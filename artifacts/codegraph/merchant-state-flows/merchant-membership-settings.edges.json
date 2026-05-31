@@ -1,0 +1,690 @@
+{
+  "schema": "locallife-code-slice/v1",
+  "slice": "merchant-membership-settings",
+  "risk_class": "G2",
+  "generated_at": "2026-05-30",
+  "nodes": [
+    {
+      "id": "weapp.merchantDashboardMenu",
+      "kind": "frontend_menu",
+      "label": "Merchant dashboard membership settings entry",
+      "file": "weapp/miniprogram/pages/merchant/_utils/merchant-dashboard-view.ts",
+      "line": 186
+    },
+    {
+      "id": "weapp.merchantConfigMenu",
+      "kind": "frontend_menu",
+      "label": "Merchant config membership settings entry",
+      "file": "weapp/miniprogram/pages/merchant/config/index.ts",
+      "line": 60
+    },
+    {
+      "id": "weapp.membershipPage",
+      "kind": "frontend_page",
+      "label": "Merchant membership settings page",
+      "file": "weapp/miniprogram/pages/merchant/settings/membership/index.ts",
+      "line": 1
+    },
+    {
+      "id": "weapp.sceneOptions",
+      "kind": "frontend_state",
+      "label": "SCENE_OPTIONS takeout/dine_in/reservation",
+      "file": "weapp/miniprogram/pages/merchant/settings/membership/index.ts",
+      "line": 20
+    },
+    {
+      "id": "weapp.loadSettings",
+      "kind": "frontend_handler",
+      "label": "loadSettings",
+      "file": "weapp/miniprogram/pages/merchant/settings/membership/index.ts",
+      "line": 160
+    },
+    {
+      "id": "weapp.toggleRule",
+      "kind": "frontend_handler",
+      "label": "onToggleRule",
+      "file": "weapp/miniprogram/pages/merchant/settings/membership/index.ts",
+      "line": 215
+    },
+    {
+      "id": "weapp.toggleScene",
+      "kind": "frontend_handler",
+      "label": "onToggleScene",
+      "file": "weapp/miniprogram/pages/merchant/settings/membership/index.ts",
+      "line": 232
+    },
+    {
+      "id": "weapp.saveSettings",
+      "kind": "frontend_handler",
+      "label": "onSave",
+      "file": "weapp/miniprogram/pages/merchant/settings/membership/index.ts",
+      "line": 258
+    },
+    {
+      "id": "apiWrapper.getMembershipSettings",
+      "kind": "frontend_api",
+      "label": "getMyMerchantMembershipSettings",
+      "file": "weapp/miniprogram/api/merchant.ts",
+      "line": 606
+    },
+    {
+      "id": "apiWrapper.updateMembershipSettings",
+      "kind": "frontend_api",
+      "label": "updateMyMerchantMembershipSettings",
+      "file": "weapp/miniprogram/api/merchant.ts",
+      "line": 617
+    },
+    {
+      "id": "apiWrapper.membershipSceneType",
+      "kind": "frontend_contract",
+      "label": "MerchantMembershipScene dine_in/takeout/reservation",
+      "file": "weapp/miniprogram/api/merchant.ts",
+      "line": 479
+    },
+    {
+      "id": "route.getMembershipSettings",
+      "kind": "route",
+      "label": "GET /v1/merchants/me/membership-settings",
+      "file": "locallife/api/server.go",
+      "line": 672
+    },
+    {
+      "id": "route.putMembershipSettings",
+      "kind": "route",
+      "label": "PUT /v1/merchants/me/membership-settings",
+      "file": "locallife/api/server.go",
+      "line": 696
+    },
+    {
+      "id": "middleware.ownerOnlyMembershipSettings",
+      "kind": "middleware",
+      "label": "Owner-only merchant membership settings middleware",
+      "file": "locallife/api/server.go",
+      "line": 689
+    },
+    {
+      "id": "api.getMembershipSettings",
+      "kind": "handler",
+      "label": "Server.getMerchantMembershipSettings",
+      "file": "locallife/api/membership.go",
+      "line": 809
+    },
+    {
+      "id": "api.updateMembershipSettings",
+      "kind": "handler",
+      "label": "Server.updateMerchantMembershipSettings",
+      "file": "locallife/api/membership.go",
+      "line": 869
+    },
+    {
+      "id": "api.updateMembershipSettingsRequest",
+      "kind": "api_contract",
+      "label": "updateMembershipSettingsRequest dine_in/takeaway binding",
+      "file": "locallife/api/membership.go",
+      "line": 847
+    },
+    {
+      "id": "logic.getMembershipSettingsForOwner",
+      "kind": "logic",
+      "label": "GetMembershipSettingsForOwner",
+      "file": "locallife/logic/membership_settings.go",
+      "line": 51
+    },
+    {
+      "id": "logic.updateMembershipSettingsForOwner",
+      "kind": "logic",
+      "label": "UpdateMembershipSettingsForOwner",
+      "file": "locallife/logic/membership_settings.go",
+      "line": 74
+    },
+    {
+      "id": "logic.defaultMembershipSettings",
+      "kind": "logic",
+      "label": "defaultMembershipSettings dine_in/takeaway",
+      "file": "locallife/logic/membership_settings.go",
+      "line": 29
+    },
+    {
+      "id": "logic.supportedMembershipScenes",
+      "kind": "logic",
+      "label": "membershipBalanceSupportedScenes dine_in/takeaway",
+      "file": "locallife/logic/membership_balance_scenes.go",
+      "line": 3
+    },
+    {
+      "id": "logic.sanitizeMembershipScenes",
+      "kind": "logic",
+      "label": "sanitizeMembershipUsableScenes",
+      "file": "locallife/logic/membership_balance_scenes.go",
+      "line": 14
+    },
+    {
+      "id": "sql.getMembershipSettings",
+      "kind": "sql_query",
+      "label": "GetMerchantMembershipSettings",
+      "file": "locallife/db/query/merchant_membership_settings.sql",
+      "line": 3
+    },
+    {
+      "id": "sql.createMembershipSettings",
+      "kind": "sql_query",
+      "label": "CreateMerchantMembershipSettings",
+      "file": "locallife/db/query/merchant_membership_settings.sql",
+      "line": 7
+    },
+    {
+      "id": "sql.updateMembershipSettings",
+      "kind": "sql_query",
+      "label": "UpdateMerchantMembershipSettings partial update",
+      "file": "locallife/db/query/merchant_membership_settings.sql",
+      "line": 19
+    },
+    {
+      "id": "sql.upsertMembershipSettings",
+      "kind": "sql_query",
+      "label": "UpsertMerchantMembershipSettings full upsert",
+      "file": "locallife/db/query/merchant_membership_settings.sql",
+      "line": 31
+    },
+    {
+      "id": "table.merchantMembershipSettings",
+      "kind": "table",
+      "label": "merchant_membership_settings",
+      "file": "locallife/db/migration/000030_add_merchant_membership_settings.up.sql",
+      "line": 4
+    },
+    {
+      "id": "migration.membershipSettingsDefaults",
+      "kind": "schema_default",
+      "label": "DB defaults dine_in/takeout/reservation",
+      "file": "locallife/db/migration/000030_add_merchant_membership_settings.up.sql",
+      "line": 8
+    },
+    {
+      "id": "route.cartCalculate",
+      "kind": "route",
+      "label": "POST /v1/cart/calculate",
+      "file": "locallife/api/server.go",
+      "line": 1514
+    },
+    {
+      "id": "api.calculateCart",
+      "kind": "handler",
+      "label": "Server.calculateCart",
+      "file": "locallife/api/cart.go",
+      "line": 563
+    },
+    {
+      "id": "logic.calculateCartPreview",
+      "kind": "logic",
+      "label": "CalculateCartPreview",
+      "file": "locallife/logic/cart_calculation.go",
+      "line": 48
+    },
+    {
+      "id": "route.orderCalculate",
+      "kind": "route",
+      "label": "GET /v1/orders/calculate",
+      "file": "locallife/api/server.go",
+      "line": 977
+    },
+    {
+      "id": "api.calculateOrder",
+      "kind": "handler",
+      "label": "Server.calculateOrder",
+      "file": "locallife/api/order.go",
+      "line": 2572
+    },
+    {
+      "id": "logic.calculateOrderPreview",
+      "kind": "logic",
+      "label": "CalculateOrderPreview",
+      "file": "locallife/logic/order_calculation.go",
+      "line": 67
+    },
+    {
+      "id": "logic.promotionEngine",
+      "kind": "logic",
+      "label": "PromotionEngine.CalculateFinalPrice",
+      "file": "locallife/logic/promotion_engine.go",
+      "line": 91
+    },
+    {
+      "id": "logic.loadMembershipSettings",
+      "kind": "logic",
+      "label": "loadMembershipSettings",
+      "file": "locallife/logic/promotion_engine.go",
+      "line": 355
+    },
+    {
+      "id": "logic.applyMembershipSettings",
+      "kind": "logic",
+      "label": "applyMembershipSettings",
+      "file": "locallife/logic/promotion_engine.go",
+      "line": 369
+    },
+    {
+      "id": "logic.curatePaymentBalance",
+      "kind": "logic",
+      "label": "curatePaymentBalance",
+      "file": "locallife/logic/promotion_engine.go",
+      "line": 446
+    },
+    {
+      "id": "route.createOrder",
+      "kind": "route",
+      "label": "POST /v1/orders",
+      "file": "locallife/api/server.go",
+      "line": 976
+    },
+    {
+      "id": "api.createOrder",
+      "kind": "handler",
+      "label": "Server.createOrder",
+      "file": "locallife/api/order.go",
+      "line": 525
+    },
+    {
+      "id": "logic.orderServiceCreateOrder",
+      "kind": "logic",
+      "label": "OrderService.CreateOrder",
+      "file": "locallife/logic/order_service.go",
+      "line": 1
+    },
+    {
+      "id": "logic.validateMembershipPayment",
+      "kind": "logic",
+      "label": "ValidateMembershipPayment",
+      "file": "locallife/logic/membership_payment.go",
+      "line": 20
+    },
+    {
+      "id": "logic.computeOrderTotals",
+      "kind": "logic",
+      "label": "ComputeOrderTotals",
+      "file": "locallife/logic/order_payment.go",
+      "line": 53
+    },
+    {
+      "id": "api.rulesEngineCondition",
+      "kind": "logic",
+      "label": "DB rules balance_scene_allowed condition",
+      "file": "locallife/api/rules_engine_db.go",
+      "line": 259
+    },
+    {
+      "id": "api.checkBalanceSceneAllowed",
+      "kind": "logic",
+      "label": "checkBalanceSceneAllowed",
+      "file": "locallife/api/rules_engine_db.go",
+      "line": 446
+    },
+    {
+      "id": "weapp.cartCalculateApi",
+      "kind": "frontend_api",
+      "label": "calculateCart",
+      "file": "weapp/miniprogram/api/cart.ts",
+      "line": 291
+    },
+    {
+      "id": "weapp.orderCalculateApi",
+      "kind": "frontend_api",
+      "label": "calculateOrder",
+      "file": "weapp/miniprogram/api/order.ts",
+      "line": 356
+    },
+    {
+      "id": "weapp.createOrderFromCartApi",
+      "kind": "frontend_api",
+      "label": "createOrderFromCart",
+      "file": "weapp/miniprogram/api/order.ts",
+      "line": 471
+    },
+    {
+      "id": "weapp.dineInCheckout",
+      "kind": "frontend_page",
+      "label": "Dine-in checkout payment assessment and use_balance",
+      "file": "weapp/miniprogram/pages/dine-in/checkout/checkout.ts",
+      "line": 83
+    },
+    {
+      "id": "weapp.takeoutOrderConfirm",
+      "kind": "frontend_page",
+      "label": "Takeout order confirm payment hint",
+      "file": "weapp/miniprogram/pages/takeout/order-confirm/_utils/takeout-order-confirm-support.ts",
+      "line": 372
+    }
+  ],
+  "edges": [
+    {
+      "from": "weapp.merchantDashboardMenu",
+      "to": "weapp.membershipPage",
+      "kind": "frontend_navigation",
+      "evidence": "weapp/miniprogram/pages/merchant/_utils/merchant-dashboard-view.ts:186"
+    },
+    {
+      "from": "weapp.merchantConfigMenu",
+      "to": "weapp.membershipPage",
+      "kind": "frontend_navigation",
+      "evidence": "weapp/miniprogram/pages/merchant/config/index.ts:60"
+    },
+    {
+      "from": "weapp.membershipPage",
+      "to": "weapp.sceneOptions",
+      "kind": "read",
+      "evidence": "weapp/miniprogram/pages/merchant/settings/membership/index.ts:64"
+    },
+    {
+      "from": "weapp.loadSettings",
+      "to": "apiWrapper.getMembershipSettings",
+      "kind": "frontend_api_call",
+      "evidence": "weapp/miniprogram/pages/merchant/settings/membership/index.ts:181"
+    },
+    {
+      "from": "weapp.toggleRule",
+      "to": "weapp.membershipPage",
+      "kind": "write",
+      "evidence": "weapp/miniprogram/pages/merchant/settings/membership/index.ts:221"
+    },
+    {
+      "from": "weapp.toggleScene",
+      "to": "weapp.membershipPage",
+      "kind": "write",
+      "evidence": "weapp/miniprogram/pages/merchant/settings/membership/index.ts:246"
+    },
+    {
+      "from": "weapp.saveSettings",
+      "to": "apiWrapper.updateMembershipSettings",
+      "kind": "frontend_api_call",
+      "evidence": "weapp/miniprogram/pages/merchant/settings/membership/index.ts:265"
+    },
+    {
+      "from": "apiWrapper.getMembershipSettings",
+      "to": "route.getMembershipSettings",
+      "kind": "frontend_api_call",
+      "evidence": "weapp/miniprogram/api/merchant.ts:608"
+    },
+    {
+      "from": "apiWrapper.updateMembershipSettings",
+      "to": "route.putMembershipSettings",
+      "kind": "frontend_api_call",
+      "evidence": "weapp/miniprogram/api/merchant.ts:619"
+    },
+    {
+      "from": "apiWrapper.membershipSceneType",
+      "to": "weapp.sceneOptions",
+      "kind": "contract",
+      "evidence": "weapp/miniprogram/pages/merchant/settings/membership/index.ts:20"
+    },
+    {
+      "from": "route.getMembershipSettings",
+      "to": "api.getMembershipSettings",
+      "kind": "route",
+      "evidence": "locallife/api/server.go:672"
+    },
+    {
+      "from": "route.putMembershipSettings",
+      "to": "middleware.ownerOnlyMembershipSettings",
+      "kind": "authorization",
+      "evidence": "locallife/api/server.go:690"
+    },
+    {
+      "from": "middleware.ownerOnlyMembershipSettings",
+      "to": "api.updateMembershipSettings",
+      "kind": "route",
+      "evidence": "locallife/api/server.go:696"
+    },
+    {
+      "from": "api.updateMembershipSettings",
+      "to": "api.updateMembershipSettingsRequest",
+      "kind": "bind",
+      "evidence": "locallife/api/membership.go:870"
+    },
+    {
+      "from": "api.getMembershipSettings",
+      "to": "logic.getMembershipSettingsForOwner",
+      "kind": "call",
+      "evidence": "locallife/api/membership.go:828"
+    },
+    {
+      "from": "api.updateMembershipSettings",
+      "to": "logic.updateMembershipSettingsForOwner",
+      "kind": "call",
+      "evidence": "locallife/api/membership.go:894"
+    },
+    {
+      "from": "api.updateMembershipSettingsRequest",
+      "to": "logic.supportedMembershipScenes",
+      "kind": "contract_drift",
+      "evidence": "locallife/api/membership.go:848"
+    },
+    {
+      "from": "logic.getMembershipSettingsForOwner",
+      "to": "sql.getMembershipSettings",
+      "kind": "read",
+      "evidence": "locallife/logic/membership_settings.go:63"
+    },
+    {
+      "from": "logic.getMembershipSettingsForOwner",
+      "to": "logic.defaultMembershipSettings",
+      "kind": "call",
+      "evidence": "locallife/logic/membership_settings.go:66"
+    },
+    {
+      "from": "logic.updateMembershipSettingsForOwner",
+      "to": "logic.defaultMembershipSettings",
+      "kind": "call",
+      "evidence": "locallife/logic/membership_settings.go:86"
+    },
+    {
+      "from": "logic.updateMembershipSettingsForOwner",
+      "to": "logic.sanitizeMembershipScenes",
+      "kind": "call",
+      "evidence": "locallife/logic/membership_settings.go:94"
+    },
+    {
+      "from": "logic.sanitizeMembershipScenes",
+      "to": "logic.supportedMembershipScenes",
+      "kind": "call",
+      "evidence": "locallife/logic/membership_balance_scenes.go:22"
+    },
+    {
+      "from": "logic.updateMembershipSettingsForOwner",
+      "to": "sql.upsertMembershipSettings",
+      "kind": "write",
+      "evidence": "locallife/logic/membership_settings.go:109"
+    },
+    {
+      "from": "sql.getMembershipSettings",
+      "to": "table.merchantMembershipSettings",
+      "kind": "read",
+      "evidence": "locallife/db/query/merchant_membership_settings.sql:4"
+    },
+    {
+      "from": "sql.upsertMembershipSettings",
+      "to": "table.merchantMembershipSettings",
+      "kind": "write",
+      "evidence": "locallife/db/query/merchant_membership_settings.sql:31"
+    },
+    {
+      "from": "sql.updateMembershipSettings",
+      "to": "table.merchantMembershipSettings",
+      "kind": "write",
+      "evidence": "locallife/db/query/merchant_membership_settings.sql:19"
+    },
+    {
+      "from": "sql.createMembershipSettings",
+      "to": "table.merchantMembershipSettings",
+      "kind": "write",
+      "evidence": "locallife/db/query/merchant_membership_settings.sql:7"
+    },
+    {
+      "from": "migration.membershipSettingsDefaults",
+      "to": "table.merchantMembershipSettings",
+      "kind": "schema_default",
+      "evidence": "locallife/db/migration/000030_add_merchant_membership_settings.up.sql:9"
+    },
+    {
+      "from": "route.cartCalculate",
+      "to": "api.calculateCart",
+      "kind": "route",
+      "evidence": "locallife/api/server.go:1514"
+    },
+    {
+      "from": "api.calculateCart",
+      "to": "logic.calculateCartPreview",
+      "kind": "call",
+      "evidence": "locallife/api/cart.go:617"
+    },
+    {
+      "from": "logic.calculateCartPreview",
+      "to": "logic.promotionEngine",
+      "kind": "call",
+      "evidence": "locallife/logic/cart_calculation.go:135"
+    },
+    {
+      "from": "route.orderCalculate",
+      "to": "api.calculateOrder",
+      "kind": "route",
+      "evidence": "locallife/api/server.go:977"
+    },
+    {
+      "from": "api.calculateOrder",
+      "to": "logic.calculateOrderPreview",
+      "kind": "call",
+      "evidence": "locallife/api/order.go:2594"
+    },
+    {
+      "from": "logic.calculateOrderPreview",
+      "to": "logic.promotionEngine",
+      "kind": "call",
+      "evidence": "locallife/logic/order_calculation.go:239"
+    },
+    {
+      "from": "logic.promotionEngine",
+      "to": "logic.loadMembershipSettings",
+      "kind": "call",
+      "evidence": "locallife/logic/promotion_engine.go:172"
+    },
+    {
+      "from": "logic.loadMembershipSettings",
+      "to": "sql.getMembershipSettings",
+      "kind": "read",
+      "evidence": "locallife/logic/promotion_engine.go:358"
+    },
+    {
+      "from": "logic.promotionEngine",
+      "to": "logic.applyMembershipSettings",
+      "kind": "call",
+      "evidence": "locallife/logic/promotion_engine.go:173"
+    },
+    {
+      "from": "logic.applyMembershipSettings",
+      "to": "logic.supportedMembershipScenes",
+      "kind": "call",
+      "evidence": "locallife/logic/promotion_engine.go:379"
+    },
+    {
+      "from": "logic.applyMembershipSettings",
+      "to": "logic.sanitizeMembershipScenes",
+      "kind": "call",
+      "evidence": "locallife/logic/promotion_engine.go:383"
+    },
+    {
+      "from": "logic.promotionEngine",
+      "to": "logic.curatePaymentBalance",
+      "kind": "call",
+      "evidence": "locallife/logic/promotion_engine.go:176"
+    },
+    {
+      "from": "route.createOrder",
+      "to": "api.createOrder",
+      "kind": "route",
+      "evidence": "locallife/api/server.go:976"
+    },
+    {
+      "from": "api.createOrder",
+      "to": "logic.orderServiceCreateOrder",
+      "kind": "call",
+      "evidence": "locallife/api/order.go:544"
+    },
+    {
+      "from": "logic.orderServiceCreateOrder",
+      "to": "logic.validateMembershipPayment",
+      "kind": "call",
+      "evidence": "locallife/logic/order_service.go:224"
+    },
+    {
+      "from": "logic.validateMembershipPayment",
+      "to": "logic.supportedMembershipScenes",
+      "kind": "call",
+      "evidence": "locallife/logic/membership_payment.go:21"
+    },
+    {
+      "from": "logic.validateMembershipPayment",
+      "to": "sql.getMembershipSettings",
+      "kind": "read",
+      "evidence": "locallife/logic/membership_payment.go:36"
+    },
+    {
+      "from": "logic.validateMembershipPayment",
+      "to": "logic.computeOrderTotals",
+      "kind": "guards",
+      "evidence": "locallife/logic/order_service.go:237"
+    },
+    {
+      "from": "api.rulesEngineCondition",
+      "to": "api.checkBalanceSceneAllowed",
+      "kind": "call",
+      "evidence": "locallife/api/rules_engine_db.go:260"
+    },
+    {
+      "from": "api.checkBalanceSceneAllowed",
+      "to": "logic.supportedMembershipScenes",
+      "kind": "call",
+      "evidence": "locallife/api/rules_engine_db.go:450"
+    },
+    {
+      "from": "api.checkBalanceSceneAllowed",
+      "to": "sql.getMembershipSettings",
+      "kind": "read",
+      "evidence": "locallife/api/rules_engine_db.go:453"
+    },
+    {
+      "from": "weapp.cartCalculateApi",
+      "to": "route.cartCalculate",
+      "kind": "frontend_api_call",
+      "evidence": "weapp/miniprogram/api/cart.ts:291"
+    },
+    {
+      "from": "weapp.orderCalculateApi",
+      "to": "route.orderCalculate",
+      "kind": "frontend_api_call",
+      "evidence": "weapp/miniprogram/api/order.ts:356"
+    },
+    {
+      "from": "weapp.createOrderFromCartApi",
+      "to": "route.createOrder",
+      "kind": "frontend_api_call",
+      "evidence": "weapp/miniprogram/api/order.ts:511"
+    },
+    {
+      "from": "weapp.dineInCheckout",
+      "to": "weapp.cartCalculateApi",
+      "kind": "frontend_api_call",
+      "evidence": "weapp/miniprogram/pages/dine-in/_services/dine-in-checkout.ts:32"
+    },
+    {
+      "from": "weapp.dineInCheckout",
+      "to": "weapp.createOrderFromCartApi",
+      "kind": "frontend_api_call",
+      "evidence": "weapp/miniprogram/pages/dine-in/_services/dine-in-checkout.ts:40"
+    },
+    {
+      "from": "weapp.takeoutOrderConfirm",
+      "to": "weapp.cartCalculateApi",
+      "kind": "frontend_api_call",
+      "evidence": "weapp/miniprogram/pages/takeout/order-confirm/_utils/takeout-order-confirm-support.ts:372"
+    }
+  ]
+}

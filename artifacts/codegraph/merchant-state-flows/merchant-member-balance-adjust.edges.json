@@ -1,0 +1,535 @@
+{
+  "schema": "locallife-code-slice/v1",
+  "slice": "merchant-member-balance-adjust",
+  "risk_class": "G3",
+  "generated_at": "2026-05-30",
+  "nodes": [
+    {
+      "id": "weapp.dashboardMembersEntry",
+      "kind": "frontend_menu",
+      "label": "Merchant dashboard member list entry",
+      "file": "weapp/miniprogram/pages/merchant/_utils/merchant-dashboard-view.ts",
+      "line": 187
+    },
+    {
+      "id": "weapp.memberPage",
+      "kind": "frontend_page",
+      "label": "Merchant member management page",
+      "file": "weapp/miniprogram/pages/merchant/settings/members/index.ts",
+      "line": 86
+    },
+    {
+      "id": "weapp.initMerchantId",
+      "kind": "frontend_behavior",
+      "label": "Resolve current merchant id",
+      "file": "weapp/miniprogram/pages/merchant/settings/members/index.ts",
+      "line": 126
+    },
+    {
+      "id": "weapp.loadMembers",
+      "kind": "frontend_behavior",
+      "label": "Load merchant members",
+      "file": "weapp/miniprogram/pages/merchant/settings/members/index.ts",
+      "line": 149
+    },
+    {
+      "id": "weapp.openMemberDetail",
+      "kind": "frontend_behavior",
+      "label": "Open member detail drawer",
+      "file": "weapp/miniprogram/pages/merchant/settings/members/index.ts",
+      "line": 207
+    },
+    {
+      "id": "weapp.openAdjustPopup",
+      "kind": "frontend_behavior",
+      "label": "Open balance adjustment popup",
+      "file": "weapp/miniprogram/pages/merchant/settings/members/index.ts",
+      "line": 244
+    },
+    {
+      "id": "weapp.submitAdjust",
+      "kind": "frontend_action",
+      "label": "Submit manual balance adjustment",
+      "file": "weapp/miniprogram/pages/merchant/settings/members/index.ts",
+      "line": 271
+    },
+    {
+      "id": "weapp.transactionTagView",
+      "kind": "frontend_view_mapper",
+      "label": "Membership transaction tag mapper",
+      "file": "weapp/miniprogram/pages/merchant/_utils/membership-transaction-view.ts",
+      "line": 8
+    },
+    {
+      "id": "apiWrapper.listMembers",
+      "kind": "frontend_api",
+      "label": "listMerchantMembers",
+      "file": "weapp/miniprogram/api/merchant.ts",
+      "line": 850
+    },
+    {
+      "id": "apiWrapper.getMemberDetail",
+      "kind": "frontend_api",
+      "label": "getMerchantMemberDetail",
+      "file": "weapp/miniprogram/api/merchant.ts",
+      "line": 862
+    },
+    {
+      "id": "apiWrapper.adjustBalance",
+      "kind": "frontend_api",
+      "label": "adjustMerchantMemberBalance",
+      "file": "weapp/miniprogram/api/merchant.ts",
+      "line": 873
+    },
+    {
+      "id": "route.merchantMembers",
+      "kind": "backend_route",
+      "label": "GET/POST /v1/merchants/:id/members/**",
+      "file": "locallife/api/server.go",
+      "line": 1640
+    },
+    {
+      "id": "middleware.ownerManager",
+      "kind": "backend_middleware",
+      "label": "MerchantStaffMiddleware owner/manager",
+      "file": "locallife/api/server.go",
+      "line": 1641
+    },
+    {
+      "id": "api.listMerchantMembers",
+      "kind": "backend_handler",
+      "label": "listMerchantMembers",
+      "file": "locallife/api/membership.go",
+      "line": 968
+    },
+    {
+      "id": "api.getMerchantMemberDetail",
+      "kind": "backend_handler",
+      "label": "getMerchantMemberDetail",
+      "file": "locallife/api/membership.go",
+      "line": 1066
+    },
+    {
+      "id": "api.adjustMemberBalance",
+      "kind": "backend_handler",
+      "label": "adjustMemberBalance",
+      "file": "locallife/api/membership.go",
+      "line": 1178
+    },
+    {
+      "id": "api.recordMemberRecharge",
+      "kind": "backend_handler",
+      "label": "recordMemberRecharge",
+      "file": "locallife/api/membership.go",
+      "line": 1253
+    },
+    {
+      "id": "logic.listMerchantMembers",
+      "kind": "backend_logic",
+      "label": "ListMerchantMembers",
+      "file": "locallife/logic/membership_merchant.go",
+      "line": 31
+    },
+    {
+      "id": "logic.getMerchantMemberDetail",
+      "kind": "backend_logic",
+      "label": "GetMerchantMemberDetail",
+      "file": "locallife/logic/membership_merchant.go",
+      "line": 48
+    },
+    {
+      "id": "logic.adjustMemberBalance",
+      "kind": "backend_logic",
+      "label": "AdjustMemberBalance",
+      "file": "locallife/logic/membership_balance_adjust.go",
+      "line": 25
+    },
+    {
+      "id": "logic.recordMerchantRecharge",
+      "kind": "backend_logic",
+      "label": "RecordMembershipRechargeForMerchant",
+      "file": "locallife/logic/membership_recharge.go",
+      "line": 88
+    },
+    {
+      "id": "logic.validateMembershipPayment",
+      "kind": "backend_logic",
+      "label": "ValidateMembershipPayment",
+      "file": "locallife/logic/membership_payment.go",
+      "line": 20
+    },
+    {
+      "id": "logic.promotionEngineBalance",
+      "kind": "backend_logic",
+      "label": "PromotionEngine split balance reader",
+      "file": "locallife/logic/promotion_engine.go",
+      "line": 377
+    },
+    {
+      "id": "tx.adjustMemberBalance",
+      "kind": "db_transaction",
+      "label": "AdjustMemberBalanceTx",
+      "file": "locallife/db/sqlc/tx_membership.go",
+      "line": 308
+    },
+    {
+      "id": "tx.recharge",
+      "kind": "db_transaction",
+      "label": "RechargeTx",
+      "file": "locallife/db/sqlc/tx_membership.go",
+      "line": 71
+    },
+    {
+      "id": "tx.createOrder",
+      "kind": "db_transaction",
+      "label": "CreateOrderTx balance deduction",
+      "file": "locallife/db/sqlc/tx_create_order.go",
+      "line": 185
+    },
+    {
+      "id": "tx.cancelOrder",
+      "kind": "db_transaction",
+      "label": "CancelOrderTx membership rollback",
+      "file": "locallife/db/sqlc/tx_order_status.go",
+      "line": 288
+    },
+    {
+      "id": "sql.listMerchantMembers",
+      "kind": "sql_query",
+      "label": "ListMerchantMembers",
+      "file": "locallife/db/query/membership.sql",
+      "line": 25
+    },
+    {
+      "id": "sql.getMembershipByMerchantUser",
+      "kind": "sql_query",
+      "label": "GetMembershipByMerchantAndUser",
+      "file": "locallife/db/query/membership.sql",
+      "line": 13
+    },
+    {
+      "id": "sql.getMembershipForUpdate",
+      "kind": "sql_query",
+      "label": "GetMembershipForUpdate",
+      "file": "locallife/db/query/membership.sql",
+      "line": 65
+    },
+    {
+      "id": "sql.updateMembershipBalance",
+      "kind": "sql_query",
+      "label": "UpdateMembershipBalance",
+      "file": "locallife/db/query/membership.sql",
+      "line": 33
+    },
+    {
+      "id": "sql.createMembershipTransaction",
+      "kind": "sql_query",
+      "label": "CreateMembershipTransaction",
+      "file": "locallife/db/query/membership.sql",
+      "line": 133
+    },
+    {
+      "id": "sql.createMembershipRechargeTransaction",
+      "kind": "sql_query",
+      "label": "CreateMembershipRechargeTransaction",
+      "file": "locallife/db/query/membership.sql",
+      "line": 164
+    },
+    {
+      "id": "sql.listMembershipTransactions",
+      "kind": "sql_query",
+      "label": "ListMembershipTransactions",
+      "file": "locallife/db/query/membership.sql",
+      "line": 203
+    },
+    {
+      "id": "sql.getRechargeByIdempotencyKey",
+      "kind": "sql_query",
+      "label": "GetMembershipRechargeTransactionByIdempotencyKey",
+      "file": "locallife/db/query/membership.sql",
+      "line": 194
+    },
+    {
+      "id": "migration.rechargeIdempotency",
+      "kind": "migration",
+      "label": "Recharge-only membership transaction idempotency index",
+      "file": "locallife/db/migration/000204_add_membership_recharge_idempotency.up.sql",
+      "line": 4
+    },
+    {
+      "id": "table.merchantMemberships",
+      "kind": "table",
+      "label": "merchant_memberships",
+      "file": "locallife/db/query/membership.sql",
+      "line": 9
+    },
+    {
+      "id": "table.membershipTransactions",
+      "kind": "table",
+      "label": "membership_transactions",
+      "file": "locallife/db/query/membership.sql",
+      "line": 131
+    },
+    {
+      "id": "zombie.incrementMembershipBalance",
+      "kind": "zombie_candidate",
+      "label": "IncrementMembershipBalance generated SQL",
+      "file": "locallife/db/query/membership.sql",
+      "line": 45
+    },
+    {
+      "id": "zombie.decrementMembershipBalance",
+      "kind": "zombie_candidate",
+      "label": "DecrementMembershipBalance generated SQL",
+      "file": "locallife/db/query/membership.sql",
+      "line": 55
+    }
+  ],
+  "edges": [
+    {
+      "from": "weapp.dashboardMembersEntry",
+      "to": "weapp.memberPage",
+      "kind": "routes_to"
+    },
+    {
+      "from": "weapp.memberPage",
+      "to": "weapp.initMerchantId",
+      "kind": "invokes"
+    },
+    {
+      "from": "weapp.initMerchantId",
+      "to": "weapp.loadMembers",
+      "kind": "invokes"
+    },
+    {
+      "from": "weapp.loadMembers",
+      "to": "apiWrapper.listMembers",
+      "kind": "calls"
+    },
+    {
+      "from": "weapp.openMemberDetail",
+      "to": "apiWrapper.getMemberDetail",
+      "kind": "calls"
+    },
+    {
+      "from": "weapp.openAdjustPopup",
+      "to": "weapp.submitAdjust",
+      "kind": "enables"
+    },
+    {
+      "from": "weapp.submitAdjust",
+      "to": "apiWrapper.adjustBalance",
+      "kind": "calls"
+    },
+    {
+      "from": "weapp.openMemberDetail",
+      "to": "weapp.transactionTagView",
+      "kind": "maps_transactions_with"
+    },
+    {
+      "from": "apiWrapper.listMembers",
+      "to": "route.merchantMembers",
+      "kind": "http_get"
+    },
+    {
+      "from": "apiWrapper.getMemberDetail",
+      "to": "route.merchantMembers",
+      "kind": "http_get"
+    },
+    {
+      "from": "apiWrapper.adjustBalance",
+      "to": "route.merchantMembers",
+      "kind": "http_post"
+    },
+    {
+      "from": "route.merchantMembers",
+      "to": "middleware.ownerManager",
+      "kind": "uses_middleware"
+    },
+    {
+      "from": "route.merchantMembers",
+      "to": "api.listMerchantMembers",
+      "kind": "dispatches_get_list"
+    },
+    {
+      "from": "route.merchantMembers",
+      "to": "api.getMerchantMemberDetail",
+      "kind": "dispatches_get_detail"
+    },
+    {
+      "from": "route.merchantMembers",
+      "to": "api.adjustMemberBalance",
+      "kind": "dispatches_post_adjust"
+    },
+    {
+      "from": "route.merchantMembers",
+      "to": "api.recordMemberRecharge",
+      "kind": "dispatches_post_recharge"
+    },
+    {
+      "from": "api.listMerchantMembers",
+      "to": "logic.listMerchantMembers",
+      "kind": "calls"
+    },
+    {
+      "from": "api.getMerchantMemberDetail",
+      "to": "logic.getMerchantMemberDetail",
+      "kind": "calls"
+    },
+    {
+      "from": "api.adjustMemberBalance",
+      "to": "logic.adjustMemberBalance",
+      "kind": "calls"
+    },
+    {
+      "from": "api.recordMemberRecharge",
+      "to": "logic.recordMerchantRecharge",
+      "kind": "calls"
+    },
+    {
+      "from": "logic.listMerchantMembers",
+      "to": "sql.listMerchantMembers",
+      "kind": "reads"
+    },
+    {
+      "from": "logic.getMerchantMemberDetail",
+      "to": "sql.getMembershipByMerchantUser",
+      "kind": "reads"
+    },
+    {
+      "from": "logic.getMerchantMemberDetail",
+      "to": "sql.listMembershipTransactions",
+      "kind": "reads"
+    },
+    {
+      "from": "logic.adjustMemberBalance",
+      "to": "sql.getMembershipByMerchantUser",
+      "kind": "precheck_reads"
+    },
+    {
+      "from": "logic.adjustMemberBalance",
+      "to": "tx.adjustMemberBalance",
+      "kind": "mutates_via"
+    },
+    {
+      "from": "tx.adjustMemberBalance",
+      "to": "sql.getMembershipForUpdate",
+      "kind": "locks"
+    },
+    {
+      "from": "tx.adjustMemberBalance",
+      "to": "sql.updateMembershipBalance",
+      "kind": "writes"
+    },
+    {
+      "from": "tx.adjustMemberBalance",
+      "to": "sql.createMembershipTransaction",
+      "kind": "writes_ledger"
+    },
+    {
+      "from": "sql.updateMembershipBalance",
+      "to": "table.merchantMemberships",
+      "kind": "writes_table"
+    },
+    {
+      "from": "sql.createMembershipTransaction",
+      "to": "table.membershipTransactions",
+      "kind": "writes_table"
+    },
+    {
+      "from": "sql.createMembershipRechargeTransaction",
+      "to": "table.membershipTransactions",
+      "kind": "writes_table"
+    },
+    {
+      "from": "logic.recordMerchantRecharge",
+      "to": "sql.getMembershipByMerchantUser",
+      "kind": "precheck_reads"
+    },
+    {
+      "from": "logic.recordMerchantRecharge",
+      "to": "sql.getRechargeByIdempotencyKey",
+      "kind": "idempotency_lookup"
+    },
+    {
+      "from": "logic.recordMerchantRecharge",
+      "to": "tx.recharge",
+      "kind": "mutates_via"
+    },
+    {
+      "from": "tx.recharge",
+      "to": "sql.getMembershipForUpdate",
+      "kind": "locks"
+    },
+    {
+      "from": "tx.recharge",
+      "to": "sql.updateMembershipBalance",
+      "kind": "writes"
+    },
+    {
+      "from": "tx.recharge",
+      "to": "sql.createMembershipRechargeTransaction",
+      "kind": "writes_idempotent_ledger"
+    },
+    {
+      "from": "migration.rechargeIdempotency",
+      "to": "table.membershipTransactions",
+      "kind": "adds_unique_constraint"
+    },
+    {
+      "from": "logic.validateMembershipPayment",
+      "to": "sql.getMembershipByMerchantUser",
+      "kind": "reads_balance"
+    },
+    {
+      "from": "logic.promotionEngineBalance",
+      "to": "sql.getMembershipByMerchantUser",
+      "kind": "reads_split_balance"
+    },
+    {
+      "from": "tx.createOrder",
+      "to": "sql.getMembershipForUpdate",
+      "kind": "locks"
+    },
+    {
+      "from": "tx.createOrder",
+      "to": "sql.updateMembershipBalance",
+      "kind": "deducts_balance"
+    },
+    {
+      "from": "tx.createOrder",
+      "to": "sql.createMembershipTransaction",
+      "kind": "writes_consume_ledger"
+    },
+    {
+      "from": "tx.cancelOrder",
+      "to": "sql.getMembershipForUpdate",
+      "kind": "locks"
+    },
+    {
+      "from": "tx.cancelOrder",
+      "to": "sql.updateMembershipBalance",
+      "kind": "restores_balance"
+    },
+    {
+      "from": "tx.cancelOrder",
+      "to": "sql.createMembershipTransaction",
+      "kind": "writes_refund_ledger"
+    },
+    {
+      "from": "tx.adjustMemberBalance",
+      "to": "weapp.transactionTagView",
+      "kind": "type_mapping_drift"
+    },
+    {
+      "from": "zombie.incrementMembershipBalance",
+      "to": "table.merchantMemberships",
+      "kind": "unused_direct_writer_candidate"
+    },
+    {
+      "from": "zombie.decrementMembershipBalance",
+      "to": "table.merchantMemberships",
+      "kind": "unused_direct_writer_candidate"
+    }
+  ]
+}

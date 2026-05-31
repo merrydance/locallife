@@ -1,0 +1,1122 @@
+{
+  "schema": "locallife-code-slice/v1",
+  "slice": "merchant-marketing-rules",
+  "risk_class": "G2",
+  "generated_at": "2026-05-30",
+  "nodes": [
+    {
+      "id": "weapp.dashboardMarketingEntries",
+      "kind": "frontend_menu",
+      "label": "Merchant dashboard marketing/settings entries",
+      "file": "weapp/miniprogram/pages/merchant/_utils/merchant-dashboard-view.ts",
+      "line": 188
+    },
+    {
+      "id": "weapp.configMarketingEntries",
+      "kind": "frontend_menu",
+      "label": "Merchant config marketing entries",
+      "file": "weapp/miniprogram/pages/merchant/config/index.ts",
+      "line": 61
+    },
+    {
+      "id": "weapp.vouchersListPage",
+      "kind": "frontend_page",
+      "label": "Merchant vouchers list page",
+      "file": "weapp/miniprogram/pages/merchant/vouchers/index.ts",
+      "line": 1
+    },
+    {
+      "id": "weapp.vouchersEditPage",
+      "kind": "frontend_page",
+      "label": "Merchant voucher create/edit page",
+      "file": "weapp/miniprogram/pages/merchant/vouchers/edit/index.ts",
+      "line": 1
+    },
+    {
+      "id": "weapp.vouchersLoad",
+      "kind": "frontend_handler",
+      "label": "loadVouchers paged load",
+      "file": "weapp/miniprogram/pages/merchant/vouchers/index.ts",
+      "line": 346
+    },
+    {
+      "id": "weapp.vouchersToggle",
+      "kind": "frontend_handler",
+      "label": "onToggleVoucherStatus",
+      "file": "weapp/miniprogram/pages/merchant/vouchers/index.ts",
+      "line": 503
+    },
+    {
+      "id": "weapp.vouchersDelete",
+      "kind": "frontend_handler",
+      "label": "onConfirmDeleteVoucher",
+      "file": "weapp/miniprogram/pages/merchant/vouchers/index.ts",
+      "line": 583
+    },
+    {
+      "id": "weapp.voucherEditLoad",
+      "kind": "frontend_handler",
+      "label": "loadVoucherDetail by paged list scan",
+      "file": "weapp/miniprogram/pages/merchant/vouchers/edit/index.ts",
+      "line": 228
+    },
+    {
+      "id": "weapp.voucherSubmit",
+      "kind": "frontend_handler",
+      "label": "onSubmit voucher create/update",
+      "file": "weapp/miniprogram/pages/merchant/vouchers/edit/index.ts",
+      "line": 364
+    },
+    {
+      "id": "apiWrapper.listMerchantVouchers",
+      "kind": "frontend_api",
+      "label": "MerchantVoucherService.listMerchantVouchers",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/coupon.ts",
+      "line": 360
+    },
+    {
+      "id": "apiWrapper.createMerchantVoucher",
+      "kind": "frontend_api",
+      "label": "MerchantVoucherService.createMerchantVoucher",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/coupon.ts",
+      "line": 376
+    },
+    {
+      "id": "apiWrapper.updateMerchantVoucher",
+      "kind": "frontend_api",
+      "label": "MerchantVoucherService.updateMerchantVoucher",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/coupon.ts",
+      "line": 386
+    },
+    {
+      "id": "apiWrapper.deleteMerchantVoucher",
+      "kind": "frontend_api",
+      "label": "MerchantVoucherService.deleteMerchantVoucher",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/coupon.ts",
+      "line": 396
+    },
+    {
+      "id": "weapp.rechargeRulesListPage",
+      "kind": "frontend_page",
+      "label": "Merchant recharge rules list page",
+      "file": "weapp/miniprogram/pages/merchant/settings/recharge-rules/index.ts",
+      "line": 1
+    },
+    {
+      "id": "weapp.rechargeRulesEditPage",
+      "kind": "frontend_page",
+      "label": "Merchant recharge rule create/edit page",
+      "file": "weapp/miniprogram/pages/merchant/settings/recharge-rules/edit/index.ts",
+      "line": 1
+    },
+    {
+      "id": "weapp.rechargeRulesLoad",
+      "kind": "frontend_handler",
+      "label": "loadRules recharge",
+      "file": "weapp/miniprogram/pages/merchant/settings/recharge-rules/index.ts",
+      "line": 271
+    },
+    {
+      "id": "weapp.rechargeRulesToggle",
+      "kind": "frontend_handler",
+      "label": "onToggleRuleStatus recharge",
+      "file": "weapp/miniprogram/pages/merchant/settings/recharge-rules/index.ts",
+      "line": 375
+    },
+    {
+      "id": "weapp.rechargeRulesDelete",
+      "kind": "frontend_handler",
+      "label": "onConfirmDeleteRule recharge",
+      "file": "weapp/miniprogram/pages/merchant/settings/recharge-rules/index.ts",
+      "line": 454
+    },
+    {
+      "id": "weapp.rechargeRuleEditLoad",
+      "kind": "frontend_handler",
+      "label": "loadRuleDetail recharge list lookup",
+      "file": "weapp/miniprogram/pages/merchant/settings/recharge-rules/edit/index.ts",
+      "line": 173
+    },
+    {
+      "id": "weapp.rechargeRuleSubmit",
+      "kind": "frontend_handler",
+      "label": "onSubmit recharge rule",
+      "file": "weapp/miniprogram/pages/merchant/settings/recharge-rules/edit/index.ts",
+      "line": 276
+    },
+    {
+      "id": "apiWrapper.listRechargeRules",
+      "kind": "frontend_api",
+      "label": "listMerchantRechargeRules",
+      "file": "weapp/miniprogram/api/merchant.ts",
+      "line": 804
+    },
+    {
+      "id": "apiWrapper.createRechargeRule",
+      "kind": "frontend_api",
+      "label": "createMerchantRechargeRule",
+      "file": "weapp/miniprogram/api/merchant.ts",
+      "line": 815
+    },
+    {
+      "id": "apiWrapper.updateRechargeRule",
+      "kind": "frontend_api",
+      "label": "updateMerchantRechargeRule",
+      "file": "weapp/miniprogram/api/merchant.ts",
+      "line": 827
+    },
+    {
+      "id": "apiWrapper.deleteRechargeRule",
+      "kind": "frontend_api",
+      "label": "deleteMerchantRechargeRule",
+      "file": "weapp/miniprogram/api/merchant.ts",
+      "line": 839
+    },
+    {
+      "id": "weapp.deliveryPromotionsListPage",
+      "kind": "frontend_page",
+      "label": "Merchant delivery promotions list page",
+      "file": "weapp/miniprogram/pages/merchant/delivery-promotions/index.ts",
+      "line": 1
+    },
+    {
+      "id": "weapp.deliveryPromotionsEditPage",
+      "kind": "frontend_page",
+      "label": "Merchant delivery promotion create/edit page",
+      "file": "weapp/miniprogram/pages/merchant/delivery-promotions/edit/index.ts",
+      "line": 1
+    },
+    {
+      "id": "weapp.deliveryPromotionsLoad",
+      "kind": "frontend_handler",
+      "label": "loadPromotions delivery",
+      "file": "weapp/miniprogram/pages/merchant/delivery-promotions/index.ts",
+      "line": 270
+    },
+    {
+      "id": "weapp.deliveryPromotionsToggle",
+      "kind": "frontend_handler",
+      "label": "onTogglePromoStatus",
+      "file": "weapp/miniprogram/pages/merchant/delivery-promotions/index.ts",
+      "line": 382
+    },
+    {
+      "id": "weapp.deliveryPromotionsDelete",
+      "kind": "frontend_handler",
+      "label": "onConfirmDeletePromotion",
+      "file": "weapp/miniprogram/pages/merchant/delivery-promotions/index.ts",
+      "line": 461
+    },
+    {
+      "id": "weapp.deliveryPromotionEditLoad",
+      "kind": "frontend_handler",
+      "label": "loadPromotionDetail list lookup",
+      "file": "weapp/miniprogram/pages/merchant/delivery-promotions/edit/index.ts",
+      "line": 172
+    },
+    {
+      "id": "weapp.deliveryPromotionSubmit",
+      "kind": "frontend_handler",
+      "label": "onSubmit delivery promotion",
+      "file": "weapp/miniprogram/pages/merchant/delivery-promotions/edit/index.ts",
+      "line": 275
+    },
+    {
+      "id": "apiWrapper.listDeliveryPromotions",
+      "kind": "frontend_api",
+      "label": "deliveryFeeService.getMerchantPromotions",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/delivery-fee.ts",
+      "line": 260
+    },
+    {
+      "id": "apiWrapper.createDeliveryPromotion",
+      "kind": "frontend_api",
+      "label": "deliveryFeeService.createMerchantPromotion",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/delivery-fee.ts",
+      "line": 270
+    },
+    {
+      "id": "apiWrapper.updateDeliveryPromotion",
+      "kind": "frontend_api",
+      "label": "deliveryFeeService.updateMerchantPromotion",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/delivery-fee.ts",
+      "line": 281
+    },
+    {
+      "id": "apiWrapper.deleteDeliveryPromotion",
+      "kind": "frontend_api",
+      "label": "deliveryFeeService.deleteMerchantPromotion",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/delivery-fee.ts",
+      "line": 292
+    },
+    {
+      "id": "weapp.discountRulesListPage",
+      "kind": "frontend_page",
+      "label": "Merchant discount rules list page",
+      "file": "weapp/miniprogram/pages/merchant/discount-rules/index.ts",
+      "line": 1
+    },
+    {
+      "id": "weapp.discountRulesEditPage",
+      "kind": "frontend_page",
+      "label": "Merchant discount rule create/edit page",
+      "file": "weapp/miniprogram/pages/merchant/discount-rules/edit/index.ts",
+      "line": 1
+    },
+    {
+      "id": "weapp.discountRulesLoad",
+      "kind": "frontend_handler",
+      "label": "loadRules discount",
+      "file": "weapp/miniprogram/pages/merchant/discount-rules/index.ts",
+      "line": 347
+    },
+    {
+      "id": "weapp.discountRulesToggle",
+      "kind": "frontend_handler",
+      "label": "onToggleRuleStatus discount",
+      "file": "weapp/miniprogram/pages/merchant/discount-rules/index.ts",
+      "line": 504
+    },
+    {
+      "id": "weapp.discountRulesDelete",
+      "kind": "frontend_handler",
+      "label": "onConfirmDeleteRule discount",
+      "file": "weapp/miniprogram/pages/merchant/discount-rules/index.ts",
+      "line": 584
+    },
+    {
+      "id": "weapp.discountRuleEditLoad",
+      "kind": "frontend_handler",
+      "label": "loadRuleDetail discount detail API",
+      "file": "weapp/miniprogram/pages/merchant/discount-rules/edit/index.ts",
+      "line": 188
+    },
+    {
+      "id": "weapp.discountRuleSubmit",
+      "kind": "frontend_handler",
+      "label": "onSubmit discount rule",
+      "file": "weapp/miniprogram/pages/merchant/discount-rules/edit/index.ts",
+      "line": 280
+    },
+    {
+      "id": "apiWrapper.listDiscountRules",
+      "kind": "frontend_api",
+      "label": "listMerchantDiscountRules",
+      "file": "weapp/miniprogram/api/merchant.ts",
+      "line": 885
+    },
+    {
+      "id": "apiWrapper.getDiscountRule",
+      "kind": "frontend_api",
+      "label": "getMerchantDiscountRule",
+      "file": "weapp/miniprogram/api/merchant.ts",
+      "line": 897
+    },
+    {
+      "id": "apiWrapper.createDiscountRule",
+      "kind": "frontend_api",
+      "label": "createMerchantDiscountRule",
+      "file": "weapp/miniprogram/api/merchant.ts",
+      "line": 908
+    },
+    {
+      "id": "apiWrapper.updateDiscountRule",
+      "kind": "frontend_api",
+      "label": "updateMerchantDiscountRule",
+      "file": "weapp/miniprogram/api/merchant.ts",
+      "line": 920
+    },
+    {
+      "id": "apiWrapper.deleteDiscountRule",
+      "kind": "frontend_api",
+      "label": "deleteMerchantDiscountRule",
+      "file": "weapp/miniprogram/api/merchant.ts",
+      "line": 935
+    },
+    {
+      "id": "route.voucherGroup",
+      "kind": "route",
+      "label": "/v1/merchants/:id/vouchers group",
+      "file": "locallife/api/server.go",
+      "line": 1619
+    },
+    {
+      "id": "route.rechargeRuleGroup",
+      "kind": "route",
+      "label": "/v1/merchants/:id/recharge-rules group",
+      "file": "locallife/api/server.go",
+      "line": 1599
+    },
+    {
+      "id": "route.deliveryPromotionGroup",
+      "kind": "route",
+      "label": "/v1/delivery-fee/merchants/:merchant_id/promotions group",
+      "file": "locallife/api/server.go",
+      "line": 845
+    },
+    {
+      "id": "route.discountGroup",
+      "kind": "route",
+      "label": "/v1/merchants/:id/discounts group",
+      "file": "locallife/api/server.go",
+      "line": 1672
+    },
+    {
+      "id": "route.userVoucherGroup",
+      "kind": "route",
+      "label": "/v1/vouchers user voucher group",
+      "file": "locallife/api/server.go",
+      "line": 1656
+    },
+    {
+      "id": "route.publicMerchantPromotions",
+      "kind": "route",
+      "label": "GET /v1/merchants/:id/promotions",
+      "file": "locallife/api/server.go",
+      "line": 588
+    },
+    {
+      "id": "api.createVoucher",
+      "kind": "handler",
+      "label": "Server.createVoucher",
+      "file": "locallife/api/voucher.go",
+      "line": 74
+    },
+    {
+      "id": "api.listMerchantVouchers",
+      "kind": "handler",
+      "label": "Server.listMerchantVouchers",
+      "file": "locallife/api/voucher.go",
+      "line": 174
+    },
+    {
+      "id": "api.updateVoucher",
+      "kind": "handler",
+      "label": "Server.updateVoucher",
+      "file": "locallife/api/voucher.go",
+      "line": 320
+    },
+    {
+      "id": "api.deleteVoucher",
+      "kind": "handler",
+      "label": "Server.deleteVoucher",
+      "file": "locallife/api/voucher.go",
+      "line": 450
+    },
+    {
+      "id": "api.claimVoucher",
+      "kind": "handler",
+      "label": "Server.claimVoucher",
+      "file": "locallife/api/voucher.go",
+      "line": 545
+    },
+    {
+      "id": "api.listUserAvailableVouchersForMerchant",
+      "kind": "handler",
+      "label": "Server.listUserAvailableVouchersForMerchant",
+      "file": "locallife/api/voucher.go",
+      "line": 717
+    },
+    {
+      "id": "api.createRechargeRule",
+      "kind": "handler",
+      "label": "Server.createRechargeRule",
+      "file": "locallife/api/membership.go",
+      "line": 273
+    },
+    {
+      "id": "api.listRechargeRules",
+      "kind": "handler",
+      "label": "Server.listRechargeRules",
+      "file": "locallife/api/membership.go",
+      "line": 330
+    },
+    {
+      "id": "api.updateRechargeRule",
+      "kind": "handler",
+      "label": "Server.updateRechargeRule",
+      "file": "locallife/api/membership.go",
+      "line": 484
+    },
+    {
+      "id": "api.deleteRechargeRule",
+      "kind": "handler",
+      "label": "Server.deleteRechargeRule",
+      "file": "locallife/api/membership.go",
+      "line": 599
+    },
+    {
+      "id": "logic.createRechargeRule",
+      "kind": "logic",
+      "label": "logic.CreateRechargeRule",
+      "file": "locallife/logic/recharge_rule.go",
+      "line": 43
+    },
+    {
+      "id": "logic.listRechargeRules",
+      "kind": "logic",
+      "label": "logic.ListMerchantRechargeRules",
+      "file": "locallife/logic/recharge_rule.go",
+      "line": 63
+    },
+    {
+      "id": "logic.updateRechargeRule",
+      "kind": "logic",
+      "label": "logic.UpdateRechargeRuleForMerchant",
+      "file": "locallife/logic/recharge_rule.go",
+      "line": 105
+    },
+    {
+      "id": "logic.deleteRechargeRule",
+      "kind": "logic",
+      "label": "logic.DeleteRechargeRuleForMerchant",
+      "file": "locallife/logic/recharge_rule.go",
+      "line": 159
+    },
+    {
+      "id": "api.createDeliveryPromotion",
+      "kind": "handler",
+      "label": "Server.createDeliveryPromotion",
+      "file": "locallife/api/delivery_fee.go",
+      "line": 900
+    },
+    {
+      "id": "api.listDeliveryPromotions",
+      "kind": "handler",
+      "label": "Server.listDeliveryPromotions",
+      "file": "locallife/api/delivery_fee.go",
+      "line": 1005
+    },
+    {
+      "id": "api.updateDeliveryPromotion",
+      "kind": "handler",
+      "label": "Server.updateDeliveryPromotion",
+      "file": "locallife/api/delivery_fee.go",
+      "line": 1134
+    },
+    {
+      "id": "api.deleteDeliveryPromotion",
+      "kind": "handler",
+      "label": "Server.deleteDeliveryPromotion",
+      "file": "locallife/api/delivery_fee.go",
+      "line": 1058
+    },
+    {
+      "id": "api.calculateDeliveryFeeInternal",
+      "kind": "handler_helper",
+      "label": "calculateDeliveryFeeInternal",
+      "file": "locallife/api/delivery_fee.go",
+      "line": 1356
+    },
+    {
+      "id": "api.createDiscountRule",
+      "kind": "handler",
+      "label": "Server.createDiscountRule",
+      "file": "locallife/api/discount.go",
+      "line": 64
+    },
+    {
+      "id": "api.listDiscountRules",
+      "kind": "handler",
+      "label": "Server.listMerchantDiscountRules",
+      "file": "locallife/api/discount.go",
+      "line": 187
+    },
+    {
+      "id": "api.getDiscountRule",
+      "kind": "handler",
+      "label": "Server.getDiscountRule",
+      "file": "locallife/api/discount.go",
+      "line": 123
+    },
+    {
+      "id": "api.updateDiscountRule",
+      "kind": "handler",
+      "label": "Server.updateDiscountRule",
+      "file": "locallife/api/discount.go",
+      "line": 435
+    },
+    {
+      "id": "api.deleteDiscountRule",
+      "kind": "handler",
+      "label": "Server.deleteDiscountRule",
+      "file": "locallife/api/discount.go",
+      "line": 496
+    },
+    {
+      "id": "api.getApplicableDiscountRules",
+      "kind": "handler",
+      "label": "Server.getApplicableDiscountRules",
+      "file": "locallife/api/discount.go",
+      "line": 301
+    },
+    {
+      "id": "api.getBestDiscountRule",
+      "kind": "handler",
+      "label": "Server.getBestDiscountRule",
+      "file": "locallife/api/discount.go",
+      "line": 362
+    },
+    {
+      "id": "logic.createDiscountRule",
+      "kind": "logic",
+      "label": "logic.CreateDiscountRule",
+      "file": "locallife/logic/discount_rule.go",
+      "line": 75
+    },
+    {
+      "id": "logic.getDiscountRule",
+      "kind": "logic",
+      "label": "logic.GetDiscountRuleForMerchant",
+      "file": "locallife/logic/discount_rule.go",
+      "line": 109
+    },
+    {
+      "id": "logic.updateDiscountRule",
+      "kind": "logic",
+      "label": "logic.UpdateDiscountRuleForMerchant",
+      "file": "locallife/logic/discount_rule.go",
+      "line": 190
+    },
+    {
+      "id": "logic.deleteDiscountRule",
+      "kind": "logic",
+      "label": "logic.DeleteDiscountRuleForMerchant",
+      "file": "locallife/logic/discount_rule.go",
+      "line": 243
+    },
+    {
+      "id": "logic.getApplicableDiscountRules",
+      "kind": "logic",
+      "label": "logic.GetApplicableDiscountRules",
+      "file": "locallife/logic/discount_rule.go",
+      "line": 155
+    },
+    {
+      "id": "logic.getBestDiscountRule",
+      "kind": "logic",
+      "label": "logic.GetBestDiscountRule",
+      "file": "locallife/logic/discount_rule.go",
+      "line": 171
+    },
+    {
+      "id": "logic.promotionEngine",
+      "kind": "logic",
+      "label": "PromotionEngine.CalculateFinalPrice",
+      "file": "locallife/logic/promotion_engine.go",
+      "line": 91
+    },
+    {
+      "id": "logic.resolveMerchantDiscount",
+      "kind": "logic",
+      "label": "logic.ResolveMerchantDiscount",
+      "file": "locallife/logic/order_pricing.go",
+      "line": 18
+    },
+    {
+      "id": "logic.validateVoucher",
+      "kind": "logic",
+      "label": "logic.ValidateVoucher",
+      "file": "locallife/logic/order_pricing.go",
+      "line": 65
+    },
+    {
+      "id": "logic.membershipRecharge",
+      "kind": "logic",
+      "label": "logic.RecordMembershipRechargeForMerchant",
+      "file": "locallife/logic/membership_recharge.go",
+      "line": 88
+    },
+    {
+      "id": "logic.resolveMembershipRechargeRule",
+      "kind": "logic",
+      "label": "resolveMembershipRechargeRule",
+      "file": "locallife/logic/membership_recharge.go",
+      "line": 198
+    },
+    {
+      "id": "logic.cartPreview",
+      "kind": "logic",
+      "label": "logic.CalculateCartPreview",
+      "file": "locallife/logic/cart_calculation.go",
+      "line": 134
+    },
+    {
+      "id": "logic.orderPreview",
+      "kind": "logic",
+      "label": "logic.CalculateOrderPreview",
+      "file": "locallife/logic/order_calculation.go",
+      "line": 239
+    },
+    {
+      "id": "logic.orderCreate",
+      "kind": "logic",
+      "label": "OrderService.CreateOrder",
+      "file": "locallife/logic/order_service.go",
+      "line": 182
+    },
+    {
+      "id": "api.getMerchantPromotions",
+      "kind": "handler",
+      "label": "Server.getMerchantPromotions",
+      "file": "locallife/api/merchant.go",
+      "line": 965
+    },
+    {
+      "id": "api.getPublicMerchantDetail",
+      "kind": "handler",
+      "label": "Server.getPublicMerchantDetail",
+      "file": "locallife/api/merchant.go",
+      "line": 1178
+    },
+    {
+      "id": "scheduler.expireUnusedVouchers",
+      "kind": "scheduler",
+      "label": "DataCleanupScheduler.markExpiredVouchers",
+      "file": "locallife/scheduler/data_cleanup.go",
+      "line": 1520
+    },
+    {
+      "id": "tx.claimVoucher",
+      "kind": "transaction",
+      "label": "SQLStore.ClaimVoucherTx",
+      "file": "locallife/db/sqlc/tx_voucher.go",
+      "line": 23
+    },
+    {
+      "id": "tx.createOrder",
+      "kind": "transaction",
+      "label": "SQLStore.CreateOrderTx voucher use",
+      "file": "locallife/db/sqlc/tx_create_order.go",
+      "line": 167
+    },
+    {
+      "id": "tx.cancelOrder",
+      "kind": "transaction",
+      "label": "CancelOrderTx voucher rollback",
+      "file": "locallife/db/sqlc/tx_order_status.go",
+      "line": 256
+    },
+    {
+      "id": "sql.createVoucher",
+      "kind": "sql_query",
+      "label": "CreateVoucher",
+      "file": "locallife/db/query/voucher.sql",
+      "line": 3
+    },
+    {
+      "id": "sql.getVoucher",
+      "kind": "sql_query",
+      "label": "GetVoucher",
+      "file": "locallife/db/query/voucher.sql",
+      "line": 20
+    },
+    {
+      "id": "sql.getVoucherForUpdate",
+      "kind": "sql_query",
+      "label": "GetVoucherForUpdate",
+      "file": "locallife/db/query/voucher.sql",
+      "line": 28
+    },
+    {
+      "id": "sql.listMerchantVouchers",
+      "kind": "sql_query",
+      "label": "ListMerchantVouchers",
+      "file": "locallife/db/query/voucher.sql",
+      "line": 33
+    },
+    {
+      "id": "sql.updateVoucher",
+      "kind": "sql_query",
+      "label": "UpdateVoucher",
+      "file": "locallife/db/query/voucher.sql",
+      "line": 50
+    },
+    {
+      "id": "sql.incrementVoucherClaimed",
+      "kind": "sql_query",
+      "label": "IncrementVoucherClaimedQuantity",
+      "file": "locallife/db/query/voucher.sql",
+      "line": 66
+    },
+    {
+      "id": "sql.incrementVoucherUsed",
+      "kind": "sql_query",
+      "label": "IncrementVoucherUsedQuantity",
+      "file": "locallife/db/query/voucher.sql",
+      "line": 75
+    },
+    {
+      "id": "sql.decrementVoucherUsed",
+      "kind": "sql_query",
+      "label": "DecrementVoucherUsedQuantity",
+      "file": "locallife/db/query/voucher.sql",
+      "line": 83
+    },
+    {
+      "id": "sql.deleteVoucher",
+      "kind": "sql_query",
+      "label": "DeleteVoucher soft delete",
+      "file": "locallife/db/query/voucher.sql",
+      "line": 91
+    },
+    {
+      "id": "sql.listUserAvailableVouchersForMerchant",
+      "kind": "sql_query",
+      "label": "ListUserAvailableVouchersForMerchant",
+      "file": "locallife/db/query/voucher.sql",
+      "line": 137
+    },
+    {
+      "id": "sql.createUserVoucher",
+      "kind": "sql_query",
+      "label": "CreateUserVoucher",
+      "file": "locallife/db/query/voucher.sql",
+      "line": 97
+    },
+    {
+      "id": "sql.checkUserVoucherExists",
+      "kind": "sql_query",
+      "label": "CheckUserVoucherExists",
+      "file": "locallife/db/query/voucher.sql",
+      "line": 148
+    },
+    {
+      "id": "sql.getUserVoucher",
+      "kind": "sql_query",
+      "label": "GetUserVoucher",
+      "file": "locallife/db/query/voucher.sql",
+      "line": 106
+    },
+    {
+      "id": "sql.markUserVoucherAsUsed",
+      "kind": "sql_query",
+      "label": "MarkUserVoucherAsUsed",
+      "file": "locallife/db/query/voucher.sql",
+      "line": 153
+    },
+    {
+      "id": "sql.markUserVoucherAsUnused",
+      "kind": "sql_query",
+      "label": "MarkUserVoucherAsUnused",
+      "file": "locallife/db/query/voucher.sql",
+      "line": 162
+    },
+    {
+      "id": "sql.markUserVoucherExpiredOnRollback",
+      "kind": "sql_query",
+      "label": "MarkUserVoucherAsExpiredOnRollback",
+      "file": "locallife/db/query/voucher.sql",
+      "line": 171
+    },
+    {
+      "id": "sql.expireUnusedVouchers",
+      "kind": "sql_query",
+      "label": "ExpireUnusedVouchers",
+      "file": "locallife/db/query/voucher.sql",
+      "line": 180
+    },
+    {
+      "id": "sql.createRechargeRule",
+      "kind": "sql_query",
+      "label": "CreateRechargeRule",
+      "file": "locallife/db/query/membership.sql",
+      "line": 77
+    },
+    {
+      "id": "sql.listRechargeRules",
+      "kind": "sql_query",
+      "label": "ListMerchantRechargeRules",
+      "file": "locallife/db/query/membership.sql",
+      "line": 93
+    },
+    {
+      "id": "sql.listActiveRechargeRules",
+      "kind": "sql_query",
+      "label": "ListActiveRechargeRules",
+      "file": "locallife/db/query/membership.sql",
+      "line": 98
+    },
+    {
+      "id": "sql.getMatchingRechargeRule",
+      "kind": "sql_query",
+      "label": "GetMatchingRechargeRule",
+      "file": "locallife/db/query/membership.sql",
+      "line": 106
+    },
+    {
+      "id": "sql.updateRechargeRule",
+      "kind": "sql_query",
+      "label": "UpdateRechargeRule",
+      "file": "locallife/db/query/membership.sql",
+      "line": 115
+    },
+    {
+      "id": "sql.deleteRechargeRule",
+      "kind": "sql_query",
+      "label": "DeleteRechargeRule physical delete",
+      "file": "locallife/db/query/membership.sql",
+      "line": 127
+    },
+    {
+      "id": "sql.createDeliveryPromotion",
+      "kind": "sql_query",
+      "label": "CreateDeliveryPromotion",
+      "file": "locallife/db/query/delivery_promotion.sql",
+      "line": 1
+    },
+    {
+      "id": "sql.listDeliveryPromotions",
+      "kind": "sql_query",
+      "label": "ListDeliveryPromotionsByMerchant",
+      "file": "locallife/db/query/delivery_promotion.sql",
+      "line": 18
+    },
+    {
+      "id": "sql.listActiveDeliveryPromotions",
+      "kind": "sql_query",
+      "label": "ListActiveDeliveryPromotionsByMerchant",
+      "file": "locallife/db/query/delivery_promotion.sql",
+      "line": 23
+    },
+    {
+      "id": "sql.updateDeliveryPromotion",
+      "kind": "sql_query",
+      "label": "UpdateDeliveryPromotion",
+      "file": "locallife/db/query/delivery_promotion.sql",
+      "line": 42
+    },
+    {
+      "id": "sql.deleteDeliveryPromotion",
+      "kind": "sql_query",
+      "label": "DeleteDeliveryPromotion physical delete",
+      "file": "locallife/db/query/delivery_promotion.sql",
+      "line": 55
+    },
+    {
+      "id": "sql.createDiscountRule",
+      "kind": "sql_query",
+      "label": "CreateDiscountRule",
+      "file": "locallife/db/query/discount.sql",
+      "line": 3
+    },
+    {
+      "id": "sql.listDiscountRules",
+      "kind": "sql_query",
+      "label": "ListMerchantDiscountRules",
+      "file": "locallife/db/query/discount.sql",
+      "line": 24
+    },
+    {
+      "id": "sql.listActiveDiscountRules",
+      "kind": "sql_query",
+      "label": "ListActiveDiscountRules",
+      "file": "locallife/db/query/discount.sql",
+      "line": 30
+    },
+    {
+      "id": "sql.getDiscountRule",
+      "kind": "sql_query",
+      "label": "GetDiscountRule",
+      "file": "locallife/db/query/discount.sql",
+      "line": 20
+    },
+    {
+      "id": "sql.getApplicableDiscountRules",
+      "kind": "sql_query",
+      "label": "GetApplicableDiscountRules",
+      "file": "locallife/db/query/discount.sql",
+      "line": 39
+    },
+    {
+      "id": "sql.getBestDiscountRule",
+      "kind": "sql_query",
+      "label": "GetBestDiscountRule",
+      "file": "locallife/db/query/discount.sql",
+      "line": 49
+    },
+    {
+      "id": "sql.updateDiscountRule",
+      "kind": "sql_query",
+      "label": "UpdateDiscountRule",
+      "file": "locallife/db/query/discount.sql",
+      "line": 60
+    },
+    {
+      "id": "sql.deleteDiscountRule",
+      "kind": "sql_query",
+      "label": "DeleteDiscountRule soft delete",
+      "file": "locallife/db/query/discount.sql",
+      "line": 77
+    },
+    {
+      "id": "sql.publicActiveDiscountRules",
+      "kind": "sql_query",
+      "label": "ListMerchantActiveDiscountRules",
+      "file": "locallife/db/query/merchant_stats.sql",
+      "line": 334
+    },
+    {
+      "id": "sql.publicActiveVouchers",
+      "kind": "sql_query",
+      "label": "ListMerchantActiveVouchers",
+      "file": "locallife/db/query/merchant_stats.sql",
+      "line": 344
+    },
+    {
+      "id": "sql.listActiveVouchers",
+      "kind": "sql_query",
+      "label": "ListActiveVouchers",
+      "file": "locallife/db/query/voucher.sql",
+      "line": 39
+    },
+    {
+      "id": "sql.publicActiveDeliveryPromotions",
+      "kind": "sql_query",
+      "label": "ListMerchantActiveDeliveryPromotions",
+      "file": "locallife/db/query/merchant_stats.sql",
+      "line": 355
+    }
+  ],
+  "edges": [
+    { "from": "weapp.dashboardMarketingEntries", "to": "weapp.vouchersListPage", "kind": "route" },
+    { "from": "weapp.configMarketingEntries", "to": "weapp.rechargeRulesListPage", "kind": "route" },
+    { "from": "weapp.configMarketingEntries", "to": "weapp.deliveryPromotionsListPage", "kind": "route" },
+    { "from": "weapp.configMarketingEntries", "to": "weapp.discountRulesListPage", "kind": "route" },
+    { "from": "weapp.vouchersListPage", "to": "weapp.vouchersLoad", "kind": "call" },
+    { "from": "weapp.vouchersLoad", "to": "apiWrapper.listMerchantVouchers", "kind": "frontend_api_call" },
+    { "from": "weapp.vouchersToggle", "to": "apiWrapper.updateMerchantVoucher", "kind": "frontend_api_call" },
+    { "from": "weapp.vouchersDelete", "to": "apiWrapper.deleteMerchantVoucher", "kind": "frontend_api_call" },
+    { "from": "weapp.vouchersListPage", "to": "weapp.vouchersEditPage", "kind": "route" },
+    { "from": "weapp.voucherEditLoad", "to": "apiWrapper.listMerchantVouchers", "kind": "frontend_api_call" },
+    { "from": "weapp.voucherSubmit", "to": "apiWrapper.createMerchantVoucher", "kind": "frontend_api_call" },
+    { "from": "weapp.voucherSubmit", "to": "apiWrapper.updateMerchantVoucher", "kind": "frontend_api_call" },
+    { "from": "apiWrapper.listMerchantVouchers", "to": "route.voucherGroup", "kind": "route" },
+    { "from": "apiWrapper.createMerchantVoucher", "to": "route.voucherGroup", "kind": "route" },
+    { "from": "apiWrapper.updateMerchantVoucher", "to": "route.voucherGroup", "kind": "route" },
+    { "from": "apiWrapper.deleteMerchantVoucher", "to": "route.voucherGroup", "kind": "route" },
+    { "from": "route.voucherGroup", "to": "api.listMerchantVouchers", "kind": "call" },
+    { "from": "route.voucherGroup", "to": "api.createVoucher", "kind": "call" },
+    { "from": "route.voucherGroup", "to": "api.updateVoucher", "kind": "call" },
+    { "from": "route.voucherGroup", "to": "api.deleteVoucher", "kind": "call" },
+    { "from": "api.listMerchantVouchers", "to": "sql.listMerchantVouchers", "kind": "read" },
+    { "from": "api.createVoucher", "to": "sql.createVoucher", "kind": "write" },
+    { "from": "api.updateVoucher", "to": "sql.updateVoucher", "kind": "write" },
+    { "from": "api.deleteVoucher", "to": "sql.deleteVoucher", "kind": "write" },
+    { "from": "route.userVoucherGroup", "to": "api.claimVoucher", "kind": "call" },
+    { "from": "route.userVoucherGroup", "to": "api.listUserAvailableVouchersForMerchant", "kind": "call" },
+    { "from": "api.claimVoucher", "to": "tx.claimVoucher", "kind": "transaction" },
+    { "from": "tx.claimVoucher", "to": "sql.getVoucherForUpdate", "kind": "read" },
+    { "from": "tx.claimVoucher", "to": "sql.checkUserVoucherExists", "kind": "read" },
+    { "from": "tx.claimVoucher", "to": "sql.incrementVoucherClaimed", "kind": "write" },
+    { "from": "tx.claimVoucher", "to": "sql.createUserVoucher", "kind": "write" },
+    { "from": "api.listUserAvailableVouchersForMerchant", "to": "sql.listUserAvailableVouchersForMerchant", "kind": "read" },
+    { "from": "scheduler.expireUnusedVouchers", "to": "sql.expireUnusedVouchers", "kind": "scheduler" },
+    { "from": "weapp.rechargeRulesListPage", "to": "weapp.rechargeRulesLoad", "kind": "call" },
+    { "from": "weapp.rechargeRulesLoad", "to": "apiWrapper.listRechargeRules", "kind": "frontend_api_call" },
+    { "from": "weapp.rechargeRulesToggle", "to": "apiWrapper.updateRechargeRule", "kind": "frontend_api_call" },
+    { "from": "weapp.rechargeRulesDelete", "to": "apiWrapper.deleteRechargeRule", "kind": "frontend_api_call" },
+    { "from": "weapp.rechargeRulesListPage", "to": "weapp.rechargeRulesEditPage", "kind": "route" },
+    { "from": "weapp.rechargeRuleEditLoad", "to": "apiWrapper.listRechargeRules", "kind": "frontend_api_call" },
+    { "from": "weapp.rechargeRuleSubmit", "to": "apiWrapper.createRechargeRule", "kind": "frontend_api_call" },
+    { "from": "weapp.rechargeRuleSubmit", "to": "apiWrapper.updateRechargeRule", "kind": "frontend_api_call" },
+    { "from": "apiWrapper.listRechargeRules", "to": "route.rechargeRuleGroup", "kind": "route" },
+    { "from": "apiWrapper.createRechargeRule", "to": "route.rechargeRuleGroup", "kind": "route" },
+    { "from": "apiWrapper.updateRechargeRule", "to": "route.rechargeRuleGroup", "kind": "route" },
+    { "from": "apiWrapper.deleteRechargeRule", "to": "route.rechargeRuleGroup", "kind": "route" },
+    { "from": "route.rechargeRuleGroup", "to": "api.listRechargeRules", "kind": "call" },
+    { "from": "route.rechargeRuleGroup", "to": "api.createRechargeRule", "kind": "call" },
+    { "from": "route.rechargeRuleGroup", "to": "api.updateRechargeRule", "kind": "call" },
+    { "from": "route.rechargeRuleGroup", "to": "api.deleteRechargeRule", "kind": "call" },
+    { "from": "api.listRechargeRules", "to": "logic.listRechargeRules", "kind": "call" },
+    { "from": "api.createRechargeRule", "to": "logic.createRechargeRule", "kind": "call" },
+    { "from": "api.updateRechargeRule", "to": "logic.updateRechargeRule", "kind": "call" },
+    { "from": "api.deleteRechargeRule", "to": "logic.deleteRechargeRule", "kind": "call" },
+    { "from": "logic.listRechargeRules", "to": "sql.listRechargeRules", "kind": "read" },
+    { "from": "logic.createRechargeRule", "to": "sql.createRechargeRule", "kind": "write" },
+    { "from": "logic.updateRechargeRule", "to": "sql.updateRechargeRule", "kind": "write" },
+    { "from": "logic.deleteRechargeRule", "to": "sql.deleteRechargeRule", "kind": "write" },
+    { "from": "logic.membershipRecharge", "to": "logic.resolveMembershipRechargeRule", "kind": "call" },
+    { "from": "logic.resolveMembershipRechargeRule", "to": "sql.getMatchingRechargeRule", "kind": "read" },
+    { "from": "weapp.deliveryPromotionsListPage", "to": "weapp.deliveryPromotionsLoad", "kind": "call" },
+    { "from": "weapp.deliveryPromotionsLoad", "to": "apiWrapper.listDeliveryPromotions", "kind": "frontend_api_call" },
+    { "from": "weapp.deliveryPromotionsToggle", "to": "apiWrapper.updateDeliveryPromotion", "kind": "frontend_api_call" },
+    { "from": "weapp.deliveryPromotionsDelete", "to": "apiWrapper.deleteDeliveryPromotion", "kind": "frontend_api_call" },
+    { "from": "weapp.deliveryPromotionsListPage", "to": "weapp.deliveryPromotionsEditPage", "kind": "route" },
+    { "from": "weapp.deliveryPromotionEditLoad", "to": "apiWrapper.listDeliveryPromotions", "kind": "frontend_api_call" },
+    { "from": "weapp.deliveryPromotionSubmit", "to": "apiWrapper.createDeliveryPromotion", "kind": "frontend_api_call" },
+    { "from": "weapp.deliveryPromotionSubmit", "to": "apiWrapper.updateDeliveryPromotion", "kind": "frontend_api_call" },
+    { "from": "apiWrapper.listDeliveryPromotions", "to": "route.deliveryPromotionGroup", "kind": "route" },
+    { "from": "apiWrapper.createDeliveryPromotion", "to": "route.deliveryPromotionGroup", "kind": "route" },
+    { "from": "apiWrapper.updateDeliveryPromotion", "to": "route.deliveryPromotionGroup", "kind": "route" },
+    { "from": "apiWrapper.deleteDeliveryPromotion", "to": "route.deliveryPromotionGroup", "kind": "route" },
+    { "from": "route.deliveryPromotionGroup", "to": "api.listDeliveryPromotions", "kind": "call" },
+    { "from": "route.deliveryPromotionGroup", "to": "api.createDeliveryPromotion", "kind": "call" },
+    { "from": "route.deliveryPromotionGroup", "to": "api.updateDeliveryPromotion", "kind": "call" },
+    { "from": "route.deliveryPromotionGroup", "to": "api.deleteDeliveryPromotion", "kind": "call" },
+    { "from": "api.listDeliveryPromotions", "to": "sql.listDeliveryPromotions", "kind": "read" },
+    { "from": "api.createDeliveryPromotion", "to": "sql.createDeliveryPromotion", "kind": "write" },
+    { "from": "api.updateDeliveryPromotion", "to": "sql.updateDeliveryPromotion", "kind": "write" },
+    { "from": "api.deleteDeliveryPromotion", "to": "sql.deleteDeliveryPromotion", "kind": "write" },
+    { "from": "api.calculateDeliveryFeeInternal", "to": "sql.listActiveDeliveryPromotions", "kind": "read" },
+    { "from": "weapp.discountRulesListPage", "to": "weapp.discountRulesLoad", "kind": "call" },
+    { "from": "weapp.discountRulesLoad", "to": "apiWrapper.listDiscountRules", "kind": "frontend_api_call" },
+    { "from": "weapp.discountRulesToggle", "to": "apiWrapper.updateDiscountRule", "kind": "frontend_api_call" },
+    { "from": "weapp.discountRulesDelete", "to": "apiWrapper.deleteDiscountRule", "kind": "frontend_api_call" },
+    { "from": "weapp.discountRulesListPage", "to": "weapp.discountRulesEditPage", "kind": "route" },
+    { "from": "weapp.discountRuleEditLoad", "to": "apiWrapper.getDiscountRule", "kind": "frontend_api_call" },
+    { "from": "weapp.discountRuleSubmit", "to": "apiWrapper.createDiscountRule", "kind": "frontend_api_call" },
+    { "from": "weapp.discountRuleSubmit", "to": "apiWrapper.updateDiscountRule", "kind": "frontend_api_call" },
+    { "from": "apiWrapper.listDiscountRules", "to": "route.discountGroup", "kind": "route" },
+    { "from": "apiWrapper.getDiscountRule", "to": "route.discountGroup", "kind": "route" },
+    { "from": "apiWrapper.createDiscountRule", "to": "route.discountGroup", "kind": "route" },
+    { "from": "apiWrapper.updateDiscountRule", "to": "route.discountGroup", "kind": "route" },
+    { "from": "apiWrapper.deleteDiscountRule", "to": "route.discountGroup", "kind": "route" },
+    { "from": "route.discountGroup", "to": "api.listDiscountRules", "kind": "call" },
+    { "from": "route.discountGroup", "to": "api.getDiscountRule", "kind": "call" },
+    { "from": "route.discountGroup", "to": "api.createDiscountRule", "kind": "call" },
+    { "from": "route.discountGroup", "to": "api.updateDiscountRule", "kind": "call" },
+    { "from": "route.discountGroup", "to": "api.deleteDiscountRule", "kind": "call" },
+    { "from": "route.discountGroup", "to": "api.getApplicableDiscountRules", "kind": "call" },
+    { "from": "route.discountGroup", "to": "api.getBestDiscountRule", "kind": "call" },
+    { "from": "api.listDiscountRules", "to": "sql.listDiscountRules", "kind": "read" },
+    { "from": "api.getDiscountRule", "to": "logic.getDiscountRule", "kind": "call" },
+    { "from": "api.createDiscountRule", "to": "logic.createDiscountRule", "kind": "call" },
+    { "from": "api.updateDiscountRule", "to": "logic.updateDiscountRule", "kind": "call" },
+    { "from": "api.deleteDiscountRule", "to": "logic.deleteDiscountRule", "kind": "call" },
+    { "from": "api.getApplicableDiscountRules", "to": "logic.getApplicableDiscountRules", "kind": "call" },
+    { "from": "api.getBestDiscountRule", "to": "logic.getBestDiscountRule", "kind": "call" },
+    { "from": "logic.getDiscountRule", "to": "sql.getDiscountRule", "kind": "read" },
+    { "from": "logic.createDiscountRule", "to": "sql.createDiscountRule", "kind": "write" },
+    { "from": "logic.updateDiscountRule", "to": "sql.updateDiscountRule", "kind": "write" },
+    { "from": "logic.deleteDiscountRule", "to": "sql.deleteDiscountRule", "kind": "write" },
+    { "from": "logic.getApplicableDiscountRules", "to": "sql.getApplicableDiscountRules", "kind": "read" },
+    { "from": "logic.getBestDiscountRule", "to": "sql.getBestDiscountRule", "kind": "read" },
+    { "from": "logic.promotionEngine", "to": "sql.listActiveDiscountRules", "kind": "read" },
+    { "from": "logic.promotionEngine", "to": "sql.listUserAvailableVouchersForMerchant", "kind": "read" },
+    { "from": "logic.promotionEngine", "to": "sql.getUserVoucher", "kind": "read" },
+    { "from": "logic.resolveMerchantDiscount", "to": "sql.listActiveDiscountRules", "kind": "read" },
+    { "from": "logic.validateVoucher", "to": "sql.getUserVoucher", "kind": "read" },
+    { "from": "logic.cartPreview", "to": "logic.promotionEngine", "kind": "call" },
+    { "from": "logic.orderPreview", "to": "api.calculateDeliveryFeeInternal", "kind": "call" },
+    { "from": "logic.orderPreview", "to": "logic.validateVoucher", "kind": "call" },
+    { "from": "logic.orderPreview", "to": "logic.resolveMerchantDiscount", "kind": "call" },
+    { "from": "logic.orderPreview", "to": "logic.promotionEngine", "kind": "call" },
+    { "from": "logic.orderCreate", "to": "logic.resolveMerchantDiscount", "kind": "call" },
+    { "from": "logic.orderCreate", "to": "logic.validateVoucher", "kind": "call" },
+    { "from": "logic.orderCreate", "to": "tx.createOrder", "kind": "transaction" },
+    { "from": "tx.createOrder", "to": "sql.markUserVoucherAsUsed", "kind": "write" },
+    { "from": "tx.createOrder", "to": "sql.incrementVoucherUsed", "kind": "write" },
+    { "from": "tx.cancelOrder", "to": "sql.markUserVoucherAsUnused", "kind": "write" },
+    { "from": "tx.cancelOrder", "to": "sql.markUserVoucherExpiredOnRollback", "kind": "write" },
+    { "from": "tx.cancelOrder", "to": "sql.decrementVoucherUsed", "kind": "write" },
+    { "from": "route.publicMerchantPromotions", "to": "api.getMerchantPromotions", "kind": "call" },
+    { "from": "api.getMerchantPromotions", "to": "sql.listActiveDeliveryPromotions", "kind": "read" },
+    { "from": "api.getMerchantPromotions", "to": "sql.listActiveDiscountRules", "kind": "read" },
+    { "from": "api.getMerchantPromotions", "to": "sql.listActiveVouchers", "kind": "read" },
+    { "from": "api.getMerchantPromotions", "to": "sql.listActiveRechargeRules", "kind": "read" },
+    { "from": "api.getPublicMerchantDetail", "to": "sql.publicActiveDiscountRules", "kind": "read" },
+    { "from": "api.getPublicMerchantDetail", "to": "sql.publicActiveVouchers", "kind": "read" },
+    { "from": "api.getPublicMerchantDetail", "to": "sql.publicActiveDeliveryPromotions", "kind": "read" }
+  ]
+}

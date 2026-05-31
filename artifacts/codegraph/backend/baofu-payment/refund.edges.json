@@ -1,0 +1,397 @@
+{
+  "schema": "locallife-code-slice/v1",
+  "slice": "baofu-refund-command-to-terminal-fact-application",
+  "risk_class": "G3",
+  "generated_at": "2026-05-29",
+  "nodes": [
+    {
+      "id": "worker.ProcessTaskInitiateRefund",
+      "kind": "worker",
+      "label": "payment:process_refund",
+      "file": "locallife/worker/task_process_payment.go",
+      "line": 877
+    },
+    {
+      "id": "db.CreateRefundOrderTx",
+      "kind": "transaction",
+      "label": "SQLStore.CreateRefundOrderTx",
+      "file": "locallife/db/sqlc/tx_refund.go",
+      "line": 40
+    },
+    {
+      "id": "worker.processBaofuAggregateRefund",
+      "kind": "function",
+      "label": "RedisTaskProcessor.processBaofuAggregateRefund",
+      "file": "locallife/worker/task_process_payment.go",
+      "line": 1024
+    },
+    {
+      "id": "baofu.CreateRefund",
+      "kind": "provider_call",
+      "label": "Baofoo CreateRefund",
+      "file": "locallife/worker/task_process_payment.go",
+      "line": 1065
+    },
+    {
+      "id": "sql.UpdateRefundOrderToProcessing",
+      "kind": "sql",
+      "label": "UpdateRefundOrderToProcessing",
+      "file": "locallife/db/query/refund_order.sql",
+      "line": 95
+    },
+    {
+      "id": "sql.UpdateRefundOrderToFailed",
+      "kind": "sql",
+      "label": "UpdateRefundOrderToFailed",
+      "file": "locallife/db/query/refund_order.sql",
+      "line": 111
+    },
+    {
+      "id": "route.baofu.refund.notify",
+      "kind": "route",
+      "label": "POST /v1/webhooks/baofu/refund",
+      "file": "locallife/api/server.go",
+      "line": 538
+    },
+    {
+      "id": "api.handleBaofuRefundNotify",
+      "kind": "function",
+      "label": "Server.handleBaofuRefundNotify",
+      "file": "locallife/api/baofu_callback.go",
+      "line": 435
+    },
+    {
+      "id": "parser.ParseRefundNotification",
+      "kind": "function",
+      "label": "baofu aggregate refund notification parser",
+      "file": "locallife/baofu/aggregatepay/notification/notification.go"
+    },
+    {
+      "id": "api.recordBaofuRefundCallbackFact",
+      "kind": "function",
+      "label": "Server.recordBaofuRefundCallbackFact",
+      "file": "locallife/api/baofu_callback.go",
+      "line": 501
+    },
+    {
+      "id": "logic.PaymentFactService.RecordExternalPaymentFact",
+      "kind": "function",
+      "label": "PaymentFactService.RecordExternalPaymentFact",
+      "file": "locallife/logic/payment_fact_service.go"
+    },
+    {
+      "id": "scheduler.RefundRecoveryScheduler",
+      "kind": "scheduler",
+      "label": "RefundRecoveryScheduler",
+      "file": "locallife/worker/refund_recovery_scheduler.go"
+    },
+    {
+      "id": "baofu.QueryRefund",
+      "kind": "provider_call",
+      "label": "Baofoo QueryRefund",
+      "file": "locallife/worker/refund_recovery_scheduler.go",
+      "line": 453
+    },
+    {
+      "id": "scheduler.recordBaofuRefundQueryFact",
+      "kind": "function",
+      "label": "RefundRecoveryScheduler.recordBaofuRefundQueryFact",
+      "file": "locallife/worker/refund_recovery_scheduler.go",
+      "line": 514
+    },
+    {
+      "id": "sql.CreateExternalPaymentFact",
+      "kind": "sql",
+      "label": "CreateExternalPaymentFact",
+      "file": "locallife/db/query/external_payment_fact.sql",
+      "line": 119
+    },
+    {
+      "id": "sql.CreateExternalPaymentFactApplication",
+      "kind": "sql",
+      "label": "CreateExternalPaymentFactApplication",
+      "file": "locallife/db/query/external_payment_fact.sql"
+    },
+    {
+      "id": "worker.ProcessTaskPaymentFactApplication",
+      "kind": "worker",
+      "label": "payment:process_fact_application",
+      "file": "locallife/worker/task_payment_fact_application.go",
+      "line": 47
+    },
+    {
+      "id": "logic.PaymentFactService.ApplyExternalPaymentFactApplication",
+      "kind": "function",
+      "label": "PaymentFactService.ApplyExternalPaymentFactApplication",
+      "file": "locallife/logic/payment_fact_application_service.go",
+      "line": 187
+    },
+    {
+      "id": "logic.applyOrderRefundFact",
+      "kind": "function",
+      "label": "PaymentFactService.applyOrderRefundFact",
+      "file": "locallife/logic/payment_fact_application_service.go",
+      "line": 518
+    },
+    {
+      "id": "logic.applyReservationRefundFact",
+      "kind": "function",
+      "label": "PaymentFactService.applyReservationRefundFact",
+      "file": "locallife/logic/payment_fact_application_service.go",
+      "line": 633
+    },
+    {
+      "id": "sql.UpdateRefundOrderToSuccess",
+      "kind": "sql",
+      "label": "UpdateRefundOrderToSuccess",
+      "file": "locallife/db/query/refund_order.sql",
+      "line": 103
+    },
+    {
+      "id": "sql.UpdateRefundOrderToClosed",
+      "kind": "sql",
+      "label": "UpdateRefundOrderToClosed",
+      "file": "locallife/db/query/refund_order.sql",
+      "line": 118
+    },
+    {
+      "id": "logic.maybeMarkPaymentOrderRefunded",
+      "kind": "function",
+      "label": "PaymentFactService.maybeMarkPaymentOrderRefunded",
+      "file": "locallife/logic/payment_fact_application_service.go",
+      "line": 800
+    },
+    {
+      "id": "sql.UpdatePaymentOrderToRefunded",
+      "kind": "sql",
+      "label": "UpdatePaymentOrderToRefunded",
+      "file": "locallife/db/query/payment_order.sql",
+      "line": 176
+    },
+    {
+      "id": "logic.createOrderRefundOutbox",
+      "kind": "function",
+      "label": "PaymentFactService.createOrderRefundOutbox",
+      "file": "locallife/logic/payment_fact_application_service.go",
+      "line": 1300
+    },
+    {
+      "id": "sql.CreatePaymentDomainOutboxOnce",
+      "kind": "sql",
+      "label": "CreatePaymentDomainOutboxOnce",
+      "file": "locallife/db/query/external_payment_fact.sql",
+      "line": 324
+    },
+    {
+      "id": "scheduler.PaymentDomainOutboxScheduler",
+      "kind": "scheduler",
+      "label": "PaymentDomainOutboxScheduler",
+      "file": "locallife/worker/payment_domain_outbox_scheduler.go",
+      "line": 85
+    },
+    {
+      "id": "worker.ProcessTaskPaymentDomainOutbox",
+      "kind": "worker",
+      "label": "payment:process_domain_outbox",
+      "file": "locallife/worker/task_payment_domain_outbox.go",
+      "line": 57
+    }
+  ],
+  "edges": [
+    {
+      "from": "worker.ProcessTaskInitiateRefund",
+      "to": "db.CreateRefundOrderTx",
+      "kind": "creates_refund_order_guarded",
+      "evidence": "locallife/worker/task_process_payment.go:954"
+    },
+    {
+      "from": "worker.ProcessTaskInitiateRefund",
+      "to": "worker.processBaofuAggregateRefund",
+      "kind": "dispatch_baofu_refund",
+      "evidence": "locallife/worker/task_process_payment.go:972"
+    },
+    {
+      "from": "worker.processBaofuAggregateRefund",
+      "to": "baofu.CreateRefund",
+      "kind": "provider_call",
+      "evidence": "locallife/worker/task_process_payment.go:1065"
+    },
+    {
+      "from": "worker.processBaofuAggregateRefund",
+      "to": "sql.UpdateRefundOrderToProcessing",
+      "kind": "accepted_or_unknown_command",
+      "evidence": "locallife/worker/task_process_payment.go:1089"
+    },
+    {
+      "from": "worker.processBaofuAggregateRefund",
+      "to": "sql.UpdateRefundOrderToFailed",
+      "kind": "rejected_command",
+      "evidence": "locallife/worker/task_process_payment.go:1097"
+    },
+    {
+      "from": "route.baofu.refund.notify",
+      "to": "api.handleBaofuRefundNotify",
+      "kind": "route_handler",
+      "evidence": "locallife/api/server.go:538"
+    },
+    {
+      "from": "api.handleBaofuRefundNotify",
+      "to": "parser.ParseRefundNotification",
+      "kind": "parse_and_verify",
+      "evidence": "locallife/api/baofu_callback.go:447"
+    },
+    {
+      "from": "api.handleBaofuRefundNotify",
+      "to": "api.recordBaofuRefundCallbackFact",
+      "kind": "records_fact",
+      "evidence": "locallife/api/baofu_callback.go:478"
+    },
+    {
+      "from": "api.recordBaofuRefundCallbackFact",
+      "to": "logic.PaymentFactService.RecordExternalPaymentFact",
+      "kind": "writes_fact_and_application",
+      "evidence": "locallife/api/baofu_callback.go:520"
+    },
+    {
+      "from": "scheduler.RefundRecoveryScheduler",
+      "to": "baofu.QueryRefund",
+      "kind": "provider_query_recovery",
+      "evidence": "locallife/worker/refund_recovery_scheduler.go:453"
+    },
+    {
+      "from": "scheduler.RefundRecoveryScheduler",
+      "to": "scheduler.recordBaofuRefundQueryFact",
+      "kind": "records_query_fact",
+      "evidence": "locallife/worker/refund_recovery_scheduler.go:363"
+    },
+    {
+      "from": "scheduler.recordBaofuRefundQueryFact",
+      "to": "logic.PaymentFactService.RecordExternalPaymentFact",
+      "kind": "writes_fact_and_application",
+      "evidence": "locallife/worker/refund_recovery_scheduler.go:537"
+    },
+    {
+      "from": "logic.PaymentFactService.RecordExternalPaymentFact",
+      "to": "sql.CreateExternalPaymentFact",
+      "kind": "writes",
+      "evidence": "locallife/db/query/external_payment_fact.sql:119"
+    },
+    {
+      "from": "logic.PaymentFactService.RecordExternalPaymentFact",
+      "to": "sql.CreateExternalPaymentFactApplication",
+      "kind": "creates_terminal_application",
+      "evidence": "locallife/api/baofu_callback.go:541"
+    },
+    {
+      "from": "api.handleBaofuRefundNotify",
+      "to": "worker.ProcessTaskPaymentFactApplication",
+      "kind": "enqueue_async",
+      "evidence": "locallife/api/baofu_callback.go:487"
+    },
+    {
+      "from": "scheduler.RefundRecoveryScheduler",
+      "to": "worker.ProcessTaskPaymentFactApplication",
+      "kind": "enqueue_async",
+      "evidence": "locallife/worker/refund_recovery_scheduler.go:373"
+    },
+    {
+      "from": "worker.ProcessTaskPaymentFactApplication",
+      "to": "logic.PaymentFactService.ApplyExternalPaymentFactApplication",
+      "kind": "worker_calls",
+      "evidence": "locallife/worker/task_payment_fact_application.go:73"
+    },
+    {
+      "from": "logic.PaymentFactService.ApplyExternalPaymentFactApplication",
+      "to": "logic.applyOrderRefundFact",
+      "kind": "dispatch_order_refund_domain",
+      "evidence": "locallife/logic/payment_fact_application_service.go:309"
+    },
+    {
+      "from": "logic.PaymentFactService.ApplyExternalPaymentFactApplication",
+      "to": "logic.applyReservationRefundFact",
+      "kind": "dispatch_reservation_refund_domain",
+      "evidence": "locallife/logic/payment_fact_application_service.go:316"
+    },
+    {
+      "from": "logic.applyOrderRefundFact",
+      "to": "sql.UpdateRefundOrderToSuccess",
+      "kind": "terminal_success_update",
+      "evidence": "locallife/logic/payment_fact_application_service.go:539"
+    },
+    {
+      "from": "logic.applyOrderRefundFact",
+      "to": "sql.UpdateRefundOrderToClosed",
+      "kind": "terminal_closed_update",
+      "evidence": "locallife/logic/payment_fact_application_service.go:553"
+    },
+    {
+      "from": "logic.applyOrderRefundFact",
+      "to": "sql.UpdateRefundOrderToFailed",
+      "kind": "terminal_failed_update",
+      "evidence": "locallife/logic/payment_fact_application_service.go:573"
+    },
+    {
+      "from": "logic.applyReservationRefundFact",
+      "to": "sql.UpdateRefundOrderToSuccess",
+      "kind": "terminal_success_update",
+      "evidence": "locallife/logic/payment_fact_application_service.go:655"
+    },
+    {
+      "from": "logic.applyReservationRefundFact",
+      "to": "sql.UpdateRefundOrderToClosed",
+      "kind": "terminal_closed_update",
+      "evidence": "locallife/logic/payment_fact_application_service.go:678"
+    },
+    {
+      "from": "logic.applyReservationRefundFact",
+      "to": "sql.UpdateRefundOrderToFailed",
+      "kind": "terminal_failed_update",
+      "evidence": "locallife/logic/payment_fact_application_service.go:698"
+    },
+    {
+      "from": "logic.applyOrderRefundFact",
+      "to": "logic.maybeMarkPaymentOrderRefunded",
+      "kind": "maybe_full_refund_transition",
+      "evidence": "locallife/logic/payment_fact_application_service.go:545"
+    },
+    {
+      "from": "logic.applyReservationRefundFact",
+      "to": "logic.maybeMarkPaymentOrderRefunded",
+      "kind": "maybe_full_refund_transition",
+      "evidence": "locallife/logic/payment_fact_application_service.go:662"
+    },
+    {
+      "from": "logic.maybeMarkPaymentOrderRefunded",
+      "to": "sql.UpdatePaymentOrderToRefunded",
+      "kind": "conditional_full_refund_update",
+      "evidence": "locallife/logic/payment_fact_application_service.go:808"
+    },
+    {
+      "from": "logic.PaymentFactService.ApplyExternalPaymentFactApplication",
+      "to": "logic.createOrderRefundOutbox",
+      "kind": "post_apply_outbox",
+      "evidence": "locallife/logic/payment_fact_application_service.go:1124"
+    },
+    {
+      "from": "logic.createOrderRefundOutbox",
+      "to": "sql.CreatePaymentDomainOutboxOnce",
+      "kind": "writes_outbox",
+      "evidence": "locallife/logic/payment_fact_application_service.go:1348"
+    },
+    {
+      "from": "scheduler.PaymentDomainOutboxScheduler",
+      "to": "worker.ProcessTaskPaymentDomainOutbox",
+      "kind": "enqueue_async",
+      "evidence": "locallife/worker/payment_domain_outbox_scheduler.go:148"
+    }
+  ],
+  "invariants": [
+    "Baofoo refund command acceptance is not final refund success.",
+    "Final refund domain mutation comes from callback or query external payment facts.",
+    "Refund creation locks the payment order and counts pending, processing, and success refund amount.",
+    "Baofoo refunds are blocked after profit-sharing command has started.",
+    "Only terminal refund facts create and apply refund-domain applications.",
+    "Full payment order refunded status is set only when successful refund total covers the payment amount.",
+    "Order and reservation refund consumers share the Baofoo refund fact contract but apply separate domain side effects."
+  ]
+}

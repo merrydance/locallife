@@ -1,0 +1,1725 @@
+{
+  "schema": "locallife-code-slice/v1",
+  "slice": "merchant-order-operations",
+  "risk_class": "G3-refund-payment-and-G2-order-print",
+  "generated_at": "2026-05-30",
+  "nodes": [
+    {
+      "id": "weapp.orderListPage",
+      "kind": "frontend_page",
+      "label": "Merchant order list page",
+      "file": "weapp/miniprogram/pages/merchant/orders/list/index.ts",
+      "line": 152
+    },
+    {
+      "id": "weapp.orderListLoadOrders",
+      "kind": "frontend_handler",
+      "label": "order list loadOrders",
+      "file": "weapp/miniprogram/pages/merchant/orders/list/index.ts",
+      "line": 281
+    },
+    {
+      "id": "weapp.orderListActions",
+      "kind": "frontend_handler",
+      "label": "order list accept/reject/ready/complete actions",
+      "file": "weapp/miniprogram/pages/merchant/orders/list/index.ts",
+      "line": 523
+    },
+    {
+      "id": "weapp.orderDetailPage",
+      "kind": "frontend_page",
+      "label": "Merchant order detail page",
+      "file": "weapp/miniprogram/pages/merchant/orders/detail/index.ts",
+      "line": 103
+    },
+    {
+      "id": "weapp.orderDetailLoad",
+      "kind": "frontend_handler",
+      "label": "order detail loadDetail",
+      "file": "weapp/miniprogram/pages/merchant/orders/detail/index.ts",
+      "line": 103
+    },
+    {
+      "id": "weapp.orderDetailActions",
+      "kind": "frontend_handler",
+      "label": "order detail status actions",
+      "file": "weapp/miniprogram/pages/merchant/orders/detail/index.ts",
+      "line": 329
+    },
+    {
+      "id": "weapp.orderDetailPrintActions",
+      "kind": "frontend_handler",
+      "label": "order detail print retry/status/manual print",
+      "file": "weapp/miniprogram/pages/merchant/orders/detail/index.ts",
+      "line": 362
+    },
+    {
+      "id": "weapp.orderDetailManualRefund",
+      "kind": "frontend_handler",
+      "label": "order detail manual refund submit",
+      "file": "weapp/miniprogram/pages/merchant/orders/detail/index.ts",
+      "line": 485
+    },
+    {
+      "id": "weapp.kitchenPage",
+      "kind": "frontend_page",
+      "label": "Merchant kitchen board",
+      "file": "weapp/miniprogram/pages/merchant/kitchen/index.ts",
+      "line": 254
+    },
+    {
+      "id": "weapp.kitchenLoadOrders",
+      "kind": "frontend_handler",
+      "label": "kitchen loadKitchenOrders",
+      "file": "weapp/miniprogram/pages/merchant/kitchen/index.ts",
+      "line": 329
+    },
+    {
+      "id": "weapp.kitchenActions",
+      "kind": "frontend_handler",
+      "label": "kitchen preparing/ready actions",
+      "file": "weapp/miniprogram/pages/merchant/kitchen/index.ts",
+      "line": 439
+    },
+    {
+      "id": "weapp.printAnomaliesPage",
+      "kind": "frontend_page",
+      "label": "Merchant print anomalies page",
+      "file": "weapp/miniprogram/pages/merchant/orders/print-anomalies/index.ts",
+      "line": 127
+    },
+    {
+      "id": "weapp.printAnomaliesRetry",
+      "kind": "frontend_handler",
+      "label": "print anomaly retry action",
+      "file": "weapp/miniprogram/pages/merchant/orders/print-anomalies/index.ts",
+      "line": 244
+    },
+    {
+      "id": "weapp.wsManager",
+      "kind": "frontend_realtime",
+      "label": "Merchant Mini Program websocket manager",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/utils/websocket.ts",
+      "line": 10
+    },
+    {
+      "id": "flutter.notificationSettings",
+      "kind": "flutter_local_state",
+      "label": "NotificationSettingsNotifier local auto-accept/auto-print",
+      "file": "merchant_app/lib/features/settings/notification_settings_provider.dart",
+      "line": 33
+    },
+    {
+      "id": "flutter.orderAlertCoordinator",
+      "kind": "flutter_service",
+      "label": "OrderAlertCoordinator push/poll/backfill handling",
+      "file": "merchant_app/lib/features/order/order_alert_coordinator.dart",
+      "line": 72
+    },
+    {
+      "id": "flutter.orderNotifier",
+      "kind": "flutter_state",
+      "label": "OrderNotifier list/detail/accept/reject/ready",
+      "file": "merchant_app/lib/features/order/order_provider.dart",
+      "line": 26
+    },
+    {
+      "id": "flutter.bluetoothPrinterProvider",
+      "kind": "flutter_state",
+      "label": "PrinterNotifier local BLE receipt print",
+      "file": "merchant_app/lib/features/printer/printer_provider.dart",
+      "line": 48
+    },
+    {
+      "id": "apiWrapper.getMerchantOrderList",
+      "kind": "frontend_api",
+      "label": "GET /v1/merchant/orders",
+      "file": "weapp/miniprogram/pages/merchant/_api/order-management.ts",
+      "line": 320
+    },
+    {
+      "id": "apiWrapper.getMerchantOrderDetail",
+      "kind": "frontend_api",
+      "label": "GET /v1/merchant/orders/:id",
+      "file": "weapp/miniprogram/pages/merchant/_api/order-management.ts",
+      "line": 375
+    },
+    {
+      "id": "apiWrapper.acceptOrder",
+      "kind": "frontend_api",
+      "label": "POST /v1/merchant/orders/:id/accept",
+      "file": "weapp/miniprogram/pages/merchant/_api/order-management.ts",
+      "line": 386
+    },
+    {
+      "id": "apiWrapper.rejectOrder",
+      "kind": "frontend_api",
+      "label": "POST /v1/merchant/orders/:id/reject",
+      "file": "weapp/miniprogram/pages/merchant/_api/order-management.ts",
+      "line": 397
+    },
+    {
+      "id": "apiWrapper.markOrderReady",
+      "kind": "frontend_api",
+      "label": "POST /v1/merchant/orders/:id/ready",
+      "file": "weapp/miniprogram/pages/merchant/_api/order-management.ts",
+      "line": 409
+    },
+    {
+      "id": "apiWrapper.completeOrder",
+      "kind": "frontend_api",
+      "label": "POST /v1/merchant/orders/:id/complete",
+      "file": "weapp/miniprogram/pages/merchant/_api/order-management.ts",
+      "line": 420
+    },
+    {
+      "id": "apiWrapper.listOrderPrintJobs",
+      "kind": "frontend_api",
+      "label": "GET /v1/merchant/orders/:id/print-jobs",
+      "file": "weapp/miniprogram/pages/merchant/_api/order-management.ts",
+      "line": 431
+    },
+    {
+      "id": "apiWrapper.retryOrderPrintJob",
+      "kind": "frontend_api",
+      "label": "POST /v1/merchant/orders/:id/print-jobs/:print_log_id/retry",
+      "file": "weapp/miniprogram/pages/merchant/_api/order-management.ts",
+      "line": 442
+    },
+    {
+      "id": "apiWrapper.getOrderPrintJobStatus",
+      "kind": "frontend_api",
+      "label": "GET /v1/merchant/orders/:id/print-jobs/:print_log_id/status",
+      "file": "weapp/miniprogram/pages/merchant/_api/order-management.ts",
+      "line": 453
+    },
+    {
+      "id": "apiWrapper.printOrder",
+      "kind": "frontend_api",
+      "label": "POST /v1/merchant/orders/:id/print-jobs",
+      "file": "weapp/miniprogram/pages/merchant/_api/order-management.ts",
+      "line": 464
+    },
+    {
+      "id": "apiWrapper.listPrintAnomalies",
+      "kind": "frontend_api",
+      "label": "GET /v1/merchant/orders/print-anomalies",
+      "file": "weapp/miniprogram/pages/merchant/_api/order-management.ts",
+      "line": 475
+    },
+    {
+      "id": "apiWrapper.getKitchenOrders",
+      "kind": "frontend_api",
+      "label": "GET /v1/kitchen/orders",
+      "file": "weapp/miniprogram/pages/merchant/_api/order-management.ts",
+      "line": 500
+    },
+    {
+      "id": "apiWrapper.startPreparing",
+      "kind": "frontend_api",
+      "label": "POST /v1/kitchen/orders/:id/preparing",
+      "file": "weapp/miniprogram/pages/merchant/_api/order-management.ts",
+      "line": 522
+    },
+    {
+      "id": "apiWrapper.markKitchenReady",
+      "kind": "frontend_api",
+      "label": "POST /v1/kitchen/orders/:id/ready",
+      "file": "weapp/miniprogram/pages/merchant/_api/order-management.ts",
+      "line": 533
+    },
+    {
+      "id": "apiWrapper.createRefund",
+      "kind": "frontend_api",
+      "label": "POST /v1/refunds",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/payment.ts",
+      "line": 650
+    },
+    {
+      "id": "apiWrapper.getRefundById",
+      "kind": "frontend_api",
+      "label": "GET /v1/refunds/:id",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/payment.ts",
+      "line": 661
+    },
+    {
+      "id": "apiWrapper.getPaymentRefunds",
+      "kind": "frontend_api",
+      "label": "GET /v1/payments/:id/refunds",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/payment.ts",
+      "line": 643
+    },
+    {
+      "id": "apiWrapper.waitForRefundTerminal",
+      "kind": "frontend_service",
+      "label": "waitForRefundTerminalResult",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/services/refund-workflow.ts",
+      "line": 28
+    },
+    {
+      "id": "route.merchantOrders",
+      "kind": "route_group",
+      "label": "/v1/merchant/orders route group owner/manager/cashier",
+      "file": "locallife/api/server.go",
+      "line": 988
+    },
+    {
+      "id": "route.kitchen",
+      "kind": "route_group",
+      "label": "/v1/kitchen route group owner/manager/chef",
+      "file": "locallife/api/server.go",
+      "line": 1016
+    },
+    {
+      "id": "route.refunds",
+      "kind": "route_group",
+      "label": "/v1/refunds route group",
+      "file": "locallife/api/server.go",
+      "line": 1086
+    },
+    {
+      "id": "api.listMerchantOrders",
+      "kind": "handler",
+      "label": "Server.listMerchantOrders",
+      "file": "locallife/api/order.go",
+      "line": 1105
+    },
+    {
+      "id": "api.getMerchantOrder",
+      "kind": "handler",
+      "label": "Server.getMerchantOrder",
+      "file": "locallife/api/order.go",
+      "line": 1206
+    },
+    {
+      "id": "api.acceptOrder",
+      "kind": "handler",
+      "label": "Server.acceptOrder",
+      "file": "locallife/api/order.go",
+      "line": 1300
+    },
+    {
+      "id": "api.rejectOrder",
+      "kind": "handler",
+      "label": "Server.rejectOrder",
+      "file": "locallife/api/order.go",
+      "line": 1400
+    },
+    {
+      "id": "api.markOrderReady",
+      "kind": "handler",
+      "label": "Server.markOrderReady",
+      "file": "locallife/api/order.go",
+      "line": 1502
+    },
+    {
+      "id": "api.completeOrder",
+      "kind": "handler",
+      "label": "Server.completeOrder",
+      "file": "locallife/api/order.go",
+      "line": 1736
+    },
+    {
+      "id": "api.listOrderPrintJobs",
+      "kind": "handler",
+      "label": "Server.listMerchantOrderPrintJobs",
+      "file": "locallife/api/order.go",
+      "line": 1807
+    },
+    {
+      "id": "api.getPrintJobStatus",
+      "kind": "handler",
+      "label": "Server.getMerchantOrderPrintJobStatus",
+      "file": "locallife/api/order.go",
+      "line": 1893
+    },
+    {
+      "id": "api.listPrintAnomalies",
+      "kind": "handler",
+      "label": "Server.listMerchantPrintAnomalies",
+      "file": "locallife/api/order.go",
+      "line": 1996
+    },
+    {
+      "id": "api.retryPrintJob",
+      "kind": "handler",
+      "label": "Server.retryMerchantOrderPrintJob",
+      "file": "locallife/api/order.go",
+      "line": 2068
+    },
+    {
+      "id": "api.printMerchantOrder",
+      "kind": "handler",
+      "label": "Server.printMerchantOrder",
+      "file": "locallife/api/order.go",
+      "line": 2214
+    },
+    {
+      "id": "api.startPreparing",
+      "kind": "handler",
+      "label": "Server.startPreparing",
+      "file": "locallife/api/kitchen.go",
+      "line": 292
+    },
+    {
+      "id": "api.markKitchenReady",
+      "kind": "handler",
+      "label": "Server.markKitchenOrderReady",
+      "file": "locallife/api/kitchen.go",
+      "line": 373
+    },
+    {
+      "id": "api.createRefundOrder",
+      "kind": "handler",
+      "label": "Server.createRefundOrder",
+      "file": "locallife/api/payment_order.go",
+      "line": 1213
+    },
+    {
+      "id": "api.getRefundOrder",
+      "kind": "handler",
+      "label": "Server.getRefundOrder",
+      "file": "locallife/api/payment_order.go",
+      "line": 1329
+    },
+    {
+      "id": "api.listRefundOrdersByPayment",
+      "kind": "handler",
+      "label": "Server.listRefundOrdersByPayment",
+      "file": "locallife/api/payment_order.go",
+      "line": 1382
+    },
+    {
+      "id": "logic.OrderService.AcceptMerchantOrder",
+      "kind": "service",
+      "label": "OrderService.AcceptMerchantOrder",
+      "file": "locallife/logic/order_service.go",
+      "line": 553
+    },
+    {
+      "id": "logic.OrderService.RejectMerchantOrder",
+      "kind": "service",
+      "label": "OrderService.RejectMerchantOrder",
+      "file": "locallife/logic/order_service.go",
+      "line": 586
+    },
+    {
+      "id": "logic.OrderService.MarkMerchantOrderReady",
+      "kind": "service",
+      "label": "OrderService.MarkMerchantOrderReady",
+      "file": "locallife/logic/order_service.go",
+      "line": 627
+    },
+    {
+      "id": "logic.OrderService.CompleteMerchantOrder",
+      "kind": "service",
+      "label": "OrderService.CompleteMerchantOrder",
+      "file": "locallife/logic/order_service.go",
+      "line": 656
+    },
+    {
+      "id": "logic.OrderService.PrintMerchantOrder",
+      "kind": "service",
+      "label": "OrderService.PrintMerchantOrder",
+      "file": "locallife/logic/order_service.go",
+      "line": 683
+    },
+    {
+      "id": "logic.AcceptMerchantOrder",
+      "kind": "logic",
+      "label": "AcceptMerchantOrder",
+      "file": "locallife/logic/merchant_order.go",
+      "line": 28
+    },
+    {
+      "id": "logic.RejectMerchantOrder",
+      "kind": "logic",
+      "label": "RejectMerchantOrder",
+      "file": "locallife/logic/merchant_order.go",
+      "line": 85
+    },
+    {
+      "id": "logic.MarkMerchantOrderReady",
+      "kind": "logic",
+      "label": "MarkMerchantOrderReady",
+      "file": "locallife/logic/merchant_order.go",
+      "line": 119
+    },
+    {
+      "id": "logic.CompleteMerchantOrder",
+      "kind": "logic",
+      "label": "CompleteMerchantOrder",
+      "file": "locallife/logic/merchant_order.go",
+      "line": 173
+    },
+    {
+      "id": "tx.UpdateOrderStatusTx",
+      "kind": "transaction",
+      "label": "SQLStore.UpdateOrderStatusTx",
+      "file": "locallife/db/sqlc/tx_order_status.go",
+      "line": 33
+    },
+    {
+      "id": "tx.CancelOrderTx",
+      "kind": "transaction",
+      "label": "SQLStore.CancelOrderTx",
+      "file": "locallife/db/sqlc/tx_order_status.go",
+      "line": 145
+    },
+    {
+      "id": "tx.CompleteOrderTx",
+      "kind": "transaction",
+      "label": "SQLStore.CompleteOrderTx",
+      "file": "locallife/db/sqlc/tx_order_status.go",
+      "line": 97
+    },
+    {
+      "id": "tx.AcceptTakeoutOrderTx",
+      "kind": "transaction",
+      "label": "SQLStore.AcceptTakeoutOrderTx",
+      "file": "locallife/db/sqlc/tx_takeout_order.go",
+      "line": 47
+    },
+    {
+      "id": "tx.MarkTakeoutOrderReadyTx",
+      "kind": "transaction",
+      "label": "SQLStore.MarkTakeoutOrderReadyTx",
+      "file": "locallife/db/sqlc/tx_takeout_order.go",
+      "line": 94
+    },
+    {
+      "id": "sql.UpdateOrderStatus",
+      "kind": "sql",
+      "label": "UpdateOrderStatus",
+      "file": "locallife/db/query/order.sql",
+      "line": 200
+    },
+    {
+      "id": "sql.UpdateOrderToCompleted",
+      "kind": "sql",
+      "label": "UpdateOrderToCompleted",
+      "file": "locallife/db/query/order.sql",
+      "line": 235
+    },
+    {
+      "id": "sql.CreateOrderStatusLog",
+      "kind": "sql",
+      "label": "CreateOrderStatusLog",
+      "file": "locallife/db/query/order_status_log.sql",
+      "line": 1
+    },
+    {
+      "id": "logic.ProcessMerchantRejectRefund",
+      "kind": "logic",
+      "label": "ProcessMerchantRejectRefund",
+      "file": "locallife/logic/merchant_reject_refund.go",
+      "line": 30
+    },
+    {
+      "id": "logic.processMerchantRejectBaofuRefund",
+      "kind": "logic",
+      "label": "processMerchantRejectBaofuRefund",
+      "file": "locallife/logic/merchant_reject_refund.go",
+      "line": 100
+    },
+    {
+      "id": "logic.RefundService.CreateRefundOrder",
+      "kind": "service",
+      "label": "RefundService.CreateRefundOrder",
+      "file": "locallife/logic/refund_service.go",
+      "line": 77
+    },
+    {
+      "id": "logic.RefundService.GetRefundOrder",
+      "kind": "service",
+      "label": "RefundService.GetRefundOrder",
+      "file": "locallife/logic/refund_service.go",
+      "line": 213
+    },
+    {
+      "id": "logic.RefundService.ListRefundOrdersByPayment",
+      "kind": "service",
+      "label": "RefundService.ListRefundOrdersByPayment",
+      "file": "locallife/logic/refund_service.go",
+      "line": 244
+    },
+    {
+      "id": "tx.CreateRefundOrderTx",
+      "kind": "transaction",
+      "label": "SQLStore.CreateRefundOrderTx",
+      "file": "locallife/db/sqlc/tx_refund.go",
+      "line": 40
+    },
+    {
+      "id": "sql.CreateRefundRequestIdempotency",
+      "kind": "sql",
+      "label": "CreateRefundRequestIdempotency",
+      "file": "locallife/db/query/refund_order.sql",
+      "line": 50
+    },
+    {
+      "id": "sql.GetRefundRequestIdempotencyForUpdate",
+      "kind": "sql",
+      "label": "GetRefundRequestIdempotencyForUpdate",
+      "file": "locallife/db/query/refund_order.sql",
+      "line": 41
+    },
+    {
+      "id": "sql.UpdateRefundOrderToProcessing",
+      "kind": "sql",
+      "label": "UpdateRefundOrderToProcessing",
+      "file": "locallife/db/query/refund_order.sql",
+      "line": 95
+    },
+    {
+      "id": "sql.UpdateRefundOrderToFailed",
+      "kind": "sql",
+      "label": "UpdateRefundOrderToFailed",
+      "file": "locallife/db/query/refund_order.sql",
+      "line": 117
+    },
+    {
+      "id": "callback.BaofuRefundNotify",
+      "kind": "callback",
+      "label": "Baofu refund callback",
+      "file": "locallife/api/baofu_callback.go",
+      "line": 435
+    },
+    {
+      "id": "logic.PaymentFactService.Apply",
+      "kind": "service",
+      "label": "PaymentFactService.ApplyExternalPaymentFactApplication",
+      "file": "locallife/logic/payment_fact_application_service.go",
+      "line": 187
+    },
+    {
+      "id": "logic.PaymentFactService.applyOrderRefundFact",
+      "kind": "service",
+      "label": "PaymentFactService.applyOrderRefundFact",
+      "file": "locallife/logic/payment_fact_application_service.go",
+      "line": 518
+    },
+    {
+      "id": "logic.PaymentFactService.createOrderRefundOutbox",
+      "kind": "service",
+      "label": "PaymentFactService.createOrderRefundOutbox",
+      "file": "locallife/logic/payment_fact_application_service.go",
+      "line": 1300
+    },
+    {
+      "id": "worker.PaymentDomainOutbox",
+      "kind": "worker",
+      "label": "payment domain outbox worker",
+      "file": "locallife/worker/task_payment_domain_outbox.go",
+      "line": 532
+    },
+    {
+      "id": "scheduler.RefundRecovery",
+      "kind": "scheduler",
+      "label": "RefundRecoveryScheduler",
+      "file": "locallife/worker/refund_recovery_scheduler.go",
+      "line": 123
+    },
+    {
+      "id": "sql.ListPaidUnrefundedPaymentOrders",
+      "kind": "sql",
+      "label": "ListPaidUnrefundedPaymentOrders",
+      "file": "locallife/db/query/payment_order.sql",
+      "line": 224
+    },
+    {
+      "id": "sql.ListPendingReservationRefundOrdersForRecovery",
+      "kind": "sql",
+      "label": "ListPendingReservationRefundOrdersForRecovery",
+      "file": "locallife/db/query/refund_order.sql",
+      "line": 76
+    },
+    {
+      "id": "sql.ListStuckProcessingRefundOrders",
+      "kind": "sql",
+      "label": "ListStuckProcessingRefundOrders",
+      "file": "locallife/db/query/refund_order.sql",
+      "line": 140
+    },
+    {
+      "id": "apiTaskScheduler.ScheduleOrderPrint",
+      "kind": "scheduler_adapter",
+      "label": "apiTaskScheduler.ScheduleOrderPrint",
+      "file": "locallife/api/logic_adapters.go",
+      "line": 188
+    },
+    {
+      "id": "apiTaskScheduler.PublishMerchantOrderSnapshot",
+      "kind": "websocket_adapter",
+      "label": "apiOrderEventPublisher.PublishMerchantOrderSnapshot",
+      "file": "locallife/api/logic_adapters.go",
+      "line": 53
+    },
+    {
+      "id": "worker.DistributeTaskPrintOrder",
+      "kind": "enqueue",
+      "label": "RedisTaskDistributor.DistributeTaskPrintOrder",
+      "file": "locallife/worker/task_print_order.go",
+      "line": 55
+    },
+    {
+      "id": "worker.ProcessTaskPrintOrder",
+      "kind": "worker",
+      "label": "RedisTaskProcessor.ProcessTaskPrintOrder",
+      "file": "locallife/worker/task_print_order.go",
+      "line": 82
+    },
+    {
+      "id": "worker.executePrintAttempt",
+      "kind": "worker",
+      "label": "executePrintAttempt",
+      "file": "locallife/worker/task_print_order.go",
+      "line": 178
+    },
+    {
+      "id": "callback.FeieyunPrintResult",
+      "kind": "callback",
+      "label": "handleFeieyunPrintResultNotify",
+      "file": "locallife/api/feieyun_callback.go",
+      "line": 17
+    },
+    {
+      "id": "scheduler.PrintAnomalyTimeout",
+      "kind": "scheduler",
+      "label": "DataCleanupScheduler.checkTimedOutPrintAnomalies",
+      "file": "locallife/scheduler/data_cleanup.go",
+      "line": 651
+    },
+    {
+      "id": "sql.ListPrintLogsByOrder",
+      "kind": "sql",
+      "label": "ListPrintLogsByOrder",
+      "file": "locallife/db/query/print_log.sql",
+      "line": 35
+    },
+    {
+      "id": "sql.ListMerchantPrintAnomalies",
+      "kind": "sql",
+      "label": "ListMerchantPrintAnomalies",
+      "file": "locallife/db/query/print_log.sql",
+      "line": 50
+    },
+    {
+      "id": "sql.CountMerchantPrintAnomalies",
+      "kind": "sql",
+      "label": "CountMerchantPrintAnomalies",
+      "file": "locallife/db/query/print_log.sql",
+      "line": 78
+    },
+    {
+      "id": "sql.GetPrintLogByTaskKeyAndPrinter",
+      "kind": "sql",
+      "label": "GetPrintLogByTaskKeyAndPrinter",
+      "file": "locallife/db/query/print_log.sql",
+      "line": 16
+    },
+    {
+      "id": "sql.CreatePrintLog",
+      "kind": "sql",
+      "label": "CreatePrintLog",
+      "file": "locallife/db/query/print_log.sql",
+      "line": 1
+    },
+    {
+      "id": "sql.UpdatePrintLogStatus",
+      "kind": "sql",
+      "label": "UpdatePrintLogStatus",
+      "file": "locallife/db/query/print_log.sql",
+      "line": 123
+    },
+    {
+      "id": "sql.GetPrintLogByVendorOrderID",
+      "kind": "sql",
+      "label": "GetPrintLogByVendorOrderID",
+      "file": "locallife/db/query/print_log.sql",
+      "line": 22
+    },
+    {
+      "id": "table.orders",
+      "kind": "table",
+      "label": "orders"
+    },
+    {
+      "id": "table.order_status_logs",
+      "kind": "table",
+      "label": "order_status_logs"
+    },
+    {
+      "id": "table.delivery_pool",
+      "kind": "table",
+      "label": "delivery_pool"
+    },
+    {
+      "id": "table.payment_orders",
+      "kind": "table",
+      "label": "payment_orders"
+    },
+    {
+      "id": "table.refund_orders",
+      "kind": "table",
+      "label": "refund_orders"
+    },
+    {
+      "id": "table.refund_request_idempotency",
+      "kind": "table",
+      "label": "refund_request_idempotency"
+    },
+    {
+      "id": "table.external_payment_facts",
+      "kind": "table",
+      "label": "external_payment_facts"
+    },
+    {
+      "id": "table.external_payment_fact_applications",
+      "kind": "table",
+      "label": "external_payment_fact_applications"
+    },
+    {
+      "id": "table.payment_domain_outbox",
+      "kind": "table",
+      "label": "payment_domain_outbox"
+    },
+    {
+      "id": "table.print_logs",
+      "kind": "table",
+      "label": "print_logs"
+    },
+    {
+      "id": "external.baofuRefund",
+      "kind": "provider",
+      "label": "Baofu refund before share provider"
+    },
+    {
+      "id": "external.cloudPrinter",
+      "kind": "provider",
+      "label": "Cloud printer provider"
+    },
+    {
+      "id": "websocket.merchantOrderUpdate",
+      "kind": "websocket",
+      "label": "merchant websocket order_update snapshot"
+    },
+    {
+      "id": "local.flutterNotificationSettings",
+      "kind": "local_state",
+      "label": "Flutter SharedPreferences order alert settings"
+    },
+    {
+      "id": "local.bluetoothReceiptPaper",
+      "kind": "local_side_effect",
+      "label": "Local Bluetooth paper receipt"
+    }
+  ],
+  "edges": [
+    {
+      "from": "weapp.orderListPage",
+      "to": "weapp.orderListLoadOrders",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.orderListLoadOrders",
+      "to": "apiWrapper.getMerchantOrderList",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.getMerchantOrderList",
+      "to": "route.merchantOrders",
+      "kind": "http"
+    },
+    {
+      "from": "route.merchantOrders",
+      "to": "api.listMerchantOrders",
+      "kind": "route"
+    },
+    {
+      "from": "api.listMerchantOrders",
+      "to": "table.orders",
+      "kind": "read"
+    },
+    {
+      "from": "weapp.orderListPage",
+      "to": "weapp.wsManager",
+      "kind": "websocket"
+    },
+    {
+      "from": "flutter.notificationSettings",
+      "to": "local.flutterNotificationSettings",
+      "kind": "read_write"
+    },
+    {
+      "from": "flutter.orderAlertCoordinator",
+      "to": "flutter.notificationSettings",
+      "kind": "read"
+    },
+    {
+      "from": "flutter.orderAlertCoordinator",
+      "to": "flutter.orderNotifier",
+      "kind": "state_call"
+    },
+    {
+      "from": "flutter.orderNotifier",
+      "to": "route.merchantOrders",
+      "kind": "http"
+    },
+    {
+      "from": "flutter.orderAlertCoordinator",
+      "to": "flutter.bluetoothPrinterProvider",
+      "kind": "local_print_call"
+    },
+    {
+      "from": "flutter.bluetoothPrinterProvider",
+      "to": "local.bluetoothReceiptPaper",
+      "kind": "local_print_side_effect"
+    },
+    {
+      "from": "weapp.orderListPage",
+      "to": "weapp.orderListActions",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.orderListActions",
+      "to": "apiWrapper.acceptOrder",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.orderListActions",
+      "to": "apiWrapper.rejectOrder",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.orderListActions",
+      "to": "apiWrapper.markOrderReady",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.orderListActions",
+      "to": "apiWrapper.completeOrder",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.orderDetailPage",
+      "to": "weapp.orderDetailLoad",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.orderDetailLoad",
+      "to": "apiWrapper.getMerchantOrderDetail",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.orderDetailLoad",
+      "to": "apiWrapper.listOrderPrintJobs",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.orderDetailLoad",
+      "to": "apiWrapper.getPaymentRefunds",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.getMerchantOrderDetail",
+      "to": "route.merchantOrders",
+      "kind": "http"
+    },
+    {
+      "from": "route.merchantOrders",
+      "to": "api.getMerchantOrder",
+      "kind": "route"
+    },
+    {
+      "from": "api.getMerchantOrder",
+      "to": "table.orders",
+      "kind": "read"
+    },
+    {
+      "from": "weapp.orderDetailPage",
+      "to": "weapp.orderDetailActions",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.orderDetailActions",
+      "to": "apiWrapper.acceptOrder",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.orderDetailActions",
+      "to": "apiWrapper.rejectOrder",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.orderDetailActions",
+      "to": "apiWrapper.markOrderReady",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.orderDetailActions",
+      "to": "apiWrapper.completeOrder",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.acceptOrder",
+      "to": "route.merchantOrders",
+      "kind": "http"
+    },
+    {
+      "from": "apiWrapper.rejectOrder",
+      "to": "route.merchantOrders",
+      "kind": "http"
+    },
+    {
+      "from": "apiWrapper.markOrderReady",
+      "to": "route.merchantOrders",
+      "kind": "http"
+    },
+    {
+      "from": "apiWrapper.completeOrder",
+      "to": "route.merchantOrders",
+      "kind": "http"
+    },
+    {
+      "from": "route.merchantOrders",
+      "to": "api.acceptOrder",
+      "kind": "route"
+    },
+    {
+      "from": "route.merchantOrders",
+      "to": "api.rejectOrder",
+      "kind": "route"
+    },
+    {
+      "from": "route.merchantOrders",
+      "to": "api.markOrderReady",
+      "kind": "route"
+    },
+    {
+      "from": "route.merchantOrders",
+      "to": "api.completeOrder",
+      "kind": "route"
+    },
+    {
+      "from": "api.acceptOrder",
+      "to": "logic.OrderService.AcceptMerchantOrder",
+      "kind": "call"
+    },
+    {
+      "from": "api.rejectOrder",
+      "to": "logic.OrderService.RejectMerchantOrder",
+      "kind": "call"
+    },
+    {
+      "from": "api.markOrderReady",
+      "to": "logic.OrderService.MarkMerchantOrderReady",
+      "kind": "call"
+    },
+    {
+      "from": "api.completeOrder",
+      "to": "logic.OrderService.CompleteMerchantOrder",
+      "kind": "call"
+    },
+    {
+      "from": "logic.OrderService.AcceptMerchantOrder",
+      "to": "logic.AcceptMerchantOrder",
+      "kind": "call"
+    },
+    {
+      "from": "logic.OrderService.RejectMerchantOrder",
+      "to": "logic.RejectMerchantOrder",
+      "kind": "call"
+    },
+    {
+      "from": "logic.OrderService.MarkMerchantOrderReady",
+      "to": "logic.MarkMerchantOrderReady",
+      "kind": "call"
+    },
+    {
+      "from": "logic.OrderService.CompleteMerchantOrder",
+      "to": "logic.CompleteMerchantOrder",
+      "kind": "call"
+    },
+    {
+      "from": "logic.AcceptMerchantOrder",
+      "to": "table.orders",
+      "kind": "read"
+    },
+    {
+      "from": "logic.AcceptMerchantOrder",
+      "to": "tx.AcceptTakeoutOrderTx",
+      "kind": "transaction"
+    },
+    {
+      "from": "logic.AcceptMerchantOrder",
+      "to": "tx.UpdateOrderStatusTx",
+      "kind": "transaction"
+    },
+    {
+      "from": "logic.RejectMerchantOrder",
+      "to": "tx.CancelOrderTx",
+      "kind": "transaction"
+    },
+    {
+      "from": "logic.MarkMerchantOrderReady",
+      "to": "tx.MarkTakeoutOrderReadyTx",
+      "kind": "transaction"
+    },
+    {
+      "from": "logic.MarkMerchantOrderReady",
+      "to": "tx.UpdateOrderStatusTx",
+      "kind": "transaction"
+    },
+    {
+      "from": "logic.CompleteMerchantOrder",
+      "to": "tx.CompleteOrderTx",
+      "kind": "transaction"
+    },
+    {
+      "from": "tx.UpdateOrderStatusTx",
+      "to": "sql.UpdateOrderStatus",
+      "kind": "write"
+    },
+    {
+      "from": "sql.UpdateOrderStatus",
+      "to": "table.orders",
+      "kind": "write"
+    },
+    {
+      "from": "tx.UpdateOrderStatusTx",
+      "to": "sql.CreateOrderStatusLog",
+      "kind": "write"
+    },
+    {
+      "from": "sql.CreateOrderStatusLog",
+      "to": "table.order_status_logs",
+      "kind": "write"
+    },
+    {
+      "from": "tx.AcceptTakeoutOrderTx",
+      "to": "table.orders",
+      "kind": "write"
+    },
+    {
+      "from": "tx.AcceptTakeoutOrderTx",
+      "to": "table.delivery_pool",
+      "kind": "write"
+    },
+    {
+      "from": "tx.AcceptTakeoutOrderTx",
+      "to": "table.order_status_logs",
+      "kind": "write"
+    },
+    {
+      "from": "tx.MarkTakeoutOrderReadyTx",
+      "to": "table.orders",
+      "kind": "write"
+    },
+    {
+      "from": "tx.MarkTakeoutOrderReadyTx",
+      "to": "table.order_status_logs",
+      "kind": "write"
+    },
+    {
+      "from": "tx.CancelOrderTx",
+      "to": "table.orders",
+      "kind": "write"
+    },
+    {
+      "from": "tx.CancelOrderTx",
+      "to": "table.order_status_logs",
+      "kind": "write"
+    },
+    {
+      "from": "tx.CompleteOrderTx",
+      "to": "sql.UpdateOrderToCompleted",
+      "kind": "write"
+    },
+    {
+      "from": "sql.UpdateOrderToCompleted",
+      "to": "table.orders",
+      "kind": "write"
+    },
+    {
+      "from": "tx.CompleteOrderTx",
+      "to": "sql.CreateOrderStatusLog",
+      "kind": "write"
+    },
+    {
+      "from": "logic.OrderService.AcceptMerchantOrder",
+      "to": "apiTaskScheduler.PublishMerchantOrderSnapshot",
+      "kind": "websocket"
+    },
+    {
+      "from": "logic.OrderService.RejectMerchantOrder",
+      "to": "apiTaskScheduler.PublishMerchantOrderSnapshot",
+      "kind": "websocket"
+    },
+    {
+      "from": "logic.OrderService.MarkMerchantOrderReady",
+      "to": "apiTaskScheduler.PublishMerchantOrderSnapshot",
+      "kind": "websocket"
+    },
+    {
+      "from": "logic.OrderService.CompleteMerchantOrder",
+      "to": "apiTaskScheduler.PublishMerchantOrderSnapshot",
+      "kind": "websocket"
+    },
+    {
+      "from": "apiTaskScheduler.PublishMerchantOrderSnapshot",
+      "to": "websocket.merchantOrderUpdate",
+      "kind": "websocket"
+    },
+    {
+      "from": "websocket.merchantOrderUpdate",
+      "to": "weapp.wsManager",
+      "kind": "websocket"
+    },
+    {
+      "from": "logic.OrderService.AcceptMerchantOrder",
+      "to": "apiTaskScheduler.ScheduleOrderPrint",
+      "kind": "scheduler"
+    },
+    {
+      "from": "logic.OrderService.MarkMerchantOrderReady",
+      "to": "apiTaskScheduler.ScheduleOrderPrint",
+      "kind": "scheduler"
+    },
+    {
+      "from": "apiTaskScheduler.ScheduleOrderPrint",
+      "to": "worker.DistributeTaskPrintOrder",
+      "kind": "enqueue"
+    },
+    {
+      "from": "worker.DistributeTaskPrintOrder",
+      "to": "worker.ProcessTaskPrintOrder",
+      "kind": "worker"
+    },
+    {
+      "from": "worker.ProcessTaskPrintOrder",
+      "to": "worker.executePrintAttempt",
+      "kind": "call"
+    },
+    {
+      "from": "worker.executePrintAttempt",
+      "to": "sql.GetPrintLogByTaskKeyAndPrinter",
+      "kind": "read"
+    },
+    {
+      "from": "sql.GetPrintLogByTaskKeyAndPrinter",
+      "to": "table.print_logs",
+      "kind": "read"
+    },
+    {
+      "from": "worker.executePrintAttempt",
+      "to": "sql.CreatePrintLog",
+      "kind": "write"
+    },
+    {
+      "from": "sql.CreatePrintLog",
+      "to": "table.print_logs",
+      "kind": "write"
+    },
+    {
+      "from": "worker.executePrintAttempt",
+      "to": "external.cloudPrinter",
+      "kind": "call"
+    },
+    {
+      "from": "worker.executePrintAttempt",
+      "to": "sql.UpdatePrintLogStatus",
+      "kind": "write"
+    },
+    {
+      "from": "sql.UpdatePrintLogStatus",
+      "to": "table.print_logs",
+      "kind": "write"
+    },
+    {
+      "from": "external.cloudPrinter",
+      "to": "callback.FeieyunPrintResult",
+      "kind": "callback"
+    },
+    {
+      "from": "callback.FeieyunPrintResult",
+      "to": "sql.GetPrintLogByVendorOrderID",
+      "kind": "read"
+    },
+    {
+      "from": "sql.GetPrintLogByVendorOrderID",
+      "to": "table.print_logs",
+      "kind": "read"
+    },
+    {
+      "from": "callback.FeieyunPrintResult",
+      "to": "sql.UpdatePrintLogStatus",
+      "kind": "write"
+    },
+    {
+      "from": "weapp.orderDetailPage",
+      "to": "weapp.orderDetailPrintActions",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.orderDetailPrintActions",
+      "to": "apiWrapper.retryOrderPrintJob",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.orderDetailPrintActions",
+      "to": "apiWrapper.getOrderPrintJobStatus",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.orderDetailPrintActions",
+      "to": "apiWrapper.printOrder",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.listOrderPrintJobs",
+      "to": "route.merchantOrders",
+      "kind": "http"
+    },
+    {
+      "from": "route.merchantOrders",
+      "to": "api.listOrderPrintJobs",
+      "kind": "route"
+    },
+    {
+      "from": "api.listOrderPrintJobs",
+      "to": "sql.ListPrintLogsByOrder",
+      "kind": "read"
+    },
+    {
+      "from": "sql.ListPrintLogsByOrder",
+      "to": "table.print_logs",
+      "kind": "read"
+    },
+    {
+      "from": "apiWrapper.retryOrderPrintJob",
+      "to": "route.merchantOrders",
+      "kind": "http"
+    },
+    {
+      "from": "route.merchantOrders",
+      "to": "api.retryPrintJob",
+      "kind": "route"
+    },
+    {
+      "from": "api.retryPrintJob",
+      "to": "table.print_logs",
+      "kind": "read"
+    },
+    {
+      "from": "api.retryPrintJob",
+      "to": "worker.DistributeTaskPrintOrder",
+      "kind": "enqueue"
+    },
+    {
+      "from": "apiWrapper.getOrderPrintJobStatus",
+      "to": "route.merchantOrders",
+      "kind": "http"
+    },
+    {
+      "from": "route.merchantOrders",
+      "to": "api.getPrintJobStatus",
+      "kind": "route"
+    },
+    {
+      "from": "api.getPrintJobStatus",
+      "to": "table.print_logs",
+      "kind": "read"
+    },
+    {
+      "from": "api.getPrintJobStatus",
+      "to": "external.cloudPrinter",
+      "kind": "call"
+    },
+    {
+      "from": "apiWrapper.printOrder",
+      "to": "route.merchantOrders",
+      "kind": "http"
+    },
+    {
+      "from": "route.merchantOrders",
+      "to": "api.printMerchantOrder",
+      "kind": "route"
+    },
+    {
+      "from": "api.printMerchantOrder",
+      "to": "logic.OrderService.PrintMerchantOrder",
+      "kind": "call"
+    },
+    {
+      "from": "logic.OrderService.PrintMerchantOrder",
+      "to": "apiTaskScheduler.ScheduleOrderPrint",
+      "kind": "scheduler"
+    },
+    {
+      "from": "weapp.printAnomaliesPage",
+      "to": "apiWrapper.listPrintAnomalies",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.listPrintAnomalies",
+      "to": "route.merchantOrders",
+      "kind": "http"
+    },
+    {
+      "from": "route.merchantOrders",
+      "to": "api.listPrintAnomalies",
+      "kind": "route"
+    },
+    {
+      "from": "api.listPrintAnomalies",
+      "to": "sql.ListMerchantPrintAnomalies",
+      "kind": "read"
+    },
+    {
+      "from": "api.listPrintAnomalies",
+      "to": "sql.CountMerchantPrintAnomalies",
+      "kind": "read"
+    },
+    {
+      "from": "sql.ListMerchantPrintAnomalies",
+      "to": "table.print_logs",
+      "kind": "read"
+    },
+    {
+      "from": "sql.CountMerchantPrintAnomalies",
+      "to": "table.print_logs",
+      "kind": "read"
+    },
+    {
+      "from": "weapp.printAnomaliesPage",
+      "to": "weapp.printAnomaliesRetry",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.printAnomaliesRetry",
+      "to": "apiWrapper.retryOrderPrintJob",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "scheduler.PrintAnomalyTimeout",
+      "to": "sql.ListMerchantPrintAnomalies",
+      "kind": "scheduler"
+    },
+    {
+      "from": "weapp.kitchenPage",
+      "to": "weapp.wsManager",
+      "kind": "websocket"
+    },
+    {
+      "from": "weapp.kitchenPage",
+      "to": "weapp.kitchenLoadOrders",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.kitchenLoadOrders",
+      "to": "apiWrapper.getKitchenOrders",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.getKitchenOrders",
+      "to": "route.kitchen",
+      "kind": "http"
+    },
+    {
+      "from": "route.kitchen",
+      "to": "table.orders",
+      "kind": "read"
+    },
+    {
+      "from": "weapp.kitchenPage",
+      "to": "weapp.kitchenActions",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.kitchenActions",
+      "to": "apiWrapper.startPreparing",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.kitchenActions",
+      "to": "apiWrapper.markKitchenReady",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.startPreparing",
+      "to": "route.kitchen",
+      "kind": "http"
+    },
+    {
+      "from": "apiWrapper.markKitchenReady",
+      "to": "route.kitchen",
+      "kind": "http"
+    },
+    {
+      "from": "route.kitchen",
+      "to": "api.startPreparing",
+      "kind": "route"
+    },
+    {
+      "from": "route.kitchen",
+      "to": "api.markKitchenReady",
+      "kind": "route"
+    },
+    {
+      "from": "api.startPreparing",
+      "to": "logic.OrderService.AcceptMerchantOrder",
+      "kind": "call"
+    },
+    {
+      "from": "api.markKitchenReady",
+      "to": "logic.OrderService.MarkMerchantOrderReady",
+      "kind": "call"
+    },
+    {
+      "from": "logic.OrderService.RejectMerchantOrder",
+      "to": "logic.ProcessMerchantRejectRefund",
+      "kind": "call"
+    },
+    {
+      "from": "logic.ProcessMerchantRejectRefund",
+      "to": "table.payment_orders",
+      "kind": "read"
+    },
+    {
+      "from": "logic.ProcessMerchantRejectRefund",
+      "to": "tx.CreateRefundOrderTx",
+      "kind": "transaction"
+    },
+    {
+      "from": "tx.CreateRefundOrderTx",
+      "to": "table.refund_orders",
+      "kind": "write"
+    },
+    {
+      "from": "logic.ProcessMerchantRejectRefund",
+      "to": "logic.processMerchantRejectBaofuRefund",
+      "kind": "call"
+    },
+    {
+      "from": "logic.processMerchantRejectBaofuRefund",
+      "to": "external.baofuRefund",
+      "kind": "call"
+    },
+    {
+      "from": "logic.processMerchantRejectBaofuRefund",
+      "to": "sql.UpdateRefundOrderToProcessing",
+      "kind": "write"
+    },
+    {
+      "from": "logic.processMerchantRejectBaofuRefund",
+      "to": "sql.UpdateRefundOrderToFailed",
+      "kind": "write"
+    },
+    {
+      "from": "sql.UpdateRefundOrderToProcessing",
+      "to": "table.refund_orders",
+      "kind": "write"
+    },
+    {
+      "from": "sql.UpdateRefundOrderToFailed",
+      "to": "table.refund_orders",
+      "kind": "write"
+    },
+    {
+      "from": "weapp.orderDetailPage",
+      "to": "weapp.orderDetailManualRefund",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.orderDetailManualRefund",
+      "to": "apiWrapper.createRefund",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.createRefund",
+      "to": "route.refunds",
+      "kind": "http"
+    },
+    {
+      "from": "route.refunds",
+      "to": "api.createRefundOrder",
+      "kind": "route"
+    },
+    {
+      "from": "api.createRefundOrder",
+      "to": "logic.RefundService.CreateRefundOrder",
+      "kind": "call"
+    },
+    {
+      "from": "logic.RefundService.CreateRefundOrder",
+      "to": "tx.CreateRefundOrderTx",
+      "kind": "transaction"
+    },
+    {
+      "from": "logic.RefundService.CreateRefundOrder",
+      "to": "sql.GetRefundRequestIdempotencyForUpdate",
+      "kind": "read"
+    },
+    {
+      "from": "sql.GetRefundRequestIdempotencyForUpdate",
+      "to": "table.refund_request_idempotency",
+      "kind": "read"
+    },
+    {
+      "from": "tx.CreateRefundOrderTx",
+      "to": "sql.CreateRefundRequestIdempotency",
+      "kind": "write"
+    },
+    {
+      "from": "sql.CreateRefundRequestIdempotency",
+      "to": "table.refund_request_idempotency",
+      "kind": "write"
+    },
+    {
+      "from": "weapp.orderDetailManualRefund",
+      "to": "apiWrapper.waitForRefundTerminal",
+      "kind": "call"
+    },
+    {
+      "from": "apiWrapper.waitForRefundTerminal",
+      "to": "apiWrapper.getRefundById",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.getRefundById",
+      "to": "route.refunds",
+      "kind": "http"
+    },
+    {
+      "from": "route.refunds",
+      "to": "api.getRefundOrder",
+      "kind": "route"
+    },
+    {
+      "from": "api.getRefundOrder",
+      "to": "logic.RefundService.GetRefundOrder",
+      "kind": "call"
+    },
+    {
+      "from": "logic.RefundService.GetRefundOrder",
+      "to": "table.refund_orders",
+      "kind": "read"
+    },
+    {
+      "from": "apiWrapper.getPaymentRefunds",
+      "to": "route.refunds",
+      "kind": "http"
+    },
+    {
+      "from": "route.refunds",
+      "to": "api.listRefundOrdersByPayment",
+      "kind": "route"
+    },
+    {
+      "from": "api.listRefundOrdersByPayment",
+      "to": "logic.RefundService.ListRefundOrdersByPayment",
+      "kind": "call"
+    },
+    {
+      "from": "logic.RefundService.ListRefundOrdersByPayment",
+      "to": "table.refund_orders",
+      "kind": "read"
+    },
+    {
+      "from": "external.baofuRefund",
+      "to": "callback.BaofuRefundNotify",
+      "kind": "callback"
+    },
+    {
+      "from": "callback.BaofuRefundNotify",
+      "to": "table.external_payment_facts",
+      "kind": "write"
+    },
+    {
+      "from": "callback.BaofuRefundNotify",
+      "to": "table.external_payment_fact_applications",
+      "kind": "write"
+    },
+    {
+      "from": "callback.BaofuRefundNotify",
+      "to": "logic.PaymentFactService.Apply",
+      "kind": "enqueue"
+    },
+    {
+      "from": "logic.PaymentFactService.Apply",
+      "to": "logic.PaymentFactService.applyOrderRefundFact",
+      "kind": "call"
+    },
+    {
+      "from": "logic.PaymentFactService.applyOrderRefundFact",
+      "to": "table.refund_orders",
+      "kind": "write"
+    },
+    {
+      "from": "logic.PaymentFactService.applyOrderRefundFact",
+      "to": "table.payment_orders",
+      "kind": "write"
+    },
+    {
+      "from": "logic.PaymentFactService.Apply",
+      "to": "logic.PaymentFactService.createOrderRefundOutbox",
+      "kind": "call"
+    },
+    {
+      "from": "logic.PaymentFactService.createOrderRefundOutbox",
+      "to": "table.payment_domain_outbox",
+      "kind": "write"
+    },
+    {
+      "from": "table.payment_domain_outbox",
+      "to": "worker.PaymentDomainOutbox",
+      "kind": "worker"
+    },
+    {
+      "from": "worker.PaymentDomainOutbox",
+      "to": "table.refund_orders",
+      "kind": "read"
+    },
+    {
+      "from": "worker.PaymentDomainOutbox",
+      "to": "table.payment_orders",
+      "kind": "read"
+    },
+    {
+      "from": "scheduler.RefundRecovery",
+      "to": "sql.ListPaidUnrefundedPaymentOrders",
+      "kind": "scheduler"
+    },
+    {
+      "from": "sql.ListPaidUnrefundedPaymentOrders",
+      "to": "table.payment_orders",
+      "kind": "read"
+    },
+    {
+      "from": "sql.ListPaidUnrefundedPaymentOrders",
+      "to": "table.refund_orders",
+      "kind": "read"
+    },
+    {
+      "from": "scheduler.RefundRecovery",
+      "to": "sql.ListPendingReservationRefundOrdersForRecovery",
+      "kind": "scheduler"
+    },
+    {
+      "from": "sql.ListPendingReservationRefundOrdersForRecovery",
+      "to": "table.refund_orders",
+      "kind": "read"
+    },
+    {
+      "from": "scheduler.RefundRecovery",
+      "to": "sql.ListStuckProcessingRefundOrders",
+      "kind": "scheduler"
+    },
+    {
+      "from": "sql.ListStuckProcessingRefundOrders",
+      "to": "table.refund_orders",
+      "kind": "read"
+    }
+  ]
+}

@@ -1,0 +1,288 @@
+{
+  "schema": "locallife-code-slice/v1",
+  "slice": "merchant-business-hours-auto-open",
+  "risk_class": "G2",
+  "generated_at": "2026-05-30",
+  "nodes": [
+    {
+      "id": "weapp.businessHoursPage",
+      "kind": "frontend_page",
+      "label": "Merchant business hours settings page",
+      "file": "weapp/miniprogram/pages/merchant/settings/business-hours/index.ts",
+      "line": 198
+    },
+    {
+      "id": "weapp.loadBusinessHours",
+      "kind": "frontend_handler",
+      "label": "loadBusinessHours",
+      "file": "weapp/miniprogram/pages/merchant/settings/business-hours/index.ts",
+      "line": 255
+    },
+    {
+      "id": "weapp.onSaveBusinessHours",
+      "kind": "frontend_handler",
+      "label": "onSave",
+      "file": "weapp/miniprogram/pages/merchant/settings/business-hours/index.ts",
+      "line": 517
+    },
+    {
+      "id": "weapp.syncFirstBusinessDay",
+      "kind": "frontend_handler",
+      "label": "onSyncFirstBusinessDay",
+      "file": "weapp/miniprogram/pages/merchant/settings/business-hours/index.ts",
+      "line": 437
+    },
+    {
+      "id": "apiWrapper.getMyMerchantBusinessHours",
+      "kind": "frontend_api",
+      "label": "GET /v1/merchants/me/business-hours",
+      "file": "weapp/miniprogram/api/merchant.ts",
+      "line": 583
+    },
+    {
+      "id": "apiWrapper.updateMyMerchantBusinessHours",
+      "kind": "frontend_api",
+      "label": "PUT /v1/merchants/me/business-hours",
+      "file": "weapp/miniprogram/api/merchant.ts",
+      "line": 594
+    },
+    {
+      "id": "route.getBusinessHours",
+      "kind": "route",
+      "label": "GET /v1/merchants/me/business-hours",
+      "file": "locallife/api/server.go",
+      "line": 670
+    },
+    {
+      "id": "route.putBusinessHours",
+      "kind": "route",
+      "label": "PUT /v1/merchants/me/business-hours",
+      "file": "locallife/api/server.go",
+      "line": 685
+    },
+    {
+      "id": "api.getMerchantBusinessHours",
+      "kind": "handler",
+      "label": "Server.getMerchantBusinessHours",
+      "file": "locallife/api/merchant.go",
+      "line": 866
+    },
+    {
+      "id": "api.setMerchantBusinessHours",
+      "kind": "handler",
+      "label": "Server.setMerchantBusinessHours",
+      "file": "locallife/api/merchant.go",
+      "line": 773
+    },
+    {
+      "id": "db.SetBusinessHoursTx",
+      "kind": "transaction",
+      "label": "SQLStore.SetBusinessHoursTx",
+      "file": "locallife/db/sqlc/tx_merchant.go",
+      "line": 34
+    },
+    {
+      "id": "sql.DeleteMerchantBusinessHours",
+      "kind": "sql",
+      "label": "DeleteMerchantBusinessHours",
+      "file": "locallife/db/query/merchant.sql",
+      "line": 337
+    },
+    {
+      "id": "sql.CreateBusinessHour",
+      "kind": "sql",
+      "label": "CreateBusinessHour",
+      "file": "locallife/db/query/merchant.sql",
+      "line": 276
+    },
+    {
+      "id": "sql.ListMerchantBusinessHoursAll",
+      "kind": "sql",
+      "label": "ListMerchantBusinessHoursAll",
+      "file": "locallife/db/query/merchant.sql",
+      "line": 299
+    },
+    {
+      "id": "sql.UpdateMerchantAutoOpenByBusinessHours",
+      "kind": "sql",
+      "label": "UpdateMerchantAutoOpenByBusinessHours",
+      "file": "locallife/db/query/merchant.sql",
+      "line": 341
+    },
+    {
+      "id": "scheduler.MerchantOpenStatusScheduler",
+      "kind": "scheduler",
+      "label": "merchant-open-status scheduler",
+      "file": "locallife/scheduler/merchant_open_status.go",
+      "line": 37
+    },
+    {
+      "id": "sql.SyncMerchantOpenStatusByBusinessHours",
+      "kind": "sql",
+      "label": "SyncMerchantOpenStatusByBusinessHours",
+      "file": "locallife/db/query/merchant.sql",
+      "line": 492
+    },
+    {
+      "id": "sql.GetMerchantIsOpen",
+      "kind": "sql",
+      "label": "GetMerchantIsOpen",
+      "file": "locallife/db/query/merchant.sql",
+      "line": 469
+    },
+    {
+      "id": "websocket.PublishMerchantStatusChange",
+      "kind": "websocket",
+      "label": "merchant status change source=business_hours",
+      "file": "locallife/scheduler/merchant_open_status.go",
+      "line": 83
+    },
+    {
+      "id": "table.merchant_business_hours",
+      "kind": "table",
+      "label": "merchant_business_hours"
+    },
+    {
+      "id": "field.merchants.auto_open_by_business_hours",
+      "kind": "field",
+      "label": "merchants.auto_open_by_business_hours"
+    },
+    {
+      "id": "field.merchants.is_open",
+      "kind": "field",
+      "label": "merchants.is_open"
+    }
+  ],
+  "edges": [
+    {
+      "from": "weapp.businessHoursPage",
+      "to": "weapp.loadBusinessHours",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.loadBusinessHours",
+      "to": "apiWrapper.getMyMerchantBusinessHours",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.getMyMerchantBusinessHours",
+      "to": "route.getBusinessHours",
+      "kind": "http"
+    },
+    {
+      "from": "route.getBusinessHours",
+      "to": "api.getMerchantBusinessHours",
+      "kind": "route"
+    },
+    {
+      "from": "api.getMerchantBusinessHours",
+      "to": "sql.ListMerchantBusinessHoursAll",
+      "kind": "read"
+    },
+    {
+      "from": "sql.ListMerchantBusinessHoursAll",
+      "to": "table.merchant_business_hours",
+      "kind": "read"
+    },
+    {
+      "from": "api.getMerchantBusinessHours",
+      "to": "field.merchants.auto_open_by_business_hours",
+      "kind": "read"
+    },
+    {
+      "from": "weapp.businessHoursPage",
+      "to": "weapp.syncFirstBusinessDay",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.businessHoursPage",
+      "to": "weapp.onSaveBusinessHours",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.onSaveBusinessHours",
+      "to": "apiWrapper.updateMyMerchantBusinessHours",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.updateMyMerchantBusinessHours",
+      "to": "route.putBusinessHours",
+      "kind": "http"
+    },
+    {
+      "from": "route.putBusinessHours",
+      "to": "api.setMerchantBusinessHours",
+      "kind": "route"
+    },
+    {
+      "from": "api.setMerchantBusinessHours",
+      "to": "db.SetBusinessHoursTx",
+      "kind": "call"
+    },
+    {
+      "from": "db.SetBusinessHoursTx",
+      "to": "sql.DeleteMerchantBusinessHours",
+      "kind": "transaction_write"
+    },
+    {
+      "from": "sql.DeleteMerchantBusinessHours",
+      "to": "table.merchant_business_hours",
+      "kind": "write"
+    },
+    {
+      "from": "db.SetBusinessHoursTx",
+      "to": "sql.CreateBusinessHour",
+      "kind": "transaction_write"
+    },
+    {
+      "from": "sql.CreateBusinessHour",
+      "to": "table.merchant_business_hours",
+      "kind": "write"
+    },
+    {
+      "from": "db.SetBusinessHoursTx",
+      "to": "sql.UpdateMerchantAutoOpenByBusinessHours",
+      "kind": "transaction_write"
+    },
+    {
+      "from": "sql.UpdateMerchantAutoOpenByBusinessHours",
+      "to": "field.merchants.auto_open_by_business_hours",
+      "kind": "write"
+    },
+    {
+      "from": "scheduler.MerchantOpenStatusScheduler",
+      "to": "sql.SyncMerchantOpenStatusByBusinessHours",
+      "kind": "scheduler"
+    },
+    {
+      "from": "sql.SyncMerchantOpenStatusByBusinessHours",
+      "to": "table.merchant_business_hours",
+      "kind": "read"
+    },
+    {
+      "from": "sql.SyncMerchantOpenStatusByBusinessHours",
+      "to": "field.merchants.auto_open_by_business_hours",
+      "kind": "read"
+    },
+    {
+      "from": "sql.SyncMerchantOpenStatusByBusinessHours",
+      "to": "field.merchants.is_open",
+      "kind": "write"
+    },
+    {
+      "from": "scheduler.MerchantOpenStatusScheduler",
+      "to": "sql.GetMerchantIsOpen",
+      "kind": "read"
+    },
+    {
+      "from": "sql.GetMerchantIsOpen",
+      "to": "field.merchants.is_open",
+      "kind": "read"
+    },
+    {
+      "from": "scheduler.MerchantOpenStatusScheduler",
+      "to": "websocket.PublishMerchantStatusChange",
+      "kind": "websocket_publish"
+    }
+  ]
+}

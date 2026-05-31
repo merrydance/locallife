@@ -1,0 +1,251 @@
+{
+  "schema": "locallife-code-slice/v1",
+  "slice": "merchant-manual-open-status",
+  "risk_class": "G2",
+  "generated_at": "2026-05-30",
+  "nodes": [
+    {
+      "id": "weapp.dashboard",
+      "kind": "frontend_page",
+      "label": "Merchant dashboard",
+      "file": "weapp/miniprogram/pages/merchant/dashboard/index.ts",
+      "line": 106
+    },
+    {
+      "id": "weapp.dashboardStatusSwitch",
+      "kind": "frontend_component",
+      "label": "Dashboard open status switch",
+      "file": "weapp/miniprogram/pages/merchant/dashboard/index.wxml",
+      "line": 47
+    },
+    {
+      "id": "weapp.loadDashboard",
+      "kind": "frontend_handler",
+      "label": "loadDashboard",
+      "file": "weapp/miniprogram/pages/merchant/dashboard/index.ts",
+      "line": 213
+    },
+    {
+      "id": "weapp.onOpenStatusSwitchChange",
+      "kind": "frontend_handler",
+      "label": "onOpenStatusSwitchChange",
+      "file": "weapp/miniprogram/pages/merchant/dashboard/index.ts",
+      "line": 471
+    },
+    {
+      "id": "weapp.fetchMerchantStorefrontOpenStatus",
+      "kind": "frontend_service",
+      "label": "fetchMerchantStorefrontOpenStatus",
+      "file": "weapp/miniprogram/pages/merchant/_services/merchant-open-status.ts",
+      "line": 14
+    },
+    {
+      "id": "weapp.updateMerchantStorefrontOpenStatus",
+      "kind": "frontend_service",
+      "label": "updateMerchantStorefrontOpenStatus",
+      "file": "weapp/miniprogram/pages/merchant/_services/merchant-open-status.ts",
+      "line": 18
+    },
+    {
+      "id": "flutter.orderListWorkingSwitch",
+      "kind": "flutter_page",
+      "label": "OrderListPage working status switch",
+      "file": "merchant_app/lib/features/order/order_list_page.dart",
+      "line": 106
+    },
+    {
+      "id": "flutter.workingStatusNotifier",
+      "kind": "flutter_state",
+      "label": "WorkingStatusNotifier sync/setStatus",
+      "file": "merchant_app/lib/features/order/working_status_provider.dart",
+      "line": 46
+    },
+    {
+      "id": "apiWrapper.getMyMerchantOpenStatus",
+      "kind": "frontend_api",
+      "label": "GET /v1/merchants/me/status",
+      "file": "weapp/miniprogram/api/merchant.ts",
+      "line": 556
+    },
+    {
+      "id": "apiWrapper.updateMyMerchantOpenStatus",
+      "kind": "frontend_api",
+      "label": "PATCH /v1/merchants/me/status",
+      "file": "weapp/miniprogram/api/merchant.ts",
+      "line": 567
+    },
+    {
+      "id": "route.getMerchantOpenStatus",
+      "kind": "route",
+      "label": "GET /v1/merchants/me/status",
+      "file": "locallife/api/server.go",
+      "line": 669
+    },
+    {
+      "id": "route.patchMerchantOpenStatus",
+      "kind": "route",
+      "label": "PATCH /v1/merchants/me/status",
+      "file": "locallife/api/server.go",
+      "line": 684
+    },
+    {
+      "id": "api.getMerchantOpenStatus",
+      "kind": "handler",
+      "label": "Server.getMerchantOpenStatus",
+      "file": "locallife/api/merchant.go",
+      "line": 626
+    },
+    {
+      "id": "api.updateMerchantOpenStatus",
+      "kind": "handler",
+      "label": "Server.updateMerchantOpenStatus",
+      "file": "locallife/api/merchant.go",
+      "line": 514
+    },
+    {
+      "id": "logic.ensureMerchantBaofuPaymentReady",
+      "kind": "function",
+      "label": "ensureMerchantBaofuPaymentReady",
+      "file": "locallife/api/merchant.go",
+      "line": 550
+    },
+    {
+      "id": "sql.GetMerchantIsOpen",
+      "kind": "sql",
+      "label": "GetMerchantIsOpen",
+      "file": "locallife/db/query/merchant.sql",
+      "line": 469
+    },
+    {
+      "id": "sql.UpdateMerchantIsOpen",
+      "kind": "sql",
+      "label": "UpdateMerchantIsOpen",
+      "file": "locallife/db/query/merchant.sql",
+      "line": 459
+    },
+    {
+      "id": "websocket.PublishMerchantStatusChange",
+      "kind": "websocket",
+      "label": "merchant status change source=manual",
+      "file": "locallife/api/merchant.go",
+      "line": 586
+    },
+    {
+      "id": "field.merchants.is_open",
+      "kind": "field",
+      "label": "merchants.is_open"
+    },
+    {
+      "id": "field.merchants.auto_close_at",
+      "kind": "field",
+      "label": "merchants.auto_close_at"
+    }
+  ],
+  "edges": [
+    {
+      "from": "weapp.dashboard",
+      "to": "weapp.loadDashboard",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.loadDashboard",
+      "to": "weapp.fetchMerchantStorefrontOpenStatus",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.fetchMerchantStorefrontOpenStatus",
+      "to": "apiWrapper.getMyMerchantOpenStatus",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.getMyMerchantOpenStatus",
+      "to": "route.getMerchantOpenStatus",
+      "kind": "http"
+    },
+    {
+      "from": "route.getMerchantOpenStatus",
+      "to": "api.getMerchantOpenStatus",
+      "kind": "route"
+    },
+    {
+      "from": "api.getMerchantOpenStatus",
+      "to": "sql.GetMerchantIsOpen",
+      "kind": "read"
+    },
+    {
+      "from": "sql.GetMerchantIsOpen",
+      "to": "field.merchants.is_open",
+      "kind": "read"
+    },
+    {
+      "from": "sql.GetMerchantIsOpen",
+      "to": "field.merchants.auto_close_at",
+      "kind": "read"
+    },
+    {
+      "from": "weapp.dashboardStatusSwitch",
+      "to": "weapp.onOpenStatusSwitchChange",
+      "kind": "event"
+    },
+    {
+      "from": "weapp.onOpenStatusSwitchChange",
+      "to": "weapp.updateMerchantStorefrontOpenStatus",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.updateMerchantStorefrontOpenStatus",
+      "to": "apiWrapper.updateMyMerchantOpenStatus",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.updateMyMerchantOpenStatus",
+      "to": "route.patchMerchantOpenStatus",
+      "kind": "http"
+    },
+    {
+      "from": "route.patchMerchantOpenStatus",
+      "to": "api.updateMerchantOpenStatus",
+      "kind": "route"
+    },
+    {
+      "from": "api.updateMerchantOpenStatus",
+      "to": "logic.ensureMerchantBaofuPaymentReady",
+      "kind": "call"
+    },
+    {
+      "from": "api.updateMerchantOpenStatus",
+      "to": "sql.UpdateMerchantIsOpen",
+      "kind": "write"
+    },
+    {
+      "from": "sql.UpdateMerchantIsOpen",
+      "to": "field.merchants.is_open",
+      "kind": "write"
+    },
+    {
+      "from": "sql.UpdateMerchantIsOpen",
+      "to": "field.merchants.auto_close_at",
+      "kind": "write"
+    },
+    {
+      "from": "api.updateMerchantOpenStatus",
+      "to": "websocket.PublishMerchantStatusChange",
+      "kind": "websocket_publish"
+    },
+    {
+      "from": "flutter.orderListWorkingSwitch",
+      "to": "flutter.workingStatusNotifier",
+      "kind": "event"
+    },
+    {
+      "from": "flutter.workingStatusNotifier",
+      "to": "route.getMerchantOpenStatus",
+      "kind": "http_get"
+    },
+    {
+      "from": "flutter.workingStatusNotifier",
+      "to": "route.patchMerchantOpenStatus",
+      "kind": "http_patch"
+    }
+  ]
+}

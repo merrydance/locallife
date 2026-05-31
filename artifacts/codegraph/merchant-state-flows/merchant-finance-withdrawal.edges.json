@@ -1,0 +1,897 @@
+{
+  "schema": "locallife-code-slice/v1",
+  "slice": "merchant-finance-withdrawal",
+  "risk_class": "G3",
+  "generated_at": "2026-05-30",
+  "nodes": [
+    {
+      "id": "weapp.financeEntry",
+      "kind": "frontend_menu",
+      "label": "Merchant finance entry cards",
+      "file": "weapp/miniprogram/pages/merchant/_utils/merchant-finance-entry-view.ts",
+      "line": 21
+    },
+    {
+      "id": "weapp.financeWorkflow",
+      "kind": "frontend_service",
+      "label": "merchant-finance-workflow read view builder",
+      "file": "weapp/miniprogram/pages/merchant/_services/merchant-finance-workflow.ts",
+      "line": 1
+    },
+    {
+      "id": "apiWrapper.merchantFinanceOverview",
+      "kind": "frontend_api",
+      "label": "getMerchantFinanceOverview",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/merchant-finance.ts",
+      "line": 149
+    },
+    {
+      "id": "apiWrapper.merchantFinanceOrders",
+      "kind": "frontend_api",
+      "label": "listMerchantFinanceOrders",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/merchant-finance.ts",
+      "line": 157
+    },
+    {
+      "id": "apiWrapper.merchantSettlements",
+      "kind": "frontend_api",
+      "label": "listMerchantSettlements",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/merchant-finance.ts",
+      "line": 194
+    },
+    {
+      "id": "route.merchantFinanceRead",
+      "kind": "backend_route",
+      "label": "GET /v1/merchant/finance/** read routes",
+      "file": "locallife/api/server.go",
+      "line": 1268
+    },
+    {
+      "id": "middleware.merchantFinanceOwnerManager",
+      "kind": "backend_middleware",
+      "label": "MerchantStaffMiddleware owner/manager",
+      "file": "locallife/api/server.go",
+      "line": 1269
+    },
+    {
+      "id": "api.getMerchantFinanceOverview",
+      "kind": "backend_handler",
+      "label": "getMerchantFinanceOverview",
+      "file": "locallife/api/merchant_finance.go",
+      "line": 59
+    },
+    {
+      "id": "api.listMerchantFinanceOrders",
+      "kind": "backend_handler",
+      "label": "listMerchantFinanceOrders",
+      "file": "locallife/api/merchant_finance.go",
+      "line": 190
+    },
+    {
+      "id": "api.listMerchantSettlements",
+      "kind": "backend_handler",
+      "label": "listMerchantSettlements",
+      "file": "locallife/api/merchant_finance.go",
+      "line": 846
+    },
+    {
+      "id": "sql.getMerchantFinanceOverview",
+      "kind": "sql_query",
+      "label": "GetMerchantFinanceOverview",
+      "file": "locallife/db/query/profit_sharing_order.sql",
+      "line": 381
+    },
+    {
+      "id": "sql.listMerchantFinanceOrders",
+      "kind": "sql_query",
+      "label": "ListMerchantFinanceOrders",
+      "file": "locallife/db/query/profit_sharing_order.sql",
+      "line": 353
+    },
+    {
+      "id": "sql.listMerchantSettlements",
+      "kind": "sql_query",
+      "label": "ListMerchantSettlements",
+      "file": "locallife/db/query/profit_sharing_order.sql",
+      "line": 431
+    },
+    {
+      "id": "table.profitSharingOrders",
+      "kind": "table",
+      "label": "profit_sharing_orders",
+      "file": "locallife/db/query/profit_sharing_order.sql",
+      "line": 353
+    },
+    {
+      "id": "table.merchantSettlementAdjustments",
+      "kind": "table",
+      "label": "merchant_settlement_adjustments",
+      "file": "locallife/db/query/merchant_settlement_adjustment.sql",
+      "line": 1
+    },
+    {
+      "id": "weapp.settlementAccountStatusPage",
+      "kind": "frontend_page",
+      "label": "Merchant settlement account status page",
+      "file": "weapp/miniprogram/pages/merchant/finance/settlement-account/index.ts",
+      "line": 1
+    },
+    {
+      "id": "weapp.settlementStatusBehavior",
+      "kind": "frontend_behavior",
+      "label": "baofuSettlementStatusBehavior",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/behaviors/baofu-settlement-status.ts",
+      "line": 65
+    },
+    {
+      "id": "weapp.settlementAccountSubmitPage",
+      "kind": "frontend_page",
+      "label": "Merchant settlement account submit page",
+      "file": "weapp/miniprogram/pages/merchant/finance/settlement-account/submit/index.ts",
+      "line": 70
+    },
+    {
+      "id": "weapp.settlementSubmitBehavior",
+      "kind": "frontend_behavior",
+      "label": "baofuSettlementSubmitBehavior",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/behaviors/baofu-settlement-submit.ts",
+      "line": 52
+    },
+    {
+      "id": "weapp.baofuOnboardingService",
+      "kind": "frontend_service",
+      "label": "start/poll Baofu account onboarding",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/services/baofu-account-onboarding.ts",
+      "line": 1
+    },
+    {
+      "id": "apiWrapper.getMerchantSettlementAccount",
+      "kind": "frontend_api",
+      "label": "getMerchantBaofuSettlementAccount",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/baofu-account.ts",
+      "line": 193
+    },
+    {
+      "id": "apiWrapper.submitMerchantSettlementAccount",
+      "kind": "frontend_api",
+      "label": "submitMerchantBaofuSettlementAccountProfile",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/baofu-account.ts",
+      "line": 195
+    },
+    {
+      "id": "route.merchantSettlementAccount",
+      "kind": "backend_route",
+      "label": "GET/POST /v1/merchant/settlement-account",
+      "file": "locallife/api/server.go",
+      "line": 710
+    },
+    {
+      "id": "middleware.merchantOwnerOnly",
+      "kind": "backend_middleware",
+      "label": "MerchantOwnerOnlyMiddleware",
+      "file": "locallife/api/rbac_middleware.go",
+      "line": 139
+    },
+    {
+      "id": "api.getMerchantSettlementAccount",
+      "kind": "backend_handler",
+      "label": "getMerchantBaofuSettlementAccount",
+      "file": "locallife/api/baofu_settlement_account.go",
+      "line": 28
+    },
+    {
+      "id": "api.createMerchantSettlementAccount",
+      "kind": "backend_handler",
+      "label": "createMerchantBaofuSettlementAccount",
+      "file": "locallife/api/baofu_settlement_account.go",
+      "line": 51
+    },
+    {
+      "id": "api.loadSettlementAccount",
+      "kind": "backend_handler",
+      "label": "loadBaofuSettlementAccount",
+      "file": "locallife/api/baofu_settlement_account_read.go",
+      "line": 12
+    },
+    {
+      "id": "logic.startOrRecoverOpening",
+      "kind": "logic",
+      "label": "BaofuAccountOnboardingService.StartOrRecoverOpening",
+      "file": "locallife/logic/baofu_account_onboarding_service.go",
+      "line": 153
+    },
+    {
+      "id": "logic.openFromProfile",
+      "kind": "logic",
+      "label": "openFromProfile",
+      "file": "locallife/logic/baofu_account_onboarding_open.go",
+      "line": 14
+    },
+    {
+      "id": "logic.applyAccountOpenResult",
+      "kind": "logic",
+      "label": "applyAccountOpenResult",
+      "file": "locallife/logic/baofu_account_onboarding_apply.go",
+      "line": 26
+    },
+    {
+      "id": "logic.recoverOpeningFlow",
+      "kind": "logic",
+      "label": "RecoverOpeningFlow",
+      "file": "locallife/logic/baofu_account_onboarding_recovery.go",
+      "line": 14
+    },
+    {
+      "id": "sql.upsertBaofuAccountOpeningProfile",
+      "kind": "sql_query",
+      "label": "UpsertBaofuAccountOpeningProfile",
+      "file": "locallife/db/query/baofu_account_opening_profile.sql",
+      "line": 1
+    },
+    {
+      "id": "sql.createBaofuAccountOpeningFlow",
+      "kind": "sql_query",
+      "label": "Create/Get/Mark Baofu account opening flow",
+      "file": "locallife/db/query/baofu_account_opening_flow.sql",
+      "line": 1
+    },
+    {
+      "id": "sql.upsertBaofuAccountBinding",
+      "kind": "sql_query",
+      "label": "Upsert/mark Baofu account binding",
+      "file": "locallife/db/query/baofu_account_binding.sql",
+      "line": 1
+    },
+    {
+      "id": "table.baofuAccountOpeningProfiles",
+      "kind": "table",
+      "label": "baofu_account_opening_profiles",
+      "file": "locallife/db/query/baofu_account_opening_profile.sql",
+      "line": 1
+    },
+    {
+      "id": "table.baofuAccountOpeningFlows",
+      "kind": "table",
+      "label": "baofu_account_opening_flows",
+      "file": "locallife/db/query/baofu_account_opening_flow.sql",
+      "line": 1
+    },
+    {
+      "id": "table.baofuAccountBindings",
+      "kind": "table",
+      "label": "baofu_account_bindings",
+      "file": "locallife/db/query/baofu_account_binding.sql",
+      "line": 1
+    },
+    {
+      "id": "table.baofuMerchantReports",
+      "kind": "table",
+      "label": "baofu_merchant_reports",
+      "file": "locallife/db/query/baofu_merchant_report.sql",
+      "line": 1
+    },
+    {
+      "id": "provider.baofuAccount",
+      "kind": "provider",
+      "label": "Baofu account/open/report provider",
+      "file": "locallife/logic/baofu_account_onboarding_open.go",
+      "line": 59
+    },
+    {
+      "id": "callback.baofuAccountOpen",
+      "kind": "webhook",
+      "label": "handleBaofuAccountOpenNotify",
+      "file": "locallife/api/baofu_callback.go",
+      "line": 67
+    },
+    {
+      "id": "worker.accountOpeningRecoveryScheduler",
+      "kind": "scheduler",
+      "label": "BaofuAccountOpeningRecoveryScheduler",
+      "file": "locallife/worker/baofu_account_opening_recovery_scheduler.go",
+      "line": 75
+    },
+    {
+      "id": "weapp.withdrawalsPage",
+      "kind": "frontend_page",
+      "label": "Merchant withdrawals list page",
+      "file": "weapp/miniprogram/pages/merchant/finance/withdrawals/index.ts",
+      "line": 39
+    },
+    {
+      "id": "weapp.withdrawalCreatePage",
+      "kind": "frontend_page",
+      "label": "Merchant withdrawal create page",
+      "file": "weapp/miniprogram/pages/merchant/finance/withdrawals/create/index.ts",
+      "line": 17
+    },
+    {
+      "id": "weapp.withdrawalDetailPage",
+      "kind": "frontend_page",
+      "label": "Merchant withdrawal detail page",
+      "file": "weapp/miniprogram/pages/merchant/finance/withdrawals/detail/index.ts",
+      "line": 1
+    },
+    {
+      "id": "apiWrapper.getWithdrawalBalance",
+      "kind": "frontend_api",
+      "label": "getBaofuWithdrawalBalance",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/baofu-withdrawal.ts",
+      "line": 72
+    },
+    {
+      "id": "apiWrapper.listWithdrawals",
+      "kind": "frontend_api",
+      "label": "listBaofuWithdrawals",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/baofu-withdrawal.ts",
+      "line": 79
+    },
+    {
+      "id": "apiWrapper.getWithdrawal",
+      "kind": "frontend_api",
+      "label": "getBaofuWithdrawal",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/baofu-withdrawal.ts",
+      "line": 90
+    },
+    {
+      "id": "apiWrapper.createWithdrawal",
+      "kind": "frontend_api",
+      "label": "createBaofuWithdrawal",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/baofu-withdrawal.ts",
+      "line": 97
+    },
+    {
+      "id": "route.merchantWithdrawalRead",
+      "kind": "backend_route",
+      "label": "GET /v1/merchant/finance/baofu-withdrawal/**",
+      "file": "locallife/api/server.go",
+      "line": 1278
+    },
+    {
+      "id": "route.merchantWithdrawalCreate",
+      "kind": "backend_route",
+      "label": "POST /v1/merchant/finance/baofu-withdrawal/withdraw",
+      "file": "locallife/api/server.go",
+      "line": 1283
+    },
+    {
+      "id": "middleware.merchantWithdrawalOwner",
+      "kind": "backend_middleware",
+      "label": "MerchantStaffMiddleware owner for withdrawal create",
+      "file": "locallife/api/server.go",
+      "line": 1284
+    },
+    {
+      "id": "api.getWithdrawalBalance",
+      "kind": "backend_handler",
+      "label": "getMerchantBaofuWithdrawalBalance",
+      "file": "locallife/api/baofu_withdrawal.go",
+      "line": 80
+    },
+    {
+      "id": "api.listWithdrawals",
+      "kind": "backend_handler",
+      "label": "listMerchantBaofuWithdrawals",
+      "file": "locallife/api/baofu_withdrawal.go",
+      "line": 88
+    },
+    {
+      "id": "api.getWithdrawal",
+      "kind": "backend_handler",
+      "label": "getMerchantBaofuWithdrawal",
+      "file": "locallife/api/baofu_withdrawal.go",
+      "line": 96
+    },
+    {
+      "id": "api.createWithdrawal",
+      "kind": "backend_handler",
+      "label": "createMerchantBaofuWithdrawal",
+      "file": "locallife/api/baofu_withdrawal.go",
+      "line": 104
+    },
+    {
+      "id": "logic.queryWithdrawalBalance",
+      "kind": "logic",
+      "label": "BaofuWithdrawService.QueryBalance",
+      "file": "locallife/logic/baofu_withdraw_service.go",
+      "line": 92
+    },
+    {
+      "id": "logic.createWithdrawal",
+      "kind": "logic",
+      "label": "BaofuWithdrawService.CreateWithdrawal",
+      "file": "locallife/logic/baofu_withdraw_service.go",
+      "line": 126
+    },
+    {
+      "id": "provider.baofuWithdraw",
+      "kind": "provider",
+      "label": "Baofu withdraw provider",
+      "file": "locallife/logic/baofu_withdraw_service.go",
+      "line": 179
+    },
+    {
+      "id": "sql.createWithdrawalOrder",
+      "kind": "sql_query",
+      "label": "CreateBaofuWithdrawalOrder",
+      "file": "locallife/db/query/baofu_withdrawal_order.sql",
+      "line": 1
+    },
+    {
+      "id": "sql.listWithdrawalOrdersByOwner",
+      "kind": "sql_query",
+      "label": "List/Count BaofuWithdrawalOrdersByOwner",
+      "file": "locallife/db/query/baofu_withdrawal_order.sql",
+      "line": 32
+    },
+    {
+      "id": "sql.updateWithdrawalOrderStatus",
+      "kind": "sql_query",
+      "label": "UpdateBaofuWithdrawalOrderStatus",
+      "file": "locallife/db/query/baofu_withdrawal_order.sql",
+      "line": 66
+    },
+    {
+      "id": "table.baofuWithdrawalOrders",
+      "kind": "table",
+      "label": "baofu_withdrawal_orders",
+      "file": "locallife/db/query/baofu_withdrawal_order.sql",
+      "line": 1
+    },
+    {
+      "id": "table.externalPaymentCommands",
+      "kind": "table",
+      "label": "external_payment_commands",
+      "file": "locallife/logic/baofu_withdraw_service.go",
+      "line": 322
+    },
+    {
+      "id": "callback.baofuWithdraw",
+      "kind": "webhook",
+      "label": "handleBaofuWithdrawNotify",
+      "file": "locallife/api/baofu_callback.go",
+      "line": 113
+    },
+    {
+      "id": "worker.withdrawalRecoveryScheduler",
+      "kind": "scheduler",
+      "label": "BaofuWithdrawalRecoveryScheduler",
+      "file": "locallife/worker/baofu_withdrawal_recovery_scheduler.go",
+      "line": 61
+    },
+    {
+      "id": "worker.withdrawalFactApplication",
+      "kind": "worker_task",
+      "label": "ProcessTaskBaofuWithdrawalFactApplication",
+      "file": "locallife/worker/task_baofu_withdrawal_fact_application.go",
+      "line": 47
+    }
+  ],
+  "edges": [
+    {
+      "from": "weapp.financeEntry",
+      "to": "weapp.financeWorkflow",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.financeWorkflow",
+      "to": "apiWrapper.merchantFinanceOverview",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.financeWorkflow",
+      "to": "apiWrapper.merchantFinanceOrders",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.financeWorkflow",
+      "to": "apiWrapper.merchantSettlements",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.merchantFinanceOverview",
+      "to": "route.merchantFinanceRead",
+      "kind": "route"
+    },
+    {
+      "from": "apiWrapper.merchantFinanceOrders",
+      "to": "route.merchantFinanceRead",
+      "kind": "route"
+    },
+    {
+      "from": "apiWrapper.merchantSettlements",
+      "to": "route.merchantFinanceRead",
+      "kind": "route"
+    },
+    {
+      "from": "route.merchantFinanceRead",
+      "to": "middleware.merchantFinanceOwnerManager",
+      "kind": "call"
+    },
+    {
+      "from": "route.merchantFinanceRead",
+      "to": "api.getMerchantFinanceOverview",
+      "kind": "route"
+    },
+    {
+      "from": "route.merchantFinanceRead",
+      "to": "api.listMerchantFinanceOrders",
+      "kind": "route"
+    },
+    {
+      "from": "route.merchantFinanceRead",
+      "to": "api.listMerchantSettlements",
+      "kind": "route"
+    },
+    {
+      "from": "api.getMerchantFinanceOverview",
+      "to": "sql.getMerchantFinanceOverview",
+      "kind": "read"
+    },
+    {
+      "from": "api.getMerchantFinanceOverview",
+      "to": "table.merchantSettlementAdjustments",
+      "kind": "read"
+    },
+    {
+      "from": "api.listMerchantFinanceOrders",
+      "to": "sql.listMerchantFinanceOrders",
+      "kind": "read"
+    },
+    {
+      "from": "api.listMerchantSettlements",
+      "to": "sql.listMerchantSettlements",
+      "kind": "read"
+    },
+    {
+      "from": "sql.getMerchantFinanceOverview",
+      "to": "table.profitSharingOrders",
+      "kind": "read"
+    },
+    {
+      "from": "sql.listMerchantFinanceOrders",
+      "to": "table.profitSharingOrders",
+      "kind": "read"
+    },
+    {
+      "from": "sql.listMerchantSettlements",
+      "to": "table.profitSharingOrders",
+      "kind": "read"
+    },
+    {
+      "from": "weapp.financeEntry",
+      "to": "weapp.settlementAccountStatusPage",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.settlementAccountStatusPage",
+      "to": "weapp.settlementStatusBehavior",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.settlementStatusBehavior",
+      "to": "apiWrapper.getMerchantSettlementAccount",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.settlementAccountSubmitPage",
+      "to": "weapp.settlementSubmitBehavior",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.settlementAccountSubmitPage",
+      "to": "weapp.baofuOnboardingService",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.baofuOnboardingService",
+      "to": "apiWrapper.submitMerchantSettlementAccount",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.getMerchantSettlementAccount",
+      "to": "route.merchantSettlementAccount",
+      "kind": "route"
+    },
+    {
+      "from": "apiWrapper.submitMerchantSettlementAccount",
+      "to": "route.merchantSettlementAccount",
+      "kind": "route"
+    },
+    {
+      "from": "route.merchantSettlementAccount",
+      "to": "middleware.merchantOwnerOnly",
+      "kind": "call"
+    },
+    {
+      "from": "route.merchantSettlementAccount",
+      "to": "api.getMerchantSettlementAccount",
+      "kind": "route"
+    },
+    {
+      "from": "route.merchantSettlementAccount",
+      "to": "api.createMerchantSettlementAccount",
+      "kind": "route"
+    },
+    {
+      "from": "api.getMerchantSettlementAccount",
+      "to": "api.loadSettlementAccount",
+      "kind": "call"
+    },
+    {
+      "from": "api.loadSettlementAccount",
+      "to": "table.baofuAccountBindings",
+      "kind": "read"
+    },
+    {
+      "from": "api.loadSettlementAccount",
+      "to": "table.baofuAccountOpeningProfiles",
+      "kind": "read"
+    },
+    {
+      "from": "api.loadSettlementAccount",
+      "to": "table.baofuAccountOpeningFlows",
+      "kind": "read"
+    },
+    {
+      "from": "api.loadSettlementAccount",
+      "to": "logic.recoverOpeningFlow",
+      "kind": "call"
+    },
+    {
+      "from": "api.createMerchantSettlementAccount",
+      "to": "logic.startOrRecoverOpening",
+      "kind": "call"
+    },
+    {
+      "from": "logic.startOrRecoverOpening",
+      "to": "sql.upsertBaofuAccountOpeningProfile",
+      "kind": "write"
+    },
+    {
+      "from": "logic.startOrRecoverOpening",
+      "to": "sql.createBaofuAccountOpeningFlow",
+      "kind": "write"
+    },
+    {
+      "from": "logic.startOrRecoverOpening",
+      "to": "logic.openFromProfile",
+      "kind": "call"
+    },
+    {
+      "from": "logic.openFromProfile",
+      "to": "sql.createBaofuAccountOpeningFlow",
+      "kind": "write"
+    },
+    {
+      "from": "logic.openFromProfile",
+      "to": "sql.upsertBaofuAccountBinding",
+      "kind": "write"
+    },
+    {
+      "from": "logic.openFromProfile",
+      "to": "provider.baofuAccount",
+      "kind": "provider_call"
+    },
+    {
+      "from": "logic.openFromProfile",
+      "to": "logic.applyAccountOpenResult",
+      "kind": "call"
+    },
+    {
+      "from": "logic.applyAccountOpenResult",
+      "to": "table.baofuAccountBindings",
+      "kind": "write"
+    },
+    {
+      "from": "logic.applyAccountOpenResult",
+      "to": "table.baofuAccountOpeningFlows",
+      "kind": "write"
+    },
+    {
+      "from": "logic.applyAccountOpenResult",
+      "to": "table.baofuMerchantReports",
+      "kind": "write"
+    },
+    {
+      "from": "callback.baofuAccountOpen",
+      "to": "logic.applyAccountOpenResult",
+      "kind": "callback"
+    },
+    {
+      "from": "worker.accountOpeningRecoveryScheduler",
+      "to": "logic.recoverOpeningFlow",
+      "kind": "scheduler"
+    },
+    {
+      "from": "logic.recoverOpeningFlow",
+      "to": "provider.baofuAccount",
+      "kind": "provider_call"
+    },
+    {
+      "from": "logic.recoverOpeningFlow",
+      "to": "logic.applyAccountOpenResult",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.financeEntry",
+      "to": "weapp.withdrawalsPage",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.withdrawalsPage",
+      "to": "apiWrapper.getWithdrawalBalance",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.withdrawalsPage",
+      "to": "apiWrapper.listWithdrawals",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.withdrawalCreatePage",
+      "to": "apiWrapper.getWithdrawalBalance",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.withdrawalCreatePage",
+      "to": "apiWrapper.createWithdrawal",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.withdrawalDetailPage",
+      "to": "apiWrapper.getWithdrawal",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.getWithdrawalBalance",
+      "to": "route.merchantWithdrawalRead",
+      "kind": "route"
+    },
+    {
+      "from": "apiWrapper.listWithdrawals",
+      "to": "route.merchantWithdrawalRead",
+      "kind": "route"
+    },
+    {
+      "from": "apiWrapper.getWithdrawal",
+      "to": "route.merchantWithdrawalRead",
+      "kind": "route"
+    },
+    {
+      "from": "apiWrapper.createWithdrawal",
+      "to": "route.merchantWithdrawalCreate",
+      "kind": "route"
+    },
+    {
+      "from": "route.merchantWithdrawalRead",
+      "to": "middleware.merchantFinanceOwnerManager",
+      "kind": "call"
+    },
+    {
+      "from": "route.merchantWithdrawalCreate",
+      "to": "middleware.merchantWithdrawalOwner",
+      "kind": "call"
+    },
+    {
+      "from": "route.merchantWithdrawalRead",
+      "to": "api.getWithdrawalBalance",
+      "kind": "route"
+    },
+    {
+      "from": "route.merchantWithdrawalRead",
+      "to": "api.listWithdrawals",
+      "kind": "route"
+    },
+    {
+      "from": "route.merchantWithdrawalRead",
+      "to": "api.getWithdrawal",
+      "kind": "route"
+    },
+    {
+      "from": "route.merchantWithdrawalCreate",
+      "to": "api.createWithdrawal",
+      "kind": "route"
+    },
+    {
+      "from": "api.getWithdrawalBalance",
+      "to": "logic.queryWithdrawalBalance",
+      "kind": "call"
+    },
+    {
+      "from": "logic.queryWithdrawalBalance",
+      "to": "table.baofuAccountBindings",
+      "kind": "read"
+    },
+    {
+      "from": "logic.queryWithdrawalBalance",
+      "to": "provider.baofuWithdraw",
+      "kind": "provider_call"
+    },
+    {
+      "from": "api.listWithdrawals",
+      "to": "sql.listWithdrawalOrdersByOwner",
+      "kind": "read"
+    },
+    {
+      "from": "sql.listWithdrawalOrdersByOwner",
+      "to": "table.baofuWithdrawalOrders",
+      "kind": "read"
+    },
+    {
+      "from": "api.getWithdrawal",
+      "to": "table.baofuWithdrawalOrders",
+      "kind": "read"
+    },
+    {
+      "from": "api.createWithdrawal",
+      "to": "logic.createWithdrawal",
+      "kind": "call"
+    },
+    {
+      "from": "logic.createWithdrawal",
+      "to": "table.baofuAccountBindings",
+      "kind": "read"
+    },
+    {
+      "from": "logic.createWithdrawal",
+      "to": "provider.baofuWithdraw",
+      "kind": "provider_call"
+    },
+    {
+      "from": "logic.createWithdrawal",
+      "to": "sql.createWithdrawalOrder",
+      "kind": "write"
+    },
+    {
+      "from": "sql.createWithdrawalOrder",
+      "to": "table.baofuWithdrawalOrders",
+      "kind": "write"
+    },
+    {
+      "from": "logic.createWithdrawal",
+      "to": "table.externalPaymentCommands",
+      "kind": "write"
+    },
+    {
+      "from": "callback.baofuWithdraw",
+      "to": "table.baofuWithdrawalOrders",
+      "kind": "read"
+    },
+    {
+      "from": "callback.baofuWithdraw",
+      "to": "worker.withdrawalFactApplication",
+      "kind": "enqueue"
+    },
+    {
+      "from": "worker.withdrawalRecoveryScheduler",
+      "to": "table.baofuWithdrawalOrders",
+      "kind": "read"
+    },
+    {
+      "from": "worker.withdrawalRecoveryScheduler",
+      "to": "provider.baofuWithdraw",
+      "kind": "provider_call"
+    },
+    {
+      "from": "worker.withdrawalRecoveryScheduler",
+      "to": "worker.withdrawalFactApplication",
+      "kind": "enqueue"
+    },
+    {
+      "from": "worker.withdrawalFactApplication",
+      "to": "table.baofuWithdrawalOrders",
+      "kind": "read"
+    },
+    {
+      "from": "worker.withdrawalFactApplication",
+      "to": "sql.updateWithdrawalOrderStatus",
+      "kind": "write"
+    },
+    {
+      "from": "sql.updateWithdrawalOrderStatus",
+      "to": "table.baofuWithdrawalOrders",
+      "kind": "write"
+    }
+  ]
+}

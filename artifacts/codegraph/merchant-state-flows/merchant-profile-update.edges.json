@@ -1,0 +1,620 @@
+{
+  "schema": "locallife-code-slice/v1",
+  "slice": "merchant-profile-update",
+  "risk_class": "G2",
+  "generated_at": "2026-05-30",
+  "nodes": [
+    {
+      "id": "weapp.profilePage",
+      "kind": "frontend_page",
+      "label": "Merchant profile settings page",
+      "file": "weapp/miniprogram/pages/merchant/settings/profile/index.ts",
+      "line": 1
+    },
+    {
+      "id": "weapp.profileImagesPage",
+      "kind": "frontend_page",
+      "label": "Merchant profile images page",
+      "file": "weapp/miniprogram/pages/merchant/profile-images/index.ts",
+      "line": 1
+    },
+    {
+      "id": "weapp.loadProfile",
+      "kind": "frontend_handler",
+      "label": "loadProfile",
+      "file": "weapp/miniprogram/pages/merchant/settings/profile/index.ts",
+      "line": 112
+    },
+    {
+      "id": "weapp.saveProfile",
+      "kind": "frontend_handler",
+      "label": "onSave",
+      "file": "weapp/miniprogram/pages/merchant/settings/profile/index.ts",
+      "line": 402
+    },
+    {
+      "id": "weapp.loadProfileImages",
+      "kind": "frontend_handler",
+      "label": "loadData",
+      "file": "weapp/miniprogram/pages/merchant/profile-images/index.ts",
+      "line": 75
+    },
+    {
+      "id": "weapp.logoUpload",
+      "kind": "frontend_handler",
+      "label": "onLogoUpload",
+      "file": "weapp/miniprogram/pages/merchant/profile-images/index.ts",
+      "line": 197
+    },
+    {
+      "id": "weapp.shopImagesUpload",
+      "kind": "frontend_handler",
+      "label": "processShopImagesUpload",
+      "file": "weapp/miniprogram/pages/merchant/profile-images/index.ts",
+      "line": 327
+    },
+    {
+      "id": "weapp.persistShopImages",
+      "kind": "frontend_handler",
+      "label": "persistShopImagesUpdate",
+      "file": "weapp/miniprogram/pages/merchant/_utils/merchant-profile-images-lifecycle.ts",
+      "line": 354
+    },
+    {
+      "id": "apiWrapper.getMyMerchantProfile",
+      "kind": "frontend_api",
+      "label": "GET /v1/merchants/me",
+      "file": "weapp/miniprogram/api/merchant.ts",
+      "line": 513
+    },
+    {
+      "id": "apiWrapper.updateMyMerchantProfile",
+      "kind": "frontend_api",
+      "label": "PATCH /v1/merchants/me",
+      "file": "weapp/miniprogram/api/merchant.ts",
+      "line": 544
+    },
+    {
+      "id": "apiWrapper.updateMyMerchantLogo",
+      "kind": "frontend_api",
+      "label": "PATCH /v1/merchants/me logo",
+      "file": "weapp/miniprogram/api/merchant.ts",
+      "line": 526
+    },
+    {
+      "id": "apiWrapper.getMerchantApplication",
+      "kind": "frontend_api",
+      "label": "GET /v1/merchant/application",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/onboarding.ts",
+      "line": 585
+    },
+    {
+      "id": "apiWrapper.uploadMedia",
+      "kind": "frontend_api",
+      "label": "uploadMedia three-step flow",
+      "file": "weapp/miniprogram/utils/media.ts",
+      "line": 259
+    },
+    {
+      "id": "apiWrapper.waitForMediaURL",
+      "kind": "frontend_api",
+      "label": "GET /v1/media/:id polling",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/onboarding.ts",
+      "line": 858
+    },
+    {
+      "id": "apiWrapper.updateShopImages",
+      "kind": "frontend_api",
+      "label": "PATCH /v1/merchants/me/shop-images",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/onboarding.ts",
+      "line": 892
+    },
+    {
+      "id": "apiWrapper.getMerchantTags",
+      "kind": "frontend_api",
+      "label": "GET /v1/merchants/me/tags",
+      "file": "weapp/miniprogram/api/merchant.ts"
+    },
+    {
+      "id": "apiWrapper.setMerchantTags",
+      "kind": "frontend_api",
+      "label": "PUT /v1/merchants/me/tags",
+      "file": "weapp/miniprogram/api/merchant.ts"
+    },
+    {
+      "id": "route.getMe",
+      "kind": "route",
+      "label": "GET /v1/merchants/me",
+      "file": "locallife/api/server.go",
+      "line": 667
+    },
+    {
+      "id": "route.patchMe",
+      "kind": "route",
+      "label": "PATCH /v1/merchants/me",
+      "file": "locallife/api/server.go",
+      "line": 682
+    },
+    {
+      "id": "route.getTags",
+      "kind": "route",
+      "label": "GET /v1/merchants/me/tags",
+      "file": "locallife/api/server.go",
+      "line": 671
+    },
+    {
+      "id": "route.putTags",
+      "kind": "route",
+      "label": "PUT /v1/merchants/me/tags",
+      "file": "locallife/api/server.go",
+      "line": 686
+    },
+    {
+      "id": "route.patchShopImages",
+      "kind": "route",
+      "label": "PATCH /v1/merchants/me/shop-images",
+      "file": "locallife/api/server.go",
+      "line": 683
+    },
+    {
+      "id": "route.mediaUploadSessions",
+      "kind": "route",
+      "label": "POST /v1/media/upload-sessions",
+      "file": "locallife/api/server.go",
+      "line": 630
+    },
+    {
+      "id": "route.mediaComplete",
+      "kind": "route",
+      "label": "POST /v1/media/complete",
+      "file": "locallife/api/server.go",
+      "line": 632
+    },
+    {
+      "id": "route.mediaGet",
+      "kind": "route",
+      "label": "GET /v1/media/:id",
+      "file": "locallife/api/server.go",
+      "line": 634
+    },
+    {
+      "id": "api.getCurrentMerchant",
+      "kind": "handler",
+      "label": "Server.getCurrentMerchant",
+      "file": "locallife/api/merchant.go",
+      "line": 181
+    },
+    {
+      "id": "api.updateCurrentMerchant",
+      "kind": "handler",
+      "label": "Server.updateCurrentMerchant",
+      "file": "locallife/api/merchant.go",
+      "line": 275
+    },
+    {
+      "id": "api.getMerchantTags",
+      "kind": "handler",
+      "label": "Server.getMerchantTags",
+      "file": "locallife/api/tag.go",
+      "line": 193
+    },
+    {
+      "id": "api.setMerchantTags",
+      "kind": "handler",
+      "label": "Server.setMerchantTags",
+      "file": "locallife/api/tag.go",
+      "line": 241
+    },
+    {
+      "id": "api.updateShopImages",
+      "kind": "handler",
+      "label": "Server.updateCurrentMerchantShopImages",
+      "file": "locallife/api/merchant.go",
+      "line": 414
+    },
+    {
+      "id": "api.createMediaUploadSession",
+      "kind": "handler",
+      "label": "Server.createMediaUploadSession",
+      "file": "locallife/api/media.go",
+      "line": 76
+    },
+    {
+      "id": "api.completeMediaUpload",
+      "kind": "handler",
+      "label": "Server.completeMediaUpload",
+      "file": "locallife/api/media.go",
+      "line": 133
+    },
+    {
+      "id": "api.getMediaAsset",
+      "kind": "handler",
+      "label": "Server.getMediaAsset",
+      "file": "locallife/api/media.go",
+      "line": 299
+    },
+    {
+      "id": "sql.UpdateMerchant",
+      "kind": "sql",
+      "label": "UpdateMerchant",
+      "file": "locallife/db/query/merchant.sql",
+      "line": 114
+    },
+    {
+      "id": "sql.ClearMerchantLogo",
+      "kind": "sql",
+      "label": "ClearMerchantLogo",
+      "file": "locallife/db/query/merchant.sql",
+      "line": 133
+    },
+    {
+      "id": "sql.ListMerchantTags",
+      "kind": "sql",
+      "label": "ListMerchantTags",
+      "file": "locallife/db/query/merchant.sql",
+      "line": 256
+    },
+    {
+      "id": "sql.ClearMerchantTags",
+      "kind": "sql",
+      "label": "ClearMerchantTags",
+      "file": "locallife/db/query/merchant.sql",
+      "line": 270
+    },
+    {
+      "id": "sql.AddMerchantTag",
+      "kind": "sql",
+      "label": "AddMerchantTag",
+      "file": "locallife/db/query/merchant.sql",
+      "line": 244
+    },
+    {
+      "id": "sql.UpdateMerchantApplicationShopImages",
+      "kind": "sql",
+      "label": "UpdateMerchantApplicationShopImages",
+      "file": "locallife/db/query/merchant_application.sql",
+      "line": 204
+    },
+    {
+      "id": "media.Registry",
+      "kind": "service",
+      "label": "media registry"
+    },
+    {
+      "id": "table.merchants",
+      "kind": "table",
+      "label": "merchants"
+    },
+    {
+      "id": "field.merchants.version",
+      "kind": "field",
+      "label": "merchants.version"
+    },
+    {
+      "id": "field.merchants.logo_media_asset_id",
+      "kind": "field",
+      "label": "merchants.logo_media_asset_id"
+    },
+    {
+      "id": "table.merchant_tags",
+      "kind": "table",
+      "label": "merchant_tags"
+    },
+    {
+      "id": "table.media_assets",
+      "kind": "table",
+      "label": "media_assets"
+    },
+    {
+      "id": "table.media_upload_sessions",
+      "kind": "table",
+      "label": "media_upload_sessions"
+    },
+    {
+      "id": "field.merchant_applications.shop_images",
+      "kind": "field",
+      "label": "merchant_applications.storefront_images/environment_images"
+    },
+    {
+      "id": "api.publicMerchantDetail",
+      "kind": "reader",
+      "label": "getPublicMerchantDetail",
+      "file": "locallife/api/merchant.go",
+      "line": 1178
+    },
+    {
+      "id": "api.searchMerchantResponse",
+      "kind": "reader",
+      "label": "search merchant response builders",
+      "file": "locallife/api/search.go",
+      "line": 888
+    }
+  ],
+  "edges": [
+    {
+      "from": "weapp.profilePage",
+      "to": "weapp.loadProfile",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.loadProfile",
+      "to": "apiWrapper.getMyMerchantProfile",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.getMyMerchantProfile",
+      "to": "route.getMe",
+      "kind": "http"
+    },
+    {
+      "from": "route.getMe",
+      "to": "api.getCurrentMerchant",
+      "kind": "route"
+    },
+    {
+      "from": "api.getCurrentMerchant",
+      "to": "table.merchants",
+      "kind": "read"
+    },
+    {
+      "from": "weapp.profilePage",
+      "to": "weapp.saveProfile",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.saveProfile",
+      "to": "apiWrapper.updateMyMerchantProfile",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.updateMyMerchantProfile",
+      "to": "route.patchMe",
+      "kind": "http"
+    },
+    {
+      "from": "route.patchMe",
+      "to": "api.updateCurrentMerchant",
+      "kind": "route"
+    },
+    {
+      "from": "api.updateCurrentMerchant",
+      "to": "sql.UpdateMerchant",
+      "kind": "call"
+    },
+    {
+      "from": "sql.UpdateMerchant",
+      "to": "table.merchants",
+      "kind": "write"
+    },
+    {
+      "from": "sql.UpdateMerchant",
+      "to": "field.merchants.version",
+      "kind": "write"
+    },
+    {
+      "from": "weapp.saveProfile",
+      "to": "apiWrapper.setMerchantTags",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.getMerchantTags",
+      "to": "route.getTags",
+      "kind": "http"
+    },
+    {
+      "from": "route.getTags",
+      "to": "api.getMerchantTags",
+      "kind": "route"
+    },
+    {
+      "from": "api.getMerchantTags",
+      "to": "sql.ListMerchantTags",
+      "kind": "read"
+    },
+    {
+      "from": "sql.ListMerchantTags",
+      "to": "table.merchant_tags",
+      "kind": "read"
+    },
+    {
+      "from": "apiWrapper.setMerchantTags",
+      "to": "route.putTags",
+      "kind": "http"
+    },
+    {
+      "from": "route.putTags",
+      "to": "api.setMerchantTags",
+      "kind": "route"
+    },
+    {
+      "from": "api.setMerchantTags",
+      "to": "sql.ClearMerchantTags",
+      "kind": "write"
+    },
+    {
+      "from": "sql.ClearMerchantTags",
+      "to": "table.merchant_tags",
+      "kind": "write"
+    },
+    {
+      "from": "api.setMerchantTags",
+      "to": "sql.AddMerchantTag",
+      "kind": "write"
+    },
+    {
+      "from": "sql.AddMerchantTag",
+      "to": "table.merchant_tags",
+      "kind": "write"
+    },
+    {
+      "from": "weapp.profileImagesPage",
+      "to": "weapp.loadProfileImages",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.loadProfileImages",
+      "to": "apiWrapper.getMyMerchantProfile",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.loadProfileImages",
+      "to": "apiWrapper.getMerchantApplication",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.profileImagesPage",
+      "to": "weapp.logoUpload",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.logoUpload",
+      "to": "apiWrapper.uploadMedia",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.uploadMedia",
+      "to": "route.mediaUploadSessions",
+      "kind": "http"
+    },
+    {
+      "from": "route.mediaUploadSessions",
+      "to": "api.createMediaUploadSession",
+      "kind": "route"
+    },
+    {
+      "from": "api.createMediaUploadSession",
+      "to": "media.Registry",
+      "kind": "call"
+    },
+    {
+      "from": "media.Registry",
+      "to": "table.media_upload_sessions",
+      "kind": "write"
+    },
+    {
+      "from": "apiWrapper.uploadMedia",
+      "to": "route.mediaComplete",
+      "kind": "http"
+    },
+    {
+      "from": "route.mediaComplete",
+      "to": "api.completeMediaUpload",
+      "kind": "route"
+    },
+    {
+      "from": "api.completeMediaUpload",
+      "to": "media.Registry",
+      "kind": "call"
+    },
+    {
+      "from": "media.Registry",
+      "to": "table.media_assets",
+      "kind": "write"
+    },
+    {
+      "from": "weapp.logoUpload",
+      "to": "apiWrapper.updateMyMerchantLogo",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.updateMyMerchantLogo",
+      "to": "route.patchMe",
+      "kind": "http"
+    },
+    {
+      "from": "api.updateCurrentMerchant",
+      "to": "sql.ClearMerchantLogo",
+      "kind": "call"
+    },
+    {
+      "from": "sql.ClearMerchantLogo",
+      "to": "field.merchants.logo_media_asset_id",
+      "kind": "write"
+    },
+    {
+      "from": "sql.UpdateMerchant",
+      "to": "field.merchants.logo_media_asset_id",
+      "kind": "write"
+    },
+    {
+      "from": "weapp.profileImagesPage",
+      "to": "weapp.shopImagesUpload",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.shopImagesUpload",
+      "to": "apiWrapper.uploadMedia",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.shopImagesUpload",
+      "to": "weapp.persistShopImages",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.persistShopImages",
+      "to": "apiWrapper.updateShopImages",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.updateShopImages",
+      "to": "route.patchShopImages",
+      "kind": "http"
+    },
+    {
+      "from": "route.patchShopImages",
+      "to": "api.updateShopImages",
+      "kind": "route"
+    },
+    {
+      "from": "api.updateShopImages",
+      "to": "sql.UpdateMerchantApplicationShopImages",
+      "kind": "call"
+    },
+    {
+      "from": "sql.UpdateMerchantApplicationShopImages",
+      "to": "field.merchant_applications.shop_images",
+      "kind": "write"
+    },
+    {
+      "from": "apiWrapper.waitForMediaURL",
+      "to": "route.mediaGet",
+      "kind": "http"
+    },
+    {
+      "from": "route.mediaGet",
+      "to": "api.getMediaAsset",
+      "kind": "route"
+    },
+    {
+      "from": "api.getMediaAsset",
+      "to": "table.media_assets",
+      "kind": "read"
+    },
+    {
+      "from": "api.publicMerchantDetail",
+      "to": "table.merchants",
+      "kind": "read"
+    },
+    {
+      "from": "api.publicMerchantDetail",
+      "to": "field.merchant_applications.shop_images",
+      "kind": "read"
+    },
+    {
+      "from": "api.publicMerchantDetail",
+      "to": "table.merchant_tags",
+      "kind": "read"
+    },
+    {
+      "from": "api.searchMerchantResponse",
+      "to": "field.merchant_applications.shop_images",
+      "kind": "read"
+    },
+    {
+      "from": "api.searchMerchantResponse",
+      "to": "table.merchant_tags",
+      "kind": "read"
+    }
+  ]
+}

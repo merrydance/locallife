@@ -1,0 +1,258 @@
+{
+  "schema": "locallife-code-slice/v1",
+  "slice": "merchant-review-reply",
+  "risk_class": "G2",
+  "generated_at": "2026-05-30",
+  "nodes": [
+    {
+      "id": "weapp.reviewPage",
+      "kind": "frontend_page",
+      "label": "Merchant reviews page",
+      "file": "weapp/miniprogram/pages/merchant/reviews/index.ts",
+      "line": 90
+    },
+    {
+      "id": "weapp.ensureReviewAccess",
+      "kind": "frontend_guard",
+      "label": "ensureMerchantConsoleAccess",
+      "file": "weapp/miniprogram/pages/merchant/reviews/index.ts",
+      "line": 122
+    },
+    {
+      "id": "weapp.ensureMerchantContext",
+      "kind": "frontend_behavior",
+      "label": "Resolve merchant id from cache or profile",
+      "file": "weapp/miniprogram/pages/merchant/reviews/index.ts",
+      "line": 267
+    },
+    {
+      "id": "weapp.loadReviews",
+      "kind": "frontend_handler",
+      "label": "loadReviews",
+      "file": "weapp/miniprogram/pages/merchant/reviews/index.ts",
+      "line": 303
+    },
+    {
+      "id": "weapp.openReplyPopup",
+      "kind": "frontend_handler",
+      "label": "onOpenReplyPopup",
+      "file": "weapp/miniprogram/pages/merchant/reviews/index.ts",
+      "line": 190
+    },
+    {
+      "id": "weapp.submitReply",
+      "kind": "frontend_handler",
+      "label": "onSubmitReply",
+      "file": "weapp/miniprogram/pages/merchant/reviews/index.ts",
+      "line": 226
+    },
+    {
+      "id": "apiWrapper.listMerchantAllReviews",
+      "kind": "frontend_api",
+      "label": "ReviewService.listMerchantAllReviews",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/review.ts",
+      "line": 107
+    },
+    {
+      "id": "apiWrapper.replyToReview",
+      "kind": "frontend_api",
+      "label": "ReviewService.replyToReview",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/review.ts",
+      "line": 174
+    },
+    {
+      "id": "route.merchantReviews",
+      "kind": "backend_route",
+      "label": "Merchant reviews route group",
+      "file": "locallife/api/server.go",
+      "line": 1589
+    },
+    {
+      "id": "middleware.ownerOnly",
+      "kind": "backend_middleware",
+      "label": "MerchantStaffMiddleware owner",
+      "file": "locallife/api/server.go",
+      "line": 1591
+    },
+    {
+      "id": "api.listMerchantAllReviews",
+      "kind": "backend_handler",
+      "label": "listMerchantAllReviews",
+      "file": "locallife/api/review.go",
+      "line": 344
+    },
+    {
+      "id": "api.replyReview",
+      "kind": "backend_handler",
+      "label": "replyReview",
+      "file": "locallife/api/review.go",
+      "line": 481
+    },
+    {
+      "id": "api.msgSecCheck",
+      "kind": "external_check",
+      "label": "Wechat MsgSecCheck for reply",
+      "file": "locallife/api/review.go",
+      "line": 534
+    },
+    {
+      "id": "api.enrichReviewImages",
+      "kind": "backend_response_builder",
+      "label": "Review image URL enrichment",
+      "file": "locallife/api/review.go",
+      "line": 700
+    },
+    {
+      "id": "sql.listAllReviews",
+      "kind": "sql_reader",
+      "label": "ListAllReviewsByMerchant and count",
+      "file": "locallife/db/query/review.sql",
+      "line": 87
+    },
+    {
+      "id": "sql.updateMerchantReply",
+      "kind": "sql_writer",
+      "label": "UpdateMerchantReply",
+      "file": "locallife/db/query/review.sql",
+      "line": 45
+    },
+    {
+      "id": "sql.reviewImages",
+      "kind": "sql_reader",
+      "label": "ListReviewImages/ListReviewImagesByReviews",
+      "file": "locallife/db/query/review.sql",
+      "line": 73
+    },
+    {
+      "id": "state.reviews",
+      "kind": "state_table",
+      "label": "reviews.merchant_reply/replied_at/is_visible"
+    },
+    {
+      "id": "state.reviewImages",
+      "kind": "state_table",
+      "label": "review_images"
+    },
+    {
+      "id": "reader.publicMerchantReviews",
+      "kind": "backend_reader",
+      "label": "listMerchantReviews visible-only customer reader",
+      "file": "locallife/api/review.go",
+      "line": 285
+    },
+    {
+      "id": "reader.userReviews",
+      "kind": "backend_reader",
+      "label": "listUserReviews customer owner reader",
+      "file": "locallife/api/review.go",
+      "line": 413
+    }
+  ],
+  "edges": [
+    {
+      "from": "weapp.reviewPage",
+      "to": "weapp.ensureReviewAccess",
+      "kind": "checks"
+    },
+    {
+      "from": "weapp.reviewPage",
+      "to": "weapp.loadReviews",
+      "kind": "owns"
+    },
+    {
+      "from": "weapp.loadReviews",
+      "to": "weapp.ensureMerchantContext",
+      "kind": "calls"
+    },
+    {
+      "from": "weapp.loadReviews",
+      "to": "apiWrapper.listMerchantAllReviews",
+      "kind": "calls"
+    },
+    {
+      "from": "apiWrapper.listMerchantAllReviews",
+      "to": "api.listMerchantAllReviews",
+      "kind": "http"
+    },
+    {
+      "from": "api.listMerchantAllReviews",
+      "to": "sql.listAllReviews",
+      "kind": "reads"
+    },
+    {
+      "from": "api.listMerchantAllReviews",
+      "to": "api.enrichReviewImages",
+      "kind": "enriches"
+    },
+    {
+      "from": "api.enrichReviewImages",
+      "to": "sql.reviewImages",
+      "kind": "reads"
+    },
+    {
+      "from": "weapp.reviewPage",
+      "to": "weapp.openReplyPopup",
+      "kind": "opens_draft"
+    },
+    {
+      "from": "weapp.openReplyPopup",
+      "to": "weapp.submitReply",
+      "kind": "submits"
+    },
+    {
+      "from": "weapp.submitReply",
+      "to": "apiWrapper.replyToReview",
+      "kind": "calls"
+    },
+    {
+      "from": "apiWrapper.replyToReview",
+      "to": "api.replyReview",
+      "kind": "http"
+    },
+    {
+      "from": "route.merchantReviews",
+      "to": "middleware.ownerOnly",
+      "kind": "protected_by"
+    },
+    {
+      "from": "api.replyReview",
+      "to": "state.reviews",
+      "kind": "ownership_check"
+    },
+    {
+      "from": "api.replyReview",
+      "to": "api.msgSecCheck",
+      "kind": "pre_write_check"
+    },
+    {
+      "from": "api.replyReview",
+      "to": "sql.updateMerchantReply",
+      "kind": "writes"
+    },
+    {
+      "from": "sql.updateMerchantReply",
+      "to": "state.reviews",
+      "kind": "mutates"
+    },
+    {
+      "from": "api.replyReview",
+      "to": "api.enrichReviewImages",
+      "kind": "enriches_response"
+    },
+    {
+      "from": "state.reviews",
+      "to": "reader.publicMerchantReviews",
+      "kind": "read_by"
+    },
+    {
+      "from": "state.reviews",
+      "to": "reader.userReviews",
+      "kind": "read_by"
+    },
+    {
+      "from": "state.reviewImages",
+      "to": "api.enrichReviewImages",
+      "kind": "read_by"
+    }
+  ]
+}

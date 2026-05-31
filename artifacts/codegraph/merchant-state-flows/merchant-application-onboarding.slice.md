@@ -1,0 +1,221 @@
+# Merchant Application Onboarding Slice
+
+Status: merchant-state flow slice created
+Risk class: G3 - private identity documents, OCR async writeback, merchant creation/update, owner authorization, credential ledger activation, and review/recovery state
+Scope: Mini Program merchant application page -> media/OCR job creation -> merchant application draft writes -> submit validation -> async/sync onboarding review -> merchant/profile/staff/user-role/credential durable truth
+
+## Variant Coverage
+
+This slice covers:
+
+- Merchant Mini Program subject application page for draft edit, location save, document upload/delete, reset, and submit.
+- Merchant application APIs under `/v1/merchant/application/**`.
+- Generic OCR job API for `owner_type='merchant_application'`, merchant OCR workers, and stale OCR cleanup.
+- Onboarding review run creation, queue fallback, worker processing, approval transaction, review summary, and credential ledger activation.
+- Approved-application edit/reset behavior because it is part of the merchant-visible re-entry path.
+
+This slice does not fully cover:
+
+- Operator/rider onboarding variants except where they share review/OCR infrastructure.
+- Baofu settlement-account onboarding after application approval; that is covered by `merchant-finance-withdrawal`.
+- General media upload-session internals beyond the application OCR media binding boundary.
+- Manual/operator application review UIs if later added; current merchant path is auto-review plus blocked-review summary.
+
+## Product Invariant
+
+Merchant onboarding must preserve a clear split between editable application draft truth and activated merchant truth:
+
+- Draft edits and document OCR may only mutate the authenticated user's current editable `merchant_applications` row.
+- OCR writeback must only apply to the current media asset and current OCR job while the application is still draft.
+- Submit must validate required fields, OCR readiness, document validity, address/region/location, duplicate location, duplicate license, and duplicate legal person before creating or updating a merchant.
+- Approval must atomically create/update merchant profile truth, ensure owner staff membership, ensure owner user role, and record review/credential evidence.
+- Re-editing an approved application must be an intentional resubmission path, not a silent mutation of already-active merchant truth.
+
+## Primary Forward Chain
+
+1. Merchant application page gates entry with merchant console access, loads the current application draft, blocks pull refresh when dirty, and rehydrates local form state from backend truth.
+   Evidence: `weapp/miniprogram/pages/merchant/settings/application/index.ts:110`, `weapp/miniprogram/pages/merchant/settings/application/index.ts:143`, `weapp/miniprogram/pages/merchant/settings/application/index.ts:152`, `weapp/miniprogram/pages/merchant/settings/application/index.ts:209`.
+
+2. The page persists basic draft fields through `updateMerchantBasicInfo`, and submit first saves dirty draft state before calling `submitMerchantApplication`.
+   Evidence: `weapp/miniprogram/pages/merchant/settings/application/index.ts:320`, `weapp/miniprogram/pages/merchant/settings/application/index.ts:328`, `weapp/miniprogram/pages/merchant/settings/application/index.ts:349`, `weapp/miniprogram/pages/merchant/settings/application/index.ts:365`, `weapp/miniprogram/pages/merchant/settings/application/index.ts:371`.
+
+3. Location selection is saved immediately through the same basic-info endpoint with latitude/longitude; the backend may auto-match a `region_id`.
+   Evidence: `weapp/miniprogram/pages/merchant/settings/application/index.ts:553`, `weapp/miniprogram/pages/merchant/settings/application/index.ts:576`, `weapp/miniprogram/pages/merchant/settings/application/index.ts:578`, `locallife/api/merchant_application.go:514`, `locallife/api/merchant_application.go:535`.
+
+4. The frontend enforces submit-time completeness for merchant name, phone, address, business license number, legal person fields, four documents, location, region, and OCR block state.
+   Evidence: `weapp/miniprogram/pages/merchant/settings/application/index.ts:296`, `weapp/miniprogram/pages/merchant/_utils/merchant-application-view.ts:201`, `weapp/miniprogram/pages/merchant/_utils/merchant-application-view.ts:218`, `weapp/miniprogram/pages/merchant/_utils/merchant-application-view.ts:222`, `weapp/miniprogram/pages/merchant/_utils/merchant-application-view.ts:230`.
+
+5. Application API wrappers call `GET /v1/merchant/application`, `PUT /basic`, `DELETE /documents/:type`, `POST /submit`, and `POST /reset`.
+   Evidence: `weapp/miniprogram/pages/merchant/_main_shared/api/onboarding.ts:604`, `weapp/miniprogram/pages/merchant/_main_shared/api/onboarding.ts:756`, `weapp/miniprogram/pages/merchant/_main_shared/api/onboarding.ts:779`.
+
+6. Backend merchant application routes are authenticated but not staff-gated, because this flow is used before a merchant exists and after approved re-entry.
+   Evidence: `locallife/api/server.go:699`, `locallife/api/server.go:702`, `locallife/api/server.go:703`, `locallife/api/server.go:705`, `locallife/api/server.go:706`, `locallife/api/server.go:707`.
+
+7. `getOrCreateMerchantApplicationDraft` returns the latest draft/submitted/rejected/approved application for the user, creates an empty draft if none exists, and resets legacy `submitted` to draft on read.
+   Evidence: `locallife/api/merchant_application.go:361`, `locallife/db/query/merchant_application.sql:19`, `locallife/db/query/merchant_application.sql:22`, `locallife/api/merchant_application.go:381`, `locallife/api/merchant_application.go:382`, `locallife/api/merchant_application.go:393`.
+
+8. Basic, image, document delete, and OCR pending writes all call `checkApplicationEditable`; `rejected`, `approved`, and `submitted` are editable after `ResetMerchantApplicationTx` changes the application back to draft.
+   Evidence: `locallife/api/merchant_application.go:161`, `locallife/api/merchant_application.go:167`, `locallife/api/merchant_application.go:452`, `locallife/api/merchant_application.go:459`, `locallife/api/merchant_application.go:620`, `locallife/api/ocr.go:310`.
+
+9. Basic-info SQL only updates rows with `status='draft'`; the reset transaction updates application status and only changes an existing merchant status to pending when it is neither active nor approved.
+   Evidence: `locallife/db/query/merchant_application.sql:26`, `locallife/db/query/merchant_application.sql:41`, `locallife/db/sqlc/tx_merchant_application.go:190`, `locallife/db/sqlc/tx_merchant_application.go:197`, `locallife/db/sqlc/tx_merchant_application.go:202`.
+
+10. Document upload first creates media, then creates a generic OCR job with owner type `merchant_application`, document type, media asset id, owner id, and optional side.
+    Evidence: `weapp/miniprogram/pages/merchant/settings/application/index.ts:446`, `weapp/miniprogram/pages/merchant/_main_shared/api/onboarding.ts:612`, `weapp/miniprogram/pages/merchant/_main_shared/api/onboarding.ts:617`, `weapp/miniprogram/pages/merchant/_main_shared/api/onboarding.ts:620`, `weapp/miniprogram/pages/merchant/_main_shared/api/onboarding.ts:623`, `weapp/miniprogram/pages/merchant/_main_shared/api/onboarding.ts:625`.
+
+11. OCR job creation checks the requester owns the merchant application, enforces expected media category/side, writes a pending OCR payload plus media asset id, and enqueues the corresponding merchant OCR task.
+    Evidence: `locallife/api/ocr.go:251`, `locallife/api/ocr.go:255`, `locallife/api/ocr_media_authz.go:57`, `locallife/api/ocr.go:265`, `locallife/api/ocr.go:273`, `locallife/api/ocr.go:304`, `locallife/api/ocr.go:338`, `locallife/api/ocr.go:353`.
+
+12. Merchant OCR workers guard job payload, current draft status, current media asset id, and current OCR job id before provider execution and again before writeback.
+    Evidence: `locallife/worker/task_merchant_application_ocr.go:117`, `locallife/worker/ocr_writeback_guard.go:96`, `locallife/worker/ocr_writeback_guard.go:110`, `locallife/worker/ocr_writeback_guard.go:114`, `locallife/worker/ocr_writeback_guard.go:119`, `locallife/worker/ocr_writeback_guard.go:124`, `locallife/worker/task_merchant_application_ocr.go:164`.
+
+13. OCR success writes recognized license, food permit, and ID-card fields back into the application draft; ID card front can fill legal person name/number, and business license can fill license number/scope.
+    Evidence: `locallife/worker/task_merchant_application_ocr.go:171`, `locallife/worker/task_merchant_application_ocr.go:188`, `locallife/worker/task_merchant_application_ocr.go:193`, `locallife/worker/task_merchant_application_ocr.go:205`, `locallife/worker/task_merchant_application_ocr.go:295`, `locallife/worker/task_merchant_application_ocr.go:313`, `locallife/worker/task_merchant_application_ocr.go:419`.
+
+14. OCR failure can write a failed OCR payload only if the job is still bound to the current media/document; stale failure writebacks are skipped.
+    Evidence: `locallife/api/ocr.go:600`, `locallife/api/ocr.go:601`, `locallife/api/ocr.go:623`, `locallife/api/ocr.go:639`, `locallife/api/ocr.go:655`, `locallife/api/ocr.go:829`, `locallife/api/ocr.go:857`.
+
+15. Stale OCR cleanup marks application OCR JSON fields from `processing` to `failed` if the draft has not been updated for more than one hour.
+    Evidence: `locallife/scheduler/data_cleanup.go:1546`, `locallife/scheduler/data_cleanup.go:1552`, `locallife/scheduler/data_cleanup.go:1554`, `locallife/db/query/merchant_application.sql:214`, `locallife/db/query/merchant_application.sql:217`.
+
+16. Submit writes agreement consent audit, backfills merchant name/contact phone when possible, validates required backend fields, and runs document/address/duplicate checks before setting `status='submitted'`.
+    Evidence: `locallife/api/merchant_application.go:877`, `locallife/api/merchant_application.go:908`, `locallife/api/merchant_application.go:914`, `locallife/api/merchant_application.go:917`, `locallife/api/merchant_application.go:923`, `locallife/api/merchant_application.go:937`.
+
+17. Backend submit validation requires merchant name, address, latitude/longitude, region, business license, food permit, ID card front, and ID card back.
+    Evidence: `locallife/api/merchant_application.go:1006`, `locallife/api/merchant_application.go:1008`, `locallife/api/merchant_application.go:1014`, `locallife/api/merchant_application.go:1017`, `locallife/api/merchant_application.go:1020`, `locallife/api/merchant_application.go:1023`, `locallife/api/merchant_application.go:1026`.
+
+18. Approval checks OCR payload readiness/validity, repairs some OCR payloads from raw/normalized job results, validates address match with reverse/geocode fallback, checks nearby merchant GPS duplicates, duplicate license number, and duplicate legal-person ID.
+    Evidence: `locallife/api/merchant_application.go:1050`, `locallife/api/merchant_application.go:1060`, `locallife/api/merchant_application.go:1081`, `locallife/api/merchant_application.go:1123`, `locallife/api/merchant_application.go:1137`, `locallife/api/merchant_application.go:1141`, `locallife/api/merchant_application.go:1180`, `locallife/api/merchant_application.go:1207`, `locallife/api/merchant_application.go:1222`.
+
+19. If approval checks fail before submission is approved, the handler records a blocked onboarding review summary and returns a 400 while the application remains editable.
+    Evidence: `locallife/api/merchant_application.go:923`, `locallife/api/merchant_application.go:924`, `locallife/api/onboarding_review.go:37`, `locallife/api/onboarding_review.go:43`, `locallife/api/onboarding_review.go:58`.
+
+20. If async review infrastructure is available, submit creates an onboarding review run, enqueues `onboarding:review`, writes queued summary into the response, and returns without immediately approving.
+    Evidence: `locallife/api/merchant_application.go:944`, `locallife/api/merchant_application.go:946`, `locallife/api/merchant_application.go:947`, `locallife/api/merchant_application.go:962`, `locallife/api/merchant_application.go:968`, `locallife/api/merchant_application.go:970`.
+
+21. If review run creation or enqueue fails, submit falls back to synchronous `ProcessSubmittedApplication`.
+    Evidence: `locallife/api/merchant_application.go:958`, `locallife/api/merchant_application.go:973`, `locallife/api/merchant_application.go:977`.
+
+22. The review worker validates run/application identity, skips completed/cancelled runs, then calls merchant onboarding review service with the existing run id.
+    Evidence: `locallife/worker/task_onboarding_review.go:42`, `locallife/worker/task_onboarding_review.go:51`, `locallife/worker/task_onboarding_review.go:55`, `locallife/worker/task_onboarding_review.go:58`, `locallife/worker/task_onboarding_review.go:63`, `locallife/worker/task_onboarding_review.go:67`.
+
+23. Merchant onboarding review service only processes `submitted` applications, builds approval transaction params, approves the application, and then completes or records the review run.
+    Evidence: `locallife/logic/merchant_onboarding_review_service.go:94`, `locallife/logic/merchant_onboarding_review_service.go:98`, `locallife/logic/merchant_onboarding_review_service.go:102`, `locallife/logic/merchant_onboarding_review_service.go:108`, `locallife/logic/merchant_onboarding_review_service.go:118`, `locallife/logic/merchant_onboarding_review_service.go:121`.
+
+24. Approval transaction changes the application to approved, creates or updates the merchant, sets merchant closed, reconciles system labels, ensures owner `merchant_staff`, and ensures the coarse `merchant_owner` user role.
+    Evidence: `locallife/db/sqlc/tx_merchant_application.go:34`, `locallife/db/sqlc/tx_merchant_application.go:45`, `locallife/db/sqlc/tx_merchant_application.go:55`, `locallife/db/sqlc/tx_merchant_application.go:72`, `locallife/db/sqlc/tx_merchant_application.go:97`, `locallife/db/sqlc/tx_merchant_application.go:109`, `locallife/db/sqlc/tx_merchant_application.go:120`, `locallife/db/sqlc/tx_merchant_application.go:159`.
+
+25. After approval, credential governance activates business-license and food-permit ledgers, can release document-expiry suspension, and sends a restore notification when release occurs.
+    Evidence: `locallife/logic/merchant_onboarding_review_service.go:136`, `locallife/logic/merchant_onboarding_review_service.go:143`, `locallife/logic/merchant_onboarding_review_service.go:152`, `locallife/logic/credential_governance_service.go:63`, `locallife/db/sqlc/tx_credential_ledger.go:54`, `locallife/db/sqlc/tx_credential_ledger.go:135`, `locallife/api/onboarding_review.go:145`.
+
+## Reverse-Reference Findings
+
+- `merchant_applications` is both pre-onboarding draft truth and post-approval credential/image reference truth. Profile-image flow also writes shop images back to application rows, so application scoping affects more than the onboarding page.
+- Approved applications are explicitly editable in both frontend and backend. Any basic/image/document/OCR edit resets the application to draft, but `ResetMerchantApplicationTx` deliberately leaves an existing active/approved merchant status alone. Product should confirm whether merchant-facing copy makes this "reverification draft" boundary clear enough.
+- `getOrCreateMerchantApplicationDraft` auto-resets `submitted` applications on GET. A merchant opening the page while an async review is queued but not completed can reset the application to draft while the queued review run still exists.
+- The async review worker later refuses non-submitted applications. That avoids accidental approval after a reset, but it can leave a queued/processing review run failed/retrying rather than cleanly cancelled.
+- The Mini Program fallback wrapper `getMyApplication()` calls `/v1/merchants/applications/me`; no matching backend route was found in `server.go` or `locallife/api/**`. This fallback appears to be stale and should be removed or backed by a real route.
+- OCR writeback guards are strong: job owner, media id, OCR job id, document type, side, and draft status are checked before writes.
+- OCR pending/writeback uses full-field updates on one application row, not a shared JSON blob, so it avoids the group OCR sibling-overwrite problem.
+- `ResetStaleMerchantOCRStatus` marks only `processing` as failed, while the pending marker writes `status='pending'`. If jobs get stuck before processor marks processing in the application JSON, the scheduler may not make the field retryable through this cleanup.
+- Submit can persist repaired business-license or food-permit OCR before final approval checks. A failed submit can therefore still mutate OCR JSON on the draft.
+- Agreement consent audit is written before submit validation. A failed validation still has a consent audit event, which may be fine as an intent record but should be documented.
+- Approval transaction writes application/merchant/staff/user-role in one transaction, but review-run completion and credential-ledger activation happen after that transaction. If later review summary or credential activation fails, the application and merchant can already be approved.
+- `ApproveMerchantApplicationTx` checks `GetMerchantByOwner`, which can return a merchant where the user is only active staff because the query joins `merchant_staff`. For an application owner who is staff on another merchant, approval could update that staff merchant instead of creating the applicant's own merchant unless constrained elsewhere.
+- Duplicate license and duplicate legal-person checks query `merchant_applications`, not credential ledger or merchant `application_data`; historical approved drafts and resubmitted drafts therefore define the uniqueness boundary.
+- Storefront/environment image arrays are saved to application JSON URL lists, not media asset ids. They remain last-write-wins and are also covered as a profile-image drift risk in `merchant-profile-update`.
+
+## SQL And Durable State Boundaries
+
+- `merchant_applications`: draft/status truth, OCR JSON, document asset ids, location/region, review summary, storefront/environment image URL lists.
+- `media_assets`: uploaded private/public document/image ownership, moderation, visibility, and object-key truth.
+- `ocr_jobs`: OCR job ownership, media binding, provider status, raw/normalized result, audit trail.
+- `onboarding_review_runs`: queued/processing/completed/cancelled review evidence, rule hits, OCR job refs, requested/reviewed actors.
+- `merchants`: activated merchant profile/status/open-state truth after approval.
+- `merchant_staff`: merchant-specific owner membership created or repaired on approval.
+- `user_roles`: coarse `merchant_owner` capability created if missing.
+- `merchant_system_labels`: system labels reconciled after merchant creation/update.
+- `credential_ledgers`: active business-license and food-permit credential evidence after approval.
+- `merchant_profiles`: document-expiry takeout suspension can be released after eligible credential reactivation.
+- Notification tables/tasks: restore notification is sent synchronously in API fallback or distributed by worker after async restore release.
+
+## Trust, Authorization, And Tenant Checks
+
+- Application routes are authenticated-user scoped, not staff scoped. Handlers use `authPayload.UserID`, `GetMerchantApplicationDraft`, `GetUserMerchantApplication`, or OCR owner checks.
+- OCR creation allows access if the requester created the job, owns the OCR owner application, or is OCR admin.
+- OCR media category/side checks are centralized in `ocr_media_authz.go` for merchant application documents.
+- Document delete soft-deletes media through `mediaRegistry.SoftDelete(assetID, authPayload.UserID)` after clearing the draft binding; errors are logged and not fatal after draft mutation.
+- Submit duplicate-location check excludes the same application owner's merchant but blocks nearby coordinates owned by other users.
+- Approval transaction creates/updates the merchant under the application user id and ensures the user has owner-level merchant staff and user role.
+
+## Idempotency And Duplicate-Submit Checks
+
+- Frontend blocks duplicate save/submit/upload/reset with local flags.
+- Basic-info PUT is last-write-wins partial update on the draft row; no version/idempotency key.
+- Document upload creates a new media asset and OCR job each time. Current-binding guards make stale OCR result writeback idempotent at the application field level.
+- Asynq duplicate OCR enqueue is suppressed by task options, but durable OCR job ids are still unique per upload/request.
+- Submit permits `submitted` status for retry, but new submit calls can create additional onboarding review runs when async infrastructure is available.
+- Review worker skips completed/cancelled runs; approval SQL only approves from `submitted`, so duplicate workers after approval do not re-approve, but may fail when completing a run if state has already moved.
+- Approval transaction is atomic for application, merchant, owner staff, labels, and owner role. Review summary and credential ledger activation are not in the same transaction.
+
+## Recovery And Async Convergence Paths
+
+- Frontend OCR wrapper waits for OCR job terminal state and then polls `GET /v1/merchant/application` until writeback is visible.
+- OCR worker retries provider failures via asynq and writes failed OCR payloads while the job remains bound.
+- Data cleanup scheduler resets long-running merchant OCR `processing` fields after one hour.
+- Submit can run async review via `onboarding:review` or fallback synchronously if queue creation/enqueue fails.
+- Async review does not appear to have a stale queued-run scanner or automatic cancellation when the application is reset to draft.
+- Credential-governance restore can release takeout suspension after new active ledgers satisfy the matrix and can notify the owner.
+
+## Frontend Draft And Backend Rehydration
+
+- Page builds form/initialForm from backend response and OCR fallback fields.
+- `hasChanges` blocks pull refresh and causes submit to save the draft before final submit.
+- Document upload merges the latest backend draft after OCR writeback and keeps fallback local preview paths while public/private URLs resolve.
+- `approved` status is editable/submittable in the frontend, matching backend reset-on-edit behavior.
+- Submit response is authoritative: queued async review, approved result, blocked review, or validation errors all flow back to page state/toasts.
+- The stale `getMyApplication()` fallback may not recover from conflicts because the backend route is not registered.
+
+## Test Coverage Signals
+
+Observed tests:
+
+- `locallife/api/merchant_application_test.go` covers submit success/validation branches, address matching, duplicate checks, queue-when-async-available, and sync fallback when enqueue fails.
+- `locallife/api/ocr_test.go` covers merchant OCR pending write, owner/media auth, enqueue behavior, moderation-pending retry, and stale failure writeback.
+- `locallife/api/ocr_async_response_test.go` covers async OCR fields in the application draft response.
+- `locallife/worker/task_merchant_application_ocr_test.go` covers merchant OCR job execution, stale asset/status guards, readiness payloads, provider variants, and non-draft skip.
+- `locallife/worker/task_onboarding_review_test.go` covers merchant review worker approval and credential activation.
+- `locallife/logic/onboarding_review_service_test.go` and `logic/merchant_onboarding_review_service_test.go` cover review summary creation/completion and merchant credential activation/restore attempts.
+- `locallife/db/sqlc/tx_merchant_application_test.go` covers approval transaction owner role and owner staff behavior.
+
+Missing high-value tests:
+
+- Approved-application edit/reset product contract and existing-active-merchant behavior.
+- Async submitted application opened via GET before worker runs: queued run should be cancelled/skipped cleanly, or GET should not reset submitted when a run is active.
+- `GetMerchantByOwner` staff-merchant collision in `ApproveMerchantApplicationTx`.
+- Stale pending OCR cleanup, because current cleanup only targets `processing` in application JSON.
+- Idempotent/retry submit semantics when async review run exists.
+- Agreement-consent audit semantics on failed validation.
+- Contract test for the missing `/v1/merchants/applications/me` wrapper route or removal of the wrapper.
+
+## Gaps And Refactor Notes
+
+- Decide whether `GET /v1/merchant/application` should ever reset `submitted` to draft now that async review exists.
+- Cancel or mark superseded queued review runs when an application resets to draft, or make the worker treat non-submitted status as a terminal skip with review-run state update.
+- Restrict `ApproveMerchantApplicationTx` lookup to merchants owned by `arg.UserID`, not staff-associated merchants, before updating an existing merchant.
+- Align frontend fallback wrapper `getMyApplication()` with a real backend route or remove the fallback path.
+- Extend stale OCR cleanup to pending jobs or document why only processing jobs can be stale in application JSON.
+- Decide whether review-run completion and credential-ledger activation should be part of a larger transaction or have a repair/reconciliation job after approval.
+- Clarify copy and backend semantics for editing an already approved application, especially whether active merchant profile changes should wait for reapproval or continue to use old approved truth until the new draft is approved.
+
+## Branch Exhaustion
+
+- Entry branches checked: Mini Program merchant application/settings page, group-independent merchant application draft, basic info save, document upload/delete, OCR polling/writeback, agreement consent, submit, approved-application edit/reset, storefront/environment image draft reads, and stale `getMyApplication()` fallback. Flutter App has no merchant onboarding/OCR entry in `merchant_app/lib/features/**`. Web/operator review UI is out of current scope except backend review effects.
+- Request branches checked: `GET/PUT/POST /v1/merchant/application`, document bind/delete routes, media upload session/complete/read, OCR create/poll, agreement consent, async onboarding review enqueue, synchronous review fallback, credential restore notifications, and missing `/v1/merchants/applications/me` fallback route.
+- Backend state branches checked: draft/submitted/approved/rejected/reset transitions, pending and processing OCR payloads in application JSON, current-asset stale guards, duplicate license/legal-person checks, address/geofence validation, agreement audit write, async review-run creation/completion, approval transaction, merchant/profile/staff/user-role creation or update, system label reconciliation, credential-ledger activation, and takeout suspension release.
+- Async branches checked: OCR asynq worker and provider retry, frontend OCR terminal polling plus application rehydration, stale OCR cleanup scheduler, onboarding review asynq worker, sync fallback when queue unavailable, credential restore notification worker/path, and missing stale queued-run scanner after reset.
+- Failure/retry branches checked: duplicate frontend save/submit/upload guards, stale OCR result after asset change, pending OCR not cleaned by processing-only scheduler, submit validation failure after agreement audit, submit mutating OCR JSON before later failure, async enqueue fallback, approved edit causing draft reset, review summary/credential activation failure after approval transaction, and duplicate submit while a review run exists.
+- Reader/consumer branches checked: application page form state, OCR result readers, approved merchant profile readers, merchant profile-image flow reading application images, operator/backend review readers, credential governance, and merchant open/status readiness that depends on activated merchant state.
+- Authorization/tenant branches checked: application routes are authenticated-user scoped; OCR checks creator/application owner/OCR admin; media category/side checks apply for merchant application documents; document delete soft-deletes by user owner; approval should create/update the applicant's merchant owner truth, but current `GetMerchantByOwner` staff join is a collision risk.
+- Zombie/unreachable branches checked: stale frontend fallback route is unregistered; pending OCR cleanup gap can leave non-processing stale fields; duplicate group/web review paths are separate flows; application image URL truth overlaps with merchant profile images and remains application-scoped.
+- Test-proof gaps checked: existing tests cover application submit branches, OCR owner/media auth, async OCR response/writeback, review worker approval, credential activation, and approval transaction basics. Missing proof remains for approved edit/reset behavior, queued-run reset/cancel semantics, staff-merchant collision in approval, stale pending OCR cleanup, submit retry with existing review run, failed-validation consent audit semantics, and fallback route removal/compatibility.

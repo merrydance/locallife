@@ -1,0 +1,823 @@
+{
+  "schema": "locallife-code-slice/v1",
+  "slice": "merchant-claim-recovery",
+  "risk_class": "G3",
+  "generated_at": "2026-05-30",
+  "nodes": [
+    {
+      "id": "weapp.claimsListPage",
+      "kind": "frontend_page",
+      "label": "Merchant claims list",
+      "file": "weapp/miniprogram/pages/merchant/claims/index.ts",
+      "line": 116
+    },
+    {
+      "id": "weapp.claimDetailPage",
+      "kind": "frontend_page",
+      "label": "Merchant claim detail",
+      "file": "weapp/miniprogram/pages/merchant/claims/detail/index.ts",
+      "line": 126
+    },
+    {
+      "id": "weapp.appealsListPage",
+      "kind": "frontend_page",
+      "label": "Merchant appeals list",
+      "file": "weapp/miniprogram/pages/merchant/appeals/index.ts",
+      "line": 98
+    },
+    {
+      "id": "weapp.appealDetailPage",
+      "kind": "frontend_page",
+      "label": "Merchant appeal detail",
+      "file": "weapp/miniprogram/pages/merchant/appeals/detail/index.ts",
+      "line": 185
+    },
+    {
+      "id": "apiWrapper.getMerchantClaims",
+      "kind": "frontend_api",
+      "label": "getMerchantClaims",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/appeals-customer-service.ts",
+      "line": 520
+    },
+    {
+      "id": "apiWrapper.getMerchantClaimsSummary",
+      "kind": "frontend_api",
+      "label": "getMerchantClaimsSummary",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/appeals-customer-service.ts",
+      "line": 534
+    },
+    {
+      "id": "apiWrapper.getMerchantClaimDetail",
+      "kind": "frontend_api",
+      "label": "getMerchantClaimDetail",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/appeals-customer-service.ts",
+      "line": 545
+    },
+    {
+      "id": "apiWrapper.getMerchantClaimDecision",
+      "kind": "frontend_api",
+      "label": "getMerchantClaimDecision",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/appeals-customer-service.ts",
+      "line": 556
+    },
+    {
+      "id": "apiWrapper.getMerchantClaimRecovery.stale",
+      "kind": "frontend_api",
+      "label": "getMerchantClaimRecovery claim-path wrapper",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/appeals-customer-service.ts",
+      "line": 444
+    },
+    {
+      "id": "apiWrapper.payMerchantClaimRecovery.stale",
+      "kind": "frontend_api",
+      "label": "payMerchantClaimRecovery claim-path wrapper",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/appeals-customer-service.ts",
+      "line": 464
+    },
+    {
+      "id": "apiWrapper.createAppeal.stale",
+      "kind": "frontend_api",
+      "label": "createAppeal merchant appeals wrapper",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/appeals-customer-service.ts",
+      "line": 361
+    },
+    {
+      "id": "apiWrapper.getMerchantAppeals.stale",
+      "kind": "frontend_api",
+      "label": "getMerchantAppeals merchant appeals wrapper",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/appeals-customer-service.ts",
+      "line": 314
+    },
+    {
+      "id": "apiWrapper.getMerchantAppealDetail.stale",
+      "kind": "frontend_api",
+      "label": "getMerchantAppealDetail merchant appeals wrapper",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/appeals-customer-service.ts",
+      "line": 350
+    },
+    {
+      "id": "service.completeClaimRecoveryPayment",
+      "kind": "frontend_service",
+      "label": "completeClaimRecoveryPayment",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/services/claim-recovery-payment.ts",
+      "line": 52
+    },
+    {
+      "id": "route.merchantClaimsRead",
+      "kind": "backend_route",
+      "label": "GET /v1/merchant/claims/**",
+      "file": "locallife/api/server.go",
+      "line": 1027
+    },
+    {
+      "id": "route.merchantRecoveries",
+      "kind": "backend_route",
+      "label": "GET /v1/merchant/recoveries/:id",
+      "file": "locallife/api/server.go",
+      "line": 1040
+    },
+    {
+      "id": "route.merchantRecoveriesPay",
+      "kind": "backend_route",
+      "label": "POST /v1/merchant/recoveries/:id/pay",
+      "file": "locallife/api/server.go",
+      "line": 1054
+    },
+    {
+      "id": "route.merchantRecoveryDisputes",
+      "kind": "backend_route",
+      "label": "POST/GET /v1/merchant/recovery-disputes/**",
+      "file": "locallife/api/server.go",
+      "line": 1041
+    },
+    {
+      "id": "middleware.merchantRecoveryRead",
+      "kind": "backend_middleware",
+      "label": "Merchant recovery read owner/manager middleware",
+      "file": "locallife/api/server.go",
+      "line": 1028
+    },
+    {
+      "id": "middleware.merchantRecoveryPayment",
+      "kind": "backend_middleware",
+      "label": "Merchant recovery payment owner-only middleware",
+      "file": "locallife/api/server.go",
+      "line": 1048
+    },
+    {
+      "id": "api.listMerchantClaims",
+      "kind": "backend_handler",
+      "label": "listMerchantClaims",
+      "file": "locallife/api/recovery_dispute.go",
+      "line": 292
+    },
+    {
+      "id": "api.listMerchantClaimsSummary",
+      "kind": "backend_handler",
+      "label": "listMerchantClaimsSummary",
+      "file": "locallife/api/recovery_dispute.go",
+      "line": 380
+    },
+    {
+      "id": "api.getMerchantClaimDetail",
+      "kind": "backend_handler",
+      "label": "getMerchantClaimDetail",
+      "file": "locallife/api/recovery_dispute.go",
+      "line": 438
+    },
+    {
+      "id": "api.getMerchantClaimDecision",
+      "kind": "backend_handler",
+      "label": "getMerchantClaimDecision",
+      "file": "locallife/api/recovery_dispute.go",
+      "line": 516
+    },
+    {
+      "id": "api.getMerchantClaimRecovery",
+      "kind": "backend_handler",
+      "label": "getMerchantClaimRecovery",
+      "file": "locallife/api/claim_recovery.go",
+      "line": 94
+    },
+    {
+      "id": "api.payMerchantClaimRecovery",
+      "kind": "backend_handler",
+      "label": "payMerchantClaimRecovery",
+      "file": "locallife/api/claim_recovery.go",
+      "line": 223
+    },
+    {
+      "id": "api.createMerchantRecoveryDispute",
+      "kind": "backend_handler",
+      "label": "createMerchantRecoveryDispute",
+      "file": "locallife/api/recovery_dispute.go",
+      "line": 670
+    },
+    {
+      "id": "api.autoResolveRecoveryDispute",
+      "kind": "backend_handler",
+      "label": "autoResolveRecoveryDispute",
+      "file": "locallife/api/recovery_dispute.go",
+      "line": 1686
+    },
+    {
+      "id": "logic.getClaimRecoveryForMerchant",
+      "kind": "logic",
+      "label": "GetClaimRecoveryForMerchant",
+      "file": "locallife/logic/claim_recovery.go",
+      "line": 27
+    },
+    {
+      "id": "logic.createMerchantClaimRecoveryPayment",
+      "kind": "logic",
+      "label": "CreateMerchantClaimRecoveryPayment",
+      "file": "locallife/logic/claim_recovery_payment.go",
+      "line": 50
+    },
+    {
+      "id": "logic.createMerchantRecoveryDispute",
+      "kind": "logic",
+      "label": "CreateMerchantRecoveryDispute",
+      "file": "locallife/logic/recovery_dispute.go",
+      "line": 44
+    },
+    {
+      "id": "logic.resolveRecoveryDisputeAutomatically",
+      "kind": "logic",
+      "label": "ResolveRecoveryDisputeAutomatically",
+      "file": "locallife/logic/recovery_dispute_auto_resolution.go",
+      "line": 35
+    },
+    {
+      "id": "logic.applyClaimRecoveryPaymentFact",
+      "kind": "logic",
+      "label": "applyClaimRecoveryPaymentFact",
+      "file": "locallife/logic/payment_fact_application_direct_payment.go",
+      "line": 35
+    },
+    {
+      "id": "db.listMerchantClaimsForMerchant",
+      "kind": "sql_query",
+      "label": "ListMerchantClaimsForMerchant",
+      "file": "locallife/db/query/recovery_dispute.sql",
+      "line": 101
+    },
+    {
+      "id": "db.getMerchantClaimDetailForMerchant",
+      "kind": "sql_query",
+      "label": "GetMerchantClaimDetailForMerchant",
+      "file": "locallife/db/query/recovery_dispute.sql",
+      "line": 180
+    },
+    {
+      "id": "db.getClaimRecoveryContextByID",
+      "kind": "sql_query",
+      "label": "GetClaimRecoveryContextByID",
+      "file": "locallife/db/query/claim_recovery.sql",
+      "line": 79
+    },
+    {
+      "id": "db.getClaimRecoveryContextByClaimID",
+      "kind": "sql_query",
+      "label": "GetClaimRecoveryContextByClaimID",
+      "file": "locallife/db/query/claim_recovery.sql",
+      "line": 50
+    },
+    {
+      "id": "db.createClaimRecovery",
+      "kind": "sql_query",
+      "label": "CreateClaimRecovery",
+      "file": "locallife/db/query/claim_recovery.sql",
+      "line": 3
+    },
+    {
+      "id": "db.markClaimRecoveryDisputed",
+      "kind": "sql_query",
+      "label": "MarkClaimRecoveryDisputed",
+      "file": "locallife/db/query/claim_recovery.sql",
+      "line": 163
+    },
+    {
+      "id": "db.markClaimRecoveryOverdue",
+      "kind": "sql_query",
+      "label": "MarkClaimRecoveryOverdue",
+      "file": "locallife/db/query/claim_recovery.sql",
+      "line": 139
+    },
+    {
+      "id": "db.markClaimRecoveryPaid",
+      "kind": "sql_query",
+      "label": "MarkClaimRecoveryPaid",
+      "file": "locallife/db/query/claim_recovery.sql",
+      "line": 147
+    },
+    {
+      "id": "db.markClaimRecoveryWaived",
+      "kind": "sql_query",
+      "label": "MarkClaimRecoveryWaived",
+      "file": "locallife/db/query/claim_recovery.sql",
+      "line": 155
+    },
+    {
+      "id": "db.resumeClaimRecoveryAfterDispute",
+      "kind": "sql_query",
+      "label": "ResumeClaimRecoveryAfterDispute",
+      "file": "locallife/db/query/claim_recovery.sql",
+      "line": 179
+    },
+    {
+      "id": "tx.finalizeClaimCompensationAfterPayout",
+      "kind": "transaction",
+      "label": "FinalizeClaimCompensationAfterPayoutTx",
+      "file": "locallife/db/sqlc/tx_claim_behavior.go",
+      "line": 571
+    },
+    {
+      "id": "tx.createRecoveryDisputeWithRecovery",
+      "kind": "transaction",
+      "label": "CreateRecoveryDisputeWithRecoveryTx",
+      "file": "locallife/db/sqlc/tx_create_recovery_dispute.go",
+      "line": 20
+    },
+    {
+      "id": "tx.reviewRecoveryDisputeWithCompensation",
+      "kind": "transaction",
+      "label": "ReviewRecoveryDisputeWithCompensationTx",
+      "file": "locallife/db/sqlc/tx_recovery_dispute_review.go",
+      "line": 27
+    },
+    {
+      "id": "tx.markClaimRecoveryOverdueWithAction",
+      "kind": "transaction",
+      "label": "MarkClaimRecoveryOverdueWithActionTx",
+      "file": "locallife/db/sqlc/tx_claim_recovery_overdue.go",
+      "line": 23
+    },
+    {
+      "id": "tx.processPaymentSuccess",
+      "kind": "transaction",
+      "label": "ProcessPaymentSuccessTx claim_recovery branch",
+      "file": "locallife/db/sqlc/tx_payment_success.go",
+      "line": 242
+    },
+    {
+      "id": "worker.claimRecoveryScheduler",
+      "kind": "scheduler",
+      "label": "ClaimRecoveryScheduler",
+      "file": "locallife/worker/claim_recovery_scheduler.go",
+      "line": 19
+    },
+    {
+      "id": "worker.claimBehaviorAction",
+      "kind": "worker",
+      "label": "TaskClaimBehaviorAction",
+      "file": "locallife/worker/task_claim_behavior_action.go",
+      "line": 100
+    },
+    {
+      "id": "worker.paymentFactApplicationScheduler",
+      "kind": "scheduler",
+      "label": "PaymentFactApplicationScheduler",
+      "file": "locallife/worker/payment_fact_application_scheduler.go",
+      "line": 23
+    },
+    {
+      "id": "worker.processRecoveryDisputeResult",
+      "kind": "worker",
+      "label": "ProcessRecoveryDisputeResult",
+      "file": "locallife/worker/task_process_recovery_dispute_result.go",
+      "line": 64
+    },
+    {
+      "id": "worker.automaticRecoveryDisputeResolution",
+      "kind": "worker",
+      "label": "AutomaticRecoveryDisputeResolution",
+      "file": "locallife/worker/task_automatic_recovery_dispute_resolution.go",
+      "line": 52
+    },
+    {
+      "id": "api.paymentCallbackFact",
+      "kind": "callback",
+      "label": "recordDirectPaymentCallbackFact claim recovery branch",
+      "file": "locallife/api/payment_callback.go",
+      "line": 319
+    },
+    {
+      "id": "worker.directPaymentFactRecovery",
+      "kind": "worker",
+      "label": "recordRecoveredDirectPaymentFact",
+      "file": "locallife/worker/direct_payment_fact.go",
+      "line": 83
+    },
+    {
+      "id": "table.claims",
+      "kind": "table",
+      "label": "claims",
+      "file": "locallife/db/query/recovery_dispute.sql",
+      "line": 112
+    },
+    {
+      "id": "table.behaviorDecisions",
+      "kind": "table",
+      "label": "behavior_decisions",
+      "file": "locallife/api/recovery_dispute.go",
+      "line": 545
+    },
+    {
+      "id": "table.behaviorActions",
+      "kind": "table",
+      "label": "behavior_actions",
+      "file": "locallife/db/sqlc/tx_claim_behavior.go",
+      "line": 806
+    },
+    {
+      "id": "table.claimRecoveries",
+      "kind": "table",
+      "label": "claim_recoveries",
+      "file": "locallife/db/query/claim_recovery.sql",
+      "line": 3
+    },
+    {
+      "id": "table.claimRecoveryEvents",
+      "kind": "table",
+      "label": "claim_recovery_events",
+      "file": "locallife/db/query/claim_recovery.sql",
+      "line": 20
+    },
+    {
+      "id": "table.recoveryDisputes",
+      "kind": "table",
+      "label": "recovery_disputes",
+      "file": "locallife/db/query/recovery_dispute.sql",
+      "line": 7
+    },
+    {
+      "id": "table.paymentOrders",
+      "kind": "table",
+      "label": "payment_orders",
+      "file": "locallife/logic/claim_recovery_payment.go",
+      "line": 129
+    },
+    {
+      "id": "table.externalPaymentFacts",
+      "kind": "table",
+      "label": "external_payment_facts",
+      "file": "locallife/api/payment_callback.go",
+      "line": 343
+    },
+    {
+      "id": "table.merchantProfiles",
+      "kind": "table",
+      "label": "merchant_profiles takeout suspension fields",
+      "file": "locallife/db/query/trust_score.sql",
+      "line": 77
+    }
+  ],
+  "edges": [
+    {
+      "from": "weapp.claimsListPage",
+      "to": "apiWrapper.getMerchantClaims",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.claimsListPage",
+      "to": "apiWrapper.getMerchantClaimsSummary",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.claimsListPage",
+      "to": "apiWrapper.getMerchantClaimDecision",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.claimDetailPage",
+      "to": "apiWrapper.getMerchantClaimDetail",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.claimDetailPage",
+      "to": "apiWrapper.getMerchantClaimDecision",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.claimDetailPage",
+      "to": "apiWrapper.getMerchantClaimRecovery.stale",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.claimDetailPage",
+      "to": "apiWrapper.payMerchantClaimRecovery.stale",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.claimDetailPage",
+      "to": "apiWrapper.createAppeal.stale",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.appealsListPage",
+      "to": "apiWrapper.getMerchantAppeals.stale",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.appealDetailPage",
+      "to": "apiWrapper.getMerchantAppealDetail.stale",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.getMerchantClaims",
+      "to": "route.merchantClaimsRead",
+      "kind": "route"
+    },
+    {
+      "from": "apiWrapper.getMerchantClaimsSummary",
+      "to": "route.merchantClaimsRead",
+      "kind": "route"
+    },
+    {
+      "from": "apiWrapper.getMerchantClaimDetail",
+      "to": "route.merchantClaimsRead",
+      "kind": "route"
+    },
+    {
+      "from": "apiWrapper.getMerchantClaimDecision",
+      "to": "route.merchantClaimsRead",
+      "kind": "route"
+    },
+    {
+      "from": "route.merchantClaimsRead",
+      "to": "middleware.merchantRecoveryRead",
+      "kind": "call"
+    },
+    {
+      "from": "route.merchantClaimsRead",
+      "to": "api.listMerchantClaims",
+      "kind": "route"
+    },
+    {
+      "from": "route.merchantClaimsRead",
+      "to": "api.listMerchantClaimsSummary",
+      "kind": "route"
+    },
+    {
+      "from": "route.merchantClaimsRead",
+      "to": "api.getMerchantClaimDetail",
+      "kind": "route"
+    },
+    {
+      "from": "route.merchantClaimsRead",
+      "to": "api.getMerchantClaimDecision",
+      "kind": "route"
+    },
+    {
+      "from": "route.merchantRecoveries",
+      "to": "api.getMerchantClaimRecovery",
+      "kind": "route"
+    },
+    {
+      "from": "route.merchantRecoveriesPay",
+      "to": "middleware.merchantRecoveryPayment",
+      "kind": "call"
+    },
+    {
+      "from": "route.merchantRecoveriesPay",
+      "to": "api.payMerchantClaimRecovery",
+      "kind": "route"
+    },
+    {
+      "from": "route.merchantRecoveryDisputes",
+      "to": "api.createMerchantRecoveryDispute",
+      "kind": "route"
+    },
+    {
+      "from": "api.listMerchantClaims",
+      "to": "db.listMerchantClaimsForMerchant",
+      "kind": "call"
+    },
+    {
+      "from": "api.listMerchantClaimsSummary",
+      "to": "db.listMerchantClaimsForMerchant",
+      "kind": "read"
+    },
+    {
+      "from": "api.getMerchantClaimDetail",
+      "to": "db.getMerchantClaimDetailForMerchant",
+      "kind": "call"
+    },
+    {
+      "from": "api.getMerchantClaimDecision",
+      "to": "table.behaviorDecisions",
+      "kind": "read"
+    },
+    {
+      "from": "db.listMerchantClaimsForMerchant",
+      "to": "table.claims",
+      "kind": "read"
+    },
+    {
+      "from": "db.listMerchantClaimsForMerchant",
+      "to": "table.recoveryDisputes",
+      "kind": "read"
+    },
+    {
+      "from": "db.listMerchantClaimsForMerchant",
+      "to": "table.claimRecoveries",
+      "kind": "read"
+    },
+    {
+      "from": "db.getMerchantClaimDetailForMerchant",
+      "to": "table.claims",
+      "kind": "read"
+    },
+    {
+      "from": "db.getMerchantClaimDetailForMerchant",
+      "to": "table.recoveryDisputes",
+      "kind": "read"
+    },
+    {
+      "from": "api.getMerchantClaimRecovery",
+      "to": "logic.getClaimRecoveryForMerchant",
+      "kind": "call"
+    },
+    {
+      "from": "logic.getClaimRecoveryForMerchant",
+      "to": "db.getClaimRecoveryContextByID",
+      "kind": "call"
+    },
+    {
+      "from": "db.getClaimRecoveryContextByID",
+      "to": "table.claimRecoveries",
+      "kind": "read"
+    },
+    {
+      "from": "api.payMerchantClaimRecovery",
+      "to": "logic.createMerchantClaimRecoveryPayment",
+      "kind": "call"
+    },
+    {
+      "from": "logic.createMerchantClaimRecoveryPayment",
+      "to": "db.getClaimRecoveryContextByID",
+      "kind": "call"
+    },
+    {
+      "from": "logic.createMerchantClaimRecoveryPayment",
+      "to": "table.paymentOrders",
+      "kind": "write"
+    },
+    {
+      "from": "logic.createMerchantClaimRecoveryPayment",
+      "to": "table.claimRecoveryEvents",
+      "kind": "write"
+    },
+    {
+      "from": "logic.createMerchantClaimRecoveryPayment",
+      "to": "api.paymentCallbackFact",
+      "kind": "callback"
+    },
+    {
+      "from": "weapp.claimDetailPage",
+      "to": "service.completeClaimRecoveryPayment",
+      "kind": "call"
+    },
+    {
+      "from": "api.paymentCallbackFact",
+      "to": "table.externalPaymentFacts",
+      "kind": "write"
+    },
+    {
+      "from": "worker.directPaymentFactRecovery",
+      "to": "table.externalPaymentFacts",
+      "kind": "write"
+    },
+    {
+      "from": "table.externalPaymentFacts",
+      "to": "worker.paymentFactApplicationScheduler",
+      "kind": "scheduler"
+    },
+    {
+      "from": "worker.paymentFactApplicationScheduler",
+      "to": "logic.applyClaimRecoveryPaymentFact",
+      "kind": "call"
+    },
+    {
+      "from": "logic.applyClaimRecoveryPaymentFact",
+      "to": "tx.processPaymentSuccess",
+      "kind": "transaction"
+    },
+    {
+      "from": "tx.processPaymentSuccess",
+      "to": "db.markClaimRecoveryPaid",
+      "kind": "write"
+    },
+    {
+      "from": "tx.processPaymentSuccess",
+      "to": "table.claimRecoveryEvents",
+      "kind": "write"
+    },
+    {
+      "from": "tx.processPaymentSuccess",
+      "to": "table.behaviorActions",
+      "kind": "write"
+    },
+    {
+      "from": "tx.finalizeClaimCompensationAfterPayout",
+      "to": "db.createClaimRecovery",
+      "kind": "write"
+    },
+    {
+      "from": "tx.finalizeClaimCompensationAfterPayout",
+      "to": "table.claimRecoveryEvents",
+      "kind": "write"
+    },
+    {
+      "from": "tx.finalizeClaimCompensationAfterPayout",
+      "to": "table.behaviorActions",
+      "kind": "write"
+    },
+    {
+      "from": "worker.claimRecoveryScheduler",
+      "to": "tx.markClaimRecoveryOverdueWithAction",
+      "kind": "scheduler"
+    },
+    {
+      "from": "tx.markClaimRecoveryOverdueWithAction",
+      "to": "db.markClaimRecoveryOverdue",
+      "kind": "write"
+    },
+    {
+      "from": "tx.markClaimRecoveryOverdueWithAction",
+      "to": "table.claimRecoveryEvents",
+      "kind": "write"
+    },
+    {
+      "from": "tx.markClaimRecoveryOverdueWithAction",
+      "to": "table.behaviorActions",
+      "kind": "write"
+    },
+    {
+      "from": "table.behaviorActions",
+      "to": "worker.claimBehaviorAction",
+      "kind": "enqueue"
+    },
+    {
+      "from": "worker.claimBehaviorAction",
+      "to": "table.merchantProfiles",
+      "kind": "write"
+    },
+    {
+      "from": "api.createMerchantRecoveryDispute",
+      "to": "logic.createMerchantRecoveryDispute",
+      "kind": "call"
+    },
+    {
+      "from": "logic.createMerchantRecoveryDispute",
+      "to": "db.getClaimRecoveryContextByClaimID",
+      "kind": "call"
+    },
+    {
+      "from": "logic.createMerchantRecoveryDispute",
+      "to": "tx.createRecoveryDisputeWithRecovery",
+      "kind": "transaction"
+    },
+    {
+      "from": "tx.createRecoveryDisputeWithRecovery",
+      "to": "table.recoveryDisputes",
+      "kind": "write"
+    },
+    {
+      "from": "tx.createRecoveryDisputeWithRecovery",
+      "to": "db.markClaimRecoveryDisputed",
+      "kind": "write"
+    },
+    {
+      "from": "tx.createRecoveryDisputeWithRecovery",
+      "to": "table.claimRecoveryEvents",
+      "kind": "write"
+    },
+    {
+      "from": "api.createMerchantRecoveryDispute",
+      "to": "api.autoResolveRecoveryDispute",
+      "kind": "call"
+    },
+    {
+      "from": "api.autoResolveRecoveryDispute",
+      "to": "logic.resolveRecoveryDisputeAutomatically",
+      "kind": "call"
+    },
+    {
+      "from": "logic.resolveRecoveryDisputeAutomatically",
+      "to": "tx.reviewRecoveryDisputeWithCompensation",
+      "kind": "transaction"
+    },
+    {
+      "from": "tx.reviewRecoveryDisputeWithCompensation",
+      "to": "db.markClaimRecoveryWaived",
+      "kind": "write"
+    },
+    {
+      "from": "tx.reviewRecoveryDisputeWithCompensation",
+      "to": "db.resumeClaimRecoveryAfterDispute",
+      "kind": "write"
+    },
+    {
+      "from": "tx.reviewRecoveryDisputeWithCompensation",
+      "to": "table.behaviorActions",
+      "kind": "write"
+    },
+    {
+      "from": "api.autoResolveRecoveryDispute",
+      "to": "worker.processRecoveryDisputeResult",
+      "kind": "enqueue"
+    },
+    {
+      "from": "api.autoResolveRecoveryDispute",
+      "to": "worker.automaticRecoveryDisputeResolution",
+      "kind": "enqueue"
+    },
+    {
+      "from": "worker.processRecoveryDisputeResult",
+      "to": "worker.claimBehaviorAction",
+      "kind": "call"
+    }
+  ]
+}

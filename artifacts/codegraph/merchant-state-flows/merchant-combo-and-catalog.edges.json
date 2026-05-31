@@ -1,0 +1,702 @@
+{
+  "schema": "locallife-code-slice/v1",
+  "slice": "merchant-combo-and-catalog",
+  "risk_class": "G2",
+  "generated_at": "2026-05-30",
+  "nodes": [
+    {
+      "id": "weapp.comboListPage",
+      "kind": "frontend_page",
+      "label": "Merchant combo list page",
+      "file": "weapp/miniprogram/pages/merchant/combos/index.ts",
+      "line": 175
+    },
+    {
+      "id": "weapp.loadCombos",
+      "kind": "frontend_handler",
+      "label": "loadCombos",
+      "file": "weapp/miniprogram/pages/merchant/combos/index.ts",
+      "line": 175
+    },
+    {
+      "id": "weapp.toggleComboOnline",
+      "kind": "frontend_handler",
+      "label": "onToggleOnline",
+      "file": "weapp/miniprogram/pages/merchant/combos/index.ts",
+      "line": 293
+    },
+    {
+      "id": "weapp.deleteCombo",
+      "kind": "frontend_handler",
+      "label": "onConfirmDeleteCombo",
+      "file": "weapp/miniprogram/pages/merchant/combos/index.ts",
+      "line": 392
+    },
+    {
+      "id": "weapp.comboEditPage",
+      "kind": "frontend_page",
+      "label": "Merchant combo edit page",
+      "file": "weapp/miniprogram/pages/merchant/combos/edit/index.ts",
+      "line": 110
+    },
+    {
+      "id": "weapp.fetchAllDishes",
+      "kind": "frontend_handler",
+      "label": "fetchAllDishes",
+      "file": "weapp/miniprogram/pages/merchant/combos/edit/index.ts",
+      "line": 119
+    },
+    {
+      "id": "weapp.comboEditLoadData",
+      "kind": "frontend_handler",
+      "label": "combo edit loadData",
+      "file": "weapp/miniprogram/pages/merchant/combos/edit/index.ts",
+      "line": 144
+    },
+    {
+      "id": "weapp.syncVisibleDishes",
+      "kind": "frontend_filter",
+      "label": "Only visible online and available dishes unless selected",
+      "file": "weapp/miniprogram/pages/merchant/combos/edit/index.ts",
+      "line": 583
+    },
+    {
+      "id": "weapp.submitCombo",
+      "kind": "frontend_handler",
+      "label": "onSubmit combo create/update",
+      "file": "weapp/miniprogram/pages/merchant/combos/edit/index.ts",
+      "line": 485
+    },
+    {
+      "id": "weapp.createComboTag",
+      "kind": "frontend_handler",
+      "label": "Create combo tag popup submit",
+      "file": "weapp/miniprogram/pages/merchant/combos/edit/index.ts",
+      "line": 360
+    },
+    {
+      "id": "weapp.categoryPage",
+      "kind": "frontend_page",
+      "label": "Merchant dish category page",
+      "file": "weapp/miniprogram/pages/merchant/dishes/categories/index.ts",
+      "line": 54
+    },
+    {
+      "id": "weapp.categoryCreateLink",
+      "kind": "frontend_handler",
+      "label": "Create or link category",
+      "file": "weapp/miniprogram/pages/merchant/dishes/categories/index.ts",
+      "line": 207
+    },
+    {
+      "id": "weapp.categoryEdit",
+      "kind": "frontend_handler",
+      "label": "Edit category name",
+      "file": "weapp/miniprogram/pages/merchant/dishes/categories/index.ts",
+      "line": 269
+    },
+    {
+      "id": "weapp.categoryDelete",
+      "kind": "frontend_handler",
+      "label": "Delete category",
+      "file": "weapp/miniprogram/pages/merchant/dishes/categories/index.ts",
+      "line": 301
+    },
+    {
+      "id": "apiWrapper.comboList",
+      "kind": "frontend_api",
+      "label": "ComboManagementService.listCombos",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/dish.ts",
+      "line": 836
+    },
+    {
+      "id": "apiWrapper.comboGet",
+      "kind": "frontend_api",
+      "label": "ComboManagementService.getComboDetail",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/dish.ts",
+      "line": 852
+    },
+    {
+      "id": "apiWrapper.comboCreateUpdate",
+      "kind": "frontend_api",
+      "label": "ComboManagementService.createCombo/updateCombo",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/dish.ts",
+      "line": 874
+    },
+    {
+      "id": "apiWrapper.comboDelete",
+      "kind": "frontend_api",
+      "label": "ComboManagementService.deleteCombo",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/dish.ts",
+      "line": 898
+    },
+    {
+      "id": "apiWrapper.comboDirectDishes",
+      "kind": "frontend_api",
+      "label": "Direct add/remove combo dish wrappers",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/dish.ts",
+      "line": 909
+    },
+    {
+      "id": "apiWrapper.comboOnline",
+      "kind": "frontend_api",
+      "label": "ComboManagementService.updateComboOnlineStatus",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/dish.ts",
+      "line": 935
+    },
+    {
+      "id": "apiWrapper.categoryCrud",
+      "kind": "frontend_api",
+      "label": "DishManagementService category CRUD",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/dish.ts",
+      "line": 756
+    },
+    {
+      "id": "apiWrapper.tagCreate",
+      "kind": "frontend_api",
+      "label": "TagService.createTag",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/dish.ts",
+      "line": 566
+    },
+    {
+      "id": "route.comboGroup",
+      "kind": "backend_route",
+      "label": "/v1/combos merchant route group",
+      "file": "locallife/api/server.go",
+      "line": 812
+    },
+    {
+      "id": "route.dishCategoryGroup",
+      "kind": "backend_route",
+      "label": "/v1/dishes/categories route group",
+      "file": "locallife/api/server.go",
+      "line": 787
+    },
+    {
+      "id": "route.tagsAdminOnly",
+      "kind": "backend_route",
+      "label": "POST /v1/tags admin-only",
+      "file": "locallife/api/server.go",
+      "line": 778
+    },
+    {
+      "id": "middleware.comboCategoryStaff",
+      "kind": "backend_middleware",
+      "label": "MerchantStaffMiddleware owner/manager/chef",
+      "file": "locallife/api/server.go",
+      "line": 814
+    },
+    {
+      "id": "api.listComboSets",
+      "kind": "backend_handler",
+      "label": "listComboSets",
+      "file": "locallife/api/combo.go",
+      "line": 569
+    },
+    {
+      "id": "api.createComboSet",
+      "kind": "backend_handler",
+      "label": "createComboSet",
+      "file": "locallife/api/combo.go",
+      "line": 297
+    },
+    {
+      "id": "api.updateComboSet",
+      "kind": "backend_handler",
+      "label": "updateComboSet",
+      "file": "locallife/api/combo.go",
+      "line": 673
+    },
+    {
+      "id": "api.resolveComboSummary",
+      "kind": "backend_logic",
+      "label": "resolveComboSummary",
+      "file": "locallife/api/combo.go",
+      "line": 242
+    },
+    {
+      "id": "api.toggleComboOnline",
+      "kind": "backend_handler",
+      "label": "toggleComboOnline",
+      "file": "locallife/api/combo.go",
+      "line": 822
+    },
+    {
+      "id": "api.deleteComboSet",
+      "kind": "backend_handler",
+      "label": "deleteComboSet",
+      "file": "locallife/api/combo.go",
+      "line": 899
+    },
+    {
+      "id": "api.addComboDish",
+      "kind": "backend_handler",
+      "label": "addComboDish",
+      "file": "locallife/api/combo.go",
+      "line": 963
+    },
+    {
+      "id": "api.removeComboDish",
+      "kind": "backend_handler",
+      "label": "removeComboDish",
+      "file": "locallife/api/combo.go",
+      "line": 1056
+    },
+    {
+      "id": "api.publicComboDetail",
+      "kind": "backend_reader",
+      "label": "getPublicComboDetail",
+      "file": "locallife/api/combo.go",
+      "line": 485
+    },
+    {
+      "id": "api.publicMerchantCombos",
+      "kind": "backend_reader",
+      "label": "getPublicMerchantCombos",
+      "file": "locallife/api/merchant.go",
+      "line": 1559
+    },
+    {
+      "id": "api.scanTableMenu",
+      "kind": "backend_reader",
+      "label": "scan table menu combos",
+      "file": "locallife/api/scan.go",
+      "line": 291
+    },
+    {
+      "id": "api.createDishCategory",
+      "kind": "backend_handler",
+      "label": "create/link dish category",
+      "file": "locallife/api/dish.go",
+      "line": 207
+    },
+    {
+      "id": "api.updateDishCategory",
+      "kind": "backend_handler",
+      "label": "updateDishCategory",
+      "file": "locallife/api/dish.go",
+      "line": 260
+    },
+    {
+      "id": "api.deleteDishCategory",
+      "kind": "backend_handler",
+      "label": "deleteDishCategory",
+      "file": "locallife/api/dish.go",
+      "line": 328
+    },
+    {
+      "id": "tx.createComboSet",
+      "kind": "db_transaction",
+      "label": "CreateComboSetTx",
+      "file": "locallife/db/sqlc/tx_combo.go",
+      "line": 1
+    },
+    {
+      "id": "tx.updateComboSet",
+      "kind": "db_transaction",
+      "label": "UpdateComboSetTx",
+      "file": "locallife/db/sqlc/tx_combo.go",
+      "line": 77
+    },
+    {
+      "id": "tx.renameDishCategory",
+      "kind": "db_transaction",
+      "label": "RenameMerchantDishCategoryTx",
+      "file": "locallife/db/sqlc/tx_dish_category.go",
+      "line": 25
+    },
+    {
+      "id": "sql.comboSets",
+      "kind": "sql",
+      "label": "combo_sets CRUD queries",
+      "file": "locallife/db/query/combo.sql",
+      "line": 5
+    },
+    {
+      "id": "sql.comboDishes",
+      "kind": "sql",
+      "label": "combo_dishes queries",
+      "file": "locallife/db/query/combo.sql",
+      "line": 134
+    },
+    {
+      "id": "sql.listOnlineCombos",
+      "kind": "sql_reader",
+      "label": "ListOnlineCombosByMerchant",
+      "file": "locallife/db/query/combo.sql",
+      "line": 291
+    },
+    {
+      "id": "sql.getMerchantOnlineCombos",
+      "kind": "sql_reader",
+      "label": "GetMerchantOnlineCombos",
+      "file": "locallife/db/query/merchant_stats.sql",
+      "line": 300
+    },
+    {
+      "id": "sql.dishCategories",
+      "kind": "sql",
+      "label": "dish category and merchant category queries",
+      "file": "locallife/db/query/dish.sql",
+      "line": 9
+    },
+    {
+      "id": "logic.cartComboValidation",
+      "kind": "backend_logic",
+      "label": "Cart combo validation",
+      "file": "locallife/logic/cart_items.go",
+      "line": 109
+    },
+    {
+      "id": "logic.orderComboValidation",
+      "kind": "backend_logic",
+      "label": "Order combo validation",
+      "file": "locallife/logic/order_items.go",
+      "line": 75
+    },
+    {
+      "id": "logic.reservationComboValidation",
+      "kind": "backend_logic",
+      "label": "Reservation combo validation",
+      "file": "locallife/logic/reservation.go",
+      "line": 798
+    },
+    {
+      "id": "state.comboSets",
+      "kind": "state_table",
+      "label": "combo_sets"
+    },
+    {
+      "id": "state.comboDishes",
+      "kind": "state_table",
+      "label": "combo_dishes"
+    },
+    {
+      "id": "state.comboTags",
+      "kind": "state_table",
+      "label": "combo_tags"
+    },
+    {
+      "id": "state.dishCategories",
+      "kind": "state_table",
+      "label": "dish_categories"
+    },
+    {
+      "id": "state.merchantDishCategories",
+      "kind": "state_table",
+      "label": "merchant_dish_categories"
+    },
+    {
+      "id": "state.dishesCategoryId",
+      "kind": "state_field",
+      "label": "dishes.category_id"
+    }
+  ],
+  "edges": [
+    {
+      "from": "weapp.comboListPage",
+      "to": "weapp.loadCombos",
+      "kind": "owns"
+    },
+    {
+      "from": "weapp.loadCombos",
+      "to": "apiWrapper.comboList",
+      "kind": "calls"
+    },
+    {
+      "from": "apiWrapper.comboList",
+      "to": "api.listComboSets",
+      "kind": "http"
+    },
+    {
+      "from": "api.listComboSets",
+      "to": "sql.comboSets",
+      "kind": "reads"
+    },
+    {
+      "from": "weapp.toggleComboOnline",
+      "to": "apiWrapper.comboOnline",
+      "kind": "calls"
+    },
+    {
+      "from": "apiWrapper.comboOnline",
+      "to": "api.toggleComboOnline",
+      "kind": "http"
+    },
+    {
+      "from": "api.toggleComboOnline",
+      "to": "sql.comboSets",
+      "kind": "writes"
+    },
+    {
+      "from": "api.toggleComboOnline",
+      "to": "state.comboSets",
+      "kind": "mutates"
+    },
+    {
+      "from": "weapp.deleteCombo",
+      "to": "apiWrapper.comboDelete",
+      "kind": "calls"
+    },
+    {
+      "from": "apiWrapper.comboDelete",
+      "to": "api.deleteComboSet",
+      "kind": "http"
+    },
+    {
+      "from": "api.deleteComboSet",
+      "to": "sql.comboSets",
+      "kind": "writes"
+    },
+    {
+      "from": "api.deleteComboSet",
+      "to": "state.comboSets",
+      "kind": "soft_deletes"
+    },
+    {
+      "from": "weapp.comboEditPage",
+      "to": "weapp.comboEditLoadData",
+      "kind": "owns"
+    },
+    {
+      "from": "weapp.comboEditLoadData",
+      "to": "weapp.fetchAllDishes",
+      "kind": "calls"
+    },
+    {
+      "from": "weapp.comboEditLoadData",
+      "to": "apiWrapper.comboGet",
+      "kind": "calls"
+    },
+    {
+      "from": "weapp.comboEditLoadData",
+      "to": "weapp.syncVisibleDishes",
+      "kind": "filters"
+    },
+    {
+      "from": "weapp.submitCombo",
+      "to": "apiWrapper.comboCreateUpdate",
+      "kind": "calls"
+    },
+    {
+      "from": "apiWrapper.comboCreateUpdate",
+      "to": "api.createComboSet",
+      "kind": "http_create"
+    },
+    {
+      "from": "apiWrapper.comboCreateUpdate",
+      "to": "api.updateComboSet",
+      "kind": "http_update"
+    },
+    {
+      "from": "api.createComboSet",
+      "to": "api.resolveComboSummary",
+      "kind": "validates"
+    },
+    {
+      "from": "api.updateComboSet",
+      "to": "api.resolveComboSummary",
+      "kind": "validates"
+    },
+    {
+      "from": "api.resolveComboSummary",
+      "to": "state.comboDishes",
+      "kind": "derives_child_snapshot"
+    },
+    {
+      "from": "api.createComboSet",
+      "to": "tx.createComboSet",
+      "kind": "calls"
+    },
+    {
+      "from": "api.updateComboSet",
+      "to": "tx.updateComboSet",
+      "kind": "calls"
+    },
+    {
+      "from": "tx.createComboSet",
+      "to": "state.comboSets",
+      "kind": "writes"
+    },
+    {
+      "from": "tx.createComboSet",
+      "to": "state.comboDishes",
+      "kind": "writes"
+    },
+    {
+      "from": "tx.createComboSet",
+      "to": "state.comboTags",
+      "kind": "writes"
+    },
+    {
+      "from": "tx.updateComboSet",
+      "to": "state.comboSets",
+      "kind": "writes"
+    },
+    {
+      "from": "tx.updateComboSet",
+      "to": "state.comboDishes",
+      "kind": "replaces"
+    },
+    {
+      "from": "tx.updateComboSet",
+      "to": "state.comboTags",
+      "kind": "replaces"
+    },
+    {
+      "from": "weapp.createComboTag",
+      "to": "apiWrapper.tagCreate",
+      "kind": "calls"
+    },
+    {
+      "from": "apiWrapper.tagCreate",
+      "to": "route.tagsAdminOnly",
+      "kind": "http_permission_drift"
+    },
+    {
+      "from": "apiWrapper.comboDirectDishes",
+      "to": "api.addComboDish",
+      "kind": "http_legacy"
+    },
+    {
+      "from": "apiWrapper.comboDirectDishes",
+      "to": "api.removeComboDish",
+      "kind": "http_legacy"
+    },
+    {
+      "from": "api.addComboDish",
+      "to": "sql.comboDishes",
+      "kind": "writes"
+    },
+    {
+      "from": "api.removeComboDish",
+      "to": "sql.comboDishes",
+      "kind": "writes"
+    },
+    {
+      "from": "route.comboGroup",
+      "to": "middleware.comboCategoryStaff",
+      "kind": "protected_by"
+    },
+    {
+      "from": "route.dishCategoryGroup",
+      "to": "middleware.comboCategoryStaff",
+      "kind": "protected_by"
+    },
+    {
+      "from": "api.publicComboDetail",
+      "to": "sql.comboSets",
+      "kind": "reads"
+    },
+    {
+      "from": "api.publicMerchantCombos",
+      "to": "sql.getMerchantOnlineCombos",
+      "kind": "reads"
+    },
+    {
+      "from": "api.scanTableMenu",
+      "to": "sql.listOnlineCombos",
+      "kind": "reads"
+    },
+    {
+      "from": "logic.cartComboValidation",
+      "to": "state.comboSets",
+      "kind": "validates_online_only"
+    },
+    {
+      "from": "logic.orderComboValidation",
+      "to": "state.comboSets",
+      "kind": "validates_online_only"
+    },
+    {
+      "from": "logic.reservationComboValidation",
+      "to": "state.comboSets",
+      "kind": "validates_online_only"
+    },
+    {
+      "from": "weapp.categoryPage",
+      "to": "apiWrapper.categoryCrud",
+      "kind": "calls"
+    },
+    {
+      "from": "weapp.categoryCreateLink",
+      "to": "apiWrapper.categoryCrud",
+      "kind": "calls_create"
+    },
+    {
+      "from": "weapp.categoryEdit",
+      "to": "apiWrapper.categoryCrud",
+      "kind": "calls_update"
+    },
+    {
+      "from": "weapp.categoryDelete",
+      "to": "apiWrapper.categoryCrud",
+      "kind": "calls_delete"
+    },
+    {
+      "from": "apiWrapper.categoryCrud",
+      "to": "api.createDishCategory",
+      "kind": "http_create"
+    },
+    {
+      "from": "apiWrapper.categoryCrud",
+      "to": "api.updateDishCategory",
+      "kind": "http_update"
+    },
+    {
+      "from": "apiWrapper.categoryCrud",
+      "to": "api.deleteDishCategory",
+      "kind": "http_delete"
+    },
+    {
+      "from": "api.createDishCategory",
+      "to": "sql.dishCategories",
+      "kind": "writes_two_step"
+    },
+    {
+      "from": "api.createDishCategory",
+      "to": "state.dishCategories",
+      "kind": "writes"
+    },
+    {
+      "from": "api.createDishCategory",
+      "to": "state.merchantDishCategories",
+      "kind": "writes"
+    },
+    {
+      "from": "api.updateDishCategory",
+      "to": "tx.renameDishCategory",
+      "kind": "calls_on_rename"
+    },
+    {
+      "from": "tx.renameDishCategory",
+      "to": "state.dishCategories",
+      "kind": "writes"
+    },
+    {
+      "from": "tx.renameDishCategory",
+      "to": "state.merchantDishCategories",
+      "kind": "relinks"
+    },
+    {
+      "from": "tx.renameDishCategory",
+      "to": "state.dishesCategoryId",
+      "kind": "migrates"
+    },
+    {
+      "from": "api.updateDishCategory",
+      "to": "sql.dishCategories",
+      "kind": "sort_only_missing_write"
+    },
+    {
+      "from": "api.deleteDishCategory",
+      "to": "state.merchantDishCategories",
+      "kind": "unlinks"
+    },
+    {
+      "from": "api.deleteDishCategory",
+      "to": "state.dishesCategoryId",
+      "kind": "leaves_existing_refs"
+    }
+  ]
+}

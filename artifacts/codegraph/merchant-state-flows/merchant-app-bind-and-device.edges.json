@@ -1,0 +1,381 @@
+{
+  "schema": "locallife-code-slice/v1",
+  "slice": "merchant-app-bind-and-device",
+  "risk_class": "G3",
+  "generated_at": "2026-05-30",
+  "nodes": [
+    {
+      "id": "weapp.dashboardBindEntry",
+      "kind": "frontend_menu",
+      "label": "Dashboard bind merchant App entry",
+      "file": "weapp/miniprogram/pages/merchant/_utils/merchant-dashboard-view.ts",
+      "line": 178
+    },
+    {
+      "id": "weapp.openAppBindPopup",
+      "kind": "frontend_handler",
+      "label": "openAppBindPopup",
+      "file": "weapp/miniprogram/pages/merchant/dashboard/index.ts",
+      "line": 379
+    },
+    {
+      "id": "weapp.appBindPopup",
+      "kind": "frontend_view",
+      "label": "App bind popup",
+      "file": "weapp/miniprogram/pages/merchant/dashboard/index.wxml",
+      "line": 94
+    },
+    {
+      "id": "weapp.createMerchantAppBindCode",
+      "kind": "frontend_service",
+      "label": "createMerchantAppBindCode",
+      "file": "weapp/miniprogram/pages/merchant/_services/merchant-app-bind.ts",
+      "line": 3
+    },
+    {
+      "id": "apiWrapper.generateAppBindCode",
+      "kind": "frontend_api",
+      "label": "POST /v1/auth/app-bind/code",
+      "file": "weapp/miniprogram/api/auth.ts",
+      "line": 214
+    },
+    {
+      "id": "route.generateAppBindCode",
+      "kind": "backend_route",
+      "label": "Authenticated app-bind code route",
+      "file": "locallife/api/server.go",
+      "line": 626
+    },
+    {
+      "id": "route.verifyAppBindCode",
+      "kind": "backend_route",
+      "label": "Public app-bind verify route",
+      "file": "locallife/api/server.go",
+      "line": 521
+    },
+    {
+      "id": "api.generateAppBindCode",
+      "kind": "backend_handler",
+      "label": "generateAppBindCode",
+      "file": "locallife/api/app_bind.go",
+      "line": 92
+    },
+    {
+      "id": "api.saveOrReuseAppBindCode",
+      "kind": "backend_helper",
+      "label": "saveOrReuseAppBindCode Redis script",
+      "file": "locallife/api/app_bind.go",
+      "line": 160
+    },
+    {
+      "id": "state.redisAppBindCode",
+      "kind": "state_cache",
+      "label": "Redis app_bind:<code> and app_bind:user:<userID>"
+    },
+    {
+      "id": "flutter.bindCodePage",
+      "kind": "flutter_page",
+      "label": "BindCodePage",
+      "file": "merchant_app/lib/features/auth/bind_code_page.dart",
+      "line": 8
+    },
+    {
+      "id": "flutter.authNotifierLogin",
+      "kind": "flutter_state",
+      "label": "AuthNotifier.loginWithBindingCode",
+      "file": "merchant_app/lib/features/auth/auth_provider.dart",
+      "line": 185
+    },
+    {
+      "id": "flutter.authServiceVerify",
+      "kind": "flutter_service",
+      "label": "AuthService.verifyBindingCode",
+      "file": "merchant_app/lib/features/auth/auth_service.dart",
+      "line": 60
+    },
+    {
+      "id": "api.verifyAppBindCode",
+      "kind": "backend_handler",
+      "label": "verifyAppBindCode",
+      "file": "locallife/api/app_bind.go",
+      "line": 251
+    },
+    {
+      "id": "state.sessions",
+      "kind": "state_table",
+      "label": "sessions access/refresh token hashes"
+    },
+    {
+      "id": "api.renewAccessToken",
+      "kind": "backend_handler",
+      "label": "renewAccessToken App refresh duration",
+      "file": "locallife/api/token.go",
+      "line": 71
+    },
+    {
+      "id": "flutter.secureStorage",
+      "kind": "flutter_state",
+      "label": "FlutterSecureStorage tokens and device_uuid",
+      "file": "merchant_app/lib/features/auth/auth_service.dart",
+      "line": 14
+    },
+    {
+      "id": "flutter.deviceSyncEnsureRegistered",
+      "kind": "flutter_service",
+      "label": "DeviceSyncService.ensureRegistered",
+      "file": "merchant_app/lib/core/push/device_sync_service.dart",
+      "line": 127
+    },
+    {
+      "id": "flutter.deviceSyncHeartbeat",
+      "kind": "flutter_service",
+      "label": "DeviceSyncService.sendHeartbeat",
+      "file": "merchant_app/lib/core/push/device_sync_service.dart",
+      "line": 205
+    },
+    {
+      "id": "route.merchantAppDevice",
+      "kind": "backend_route",
+      "label": "Merchant App device route group",
+      "file": "locallife/api/server.go",
+      "line": 1007
+    },
+    {
+      "id": "api.registerMerchantAppDevice",
+      "kind": "backend_handler",
+      "label": "registerMerchantAppDevice",
+      "file": "locallife/api/merchant_app_device.go",
+      "line": 63
+    },
+    {
+      "id": "api.heartbeatMerchantAppDevice",
+      "kind": "backend_handler",
+      "label": "heartbeatMerchantAppDevice",
+      "file": "locallife/api/merchant_app_device.go",
+      "line": 120
+    },
+    {
+      "id": "logic.registerMerchantAppDevice",
+      "kind": "logic",
+      "label": "logic.RegisterMerchantAppDevice",
+      "file": "locallife/logic/merchant_app_device.go",
+      "line": 62
+    },
+    {
+      "id": "logic.heartbeatMerchantAppDevice",
+      "kind": "logic",
+      "label": "logic.HeartbeatMerchantAppDevice",
+      "file": "locallife/logic/merchant_app_device.go",
+      "line": 115
+    },
+    {
+      "id": "tx.registerMerchantAppDevice",
+      "kind": "db_tx",
+      "label": "RegisterMerchantAppDeviceTx",
+      "file": "locallife/db/sqlc/tx_merchant_app_device.go",
+      "line": 13
+    },
+    {
+      "id": "sql.registerMerchantAppDevice",
+      "kind": "sql_writer",
+      "label": "RegisterMerchantAppDevice",
+      "file": "locallife/db/query/merchant_app_device.sql",
+      "line": 10
+    },
+    {
+      "id": "sql.updateMerchantAppDeviceHeartbeat",
+      "kind": "sql_writer",
+      "label": "UpdateMerchantAppDeviceHeartbeat",
+      "file": "locallife/db/query/merchant_app_device.sql",
+      "line": 64
+    },
+    {
+      "id": "sql.unregisterMerchantAppDevice",
+      "kind": "sql_writer",
+      "label": "UnregisterMerchantAppDevice",
+      "file": "locallife/db/query/merchant_app_device.sql",
+      "line": 78
+    },
+    {
+      "id": "state.merchantAppDevices",
+      "kind": "state_table",
+      "label": "merchant_app_devices"
+    },
+    {
+      "id": "logic.merchantAppPushDispatcher",
+      "kind": "logic_reader",
+      "label": "MerchantAppPushDispatcher.Dispatch",
+      "file": "locallife/logic/merchant_app_push_gateway.go",
+      "line": 102
+    },
+    {
+      "id": "sql.listActiveMerchantAppDevices",
+      "kind": "sql_reader",
+      "label": "ListActiveMerchantAppDevicesByMerchant",
+      "file": "locallife/db/query/merchant_app_device.sql",
+      "line": 87
+    }
+  ],
+  "edges": [
+    {
+      "from": "weapp.dashboardBindEntry",
+      "to": "weapp.openAppBindPopup",
+      "kind": "opens"
+    },
+    {
+      "from": "weapp.openAppBindPopup",
+      "to": "weapp.appBindPopup",
+      "kind": "updates_view"
+    },
+    {
+      "from": "weapp.openAppBindPopup",
+      "to": "weapp.createMerchantAppBindCode",
+      "kind": "calls"
+    },
+    {
+      "from": "weapp.createMerchantAppBindCode",
+      "to": "apiWrapper.generateAppBindCode",
+      "kind": "calls"
+    },
+    {
+      "from": "apiWrapper.generateAppBindCode",
+      "to": "api.generateAppBindCode",
+      "kind": "http"
+    },
+    {
+      "from": "route.generateAppBindCode",
+      "to": "api.generateAppBindCode",
+      "kind": "routes_to"
+    },
+    {
+      "from": "api.generateAppBindCode",
+      "to": "api.saveOrReuseAppBindCode",
+      "kind": "calls"
+    },
+    {
+      "from": "api.saveOrReuseAppBindCode",
+      "to": "state.redisAppBindCode",
+      "kind": "writes"
+    },
+    {
+      "from": "state.redisAppBindCode",
+      "to": "weapp.appBindPopup",
+      "kind": "shown_as_code"
+    },
+    {
+      "from": "flutter.bindCodePage",
+      "to": "flutter.authNotifierLogin",
+      "kind": "submits"
+    },
+    {
+      "from": "flutter.authNotifierLogin",
+      "to": "flutter.authServiceVerify",
+      "kind": "calls"
+    },
+    {
+      "from": "flutter.authServiceVerify",
+      "to": "api.verifyAppBindCode",
+      "kind": "http"
+    },
+    {
+      "from": "route.verifyAppBindCode",
+      "to": "api.verifyAppBindCode",
+      "kind": "routes_to"
+    },
+    {
+      "from": "api.verifyAppBindCode",
+      "to": "state.redisAppBindCode",
+      "kind": "reads_and_deletes"
+    },
+    {
+      "from": "api.verifyAppBindCode",
+      "to": "state.sessions",
+      "kind": "writes"
+    },
+    {
+      "from": "state.sessions",
+      "to": "api.renewAccessToken",
+      "kind": "read_by"
+    },
+    {
+      "from": "api.verifyAppBindCode",
+      "to": "flutter.secureStorage",
+      "kind": "returns_tokens_for"
+    },
+    {
+      "from": "flutter.secureStorage",
+      "to": "flutter.deviceSyncEnsureRegistered",
+      "kind": "enables_authenticated_call"
+    },
+    {
+      "from": "flutter.deviceSyncEnsureRegistered",
+      "to": "api.registerMerchantAppDevice",
+      "kind": "http"
+    },
+    {
+      "from": "flutter.deviceSyncHeartbeat",
+      "to": "api.heartbeatMerchantAppDevice",
+      "kind": "http"
+    },
+    {
+      "from": "route.merchantAppDevice",
+      "to": "api.registerMerchantAppDevice",
+      "kind": "routes_to"
+    },
+    {
+      "from": "route.merchantAppDevice",
+      "to": "api.heartbeatMerchantAppDevice",
+      "kind": "routes_to"
+    },
+    {
+      "from": "api.registerMerchantAppDevice",
+      "to": "logic.registerMerchantAppDevice",
+      "kind": "calls"
+    },
+    {
+      "from": "api.heartbeatMerchantAppDevice",
+      "to": "logic.heartbeatMerchantAppDevice",
+      "kind": "calls"
+    },
+    {
+      "from": "logic.registerMerchantAppDevice",
+      "to": "tx.registerMerchantAppDevice",
+      "kind": "writes"
+    },
+    {
+      "from": "tx.registerMerchantAppDevice",
+      "to": "sql.registerMerchantAppDevice",
+      "kind": "executes"
+    },
+    {
+      "from": "sql.registerMerchantAppDevice",
+      "to": "state.merchantAppDevices",
+      "kind": "mutates"
+    },
+    {
+      "from": "logic.heartbeatMerchantAppDevice",
+      "to": "sql.updateMerchantAppDeviceHeartbeat",
+      "kind": "writes"
+    },
+    {
+      "from": "sql.updateMerchantAppDeviceHeartbeat",
+      "to": "state.merchantAppDevices",
+      "kind": "mutates"
+    },
+    {
+      "from": "sql.unregisterMerchantAppDevice",
+      "to": "state.merchantAppDevices",
+      "kind": "mutates"
+    },
+    {
+      "from": "logic.merchantAppPushDispatcher",
+      "to": "sql.listActiveMerchantAppDevices",
+      "kind": "reads"
+    },
+    {
+      "from": "sql.listActiveMerchantAppDevices",
+      "to": "state.merchantAppDevices",
+      "kind": "reads"
+    }
+  ]
+}

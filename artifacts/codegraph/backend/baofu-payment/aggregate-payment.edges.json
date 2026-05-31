@@ -1,0 +1,380 @@
+{
+  "schema": "locallife-code-slice/v1",
+  "slice": "baofu-aggregate-payment-success-to-profit-sharing",
+  "risk_class": "G3",
+  "generated_at": "2026-05-29",
+  "nodes": [
+    {
+      "id": "route.baofu.payment.notify",
+      "kind": "route",
+      "label": "POST /v1/webhooks/baofu/payment",
+      "file": "locallife/api/server.go"
+    },
+    {
+      "id": "api.handleBaofuPaymentNotify",
+      "kind": "function",
+      "label": "Server.handleBaofuPaymentNotify",
+      "file": "locallife/api/baofu_callback.go",
+      "line": 190
+    },
+    {
+      "id": "parser.ParsePaymentNotification",
+      "kind": "function",
+      "label": "baofu aggregate payment notification parser",
+      "file": "locallife/baofu/aggregatepay/notification/notification.go"
+    },
+    {
+      "id": "logic.BaofuPaymentService.RecordPaymentFact",
+      "kind": "function",
+      "label": "BaofuPaymentService.RecordPaymentFact",
+      "file": "locallife/logic/baofu_payment_service.go",
+      "line": 175
+    },
+    {
+      "id": "sql.CreateExternalPaymentFact",
+      "kind": "sql",
+      "label": "CreateExternalPaymentFact",
+      "file": "locallife/db/query/external_payment_fact.sql",
+      "line": 119
+    },
+    {
+      "id": "sql.CreateExternalPaymentFactApplication",
+      "kind": "sql",
+      "label": "CreateExternalPaymentFactApplication",
+      "file": "locallife/db/query/external_payment_fact.sql"
+    },
+    {
+      "id": "worker.ProcessTaskPaymentFactApplication",
+      "kind": "worker",
+      "label": "payment:process_fact_application",
+      "file": "locallife/worker/task_payment_fact_application.go",
+      "line": 47
+    },
+    {
+      "id": "logic.PaymentFactService.ApplyExternalPaymentFactApplication",
+      "kind": "function",
+      "label": "PaymentFactService.ApplyExternalPaymentFactApplication",
+      "file": "locallife/logic/payment_fact_application_service.go",
+      "line": 188
+    },
+    {
+      "id": "logic.applyOrderPaymentFact",
+      "kind": "function",
+      "label": "PaymentFactService.applyOrderPaymentFact",
+      "file": "locallife/logic/payment_fact_application_service.go",
+      "line": 328
+    },
+    {
+      "id": "logic.markBaofuPaymentOrderPaid",
+      "kind": "function",
+      "label": "PaymentFactService.markBaofuPaymentOrderPaid",
+      "file": "locallife/logic/baofu_payment_fact_application.go",
+      "line": 14
+    },
+    {
+      "id": "sql.UpdatePaymentOrderToPaid",
+      "kind": "sql",
+      "label": "UpdatePaymentOrderToPaid",
+      "file": "locallife/db/query/payment_order.sql",
+      "line": 153
+    },
+    {
+      "id": "db.ProcessPaymentSuccessTx",
+      "kind": "transaction",
+      "label": "SQLStore.ProcessPaymentSuccessTx",
+      "file": "locallife/db/sqlc/tx_payment_success.go",
+      "line": 37
+    },
+    {
+      "id": "logic.createOrderPaymentOutbox",
+      "kind": "function",
+      "label": "PaymentFactService.createOrderPaymentOutbox",
+      "file": "locallife/logic/payment_fact_application_service.go",
+      "line": 1171
+    },
+    {
+      "id": "logic.ensureBaofuOrderPaymentBill",
+      "kind": "function",
+      "label": "PaymentFactService.ensureBaofuOrderPaymentBill",
+      "file": "locallife/logic/payment_fact_application_service.go",
+      "line": 1205
+    },
+    {
+      "id": "logic.BaofuProfitSharingService.CreatePendingOrder",
+      "kind": "function",
+      "label": "BaofuProfitSharingService.CreatePendingOrder",
+      "file": "locallife/logic/baofu_profit_sharing_service.go",
+      "line": 78
+    },
+    {
+      "id": "db.EnsureBaofuProfitSharingBillTx",
+      "kind": "transaction",
+      "label": "SQLStore.EnsureBaofuProfitSharingBillTx",
+      "file": "locallife/db/sqlc/tx_baofu_profit_sharing.go",
+      "line": 113
+    },
+    {
+      "id": "sql.CreatePaymentDomainOutboxOnce",
+      "kind": "sql",
+      "label": "CreatePaymentDomainOutboxOnce",
+      "file": "locallife/db/query/external_payment_fact.sql",
+      "line": 324
+    },
+    {
+      "id": "scheduler.PaymentDomainOutboxScheduler",
+      "kind": "scheduler",
+      "label": "PaymentDomainOutboxScheduler",
+      "file": "locallife/worker/payment_domain_outbox_scheduler.go",
+      "line": 85
+    },
+    {
+      "id": "worker.ProcessTaskPaymentDomainOutbox",
+      "kind": "worker",
+      "label": "payment:process_domain_outbox",
+      "file": "locallife/worker/task_payment_domain_outbox.go",
+      "line": 57
+    },
+    {
+      "id": "scheduler.BaofuPaymentRecoveryScheduler",
+      "kind": "scheduler",
+      "label": "BaofuPaymentRecoveryScheduler.createReadyProfitSharingOrders",
+      "file": "locallife/worker/baofu_payment_recovery_scheduler.go",
+      "line": 118
+    },
+    {
+      "id": "scheduler.TakeoutAutoCompleteScheduler",
+      "kind": "scheduler",
+      "label": "TakeoutAutoCompleteScheduler.scheduleBaofuProfitSharing",
+      "file": "locallife/scheduler/takeout_auto_complete.go",
+      "line": 142
+    },
+    {
+      "id": "worker.ProcessTaskBaofuProfitSharing",
+      "kind": "worker",
+      "label": "baofu:process_profit_sharing",
+      "file": "locallife/worker/task_baofu_profit_sharing.go",
+      "line": 73
+    },
+    {
+      "id": "db.PrepareBaofuProfitSharingCommandTx",
+      "kind": "transaction",
+      "label": "SQLStore.PrepareBaofuProfitSharingCommandTx",
+      "file": "locallife/db/sqlc/tx_baofu_profit_sharing.go",
+      "line": 174
+    },
+    {
+      "id": "baofu.CreateProfitSharing",
+      "kind": "provider_call",
+      "label": "Baofoo CreateProfitSharing",
+      "file": "locallife/worker/task_baofu_profit_sharing.go",
+      "line": 147
+    },
+    {
+      "id": "route.baofu.share.notify",
+      "kind": "route",
+      "label": "POST /v1/webhooks/baofu/share",
+      "file": "locallife/api/server.go"
+    },
+    {
+      "id": "api.handleBaofuShareNotify",
+      "kind": "function",
+      "label": "Server.handleBaofuShareNotify",
+      "file": "locallife/api/baofu_callback.go",
+      "line": 302
+    },
+    {
+      "id": "logic.BaofuProfitSharingService.RecordShareFact",
+      "kind": "function",
+      "label": "BaofuProfitSharingService.RecordShareFact",
+      "file": "locallife/logic/baofu_profit_sharing_service.go",
+      "line": 192
+    },
+    {
+      "id": "logic.applyProfitSharingFact",
+      "kind": "function",
+      "label": "PaymentFactService.applyProfitSharingFact",
+      "file": "locallife/logic/payment_fact_application_service.go",
+      "line": 815
+    },
+    {
+      "id": "sql.UpdateProfitSharingOrderToFinished",
+      "kind": "sql",
+      "label": "UpdateProfitSharingOrderToFinished",
+      "file": "locallife/db/query/profit_sharing_order.sql",
+      "line": 306
+    }
+  ],
+  "edges": [
+    {
+      "from": "route.baofu.payment.notify",
+      "to": "api.handleBaofuPaymentNotify",
+      "kind": "route_handler",
+      "evidence": "locallife/api/server.go:536"
+    },
+    {
+      "from": "api.handleBaofuPaymentNotify",
+      "to": "parser.ParsePaymentNotification",
+      "kind": "parse_and_verify",
+      "evidence": "locallife/api/baofu_callback.go:202"
+    },
+    {
+      "from": "api.handleBaofuPaymentNotify",
+      "to": "logic.BaofuPaymentService.RecordPaymentFact",
+      "kind": "records_fact",
+      "evidence": "locallife/api/baofu_callback.go:227"
+    },
+    {
+      "from": "logic.BaofuPaymentService.RecordPaymentFact",
+      "to": "sql.CreateExternalPaymentFact",
+      "kind": "writes",
+      "evidence": "locallife/logic/baofu_payment_service.go:218"
+    },
+    {
+      "from": "logic.BaofuPaymentService.RecordPaymentFact",
+      "to": "sql.CreateExternalPaymentFactApplication",
+      "kind": "creates_terminal_application",
+      "evidence": "locallife/logic/baofu_payment_service.go:272"
+    },
+    {
+      "from": "api.handleBaofuPaymentNotify",
+      "to": "worker.ProcessTaskPaymentFactApplication",
+      "kind": "enqueue_async",
+      "evidence": "locallife/api/baofu_callback.go:241"
+    },
+    {
+      "from": "worker.ProcessTaskPaymentFactApplication",
+      "to": "logic.PaymentFactService.ApplyExternalPaymentFactApplication",
+      "kind": "worker_calls",
+      "evidence": "locallife/worker/task_payment_fact_application.go:73"
+    },
+    {
+      "from": "logic.PaymentFactService.ApplyExternalPaymentFactApplication",
+      "to": "logic.applyOrderPaymentFact",
+      "kind": "dispatch_order_domain",
+      "evidence": "locallife/logic/payment_fact_application_service.go:267"
+    },
+    {
+      "from": "logic.applyOrderPaymentFact",
+      "to": "logic.markBaofuPaymentOrderPaid",
+      "kind": "baofu_success_transition",
+      "evidence": "locallife/logic/payment_fact_application_service.go:338"
+    },
+    {
+      "from": "logic.markBaofuPaymentOrderPaid",
+      "to": "sql.UpdatePaymentOrderToPaid",
+      "kind": "conditional_update",
+      "evidence": "locallife/logic/baofu_payment_fact_application.go:31"
+    },
+    {
+      "from": "logic.applyOrderPaymentFact",
+      "to": "db.ProcessPaymentSuccessTx",
+      "kind": "domain_transaction",
+      "evidence": "locallife/logic/payment_fact_application_service.go:343"
+    },
+    {
+      "from": "logic.PaymentFactService.ApplyExternalPaymentFactApplication",
+      "to": "logic.createOrderPaymentOutbox",
+      "kind": "post_apply_outbox",
+      "evidence": "locallife/logic/payment_fact_application_service.go:221"
+    },
+    {
+      "from": "logic.createOrderPaymentOutbox",
+      "to": "logic.ensureBaofuOrderPaymentBill",
+      "kind": "ensure_share_bill",
+      "evidence": "locallife/logic/payment_fact_application_service.go:1176"
+    },
+    {
+      "from": "logic.ensureBaofuOrderPaymentBill",
+      "to": "logic.BaofuProfitSharingService.CreatePendingOrder",
+      "kind": "creates_pending_share_bill",
+      "evidence": "locallife/logic/payment_fact_application_service.go:1242"
+    },
+    {
+      "from": "logic.BaofuProfitSharingService.CreatePendingOrder",
+      "to": "db.EnsureBaofuProfitSharingBillTx",
+      "kind": "transaction",
+      "evidence": "locallife/logic/baofu_profit_sharing_service.go:160"
+    },
+    {
+      "from": "logic.createOrderPaymentOutbox",
+      "to": "sql.CreatePaymentDomainOutboxOnce",
+      "kind": "writes_outbox",
+      "evidence": "locallife/logic/payment_fact_application_service.go:1192"
+    },
+    {
+      "from": "scheduler.PaymentDomainOutboxScheduler",
+      "to": "worker.ProcessTaskPaymentDomainOutbox",
+      "kind": "enqueue_async",
+      "evidence": "locallife/worker/payment_domain_outbox_scheduler.go:148"
+    },
+    {
+      "from": "scheduler.BaofuPaymentRecoveryScheduler",
+      "to": "worker.ProcessTaskBaofuProfitSharing",
+      "kind": "enqueue_ready_share_command",
+      "evidence": "locallife/worker/baofu_payment_recovery_scheduler.go:180"
+    },
+    {
+      "from": "scheduler.TakeoutAutoCompleteScheduler",
+      "to": "worker.ProcessTaskBaofuProfitSharing",
+      "kind": "enqueue_completed_takeout_share_command",
+      "evidence": "locallife/scheduler/takeout_auto_complete.go:154"
+    },
+    {
+      "from": "worker.ProcessTaskBaofuProfitSharing",
+      "to": "db.PrepareBaofuProfitSharingCommandTx",
+      "kind": "prepare_command_transaction",
+      "evidence": "locallife/worker/task_baofu_profit_sharing.go:106"
+    },
+    {
+      "from": "worker.ProcessTaskBaofuProfitSharing",
+      "to": "baofu.CreateProfitSharing",
+      "kind": "provider_call",
+      "evidence": "locallife/worker/task_baofu_profit_sharing.go:147"
+    },
+    {
+      "from": "route.baofu.share.notify",
+      "to": "api.handleBaofuShareNotify",
+      "kind": "route_handler",
+      "evidence": "locallife/api/server.go:537"
+    },
+    {
+      "from": "api.handleBaofuShareNotify",
+      "to": "logic.BaofuProfitSharingService.RecordShareFact",
+      "kind": "records_share_fact",
+      "evidence": "locallife/api/baofu_callback.go:336"
+    },
+    {
+      "from": "logic.BaofuProfitSharingService.RecordShareFact",
+      "to": "sql.CreateExternalPaymentFact",
+      "kind": "writes",
+      "evidence": "locallife/logic/baofu_profit_sharing_service.go:230"
+    },
+    {
+      "from": "logic.BaofuProfitSharingService.RecordShareFact",
+      "to": "sql.CreateExternalPaymentFactApplication",
+      "kind": "creates_terminal_application",
+      "evidence": "locallife/logic/baofu_profit_sharing_service.go:262"
+    },
+    {
+      "from": "logic.PaymentFactService.ApplyExternalPaymentFactApplication",
+      "to": "logic.applyProfitSharingFact",
+      "kind": "dispatch_profit_sharing_domain",
+      "evidence": "locallife/logic/payment_fact_application_service.go:251"
+    },
+    {
+      "from": "logic.applyProfitSharingFact",
+      "to": "sql.UpdateProfitSharingOrderToFinished",
+      "kind": "terminal_success_update",
+      "evidence": "locallife/logic/payment_fact_application_service.go:866"
+    }
+  ],
+  "invariants": [
+    "Baofoo payment callback records a fact before domain mutation.",
+    "Only terminal payment facts create payment fact applications.",
+    "Baofoo main-business payment success amount must equal local payment order amount.",
+    "Payment order paid transition is conditional on pending status.",
+    "Order-domain processing and profit-sharing bill creation are separate from provider callback parsing.",
+    "Baofoo share command is gated by order completion and refund safety.",
+    "Baofoo share result success amount must match local expected share amount before marking profit sharing finished."
+  ]
+}

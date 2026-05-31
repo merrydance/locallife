@@ -1,0 +1,1295 @@
+{
+  "schema": "locallife-code-slice/v1",
+  "slice": "merchant-device-display-config",
+  "risk_class": "G2",
+  "generated_at": "2026-05-30",
+  "nodes": [
+    {
+      "id": "weapp.dashboardDeviceEntries",
+      "kind": "frontend_menu",
+      "label": "Merchant dashboard device/display entries",
+      "file": "weapp/miniprogram/pages/merchant/_utils/merchant-dashboard-view.ts",
+      "line": 176
+    },
+    {
+      "id": "weapp.configDeviceEntries",
+      "kind": "frontend_menu",
+      "label": "Merchant config device/display entries",
+      "file": "weapp/miniprogram/pages/merchant/config/index.ts",
+      "line": 81
+    },
+    {
+      "id": "weapp.displayConfigPage",
+      "kind": "frontend_page",
+      "label": "Merchant display config page",
+      "file": "weapp/miniprogram/pages/merchant/settings/display-config/index.ts",
+      "line": 1
+    },
+    {
+      "id": "weapp.displayConfigDraft",
+      "kind": "frontend_state",
+      "label": "DisplayConfigForm local draft",
+      "file": "weapp/miniprogram/pages/merchant/settings/display-config/index.ts",
+      "line": 12
+    },
+    {
+      "id": "weapp.displayConfigAccess",
+      "kind": "frontend_guard",
+      "label": "ensureMerchantDeviceManagementAccess for display config",
+      "file": "weapp/miniprogram/pages/merchant/settings/display-config/index.ts",
+      "line": 104
+    },
+    {
+      "id": "weapp.displayConfigLoad",
+      "kind": "frontend_handler",
+      "label": "loadSettingsConfig",
+      "file": "weapp/miniprogram/pages/merchant/settings/display-config/index.ts",
+      "line": 164
+    },
+    {
+      "id": "weapp.displayConfigSwitchHandlers",
+      "kind": "frontend_handler",
+      "label": "display config draft handlers",
+      "file": "weapp/miniprogram/pages/merchant/settings/display-config/index.ts",
+      "line": 231
+    },
+    {
+      "id": "weapp.displayConfigSave",
+      "kind": "frontend_handler",
+      "label": "onSaveSettings",
+      "file": "weapp/miniprogram/pages/merchant/settings/display-config/index.ts",
+      "line": 290
+    },
+    {
+      "id": "weapp.printersPage",
+      "kind": "frontend_page",
+      "label": "Merchant printers page",
+      "file": "weapp/miniprogram/pages/merchant/printers/index.ts",
+      "line": 1
+    },
+    {
+      "id": "weapp.printersAccess",
+      "kind": "frontend_guard",
+      "label": "ensureMerchantDeviceManagementAccess for printers",
+      "file": "weapp/miniprogram/pages/merchant/printers/index.ts",
+      "line": 247
+    },
+    {
+      "id": "weapp.printersLoad",
+      "kind": "frontend_handler",
+      "label": "loadPageData printers",
+      "file": "weapp/miniprogram/pages/merchant/printers/index.ts",
+      "line": 276
+    },
+    {
+      "id": "weapp.printersDelete",
+      "kind": "frontend_handler",
+      "label": "delete printer confirm action",
+      "file": "weapp/miniprogram/pages/merchant/printers/index.ts",
+      "line": 412
+    },
+    {
+      "id": "weapp.printersTest",
+      "kind": "frontend_handler",
+      "label": "test printer confirm action",
+      "file": "weapp/miniprogram/pages/merchant/printers/index.ts",
+      "line": 437
+    },
+    {
+      "id": "weapp.printersLiveStatus",
+      "kind": "frontend_handler",
+      "label": "fetchPrinterStatus",
+      "file": "weapp/miniprogram/pages/merchant/printers/index.ts",
+      "line": 485
+    },
+    {
+      "id": "weapp.printerEditPage",
+      "kind": "frontend_page",
+      "label": "Merchant printer create/edit page",
+      "file": "weapp/miniprogram/pages/merchant/printers/edit/index.ts",
+      "line": 1
+    },
+    {
+      "id": "weapp.printerEditAccess",
+      "kind": "frontend_guard",
+      "label": "ensureMerchantDeviceManagementAccess for printer edit",
+      "file": "weapp/miniprogram/pages/merchant/printers/edit/index.ts",
+      "line": 110
+    },
+    {
+      "id": "weapp.printerEditLoad",
+      "kind": "frontend_handler",
+      "label": "loadPrinterDetail",
+      "file": "weapp/miniprogram/pages/merchant/printers/edit/index.ts",
+      "line": 165
+    },
+    {
+      "id": "weapp.printerEditSubmit",
+      "kind": "frontend_handler",
+      "label": "onSubmit create/update printer",
+      "file": "weapp/miniprogram/pages/merchant/printers/edit/index.ts",
+      "line": 223
+    },
+    {
+      "id": "weapp.consoleAccessService",
+      "kind": "frontend_service",
+      "label": "ensureMerchantDeviceManagementAccess",
+      "file": "weapp/miniprogram/utils/console-access.ts",
+      "line": 191
+    },
+    {
+      "id": "flutter.settingsPrinterEntry",
+      "kind": "flutter_page",
+      "label": "SettingsPage Bluetooth printer entry",
+      "file": "merchant_app/lib/features/settings/settings_page.dart",
+      "line": 87
+    },
+    {
+      "id": "flutter.orderListPrinterEntry",
+      "kind": "flutter_page",
+      "label": "OrderListPage Bluetooth printer entry and print action",
+      "file": "merchant_app/lib/features/order/order_list_page.dart",
+      "line": 260
+    },
+    {
+      "id": "flutter.bluetoothPrinterProvider",
+      "kind": "flutter_state",
+      "label": "BluetoothPrinterProvider scan/connect/print",
+      "file": "merchant_app/lib/features/printer/printer_provider.dart",
+      "line": 48
+    },
+    {
+      "id": "flutter.notificationSettingsProvider",
+      "kind": "flutter_local_state",
+      "label": "NotificationSettingsNotifier auto-accept/auto-print",
+      "file": "merchant_app/lib/features/settings/notification_settings_provider.dart",
+      "line": 33
+    },
+    {
+      "id": "flutter.orderAlertCoordinator",
+      "kind": "flutter_service",
+      "label": "OrderAlertCoordinator local auto-accept and BLE auto-print",
+      "file": "merchant_app/lib/features/order/order_alert_coordinator.dart",
+      "line": 72
+    },
+    {
+      "id": "flutterBluePlus",
+      "kind": "native_library",
+      "label": "FlutterBluePlus BLE scan/connect/write"
+    },
+    {
+      "id": "apiWrapper.getMerchantDeviceAccess",
+      "kind": "frontend_api",
+      "label": "GET /v1/merchant/devices/access",
+      "file": "weapp/miniprogram/api/table-device-management.ts",
+      "line": 557
+    },
+    {
+      "id": "apiWrapper.listPrinters",
+      "kind": "frontend_api",
+      "label": "GET /v1/merchant/devices",
+      "file": "weapp/miniprogram/api/table-device-management.ts",
+      "line": 481
+    },
+    {
+      "id": "apiWrapper.listPrinterReconciliationJobs",
+      "kind": "frontend_api",
+      "label": "GET /v1/merchant/devices/reconciliation-jobs",
+      "file": "weapp/miniprogram/api/table-device-management.ts",
+      "line": 498
+    },
+    {
+      "id": "apiWrapper.getPrinterDetail",
+      "kind": "frontend_api",
+      "label": "GET /v1/merchant/devices/:id",
+      "file": "weapp/miniprogram/api/table-device-management.ts",
+      "line": 523
+    },
+    {
+      "id": "apiWrapper.getPrinterLiveStatus",
+      "kind": "frontend_api",
+      "label": "GET /v1/merchant/devices/:id/status",
+      "file": "weapp/miniprogram/api/table-device-management.ts",
+      "line": 544
+    },
+    {
+      "id": "apiWrapper.createPrinter",
+      "kind": "frontend_api",
+      "label": "POST /v1/merchant/devices",
+      "file": "weapp/miniprogram/api/table-device-management.ts",
+      "line": 569
+    },
+    {
+      "id": "apiWrapper.updatePrinter",
+      "kind": "frontend_api",
+      "label": "PUT /v1/merchant/devices/:id",
+      "file": "weapp/miniprogram/api/table-device-management.ts",
+      "line": 581
+    },
+    {
+      "id": "apiWrapper.deletePrinter",
+      "kind": "frontend_api",
+      "label": "DELETE /v1/merchant/devices/:id",
+      "file": "weapp/miniprogram/api/table-device-management.ts",
+      "line": 593
+    },
+    {
+      "id": "apiWrapper.testPrinter",
+      "kind": "frontend_api",
+      "label": "POST /v1/merchant/devices/:id/test",
+      "file": "weapp/miniprogram/api/table-device-management.ts",
+      "line": 611
+    },
+    {
+      "id": "apiWrapper.retryPrinterReconciliationJob",
+      "kind": "frontend_api",
+      "label": "POST /v1/merchant/devices/reconciliation-jobs/:id/retry",
+      "file": "weapp/miniprogram/api/table-device-management.ts",
+      "line": 622
+    },
+    {
+      "id": "apiWrapper.getDisplayConfig",
+      "kind": "frontend_api",
+      "label": "GET /v1/merchant/display-config",
+      "file": "weapp/miniprogram/api/table-device-management.ts",
+      "line": 611
+    },
+    {
+      "id": "apiWrapper.updateDisplayConfig",
+      "kind": "frontend_api",
+      "label": "PUT /v1/merchant/display-config",
+      "file": "weapp/miniprogram/api/table-device-management.ts",
+      "line": 622
+    },
+    {
+      "id": "route.getMerchantDeviceAccess",
+      "kind": "route",
+      "label": "GET /v1/merchant/devices/access",
+      "file": "locallife/api/server.go",
+      "line": 1289
+    },
+    {
+      "id": "route.createPrinter",
+      "kind": "route",
+      "label": "POST /v1/merchant/devices",
+      "file": "locallife/api/server.go",
+      "line": 1295
+    },
+    {
+      "id": "route.listPrinters",
+      "kind": "route",
+      "label": "GET /v1/merchant/devices",
+      "file": "locallife/api/server.go",
+      "line": 1296
+    },
+    {
+      "id": "route.listPrinterReconciliationJobs",
+      "kind": "route",
+      "label": "GET /v1/merchant/devices/reconciliation-jobs",
+      "file": "locallife/api/server.go",
+      "line": 1297
+    },
+    {
+      "id": "route.retryPrinterReconciliationJob",
+      "kind": "route",
+      "label": "POST /v1/merchant/devices/reconciliation-jobs/:id/retry",
+      "file": "locallife/api/server.go",
+      "line": 1298
+    },
+    {
+      "id": "route.getPrinter",
+      "kind": "route",
+      "label": "GET /v1/merchant/devices/:id",
+      "file": "locallife/api/server.go",
+      "line": 1299
+    },
+    {
+      "id": "route.getPrinterLiveStatus",
+      "kind": "route",
+      "label": "GET /v1/merchant/devices/:id/status",
+      "file": "locallife/api/server.go",
+      "line": 1300
+    },
+    {
+      "id": "route.updatePrinter",
+      "kind": "route",
+      "label": "PUT /v1/merchant/devices/:id",
+      "file": "locallife/api/server.go",
+      "line": 1301
+    },
+    {
+      "id": "route.deletePrinter",
+      "kind": "route",
+      "label": "DELETE /v1/merchant/devices/:id",
+      "file": "locallife/api/server.go",
+      "line": 1302
+    },
+    {
+      "id": "route.testPrinter",
+      "kind": "route",
+      "label": "POST /v1/merchant/devices/:id/test",
+      "file": "locallife/api/server.go",
+      "line": 1303
+    },
+    {
+      "id": "route.getDisplayConfig",
+      "kind": "route",
+      "label": "GET /v1/merchant/display-config",
+      "file": "locallife/api/server.go",
+      "line": 1310
+    },
+    {
+      "id": "route.updateDisplayConfig",
+      "kind": "route",
+      "label": "PUT /v1/merchant/display-config",
+      "file": "locallife/api/server.go",
+      "line": 1311
+    },
+    {
+      "id": "api.getMerchantDeviceAccess",
+      "kind": "handler",
+      "label": "Server.getMerchantDeviceAccess",
+      "file": "locallife/api/device_access.go",
+      "line": 35
+    },
+    {
+      "id": "api.createPrinter",
+      "kind": "handler",
+      "label": "Server.createPrinter",
+      "file": "locallife/api/device.go",
+      "line": 89
+    },
+    {
+      "id": "api.listPrinters",
+      "kind": "handler",
+      "label": "Server.listPrinters",
+      "file": "locallife/api/device.go",
+      "line": 204
+    },
+    {
+      "id": "api.getPrinter",
+      "kind": "handler",
+      "label": "Server.getPrinter",
+      "file": "locallife/api/device.go",
+      "line": 266
+    },
+    {
+      "id": "api.getPrinterLiveStatus",
+      "kind": "handler",
+      "label": "Server.getPrinterLiveStatus",
+      "file": "locallife/api/device.go",
+      "line": 324
+    },
+    {
+      "id": "api.updatePrinter",
+      "kind": "handler",
+      "label": "Server.updatePrinter",
+      "file": "locallife/api/device.go",
+      "line": 424
+    },
+    {
+      "id": "api.deletePrinter",
+      "kind": "handler",
+      "label": "Server.deletePrinter",
+      "file": "locallife/api/device.go",
+      "line": 522
+    },
+    {
+      "id": "api.testPrinter",
+      "kind": "handler",
+      "label": "Server.testPrinter",
+      "file": "locallife/api/device.go",
+      "line": 613
+    },
+    {
+      "id": "api.getDisplayConfig",
+      "kind": "handler",
+      "label": "Server.getDisplayConfig",
+      "file": "locallife/api/device.go",
+      "line": 721
+    },
+    {
+      "id": "api.updateDisplayConfig",
+      "kind": "handler",
+      "label": "Server.updateDisplayConfig",
+      "file": "locallife/api/device.go",
+      "line": 824
+    },
+    {
+      "id": "api.recordPrinterReconciliationJob",
+      "kind": "handler_helper",
+      "label": "recordPrinterReconciliationJob",
+      "file": "locallife/api/device_reconciliation.go",
+      "line": 65
+    },
+    {
+      "id": "api.listPrinterReconciliationJobs",
+      "kind": "handler",
+      "label": "Server.listPrinterReconciliationJobs",
+      "file": "locallife/api/device_reconciliation.go",
+      "line": 122
+    },
+    {
+      "id": "api.retryPrinterReconciliationJob",
+      "kind": "handler",
+      "label": "Server.retryPrinterReconciliationJob",
+      "file": "locallife/api/device_reconciliation.go",
+      "line": 178
+    },
+    {
+      "id": "provider.feieyunCloudPrint",
+      "kind": "provider",
+      "label": "Feieyun/cloudprint provider"
+    },
+    {
+      "id": "worker.paymentDomainOutbox",
+      "kind": "worker",
+      "label": "Payment domain outbox order-payment-succeeded dispatcher",
+      "file": "locallife/worker/task_payment_domain_outbox.go",
+      "line": 119
+    },
+    {
+      "id": "worker.autoAcceptPaidOrderForPrinting",
+      "kind": "worker",
+      "label": "autoAcceptPaidOrderForPrinting",
+      "file": "locallife/worker/task_payment_domain_outbox.go",
+      "line": 183
+    },
+    {
+      "id": "logic.acceptMerchantOrder",
+      "kind": "logic",
+      "label": "logic.AcceptMerchantOrder",
+      "file": "locallife/logic/merchant_order.go",
+      "line": 37
+    },
+    {
+      "id": "worker.processPrintOrderTask",
+      "kind": "worker",
+      "label": "ProcessPrintOrderTask",
+      "file": "locallife/worker/task_print_order.go",
+      "line": 85
+    },
+    {
+      "id": "worker.buildPrintJobs",
+      "kind": "worker_helper",
+      "label": "buildPrintJobs",
+      "file": "locallife/worker/task_print_order.go",
+      "line": 275
+    },
+    {
+      "id": "worker.executePrintAttempt",
+      "kind": "worker_helper",
+      "label": "executePrintAttempt",
+      "file": "locallife/worker/task_print_order.go",
+      "line": 178
+    },
+    {
+      "id": "sql.createOrderDisplayConfig",
+      "kind": "sql_query",
+      "label": "CreateOrderDisplayConfig",
+      "file": "locallife/db/query/order_display_config.sql",
+      "line": 1
+    },
+    {
+      "id": "sql.getOrderDisplayConfigByMerchant",
+      "kind": "sql_query",
+      "label": "GetOrderDisplayConfigByMerchant",
+      "file": "locallife/db/query/order_display_config.sql",
+      "line": 24
+    },
+    {
+      "id": "sql.updateOrderDisplayConfig",
+      "kind": "sql_query",
+      "label": "UpdateOrderDisplayConfig",
+      "file": "locallife/db/query/order_display_config.sql",
+      "line": 28
+    },
+    {
+      "id": "sql.getCloudPrinterBySN",
+      "kind": "sql_query",
+      "label": "GetCloudPrinterBySN",
+      "file": "locallife/db/query/cloud_printer.sql",
+      "line": 19
+    },
+    {
+      "id": "sql.createCloudPrinter",
+      "kind": "sql_query",
+      "label": "CreateCloudPrinter",
+      "file": "locallife/db/query/cloud_printer.sql",
+      "line": 1
+    },
+    {
+      "id": "sql.getCloudPrinter",
+      "kind": "sql_query",
+      "label": "GetCloudPrinter",
+      "file": "locallife/db/query/cloud_printer.sql",
+      "line": 15
+    },
+    {
+      "id": "sql.listCloudPrintersByMerchant",
+      "kind": "sql_query",
+      "label": "ListCloudPrintersByMerchant",
+      "file": "locallife/db/query/cloud_printer.sql",
+      "line": 23
+    },
+    {
+      "id": "sql.listActiveCloudPrintersByMerchant",
+      "kind": "sql_query",
+      "label": "ListActiveCloudPrintersByMerchant",
+      "file": "locallife/db/query/cloud_printer.sql",
+      "line": 28
+    },
+    {
+      "id": "sql.updateCloudPrinter",
+      "kind": "sql_query",
+      "label": "UpdateCloudPrinter",
+      "file": "locallife/db/query/cloud_printer.sql",
+      "line": 34
+    },
+    {
+      "id": "sql.deleteCloudPrinter",
+      "kind": "sql_query",
+      "label": "DeleteCloudPrinter",
+      "file": "locallife/db/query/cloud_printer.sql",
+      "line": 48
+    },
+    {
+      "id": "sql.upsertPrinterReconciliationJob",
+      "kind": "sql_query",
+      "label": "UpsertCloudPrinterReconciliationJob",
+      "file": "locallife/db/query/cloud_printer_reconciliation_job.sql",
+      "line": 1
+    },
+    {
+      "id": "sql.getPrinterReconciliationJob",
+      "kind": "sql_query",
+      "label": "GetCloudPrinterReconciliationJob",
+      "file": "locallife/db/query/cloud_printer_reconciliation_job.sql",
+      "line": 27
+    },
+    {
+      "id": "sql.listPrinterReconciliationJobsByMerchant",
+      "kind": "sql_query",
+      "label": "ListCloudPrinterReconciliationJobsByMerchant",
+      "file": "locallife/db/query/cloud_printer_reconciliation_job.sql",
+      "line": 32
+    },
+    {
+      "id": "sql.resolvePrinterReconciliationJob",
+      "kind": "sql_query",
+      "label": "ResolveCloudPrinterReconciliationJob",
+      "file": "locallife/db/query/cloud_printer_reconciliation_job.sql",
+      "line": 40
+    },
+    {
+      "id": "sql.failPrinterReconciliationJobRetry",
+      "kind": "sql_query",
+      "label": "FailCloudPrinterReconciliationJobRetry",
+      "file": "locallife/db/query/cloud_printer_reconciliation_job.sql",
+      "line": 50
+    },
+    {
+      "id": "sql.createPrintLog",
+      "kind": "sql_query",
+      "label": "CreatePrintLog",
+      "file": "locallife/db/query/print_log.sql",
+      "line": 1
+    },
+    {
+      "id": "sql.getPrintLogByTaskKeyAndPrinter",
+      "kind": "sql_query",
+      "label": "GetPrintLogByTaskKeyAndPrinter",
+      "file": "locallife/db/query/print_log.sql",
+      "line": 16
+    },
+    {
+      "id": "sql.updatePrintLogStatus",
+      "kind": "sql_query",
+      "label": "UpdatePrintLogStatus",
+      "file": "locallife/db/query/print_log.sql",
+      "line": 123
+    },
+    {
+      "id": "table.order_display_configs",
+      "kind": "table",
+      "label": "order_display_configs"
+    },
+    {
+      "id": "table.cloud_printers",
+      "kind": "table",
+      "label": "cloud_printers"
+    },
+    {
+      "id": "table.cloud_printer_reconciliation_jobs",
+      "kind": "table",
+      "label": "cloud_printer_reconciliation_jobs"
+    },
+    {
+      "id": "table.print_logs",
+      "kind": "table",
+      "label": "print_logs"
+    },
+    {
+      "id": "local.flutterSavedBluetoothDevice",
+      "kind": "local_state",
+      "label": "Flutter shared-preferences saved BLE printer id"
+    },
+    {
+      "id": "local.flutterNotificationSettings",
+      "kind": "local_state",
+      "label": "Flutter shared-preferences notification/auto-accept settings"
+    },
+    {
+      "id": "local.bluetoothReceiptPaper",
+      "kind": "local_side_effect",
+      "label": "Local Bluetooth paper receipt"
+    },
+    {
+      "id": "field.order_display_configs.auto_accept_paid_orders",
+      "kind": "field",
+      "label": "order_display_configs.auto_accept_paid_orders"
+    },
+    {
+      "id": "field.order_display_configs.enable_voice",
+      "kind": "field",
+      "label": "order_display_configs.enable_voice / voice_*"
+    }
+  ],
+  "edges": [
+    {
+      "from": "weapp.dashboardDeviceEntries",
+      "to": "weapp.displayConfigPage",
+      "kind": "navigation"
+    },
+    {
+      "from": "weapp.dashboardDeviceEntries",
+      "to": "weapp.printersPage",
+      "kind": "navigation"
+    },
+    {
+      "from": "weapp.configDeviceEntries",
+      "to": "weapp.displayConfigPage",
+      "kind": "navigation"
+    },
+    {
+      "from": "weapp.configDeviceEntries",
+      "to": "weapp.printersPage",
+      "kind": "navigation"
+    },
+    {
+      "from": "flutter.settingsPrinterEntry",
+      "to": "flutter.bluetoothPrinterProvider",
+      "kind": "state_call"
+    },
+    {
+      "from": "flutter.orderListPrinterEntry",
+      "to": "flutter.bluetoothPrinterProvider",
+      "kind": "state_call"
+    },
+    {
+      "from": "flutter.bluetoothPrinterProvider",
+      "to": "flutterBluePlus",
+      "kind": "native_ble_call"
+    },
+    {
+      "from": "flutter.bluetoothPrinterProvider",
+      "to": "local.flutterSavedBluetoothDevice",
+      "kind": "read_write"
+    },
+    {
+      "from": "flutter.bluetoothPrinterProvider",
+      "to": "local.bluetoothReceiptPaper",
+      "kind": "local_print_side_effect"
+    },
+    {
+      "from": "flutter.notificationSettingsProvider",
+      "to": "local.flutterNotificationSettings",
+      "kind": "read_write"
+    },
+    {
+      "from": "flutter.orderAlertCoordinator",
+      "to": "flutter.notificationSettingsProvider",
+      "kind": "read"
+    },
+    {
+      "from": "flutter.orderAlertCoordinator",
+      "to": "flutter.bluetoothPrinterProvider",
+      "kind": "local_print_call"
+    },
+    {
+      "from": "weapp.displayConfigPage",
+      "to": "weapp.displayConfigAccess",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.displayConfigAccess",
+      "to": "weapp.consoleAccessService",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.consoleAccessService",
+      "to": "apiWrapper.getMerchantDeviceAccess",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.getMerchantDeviceAccess",
+      "to": "route.getMerchantDeviceAccess",
+      "kind": "http"
+    },
+    {
+      "from": "route.getMerchantDeviceAccess",
+      "to": "api.getMerchantDeviceAccess",
+      "kind": "route"
+    },
+    {
+      "from": "weapp.displayConfigPage",
+      "to": "weapp.displayConfigLoad",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.displayConfigLoad",
+      "to": "apiWrapper.getDisplayConfig",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.getDisplayConfig",
+      "to": "route.getDisplayConfig",
+      "kind": "http"
+    },
+    {
+      "from": "route.getDisplayConfig",
+      "to": "api.getDisplayConfig",
+      "kind": "route"
+    },
+    {
+      "from": "api.getDisplayConfig",
+      "to": "sql.getOrderDisplayConfigByMerchant",
+      "kind": "read"
+    },
+    {
+      "from": "sql.getOrderDisplayConfigByMerchant",
+      "to": "table.order_display_configs",
+      "kind": "read"
+    },
+    {
+      "from": "weapp.displayConfigLoad",
+      "to": "weapp.displayConfigDraft",
+      "kind": "write"
+    },
+    {
+      "from": "weapp.displayConfigSwitchHandlers",
+      "to": "weapp.displayConfigDraft",
+      "kind": "write"
+    },
+    {
+      "from": "weapp.displayConfigPage",
+      "to": "weapp.displayConfigSave",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.displayConfigSave",
+      "to": "weapp.displayConfigDraft",
+      "kind": "read"
+    },
+    {
+      "from": "weapp.displayConfigSave",
+      "to": "apiWrapper.updateDisplayConfig",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.updateDisplayConfig",
+      "to": "route.updateDisplayConfig",
+      "kind": "http"
+    },
+    {
+      "from": "route.updateDisplayConfig",
+      "to": "api.updateDisplayConfig",
+      "kind": "route"
+    },
+    {
+      "from": "api.updateDisplayConfig",
+      "to": "sql.getOrderDisplayConfigByMerchant",
+      "kind": "read"
+    },
+    {
+      "from": "api.updateDisplayConfig",
+      "to": "sql.createOrderDisplayConfig",
+      "kind": "write"
+    },
+    {
+      "from": "api.updateDisplayConfig",
+      "to": "sql.updateOrderDisplayConfig",
+      "kind": "write"
+    },
+    {
+      "from": "sql.createOrderDisplayConfig",
+      "to": "table.order_display_configs",
+      "kind": "write"
+    },
+    {
+      "from": "sql.updateOrderDisplayConfig",
+      "to": "table.order_display_configs",
+      "kind": "write"
+    },
+    {
+      "from": "sql.createOrderDisplayConfig",
+      "to": "field.order_display_configs.auto_accept_paid_orders",
+      "kind": "write"
+    },
+    {
+      "from": "sql.updateOrderDisplayConfig",
+      "to": "field.order_display_configs.auto_accept_paid_orders",
+      "kind": "write"
+    },
+    {
+      "from": "sql.createOrderDisplayConfig",
+      "to": "field.order_display_configs.enable_voice",
+      "kind": "write"
+    },
+    {
+      "from": "sql.updateOrderDisplayConfig",
+      "to": "field.order_display_configs.enable_voice",
+      "kind": "write"
+    },
+    {
+      "from": "api.updateDisplayConfig",
+      "to": "weapp.displayConfigDraft",
+      "kind": "response_rehydrate"
+    },
+    {
+      "from": "weapp.printersPage",
+      "to": "weapp.printersAccess",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.printersAccess",
+      "to": "weapp.consoleAccessService",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.printersPage",
+      "to": "weapp.printersLoad",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.printersLoad",
+      "to": "apiWrapper.listPrinters",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.listPrinters",
+      "to": "route.listPrinters",
+      "kind": "http"
+    },
+    {
+      "from": "route.listPrinters",
+      "to": "api.listPrinters",
+      "kind": "route"
+    },
+    {
+      "from": "api.listPrinters",
+      "to": "sql.listCloudPrintersByMerchant",
+      "kind": "read"
+    },
+    {
+      "from": "api.listPrinters",
+      "to": "sql.listActiveCloudPrintersByMerchant",
+      "kind": "read"
+    },
+    {
+      "from": "sql.listCloudPrintersByMerchant",
+      "to": "table.cloud_printers",
+      "kind": "read"
+    },
+    {
+      "from": "sql.listActiveCloudPrintersByMerchant",
+      "to": "table.cloud_printers",
+      "kind": "read"
+    },
+    {
+      "from": "weapp.printersDelete",
+      "to": "apiWrapper.deletePrinter",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.deletePrinter",
+      "to": "route.deletePrinter",
+      "kind": "http"
+    },
+    {
+      "from": "route.deletePrinter",
+      "to": "api.deletePrinter",
+      "kind": "route"
+    },
+    {
+      "from": "api.deletePrinter",
+      "to": "sql.getCloudPrinter",
+      "kind": "read"
+    },
+    {
+      "from": "sql.getCloudPrinter",
+      "to": "table.cloud_printers",
+      "kind": "read"
+    },
+    {
+      "from": "api.deletePrinter",
+      "to": "provider.feieyunCloudPrint",
+      "kind": "provider_call"
+    },
+    {
+      "from": "api.deletePrinter",
+      "to": "sql.deleteCloudPrinter",
+      "kind": "write"
+    },
+    {
+      "from": "sql.deleteCloudPrinter",
+      "to": "table.cloud_printers",
+      "kind": "write"
+    },
+    {
+      "from": "api.deletePrinter",
+      "to": "api.recordPrinterReconciliationJob",
+      "kind": "call"
+    },
+    {
+      "from": "api.recordPrinterReconciliationJob",
+      "to": "sql.upsertPrinterReconciliationJob",
+      "kind": "write"
+    },
+    {
+      "from": "sql.upsertPrinterReconciliationJob",
+      "to": "table.cloud_printer_reconciliation_jobs",
+      "kind": "write"
+    },
+    {
+      "from": "weapp.printersDelete",
+      "to": "weapp.printersLoad",
+      "kind": "response_rehydrate"
+    },
+    {
+      "from": "weapp.printersTest",
+      "to": "apiWrapper.testPrinter",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.testPrinter",
+      "to": "route.testPrinter",
+      "kind": "http"
+    },
+    {
+      "from": "route.testPrinter",
+      "to": "api.testPrinter",
+      "kind": "route"
+    },
+    {
+      "from": "api.testPrinter",
+      "to": "sql.getCloudPrinter",
+      "kind": "read"
+    },
+    {
+      "from": "api.testPrinter",
+      "to": "provider.feieyunCloudPrint",
+      "kind": "provider_call"
+    },
+    {
+      "from": "weapp.printersLiveStatus",
+      "to": "apiWrapper.getPrinterLiveStatus",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.getPrinterLiveStatus",
+      "to": "route.getPrinterLiveStatus",
+      "kind": "http"
+    },
+    {
+      "from": "route.getPrinterLiveStatus",
+      "to": "api.getPrinterLiveStatus",
+      "kind": "route"
+    },
+    {
+      "from": "api.getPrinterLiveStatus",
+      "to": "sql.getCloudPrinter",
+      "kind": "read"
+    },
+    {
+      "from": "api.getPrinterLiveStatus",
+      "to": "provider.feieyunCloudPrint",
+      "kind": "provider_call"
+    },
+    {
+      "from": "weapp.printerEditPage",
+      "to": "weapp.printerEditAccess",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.printerEditAccess",
+      "to": "weapp.consoleAccessService",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.printerEditPage",
+      "to": "weapp.printerEditLoad",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.printerEditLoad",
+      "to": "apiWrapper.getPrinterDetail",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.getPrinterDetail",
+      "to": "route.getPrinter",
+      "kind": "http"
+    },
+    {
+      "from": "route.getPrinter",
+      "to": "api.getPrinter",
+      "kind": "route"
+    },
+    {
+      "from": "api.getPrinter",
+      "to": "sql.getCloudPrinter",
+      "kind": "read"
+    },
+    {
+      "from": "weapp.printerEditSubmit",
+      "to": "apiWrapper.createPrinter",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.createPrinter",
+      "to": "route.createPrinter",
+      "kind": "http"
+    },
+    {
+      "from": "route.createPrinter",
+      "to": "api.createPrinter",
+      "kind": "route"
+    },
+    {
+      "from": "api.createPrinter",
+      "to": "sql.getCloudPrinterBySN",
+      "kind": "read"
+    },
+    {
+      "from": "sql.getCloudPrinterBySN",
+      "to": "table.cloud_printers",
+      "kind": "read"
+    },
+    {
+      "from": "api.createPrinter",
+      "to": "provider.feieyunCloudPrint",
+      "kind": "provider_call"
+    },
+    {
+      "from": "api.createPrinter",
+      "to": "sql.createCloudPrinter",
+      "kind": "write"
+    },
+    {
+      "from": "sql.createCloudPrinter",
+      "to": "table.cloud_printers",
+      "kind": "write"
+    },
+    {
+      "from": "api.createPrinter",
+      "to": "api.recordPrinterReconciliationJob",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.printerEditSubmit",
+      "to": "apiWrapper.updatePrinter",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.updatePrinter",
+      "to": "route.updatePrinter",
+      "kind": "http"
+    },
+    {
+      "from": "route.updatePrinter",
+      "to": "api.updatePrinter",
+      "kind": "route"
+    },
+    {
+      "from": "api.updatePrinter",
+      "to": "sql.getCloudPrinter",
+      "kind": "read"
+    },
+    {
+      "from": "api.updatePrinter",
+      "to": "sql.updateCloudPrinter",
+      "kind": "write"
+    },
+    {
+      "from": "sql.updateCloudPrinter",
+      "to": "table.cloud_printers",
+      "kind": "write"
+    },
+    {
+      "from": "weapp.printerEditSubmit",
+      "to": "weapp.printersLoad",
+      "kind": "response_rehydrate"
+    },
+    {
+      "from": "apiWrapper.listPrinterReconciliationJobs",
+      "to": "route.listPrinterReconciliationJobs",
+      "kind": "http"
+    },
+    {
+      "from": "route.listPrinterReconciliationJobs",
+      "to": "api.listPrinterReconciliationJobs",
+      "kind": "route"
+    },
+    {
+      "from": "api.listPrinterReconciliationJobs",
+      "to": "sql.listPrinterReconciliationJobsByMerchant",
+      "kind": "read"
+    },
+    {
+      "from": "sql.listPrinterReconciliationJobsByMerchant",
+      "to": "table.cloud_printer_reconciliation_jobs",
+      "kind": "read"
+    },
+    {
+      "from": "apiWrapper.retryPrinterReconciliationJob",
+      "to": "route.retryPrinterReconciliationJob",
+      "kind": "http"
+    },
+    {
+      "from": "route.retryPrinterReconciliationJob",
+      "to": "api.retryPrinterReconciliationJob",
+      "kind": "route"
+    },
+    {
+      "from": "api.retryPrinterReconciliationJob",
+      "to": "sql.getPrinterReconciliationJob",
+      "kind": "read"
+    },
+    {
+      "from": "sql.getPrinterReconciliationJob",
+      "to": "table.cloud_printer_reconciliation_jobs",
+      "kind": "read"
+    },
+    {
+      "from": "api.retryPrinterReconciliationJob",
+      "to": "provider.feieyunCloudPrint",
+      "kind": "provider_call"
+    },
+    {
+      "from": "api.retryPrinterReconciliationJob",
+      "to": "sql.resolvePrinterReconciliationJob",
+      "kind": "write"
+    },
+    {
+      "from": "api.retryPrinterReconciliationJob",
+      "to": "sql.failPrinterReconciliationJobRetry",
+      "kind": "write"
+    },
+    {
+      "from": "sql.resolvePrinterReconciliationJob",
+      "to": "table.cloud_printer_reconciliation_jobs",
+      "kind": "write"
+    },
+    {
+      "from": "sql.failPrinterReconciliationJobRetry",
+      "to": "table.cloud_printer_reconciliation_jobs",
+      "kind": "write"
+    },
+    {
+      "from": "worker.paymentDomainOutbox",
+      "to": "worker.autoAcceptPaidOrderForPrinting",
+      "kind": "outbox"
+    },
+    {
+      "from": "worker.autoAcceptPaidOrderForPrinting",
+      "to": "sql.getOrderDisplayConfigByMerchant",
+      "kind": "read"
+    },
+    {
+      "from": "worker.autoAcceptPaidOrderForPrinting",
+      "to": "field.order_display_configs.auto_accept_paid_orders",
+      "kind": "read"
+    },
+    {
+      "from": "worker.autoAcceptPaidOrderForPrinting",
+      "to": "sql.listActiveCloudPrintersByMerchant",
+      "kind": "read"
+    },
+    {
+      "from": "worker.autoAcceptPaidOrderForPrinting",
+      "to": "logic.acceptMerchantOrder",
+      "kind": "call"
+    },
+    {
+      "from": "worker.autoAcceptPaidOrderForPrinting",
+      "to": "worker.processPrintOrderTask",
+      "kind": "enqueue"
+    },
+    {
+      "from": "worker.processPrintOrderTask",
+      "to": "sql.getOrderDisplayConfigByMerchant",
+      "kind": "read"
+    },
+    {
+      "from": "worker.processPrintOrderTask",
+      "to": "sql.listActiveCloudPrintersByMerchant",
+      "kind": "read"
+    },
+    {
+      "from": "worker.processPrintOrderTask",
+      "to": "worker.buildPrintJobs",
+      "kind": "call"
+    },
+    {
+      "from": "worker.buildPrintJobs",
+      "to": "table.cloud_printers",
+      "kind": "read"
+    },
+    {
+      "from": "worker.processPrintOrderTask",
+      "to": "worker.executePrintAttempt",
+      "kind": "call"
+    },
+    {
+      "from": "worker.executePrintAttempt",
+      "to": "sql.getPrintLogByTaskKeyAndPrinter",
+      "kind": "read"
+    },
+    {
+      "from": "sql.getPrintLogByTaskKeyAndPrinter",
+      "to": "table.print_logs",
+      "kind": "read"
+    },
+    {
+      "from": "worker.executePrintAttempt",
+      "to": "sql.createPrintLog",
+      "kind": "write"
+    },
+    {
+      "from": "sql.createPrintLog",
+      "to": "table.print_logs",
+      "kind": "write"
+    },
+    {
+      "from": "worker.executePrintAttempt",
+      "to": "provider.feieyunCloudPrint",
+      "kind": "provider_call"
+    },
+    {
+      "from": "worker.executePrintAttempt",
+      "to": "sql.updatePrintLogStatus",
+      "kind": "write"
+    },
+    {
+      "from": "sql.updatePrintLogStatus",
+      "to": "table.print_logs",
+      "kind": "write"
+    },
+    {
+      "from": "table.print_logs",
+      "to": "table.cloud_printers",
+      "kind": "foreign_key"
+    }
+  ]
+}

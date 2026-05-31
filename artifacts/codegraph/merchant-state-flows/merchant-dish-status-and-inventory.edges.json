@@ -1,0 +1,1190 @@
+{
+  "schema": "locallife-code-slice/v1",
+  "slice": "merchant-dish-status-and-inventory",
+  "risk_class": "G2",
+  "generated_at": "2026-05-30",
+  "nodes": [
+    {
+      "id": "weapp.dashboardDishEntry",
+      "kind": "frontend_navigation",
+      "label": "Merchant dashboard dishes/inventory entries",
+      "file": "weapp/miniprogram/pages/merchant/_utils/merchant-dashboard-view.ts",
+      "line": 172
+    },
+    {
+      "id": "weapp.dishListPage",
+      "kind": "frontend_page",
+      "label": "Merchant dish list page",
+      "file": "weapp/miniprogram/pages/merchant/dishes/index.ts",
+      "line": 219
+    },
+    {
+      "id": "weapp.onSwitchStatusChange",
+      "kind": "frontend_handler",
+      "label": "onSwitchStatusChange",
+      "file": "weapp/miniprogram/pages/merchant/dishes/index.ts",
+      "line": 299
+    },
+    {
+      "id": "weapp.dishEditPage",
+      "kind": "frontend_page",
+      "label": "Merchant dish edit page",
+      "file": "weapp/miniprogram/pages/merchant/dishes/edit/index.ts",
+      "line": 114
+    },
+    {
+      "id": "weapp.dishEditLoadPageData",
+      "kind": "frontend_handler",
+      "label": "loadPageData",
+      "file": "weapp/miniprogram/pages/merchant/dishes/edit/index.ts",
+      "line": 114
+    },
+    {
+      "id": "weapp.dishEditSubmit",
+      "kind": "frontend_handler",
+      "label": "dish edit submit",
+      "file": "weapp/miniprogram/pages/merchant/dishes/edit/index.ts",
+      "line": 569
+    },
+    {
+      "id": "weapp.buildDishSubmitPayload",
+      "kind": "frontend_helper",
+      "label": "buildDishSubmitPayload",
+      "file": "weapp/miniprogram/pages/merchant/_utils/merchant-dish-edit-view.ts",
+      "line": 515
+    },
+    {
+      "id": "weapp.inventoryPage",
+      "kind": "frontend_page",
+      "label": "Merchant inventory page",
+      "file": "weapp/miniprogram/pages/merchant/inventory/index.ts",
+      "line": 93
+    },
+    {
+      "id": "weapp.loadInventory",
+      "kind": "frontend_handler",
+      "label": "loadInventory",
+      "file": "weapp/miniprogram/pages/merchant/inventory/index.ts",
+      "line": 143
+    },
+    {
+      "id": "weapp.saveInventory",
+      "kind": "frontend_handler",
+      "label": "inventory onSave",
+      "file": "weapp/miniprogram/pages/merchant/inventory/index.ts",
+      "line": 413
+    },
+    {
+      "id": "apiWrapper.listDishes",
+      "kind": "frontend_api",
+      "label": "DishManagementService.listDishes",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/dish.ts",
+      "line": 598
+    },
+    {
+      "id": "apiWrapper.getDishDetail",
+      "kind": "frontend_api",
+      "label": "DishManagementService.getDishDetail",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/dish.ts",
+      "line": 649
+    },
+    {
+      "id": "apiWrapper.createDish",
+      "kind": "frontend_api",
+      "label": "DishManagementService.createDish",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/dish.ts",
+      "line": 637
+    },
+    {
+      "id": "apiWrapper.updateDish",
+      "kind": "frontend_api",
+      "label": "DishManagementService.updateDish",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/dish.ts",
+      "line": 671
+    },
+    {
+      "id": "apiWrapper.updateDishStatus",
+      "kind": "frontend_api",
+      "label": "DishManagementService.updateDishStatus",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/dish.ts",
+      "line": 706
+    },
+    {
+      "id": "apiWrapper.batchUpdateDishStatus",
+      "kind": "frontend_api",
+      "label": "DishManagementService.batchUpdateDishStatus",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/dish.ts",
+      "line": 720
+    },
+    {
+      "id": "apiWrapper.getDishCustomizations",
+      "kind": "frontend_api",
+      "label": "DishManagementService.getDishCustomizations",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/dish.ts",
+      "line": 732
+    },
+    {
+      "id": "apiWrapper.setDishCustomizations",
+      "kind": "frontend_api",
+      "label": "DishManagementService.setDishCustomizations",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/dish.ts",
+      "line": 744
+    },
+    {
+      "id": "apiWrapper.setDishFeaturedTags",
+      "kind": "frontend_api",
+      "label": "DishManagementService.setDishFeaturedTags",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/dish.ts",
+      "line": 683
+    },
+    {
+      "id": "apiWrapper.getDailyInventory",
+      "kind": "frontend_api",
+      "label": "InventoryManagementService.getDailyInventory",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/dish.ts",
+      "line": 958
+    },
+    {
+      "id": "apiWrapper.updateInventory",
+      "kind": "frontend_api",
+      "label": "InventoryManagementService.updateInventory",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/dish.ts",
+      "line": 970
+    },
+    {
+      "id": "apiWrapper.checkInventory",
+      "kind": "frontend_api",
+      "label": "InventoryManagementService.checkInventory",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/dish.ts",
+      "line": 982
+    },
+    {
+      "id": "apiWrapper.getInventoryStats",
+      "kind": "frontend_api",
+      "label": "InventoryManagementService.getInventoryStats",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/dish.ts",
+      "line": 1008
+    },
+    {
+      "id": "route.listDishes",
+      "kind": "route",
+      "label": "GET /v1/dishes",
+      "file": "locallife/api/server.go",
+      "line": 800
+    },
+    {
+      "id": "route.createDish",
+      "kind": "route",
+      "label": "POST /v1/dishes",
+      "file": "locallife/api/server.go",
+      "line": 799
+    },
+    {
+      "id": "route.getDish",
+      "kind": "route",
+      "label": "GET /v1/dishes/:id",
+      "file": "locallife/api/server.go",
+      "line": 801
+    },
+    {
+      "id": "route.updateDish",
+      "kind": "route",
+      "label": "PUT /v1/dishes/:id",
+      "file": "locallife/api/server.go",
+      "line": 802
+    },
+    {
+      "id": "route.deleteDish",
+      "kind": "route",
+      "label": "DELETE /v1/dishes/:id",
+      "file": "locallife/api/server.go",
+      "line": 803
+    },
+    {
+      "id": "route.updateDishStatus",
+      "kind": "route",
+      "label": "PATCH /v1/dishes/:id/status",
+      "file": "locallife/api/server.go",
+      "line": 804
+    },
+    {
+      "id": "route.batchUpdateDishStatus",
+      "kind": "route",
+      "label": "PATCH /v1/dishes/batch/status",
+      "file": "locallife/api/server.go",
+      "line": 805
+    },
+    {
+      "id": "route.getDishCustomizations",
+      "kind": "route",
+      "label": "GET /v1/dishes/:id/customizations",
+      "file": "locallife/api/server.go",
+      "line": 806
+    },
+    {
+      "id": "route.setDishCustomizations",
+      "kind": "route",
+      "label": "PUT /v1/dishes/:id/customizations",
+      "file": "locallife/api/server.go",
+      "line": 807
+    },
+    {
+      "id": "route.setDishFeaturedTags",
+      "kind": "route",
+      "label": "PUT /v1/dishes/:id/featured-tags",
+      "file": "locallife/api/server.go",
+      "line": 809
+    },
+    {
+      "id": "route.listInventory",
+      "kind": "route",
+      "label": "GET /v1/inventory",
+      "file": "locallife/api/server.go",
+      "line": 836
+    },
+    {
+      "id": "route.createInventory",
+      "kind": "route",
+      "label": "POST /v1/inventory",
+      "file": "locallife/api/server.go",
+      "line": 835
+    },
+    {
+      "id": "route.updateInventory",
+      "kind": "route",
+      "label": "PUT /v1/inventory",
+      "file": "locallife/api/server.go",
+      "line": 837
+    },
+    {
+      "id": "route.checkInventory",
+      "kind": "route",
+      "label": "POST /v1/inventory/check",
+      "file": "locallife/api/server.go",
+      "line": 839
+    },
+    {
+      "id": "route.inventoryStats",
+      "kind": "route",
+      "label": "GET /v1/inventory/stats",
+      "file": "locallife/api/server.go",
+      "line": 840
+    },
+    {
+      "id": "api.createDish",
+      "kind": "handler",
+      "label": "Server.createDish",
+      "file": "locallife/api/dish.go",
+      "line": 494
+    },
+    {
+      "id": "api.updateDish",
+      "kind": "handler",
+      "label": "Server.updateDish",
+      "file": "locallife/api/dish.go",
+      "line": 1030
+    },
+    {
+      "id": "api.deleteDish",
+      "kind": "handler",
+      "label": "Server.deleteDish",
+      "file": "locallife/api/dish.go",
+      "line": 1264
+    },
+    {
+      "id": "api.updateDishStatus",
+      "kind": "handler",
+      "label": "Server.updateDishStatus",
+      "file": "locallife/api/dish.go",
+      "line": 1421
+    },
+    {
+      "id": "api.batchUpdateDishStatus",
+      "kind": "handler",
+      "label": "Server.batchUpdateDishStatus",
+      "file": "locallife/api/dish.go",
+      "line": 1520
+    },
+    {
+      "id": "api.getDishCustomizations",
+      "kind": "handler",
+      "label": "Server.getDishCustomizations",
+      "file": "locallife/api/dish.go",
+      "line": 1837
+    },
+    {
+      "id": "api.setDishCustomizations",
+      "kind": "handler",
+      "label": "Server.setDishCustomizations",
+      "file": "locallife/api/dish.go",
+      "line": 1720
+    },
+    {
+      "id": "api.setDishFeaturedTags",
+      "kind": "handler",
+      "label": "Server.setDishFeaturedTags",
+      "file": "locallife/api/dish.go",
+      "line": 1929
+    },
+    {
+      "id": "api.listDailyInventory",
+      "kind": "handler",
+      "label": "Server.listDailyInventory",
+      "file": "locallife/api/inventory.go",
+      "line": 162
+    },
+    {
+      "id": "api.createDailyInventory",
+      "kind": "handler",
+      "label": "Server.createDailyInventory",
+      "file": "locallife/api/inventory.go",
+      "line": 60
+    },
+    {
+      "id": "api.updateDailyInventory",
+      "kind": "handler",
+      "label": "Server.updateDailyInventory",
+      "file": "locallife/api/inventory.go",
+      "line": 243
+    },
+    {
+      "id": "api.checkAndDecrementInventory",
+      "kind": "handler",
+      "label": "Server.checkAndDecrementInventory",
+      "file": "locallife/api/inventory.go",
+      "line": 445
+    },
+    {
+      "id": "api.getInventoryStats",
+      "kind": "handler",
+      "label": "Server.getInventoryStats",
+      "file": "locallife/api/inventory.go",
+      "line": 539
+    },
+    {
+      "id": "db.CreateDishTx",
+      "kind": "transaction",
+      "label": "SQLStore.CreateDishTx",
+      "file": "locallife/db/sqlc/tx_dish.go",
+      "line": 37
+    },
+    {
+      "id": "db.UpdateDishTx",
+      "kind": "transaction",
+      "label": "SQLStore.UpdateDishTx",
+      "file": "locallife/db/sqlc/tx_dish.go",
+      "line": 139
+    },
+    {
+      "id": "db.SetDishCustomizationsTx",
+      "kind": "transaction",
+      "label": "SQLStore.SetDishCustomizationsTx",
+      "file": "locallife/db/sqlc/tx_dish.go",
+      "line": 287
+    },
+    {
+      "id": "sql.CreateDish",
+      "kind": "sql",
+      "label": "CreateDish",
+      "file": "locallife/db/query/dish.sql",
+      "line": 67
+    },
+    {
+      "id": "sql.UpdateDish",
+      "kind": "sql",
+      "label": "UpdateDish",
+      "file": "locallife/db/query/dish.sql",
+      "line": 296
+    },
+    {
+      "id": "sql.UpdateDishOnlineStatus",
+      "kind": "sql",
+      "label": "UpdateDishOnlineStatus",
+      "file": "locallife/db/query/dish.sql",
+      "line": 321
+    },
+    {
+      "id": "sql.BatchUpdateDishOnlineStatus",
+      "kind": "sql",
+      "label": "BatchUpdateDishOnlineStatus",
+      "file": "locallife/db/query/dish.sql",
+      "line": 711
+    },
+    {
+      "id": "sql.UpdateDishAvailability",
+      "kind": "sql",
+      "label": "UpdateDishAvailability",
+      "file": "locallife/db/query/dish.sql",
+      "line": 314
+    },
+    {
+      "id": "sql.DeleteDish",
+      "kind": "sql",
+      "label": "DeleteDish",
+      "file": "locallife/db/query/dish.sql",
+      "line": 328
+    },
+    {
+      "id": "sql.DeleteAllDishCustomizationGroups",
+      "kind": "sql",
+      "label": "DeleteAllDishCustomizationGroups",
+      "file": "locallife/db/query/dish.sql",
+      "line": 413
+    },
+    {
+      "id": "sql.CreateDishCustomizationGroup",
+      "kind": "sql",
+      "label": "CreateDishCustomizationGroup",
+      "file": "locallife/db/query/dish.sql",
+      "line": 420
+    },
+    {
+      "id": "sql.CreateDishCustomizationOption",
+      "kind": "sql",
+      "label": "CreateDishCustomizationOption",
+      "file": "locallife/db/query/dish.sql",
+      "line": 429
+    },
+    {
+      "id": "sql.UpsertDishTag",
+      "kind": "sql",
+      "label": "UpsertDishTag",
+      "file": "locallife/db/query/auto_tag.sql",
+      "line": 20
+    },
+    {
+      "id": "sql.RemoveDishTag",
+      "kind": "sql",
+      "label": "RemoveDishTag",
+      "file": "locallife/db/query/dish.sql",
+      "line": 554
+    },
+    {
+      "id": "sql.ListDailyInventoryByMerchant",
+      "kind": "sql",
+      "label": "ListDailyInventoryByMerchant",
+      "file": "locallife/db/query/inventory.sql",
+      "line": 27
+    },
+    {
+      "id": "sql.CreateDailyInventory",
+      "kind": "sql",
+      "label": "CreateDailyInventory",
+      "file": "locallife/db/query/inventory.sql",
+      "line": 5
+    },
+    {
+      "id": "sql.GetDailyInventory",
+      "kind": "sql",
+      "label": "GetDailyInventory",
+      "file": "locallife/db/query/inventory.sql",
+      "line": 16
+    },
+    {
+      "id": "sql.GetDailyInventoryForUpdate",
+      "kind": "sql",
+      "label": "GetDailyInventoryForUpdate",
+      "file": "locallife/db/query/inventory.sql",
+      "line": 21
+    },
+    {
+      "id": "sql.UpdateDailyInventory",
+      "kind": "sql",
+      "label": "UpdateDailyInventory",
+      "file": "locallife/db/query/inventory.sql",
+      "line": 55
+    },
+    {
+      "id": "sql.CheckAndDecrementInventory",
+      "kind": "sql",
+      "label": "CheckAndDecrementInventory",
+      "file": "locallife/db/query/inventory.sql",
+      "line": 77
+    },
+    {
+      "id": "sql.ReserveInventory",
+      "kind": "sql",
+      "label": "ReserveInventory",
+      "file": "locallife/db/query/inventory.sql",
+      "line": 88
+    },
+    {
+      "id": "sql.ReleaseReservedInventory",
+      "kind": "sql",
+      "label": "ReleaseReservedInventory",
+      "file": "locallife/db/query/inventory.sql",
+      "line": 99
+    },
+    {
+      "id": "sql.GetInventoryStats",
+      "kind": "sql",
+      "label": "GetInventoryStats",
+      "file": "locallife/db/query/inventory.sql",
+      "line": 117
+    },
+    {
+      "id": "logic.CalculateOrderItems",
+      "kind": "logic",
+      "label": "logic.CalculateOrderItems",
+      "file": "locallife/logic/order_items.go",
+      "line": 42
+    },
+    {
+      "id": "logic.ValidateReservationItems",
+      "kind": "logic",
+      "label": "logic.ValidateReservationItems",
+      "file": "locallife/logic/reservation.go",
+      "line": 767
+    },
+    {
+      "id": "db.ProcessOrderPaymentTx",
+      "kind": "transaction",
+      "label": "ProcessOrderPaymentTx inventory decrement",
+      "file": "locallife/db/sqlc/tx_create_order.go",
+      "line": 364
+    },
+    {
+      "id": "api.getPublicMerchantDishes",
+      "kind": "handler",
+      "label": "getPublicMerchantDishes",
+      "file": "locallife/api/merchant.go",
+      "line": 1402
+    },
+    {
+      "id": "api.getPublicDishDetail",
+      "kind": "handler",
+      "label": "getPublicDishDetail",
+      "file": "locallife/api/dish.go",
+      "line": 934
+    },
+    {
+      "id": "api.buildScanTableResponse",
+      "kind": "handler",
+      "label": "buildScanTableResponse",
+      "file": "locallife/api/scan.go",
+      "line": 192
+    },
+    {
+      "id": "api.searchDishes",
+      "kind": "handler",
+      "label": "searchDishes",
+      "file": "locallife/api/search.go",
+      "line": 258
+    },
+    {
+      "id": "sql.GetMerchantDishesWithCategory",
+      "kind": "sql",
+      "label": "GetMerchantDishesWithCategory",
+      "file": "locallife/db/query/merchant_stats.sql",
+      "line": 231
+    },
+    {
+      "id": "sql.ListDishesForMenu",
+      "kind": "sql",
+      "label": "ListDishesForMenu",
+      "file": "locallife/db/query/dish.sql",
+      "line": 720
+    },
+    {
+      "id": "sql.SearchDishesByName",
+      "kind": "sql",
+      "label": "SearchDishesByName",
+      "file": "locallife/db/query/dish.sql",
+      "line": 164
+    },
+    {
+      "id": "sql.SearchDishesGlobal",
+      "kind": "sql",
+      "label": "SearchDishesGlobal",
+      "file": "locallife/db/query/dish.sql",
+      "line": 183
+    },
+    {
+      "id": "table.dishes",
+      "kind": "table",
+      "label": "dishes"
+    },
+    {
+      "id": "table.dish_tags",
+      "kind": "table",
+      "label": "dish_tags"
+    },
+    {
+      "id": "table.dish_customization_groups",
+      "kind": "table",
+      "label": "dish_customization_groups"
+    },
+    {
+      "id": "table.dish_customization_options",
+      "kind": "table",
+      "label": "dish_customization_options"
+    },
+    {
+      "id": "table.daily_inventory",
+      "kind": "table",
+      "label": "daily_inventory"
+    },
+    {
+      "id": "field.dishes.is_online",
+      "kind": "field",
+      "label": "dishes.is_online"
+    },
+    {
+      "id": "field.dishes.is_available",
+      "kind": "field",
+      "label": "dishes.is_available"
+    },
+    {
+      "id": "field.daily_inventory.total_quantity",
+      "kind": "field",
+      "label": "daily_inventory.total_quantity"
+    },
+    {
+      "id": "field.daily_inventory.sold_quantity",
+      "kind": "field",
+      "label": "daily_inventory.sold_quantity"
+    },
+    {
+      "id": "field.daily_inventory.reserved_quantity",
+      "kind": "field",
+      "label": "daily_inventory.reserved_quantity"
+    }
+  ],
+  "edges": [
+    {
+      "from": "weapp.dashboardDishEntry",
+      "to": "weapp.dishListPage",
+      "kind": "frontend_navigation"
+    },
+    {
+      "from": "weapp.dashboardDishEntry",
+      "to": "weapp.inventoryPage",
+      "kind": "frontend_navigation"
+    },
+    {
+      "from": "weapp.dishListPage",
+      "to": "apiWrapper.listDishes",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.listDishes",
+      "to": "route.listDishes",
+      "kind": "http"
+    },
+    {
+      "from": "weapp.dishListPage",
+      "to": "weapp.onSwitchStatusChange",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.onSwitchStatusChange",
+      "to": "apiWrapper.updateDishStatus",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.updateDishStatus",
+      "to": "route.updateDishStatus",
+      "kind": "http"
+    },
+    {
+      "from": "route.updateDishStatus",
+      "to": "api.updateDishStatus",
+      "kind": "route"
+    },
+    {
+      "from": "api.updateDishStatus",
+      "to": "sql.UpdateDishOnlineStatus",
+      "kind": "write"
+    },
+    {
+      "from": "sql.UpdateDishOnlineStatus",
+      "to": "field.dishes.is_online",
+      "kind": "write"
+    },
+    {
+      "from": "apiWrapper.batchUpdateDishStatus",
+      "to": "route.batchUpdateDishStatus",
+      "kind": "http"
+    },
+    {
+      "from": "route.batchUpdateDishStatus",
+      "to": "api.batchUpdateDishStatus",
+      "kind": "route"
+    },
+    {
+      "from": "api.batchUpdateDishStatus",
+      "to": "sql.BatchUpdateDishOnlineStatus",
+      "kind": "write"
+    },
+    {
+      "from": "sql.BatchUpdateDishOnlineStatus",
+      "to": "field.dishes.is_online",
+      "kind": "write"
+    },
+    {
+      "from": "weapp.dishListPage",
+      "to": "weapp.dishEditPage",
+      "kind": "frontend_navigation"
+    },
+    {
+      "from": "weapp.dishEditPage",
+      "to": "weapp.dishEditLoadPageData",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.dishEditLoadPageData",
+      "to": "apiWrapper.getDishDetail",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.getDishDetail",
+      "to": "route.getDish",
+      "kind": "http"
+    },
+    {
+      "from": "weapp.dishEditLoadPageData",
+      "to": "apiWrapper.getDishCustomizations",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.getDishCustomizations",
+      "to": "route.getDishCustomizations",
+      "kind": "http"
+    },
+    {
+      "from": "route.getDishCustomizations",
+      "to": "api.getDishCustomizations",
+      "kind": "route"
+    },
+    {
+      "from": "api.getDishCustomizations",
+      "to": "table.dish_customization_groups",
+      "kind": "read"
+    },
+    {
+      "from": "api.getDishCustomizations",
+      "to": "table.dish_customization_options",
+      "kind": "read"
+    },
+    {
+      "from": "weapp.dishEditPage",
+      "to": "weapp.dishEditSubmit",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.dishEditSubmit",
+      "to": "weapp.buildDishSubmitPayload",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.buildDishSubmitPayload",
+      "to": "field.dishes.is_available",
+      "kind": "write"
+    },
+    {
+      "from": "weapp.dishEditSubmit",
+      "to": "apiWrapper.createDish",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.createDish",
+      "to": "route.createDish",
+      "kind": "http"
+    },
+    {
+      "from": "route.createDish",
+      "to": "api.createDish",
+      "kind": "route"
+    },
+    {
+      "from": "api.createDish",
+      "to": "db.CreateDishTx",
+      "kind": "transaction"
+    },
+    {
+      "from": "db.CreateDishTx",
+      "to": "sql.CreateDish",
+      "kind": "write"
+    },
+    {
+      "from": "sql.CreateDish",
+      "to": "table.dishes",
+      "kind": "write"
+    },
+    {
+      "from": "weapp.dishEditSubmit",
+      "to": "apiWrapper.updateDish",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.updateDish",
+      "to": "route.updateDish",
+      "kind": "http"
+    },
+    {
+      "from": "route.updateDish",
+      "to": "api.updateDish",
+      "kind": "route"
+    },
+    {
+      "from": "api.updateDish",
+      "to": "db.UpdateDishTx",
+      "kind": "transaction"
+    },
+    {
+      "from": "db.UpdateDishTx",
+      "to": "sql.UpdateDish",
+      "kind": "write"
+    },
+    {
+      "from": "sql.UpdateDish",
+      "to": "table.dishes",
+      "kind": "write"
+    },
+    {
+      "from": "sql.UpdateDish",
+      "to": "field.dishes.is_available",
+      "kind": "write"
+    },
+    {
+      "from": "weapp.dishEditSubmit",
+      "to": "apiWrapper.setDishFeaturedTags",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.setDishFeaturedTags",
+      "to": "route.setDishFeaturedTags",
+      "kind": "http"
+    },
+    {
+      "from": "route.setDishFeaturedTags",
+      "to": "api.setDishFeaturedTags",
+      "kind": "route"
+    },
+    {
+      "from": "api.setDishFeaturedTags",
+      "to": "sql.RemoveDishTag",
+      "kind": "write"
+    },
+    {
+      "from": "api.setDishFeaturedTags",
+      "to": "sql.UpsertDishTag",
+      "kind": "write"
+    },
+    {
+      "from": "sql.RemoveDishTag",
+      "to": "table.dish_tags",
+      "kind": "write"
+    },
+    {
+      "from": "sql.UpsertDishTag",
+      "to": "table.dish_tags",
+      "kind": "write"
+    },
+    {
+      "from": "weapp.dishEditSubmit",
+      "to": "apiWrapper.setDishCustomizations",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.setDishCustomizations",
+      "to": "route.setDishCustomizations",
+      "kind": "http"
+    },
+    {
+      "from": "route.setDishCustomizations",
+      "to": "api.setDishCustomizations",
+      "kind": "route"
+    },
+    {
+      "from": "api.setDishCustomizations",
+      "to": "db.SetDishCustomizationsTx",
+      "kind": "transaction"
+    },
+    {
+      "from": "db.SetDishCustomizationsTx",
+      "to": "sql.DeleteAllDishCustomizationGroups",
+      "kind": "write"
+    },
+    {
+      "from": "db.SetDishCustomizationsTx",
+      "to": "sql.CreateDishCustomizationGroup",
+      "kind": "write"
+    },
+    {
+      "from": "db.SetDishCustomizationsTx",
+      "to": "sql.CreateDishCustomizationOption",
+      "kind": "write"
+    },
+    {
+      "from": "sql.DeleteAllDishCustomizationGroups",
+      "to": "table.dish_customization_groups",
+      "kind": "write"
+    },
+    {
+      "from": "sql.CreateDishCustomizationGroup",
+      "to": "table.dish_customization_groups",
+      "kind": "write"
+    },
+    {
+      "from": "sql.CreateDishCustomizationOption",
+      "to": "table.dish_customization_options",
+      "kind": "write"
+    },
+    {
+      "from": "route.deleteDish",
+      "to": "api.deleteDish",
+      "kind": "route"
+    },
+    {
+      "from": "api.deleteDish",
+      "to": "sql.DeleteDish",
+      "kind": "write"
+    },
+    {
+      "from": "sql.DeleteDish",
+      "to": "table.dishes",
+      "kind": "write"
+    },
+    {
+      "from": "weapp.inventoryPage",
+      "to": "weapp.loadInventory",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.loadInventory",
+      "to": "apiWrapper.getDailyInventory",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.getDailyInventory",
+      "to": "route.listInventory",
+      "kind": "http"
+    },
+    {
+      "from": "route.listInventory",
+      "to": "api.listDailyInventory",
+      "kind": "route"
+    },
+    {
+      "from": "api.listDailyInventory",
+      "to": "sql.ListDailyInventoryByMerchant",
+      "kind": "read"
+    },
+    {
+      "from": "sql.ListDailyInventoryByMerchant",
+      "to": "table.daily_inventory",
+      "kind": "read"
+    },
+    {
+      "from": "sql.ListDailyInventoryByMerchant",
+      "to": "table.dishes",
+      "kind": "read"
+    },
+    {
+      "from": "weapp.inventoryPage",
+      "to": "weapp.saveInventory",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.saveInventory",
+      "to": "apiWrapper.updateInventory",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.updateInventory",
+      "to": "route.updateInventory",
+      "kind": "http"
+    },
+    {
+      "from": "route.updateInventory",
+      "to": "api.updateDailyInventory",
+      "kind": "route"
+    },
+    {
+      "from": "api.updateDailyInventory",
+      "to": "sql.GetDailyInventory",
+      "kind": "read"
+    },
+    {
+      "from": "api.updateDailyInventory",
+      "to": "sql.CreateDailyInventory",
+      "kind": "write"
+    },
+    {
+      "from": "api.updateDailyInventory",
+      "to": "sql.UpdateDailyInventory",
+      "kind": "write"
+    },
+    {
+      "from": "sql.CreateDailyInventory",
+      "to": "table.daily_inventory",
+      "kind": "write"
+    },
+    {
+      "from": "sql.UpdateDailyInventory",
+      "to": "field.daily_inventory.total_quantity",
+      "kind": "write"
+    },
+    {
+      "from": "sql.UpdateDailyInventory",
+      "to": "field.daily_inventory.sold_quantity",
+      "kind": "write"
+    },
+    {
+      "from": "route.createInventory",
+      "to": "api.createDailyInventory",
+      "kind": "route"
+    },
+    {
+      "from": "api.createDailyInventory",
+      "to": "sql.CreateDailyInventory",
+      "kind": "write"
+    },
+    {
+      "from": "apiWrapper.checkInventory",
+      "to": "route.checkInventory",
+      "kind": "http"
+    },
+    {
+      "from": "route.checkInventory",
+      "to": "api.checkAndDecrementInventory",
+      "kind": "route"
+    },
+    {
+      "from": "api.checkAndDecrementInventory",
+      "to": "sql.CheckAndDecrementInventory",
+      "kind": "write"
+    },
+    {
+      "from": "sql.CheckAndDecrementInventory",
+      "to": "field.daily_inventory.sold_quantity",
+      "kind": "write"
+    },
+    {
+      "from": "apiWrapper.getInventoryStats",
+      "to": "route.inventoryStats",
+      "kind": "http"
+    },
+    {
+      "from": "route.inventoryStats",
+      "to": "api.getInventoryStats",
+      "kind": "route"
+    },
+    {
+      "from": "api.getInventoryStats",
+      "to": "sql.GetInventoryStats",
+      "kind": "read"
+    },
+    {
+      "from": "sql.GetInventoryStats",
+      "to": "table.daily_inventory",
+      "kind": "read"
+    },
+    {
+      "from": "sql.GetInventoryStats",
+      "to": "table.dishes",
+      "kind": "read"
+    },
+    {
+      "from": "logic.CalculateOrderItems",
+      "to": "field.dishes.is_online",
+      "kind": "read"
+    },
+    {
+      "from": "logic.CalculateOrderItems",
+      "to": "field.dishes.is_available",
+      "kind": "read"
+    },
+    {
+      "from": "logic.ValidateReservationItems",
+      "to": "field.dishes.is_online",
+      "kind": "read"
+    },
+    {
+      "from": "db.ProcessOrderPaymentTx",
+      "to": "sql.GetDailyInventoryForUpdate",
+      "kind": "read"
+    },
+    {
+      "from": "db.ProcessOrderPaymentTx",
+      "to": "sql.CheckAndDecrementInventory",
+      "kind": "write"
+    },
+    {
+      "from": "sql.GetDailyInventoryForUpdate",
+      "to": "table.daily_inventory",
+      "kind": "read"
+    },
+    {
+      "from": "sql.CheckAndDecrementInventory",
+      "to": "field.daily_inventory.sold_quantity",
+      "kind": "write"
+    },
+    {
+      "from": "sql.ReserveInventory",
+      "to": "field.daily_inventory.reserved_quantity",
+      "kind": "write"
+    },
+    {
+      "from": "sql.ReleaseReservedInventory",
+      "to": "field.daily_inventory.reserved_quantity",
+      "kind": "write"
+    },
+    {
+      "from": "api.getPublicMerchantDishes",
+      "to": "sql.GetMerchantDishesWithCategory",
+      "kind": "read"
+    },
+    {
+      "from": "sql.GetMerchantDishesWithCategory",
+      "to": "field.dishes.is_online",
+      "kind": "read"
+    },
+    {
+      "from": "sql.GetMerchantDishesWithCategory",
+      "to": "field.dishes.is_available",
+      "kind": "read"
+    },
+    {
+      "from": "api.getPublicDishDetail",
+      "to": "field.dishes.is_online",
+      "kind": "read"
+    },
+    {
+      "from": "api.buildScanTableResponse",
+      "to": "sql.ListDishesForMenu",
+      "kind": "read"
+    },
+    {
+      "from": "sql.ListDishesForMenu",
+      "to": "field.dishes.is_online",
+      "kind": "read"
+    },
+    {
+      "from": "api.searchDishes",
+      "to": "sql.SearchDishesByName",
+      "kind": "read"
+    },
+    {
+      "from": "api.searchDishes",
+      "to": "sql.SearchDishesGlobal",
+      "kind": "read"
+    },
+    {
+      "from": "sql.SearchDishesByName",
+      "to": "field.dishes.is_online",
+      "kind": "read"
+    },
+    {
+      "from": "sql.SearchDishesGlobal",
+      "to": "field.dishes.is_online",
+      "kind": "read"
+    },
+    {
+      "from": "sql.UpdateDishAvailability",
+      "to": "field.dishes.is_available",
+      "kind": "write"
+    }
+  ]
+}
