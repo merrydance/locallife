@@ -122,6 +122,7 @@ func (s *RefundRecoveryScheduler) runOnce(ctx context.Context) {
 
 	s.recoverCancelledOrderRefunds(ctx)
 	s.recoverCancelledReservationRefunds(ctx)
+	s.recoverPendingOrderRefunds(ctx)
 	s.recoverPendingReservationRefunds(ctx)
 	s.recoverStuckProcessingRefunds(ctx)
 }

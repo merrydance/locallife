@@ -345,6 +345,57 @@ func TestListRefundOrdersByStatus(t *testing.T) {
 	require.Equal(t, refundIDs[1], refunds[1].ID)
 }
 
+func TestListPendingOrderRefundOrdersForRecovery(t *testing.T) {
+	ctx := context.Background()
+	user := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	order := createRandomOrderWithStatus(t, user.ID, merchant.ID, OrderStatusCancelled)
+
+	paymentOrder, err := testStore.CreatePaymentOrder(ctx, CreatePaymentOrderParams{
+		OrderID:               pgtype.Int8{Int64: order.ID, Valid: true},
+		UserID:                user.ID,
+		PaymentType:           "profit_sharing",
+		PaymentChannel:        PaymentChannelBaofuAggregate,
+		RequiresProfitSharing: true,
+		BusinessType:          ExternalPaymentBusinessOwnerOrder,
+		Amount:                2680,
+		OutTradeNo:            util.RandomString(24),
+		ExpiresAt:             pgtype.Timestamptz{Time: time.Now().Add(15 * time.Minute), Valid: true},
+	})
+	require.NoError(t, err)
+	_, err = testStore.UpdatePaymentOrderToPaid(ctx, UpdatePaymentOrderToPaidParams{
+		ID:            paymentOrder.ID,
+		TransactionID: pgtype.Text{String: "BFPAY_UP_" + util.RandomString(12), Valid: true},
+	})
+	require.NoError(t, err)
+
+	refundOrder := createRandomRefundOrder(t, paymentOrder.ID, paymentOrder.Amount)
+	_, err = testStore.(*SQLStore).connPool.Exec(ctx,
+		`UPDATE refund_orders SET created_at = now() - interval '2 minutes' WHERE id = $1`,
+		refundOrder.ID,
+	)
+	require.NoError(t, err)
+
+	rows, err := testStore.ListPendingOrderRefundOrdersForRecovery(ctx, ListPendingOrderRefundOrdersForRecoveryParams{
+		CreatedBefore: time.Now().Add(-1 * time.Minute),
+		Limit:         50,
+	})
+	require.NoError(t, err)
+
+	var found *ListPendingOrderRefundOrdersForRecoveryRow
+	for i := range rows {
+		if rows[i].ID == refundOrder.ID {
+			found = &rows[i]
+			break
+		}
+	}
+	require.NotNil(t, found)
+	require.Equal(t, paymentOrder.ID, found.PaymentOrderID)
+	require.Equal(t, order.ID, found.OrderID.Int64)
+	require.Equal(t, refundOrder.OutRefundNo, found.OutRefundNo)
+	require.Equal(t, ExternalPaymentBusinessOwnerOrder, found.BusinessType)
+}
+
 func TestGetRefundOrderForUpdate(t *testing.T) {
 	user := createRandomUser(t)
 	payment := createRandomPaymentOrder(t, user.ID)

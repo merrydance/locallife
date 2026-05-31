@@ -50,6 +50,51 @@ func (r *orderRefundFactApplicationRecorder) DistributeTaskProcessPaymentFactApp
 	return nil
 }
 
+func TestRefundRecoverySchedulerRunOnceProcessesPendingOrderRefundsWithExistingOutRefundNo(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockwk.NewMockTaskDistributor(ctrl)
+
+	store.EXPECT().
+		ListPaidUnrefundedPaymentOrders(gomock.Any(), int32(50)).
+		Return([]db.PaymentOrder{}, nil)
+	store.EXPECT().
+		ListPaidUnrefundedReservationPaymentOrders(gomock.Any(), int32(50)).
+		Return([]db.PaymentOrder{}, nil)
+	store.EXPECT().
+		ListPendingOrderRefundOrdersForRecovery(gomock.Any(), gomock.Any()).
+		Return([]db.ListPendingOrderRefundOrdersForRecoveryRow{{
+			ID:             21,
+			PaymentOrderID: 44,
+			RefundAmount:   1280,
+			RefundReason:   pgtype.Text{String: "商户拒单：临时缺货", Valid: true},
+			OutRefundNo:    "BFRFD_MERCHANT_REJECT_001",
+			OrderID:        pgtype.Int8{Int64: 67, Valid: true},
+			BusinessType:   db.ExternalPaymentBusinessOwnerOrder,
+		}}, nil)
+	store.EXPECT().
+		ListPendingReservationRefundOrdersForRecovery(gomock.Any(), gomock.Any()).
+		Return([]db.ListPendingReservationRefundOrdersForRecoveryRow{}, nil)
+	store.EXPECT().
+		ListStuckProcessingRefundOrders(gomock.Any(), gomock.Any()).
+		Return([]db.ListStuckProcessingRefundOrdersRow{}, nil)
+	distributor.EXPECT().
+		DistributeTaskProcessRefund(gomock.Any(), gomock.AssignableToTypeOf(&worker.PayloadProcessRefund{})).
+		DoAndReturn(func(_ any, payload *worker.PayloadProcessRefund, _ ...asynq.Option) error {
+			require.Equal(t, int64(44), payload.PaymentOrderID)
+			require.Equal(t, int64(67), payload.OrderID)
+			require.Equal(t, int64(1280), payload.RefundAmount)
+			require.Equal(t, "商户拒单：临时缺货", payload.Reason)
+			require.Equal(t, "BFRFD_MERCHANT_REJECT_001", payload.OutRefundNo)
+			return nil
+		})
+
+	scheduler := worker.NewRefundRecoveryScheduler(store, distributor, nil)
+	scheduler.RunOnce()
+}
+
 func TestRefundRecoverySchedulerRunOnceProcessesPendingReservationRefundsWithoutOrderRefunds(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -63,6 +108,9 @@ func TestRefundRecoverySchedulerRunOnceProcessesPendingReservationRefundsWithout
 	store.EXPECT().
 		ListPaidUnrefundedReservationPaymentOrders(gomock.Any(), int32(50)).
 		Return([]db.PaymentOrder{}, nil)
+	store.EXPECT().
+		ListPendingOrderRefundOrdersForRecovery(gomock.Any(), gomock.Any()).
+		Return([]db.ListPendingOrderRefundOrdersForRecoveryRow{}, nil)
 	store.EXPECT().
 		ListPendingReservationRefundOrdersForRecovery(gomock.Any(), gomock.Any()).
 		Return([]db.ListPendingReservationRefundOrdersForRecoveryRow{{
@@ -114,6 +162,9 @@ func TestRefundRecoverySchedulerRunOncePersistsAlertForUnsupportedDirectRefundFa
 	store.EXPECT().
 		ListPaidUnrefundedReservationPaymentOrders(gomock.Any(), int32(50)).
 		Return([]db.PaymentOrder{}, nil)
+	store.EXPECT().
+		ListPendingOrderRefundOrdersForRecovery(gomock.Any(), gomock.Any()).
+		Return([]db.ListPendingOrderRefundOrdersForRecoveryRow{}, nil)
 	store.EXPECT().
 		ListPendingReservationRefundOrdersForRecovery(gomock.Any(), gomock.Any()).
 		Return([]db.ListPendingReservationRefundOrdersForRecoveryRow{}, nil)
@@ -170,6 +221,7 @@ func TestRefundRecoverySchedulerRunOnceRecordsRiderDepositDirectRefundQueryFact(
 
 	store.EXPECT().ListPaidUnrefundedPaymentOrders(gomock.Any(), int32(50)).Return([]db.PaymentOrder{}, nil)
 	store.EXPECT().ListPaidUnrefundedReservationPaymentOrders(gomock.Any(), int32(50)).Return([]db.PaymentOrder{}, nil)
+	store.EXPECT().ListPendingOrderRefundOrdersForRecovery(gomock.Any(), gomock.Any()).Return([]db.ListPendingOrderRefundOrdersForRecoveryRow{}, nil)
 	store.EXPECT().ListPendingReservationRefundOrdersForRecovery(gomock.Any(), gomock.Any()).Return([]db.ListPendingReservationRefundOrdersForRecoveryRow{}, nil)
 	store.EXPECT().ListStuckProcessingRefundOrders(gomock.Any(), gomock.Any()).Return([]db.ListStuckProcessingRefundOrdersRow{{
 		ID:          stuckRefund.ID,
@@ -236,6 +288,7 @@ func TestRefundRecoverySchedulerRunOnceSkipsRiderDepositRefundResultWhenFactWrit
 
 	store.EXPECT().ListPaidUnrefundedPaymentOrders(gomock.Any(), int32(50)).Return([]db.PaymentOrder{}, nil)
 	store.EXPECT().ListPaidUnrefundedReservationPaymentOrders(gomock.Any(), int32(50)).Return([]db.PaymentOrder{}, nil)
+	store.EXPECT().ListPendingOrderRefundOrdersForRecovery(gomock.Any(), gomock.Any()).Return([]db.ListPendingOrderRefundOrdersForRecoveryRow{}, nil)
 	store.EXPECT().ListPendingReservationRefundOrdersForRecovery(gomock.Any(), gomock.Any()).Return([]db.ListPendingReservationRefundOrdersForRecoveryRow{}, nil)
 	store.EXPECT().ListStuckProcessingRefundOrders(gomock.Any(), gomock.Any()).Return([]db.ListStuckProcessingRefundOrdersRow{{
 		ID:          stuckRefund.ID,
@@ -284,6 +337,7 @@ func TestRefundRecoverySchedulerRunOnceQueriesBaofuRefundStatusByOrder(t *testin
 
 	store.EXPECT().ListPaidUnrefundedPaymentOrders(gomock.Any(), int32(50)).Return([]db.PaymentOrder{}, nil)
 	store.EXPECT().ListPaidUnrefundedReservationPaymentOrders(gomock.Any(), int32(50)).Return([]db.PaymentOrder{}, nil)
+	store.EXPECT().ListPendingOrderRefundOrdersForRecovery(gomock.Any(), gomock.Any()).Return([]db.ListPendingOrderRefundOrdersForRecoveryRow{}, nil)
 	store.EXPECT().ListPendingReservationRefundOrdersForRecovery(gomock.Any(), gomock.Any()).Return([]db.ListPendingReservationRefundOrdersForRecoveryRow{}, nil)
 	store.EXPECT().ListStuckProcessingRefundOrders(gomock.Any(), gomock.Any()).Return([]db.ListStuckProcessingRefundOrdersRow{{
 		ID:          stuckRefund.ID,
@@ -361,6 +415,7 @@ func TestRefundRecoverySchedulerRunOnceRecordsBaofuReservationAddonRefundQueryFa
 
 	store.EXPECT().ListPaidUnrefundedPaymentOrders(gomock.Any(), int32(50)).Return([]db.PaymentOrder{}, nil)
 	store.EXPECT().ListPaidUnrefundedReservationPaymentOrders(gomock.Any(), int32(50)).Return([]db.PaymentOrder{}, nil)
+	store.EXPECT().ListPendingOrderRefundOrdersForRecovery(gomock.Any(), gomock.Any()).Return([]db.ListPendingOrderRefundOrdersForRecoveryRow{}, nil)
 	store.EXPECT().ListPendingReservationRefundOrdersForRecovery(gomock.Any(), gomock.Any()).Return([]db.ListPendingReservationRefundOrdersForRecoveryRow{}, nil)
 	store.EXPECT().ListStuckProcessingRefundOrders(gomock.Any(), gomock.Any()).Return([]db.ListStuckProcessingRefundOrdersRow{{
 		ID:          stuckRefund.ID,
@@ -438,6 +493,7 @@ func TestRefundRecoverySchedulerRunOnceUsesBaofuRefundResultCodeWhenStateAbsent(
 
 	store.EXPECT().ListPaidUnrefundedPaymentOrders(gomock.Any(), int32(50)).Return([]db.PaymentOrder{}, nil)
 	store.EXPECT().ListPaidUnrefundedReservationPaymentOrders(gomock.Any(), int32(50)).Return([]db.PaymentOrder{}, nil)
+	store.EXPECT().ListPendingOrderRefundOrdersForRecovery(gomock.Any(), gomock.Any()).Return([]db.ListPendingOrderRefundOrdersForRecoveryRow{}, nil)
 	store.EXPECT().ListPendingReservationRefundOrdersForRecovery(gomock.Any(), gomock.Any()).Return([]db.ListPendingReservationRefundOrdersForRecoveryRow{}, nil)
 	store.EXPECT().ListStuckProcessingRefundOrders(gomock.Any(), gomock.Any()).Return([]db.ListStuckProcessingRefundOrdersRow{{
 		ID:          stuckRefund.ID,

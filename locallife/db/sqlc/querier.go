@@ -1433,6 +1433,7 @@ type Querier interface {
 	ListPendingOCRJobsByMediaAsset(ctx context.Context, mediaAssetID int64) ([]OcrJob, error)
 	// 列出申请（平台管理员用，包含 submitted/approved/rejected）
 	ListPendingOperatorApplications(ctx context.Context, arg ListPendingOperatorApplicationsParams) ([]ListPendingOperatorApplicationsRow, error)
+	ListPendingOrderRefundOrdersForRecovery(ctx context.Context, arg ListPendingOrderRefundOrdersForRecoveryParams) ([]ListPendingOrderRefundOrdersForRecoveryRow, error)
 	// ==================== 订单超时清理 ====================
 	// 获取超时未支付的 pending 订单（创建时间早于指定时间）
 	ListPendingOrdersBefore(ctx context.Context, arg ListPendingOrdersBeforeParams) ([]Order, error)

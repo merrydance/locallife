@@ -374,6 +374,71 @@ func (q *Queries) GetTotalSuccessfulRefundedByPaymentOrder(ctx context.Context, 
 	return total_successful_refunded, err
 }
 
+const listPendingOrderRefundOrdersForRecovery = `-- name: ListPendingOrderRefundOrdersForRecovery :many
+SELECT
+    ro.id,
+    ro.payment_order_id,
+    ro.refund_amount,
+    ro.refund_reason,
+    ro.out_refund_no,
+    po.order_id,
+    po.business_type
+FROM refund_orders ro
+JOIN payment_orders po ON po.id = ro.payment_order_id
+JOIN orders o ON o.id = po.order_id
+WHERE ro.status = 'pending'
+    AND po.status = 'paid'
+    AND po.order_id IS NOT NULL
+    AND po.business_type = 'order'
+    AND o.status = 'cancelled'
+    AND ro.created_at < $1
+ORDER BY ro.created_at ASC, ro.id ASC
+LIMIT $2::int
+`
+
+type ListPendingOrderRefundOrdersForRecoveryParams struct {
+	CreatedBefore time.Time `json:"created_before"`
+	Limit         int32     `json:"limit"`
+}
+
+type ListPendingOrderRefundOrdersForRecoveryRow struct {
+	ID             int64       `json:"id"`
+	PaymentOrderID int64       `json:"payment_order_id"`
+	RefundAmount   int64       `json:"refund_amount"`
+	RefundReason   pgtype.Text `json:"refund_reason"`
+	OutRefundNo    string      `json:"out_refund_no"`
+	OrderID        pgtype.Int8 `json:"order_id"`
+	BusinessType   string      `json:"business_type"`
+}
+
+func (q *Queries) ListPendingOrderRefundOrdersForRecovery(ctx context.Context, arg ListPendingOrderRefundOrdersForRecoveryParams) ([]ListPendingOrderRefundOrdersForRecoveryRow, error) {
+	rows, err := q.db.Query(ctx, listPendingOrderRefundOrdersForRecovery, arg.CreatedBefore, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPendingOrderRefundOrdersForRecoveryRow{}
+	for rows.Next() {
+		var i ListPendingOrderRefundOrdersForRecoveryRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PaymentOrderID,
+			&i.RefundAmount,
+			&i.RefundReason,
+			&i.OutRefundNo,
+			&i.OrderID,
+			&i.BusinessType,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPendingReservationRefundOrdersForRecovery = `-- name: ListPendingReservationRefundOrdersForRecovery :many
 SELECT
     ro.id,

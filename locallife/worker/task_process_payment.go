@@ -921,12 +921,18 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 		return fmt.Errorf("get order: %w", err)
 	}
 
-	outRefundNo := fmt.Sprintf("RF%d_%d", payload.PaymentOrderID, orderID)
+	outRefundNo := strings.TrimSpace(payload.OutRefundNo)
+	if outRefundNo == "" {
+		outRefundNo = fmt.Sprintf("RF%d_%d", payload.PaymentOrderID, orderID)
+	}
 
 	var refundOrder db.RefundOrder
 	existingRefund, findErr := processor.store.GetRefundOrderByOutRefundNo(ctx, outRefundNo)
 	if findErr == nil {
 		refundOrder = existingRefund
+		if err := validateRefundOrderMatchesPayload(refundOrder, payload); err != nil {
+			return err
+		}
 		switch refundOrder.Status {
 		case "success":
 			log.Info().Str("out_refund_no", outRefundNo).Msg("refund already succeeded, skip")
@@ -1252,6 +1258,9 @@ func (processor *RedisTaskProcessor) processReservationRefund(ctx context.Contex
 	existingRefund, findErr := processor.store.GetRefundOrderByOutRefundNo(ctx, outRefundNo)
 	if findErr == nil {
 		refundOrder = existingRefund
+		if err := validateRefundOrderMatchesPayload(refundOrder, payload); err != nil {
+			return err
+		}
 		if refundOrder.Status == "success" {
 			log.Info().Str("out_refund_no", outRefundNo).Msg("reservation refund already succeeded")
 			return nil
@@ -1283,6 +1292,16 @@ func (processor *RedisTaskProcessor) processReservationRefund(ctx context.Contex
 	}
 
 	return processor.processBaofuAggregateRefund(ctx, paymentOrder, refundOrder, payload, outRefundNo)
+}
+
+func validateRefundOrderMatchesPayload(refundOrder db.RefundOrder, payload PayloadProcessRefund) error {
+	if refundOrder.PaymentOrderID != payload.PaymentOrderID {
+		return fmt.Errorf("refund order %d payment order mismatch: got %d want %d", refundOrder.ID, refundOrder.PaymentOrderID, payload.PaymentOrderID)
+	}
+	if refundOrder.RefundAmount != payload.RefundAmount {
+		return fmt.Errorf("refund order %d amount mismatch: got %d want %d", refundOrder.ID, refundOrder.RefundAmount, payload.RefundAmount)
+	}
+	return nil
 }
 
 func isReservationRefundPayment(paymentOrder db.PaymentOrder) bool {

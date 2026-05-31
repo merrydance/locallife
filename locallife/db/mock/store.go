@@ -15411,6 +15411,21 @@ func (mr *MockStoreMockRecorder) ListPendingOperatorApplications(ctx, arg any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPendingOperatorApplications", reflect.TypeOf((*MockStore)(nil).ListPendingOperatorApplications), ctx, arg)
 }
 
+// ListPendingOrderRefundOrdersForRecovery mocks base method.
+func (m *MockStore) ListPendingOrderRefundOrdersForRecovery(ctx context.Context, arg db.ListPendingOrderRefundOrdersForRecoveryParams) ([]db.ListPendingOrderRefundOrdersForRecoveryRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListPendingOrderRefundOrdersForRecovery", ctx, arg)
+	ret0, _ := ret[0].([]db.ListPendingOrderRefundOrdersForRecoveryRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListPendingOrderRefundOrdersForRecovery indicates an expected call of ListPendingOrderRefundOrdersForRecovery.
+func (mr *MockStoreMockRecorder) ListPendingOrderRefundOrdersForRecovery(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPendingOrderRefundOrdersForRecovery", reflect.TypeOf((*MockStore)(nil).ListPendingOrderRefundOrdersForRecovery), ctx, arg)
+}
+
 // ListPendingOrdersBefore mocks base method.
 func (m *MockStore) ListPendingOrdersBefore(ctx context.Context, arg db.ListPendingOrdersBeforeParams) ([]db.Order, error) {
 	m.ctrl.T.Helper()

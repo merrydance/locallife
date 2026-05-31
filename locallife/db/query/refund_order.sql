@@ -73,6 +73,27 @@ WHERE status = $1
 ORDER BY created_at ASC, id ASC
 LIMIT $2 OFFSET $3;
 
+-- name: ListPendingOrderRefundOrdersForRecovery :many
+SELECT
+    ro.id,
+    ro.payment_order_id,
+    ro.refund_amount,
+    ro.refund_reason,
+    ro.out_refund_no,
+    po.order_id,
+    po.business_type
+FROM refund_orders ro
+JOIN payment_orders po ON po.id = ro.payment_order_id
+JOIN orders o ON o.id = po.order_id
+WHERE ro.status = 'pending'
+    AND po.status = 'paid'
+    AND po.order_id IS NOT NULL
+    AND po.business_type = 'order'
+    AND o.status = 'cancelled'
+    AND ro.created_at < sqlc.arg('created_before')
+ORDER BY ro.created_at ASC, ro.id ASC
+LIMIT sqlc.arg('limit')::int;
+
 -- name: ListPendingReservationRefundOrdersForRecovery :many
 SELECT
     ro.id,
