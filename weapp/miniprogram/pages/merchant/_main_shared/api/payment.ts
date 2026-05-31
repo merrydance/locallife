@@ -195,6 +195,10 @@ export interface CreateRefundRequest {
   refund_type?: 'full' | 'partial'
 }
 
+export interface CreateRefundOptions {
+  idempotencyKey: string
+}
+
 export interface ListPaymentsParams {
   page_id?: number
   page_size?: number
@@ -647,14 +651,33 @@ export async function getPaymentRefunds(paymentId: number): Promise<ListRefundOr
   })
 }
 
+export function createRefund(
+  paymentIdOrParams: CreateRefundOrderRequest | LegacyRefundRequest,
+  options: CreateRefundOptions
+): Promise<RefundOrder>
+export function createRefund(
+  paymentIdOrParams: number,
+  refundData: CreateRefundRequest,
+  options: CreateRefundOptions
+): Promise<RefundOrder>
 export async function createRefund(
   paymentIdOrParams: number | CreateRefundOrderRequest | LegacyRefundRequest,
-  refundData?: CreateRefundRequest
+  refundDataOrOptions: CreateRefundRequest | CreateRefundOptions,
+  options?: CreateRefundOptions
 ): Promise<RefundOrder> {
+  const refundData = typeof paymentIdOrParams === 'number' ? refundDataOrOptions as CreateRefundRequest : undefined
+  const requestOptions = typeof paymentIdOrParams === 'number' ? options : refundDataOrOptions as CreateRefundOptions
+  if (!requestOptions?.idempotencyKey) {
+    throw new Error('缺少退款请求幂等键')
+  }
+
   return request({
     url: '/v1/refunds',
     method: 'POST',
-    data: normalizeRefundPayload(paymentIdOrParams, refundData)
+    data: normalizeRefundPayload(paymentIdOrParams, refundData),
+    header: {
+      'Idempotency-Key': requestOptions.idempotencyKey
+    }
   })
 }
 

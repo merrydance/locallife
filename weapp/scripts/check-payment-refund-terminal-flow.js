@@ -14,7 +14,9 @@ function assert(condition, message) {
 }
 
 function main() {
-  const paymentWorkflow = read('miniprogram/services/payment-workflow.ts')
+  const paymentWorkflow = read('miniprogram/pages/payment/_main_shared/services/payment-workflow.ts')
+  const takeoutPaymentWorkflow = read('miniprogram/pages/takeout/order-confirm/_main_shared/services/payment-workflow.ts')
+  const ordersPaymentWorkflow = read('miniprogram/pages/orders/_main_shared/services/payment-workflow.ts')
   const orderConfirm = read('miniprogram/pages/takeout/order-confirm/index.ts')
   const cart = read('miniprogram/pages/takeout/cart/index.ts')
   const orderList = read('miniprogram/pages/orders/list/index.ts')
@@ -28,6 +30,8 @@ function main() {
 
   const combinedRuntime = [
     paymentWorkflow,
+    takeoutPaymentWorkflow,
+    ordersPaymentWorkflow,
     orderConfirm,
     orderList,
     orderListWxml,

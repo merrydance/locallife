@@ -16,8 +16,8 @@ function assert(condition, message) {
 const customerRefundDetail = read('miniprogram/pages/user_center/refund-detail/index.ts')
 const customerRefundDetailWxml = read('miniprogram/pages/user_center/refund-detail/index.wxml')
 const merchantOrderDetail = read('miniprogram/pages/merchant/orders/detail/index.ts')
-const paymentApi = read('miniprogram/api/payment.ts')
-const paymentRefundCompatApi = read('miniprogram/api/payment-refund.ts')
+const merchantPaymentApi = read('miniprogram/pages/merchant/_main_shared/api/payment.ts')
+const customerRefundPaymentApi = read('miniprogram/pages/user_center/refund-detail/_main_shared/api/payment.ts')
 
 assert(
   !/\bgetRefundReturns\b|\bProfitSharingReturn\b|profitSharingReturns|profit-sharing-return-view/.test(customerRefundDetail),
@@ -30,13 +30,13 @@ assert(
 )
 
 assert(
-  /\bgetMerchantRefundReturns\b/.test(paymentApi),
-  'payment API must expose an explicitly merchant-scoped refund return reader'
+  /\bgetMerchantRefundReturns\b/.test(merchantPaymentApi),
+  'merchant payment API must expose an explicitly merchant-scoped refund return reader'
 )
 
 assert(
-  /\bgetMerchantRefundReturns\b/.test(paymentRefundCompatApi),
-  'payment-refund compatibility API must re-export the merchant-scoped refund return reader'
+  /\bgetMerchantRefundReturns\b/.test(customerRefundPaymentApi),
+  'customer refund payment API may keep the exported type but customer pages must not call it'
 )
 
 assert(

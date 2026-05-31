@@ -34,6 +34,10 @@ import {
 
 const getErrorMessage = getErrorUserMessage
 
+function buildRefundIdempotencyKey(orderId: number, paymentId: number) {
+  return `merchant-manual-refund:${orderId}:${paymentId}:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`
+}
+
 Page({
   data: {
     navBarHeight: 88,
@@ -57,6 +61,7 @@ Page({
     refundSubmitting: false,
     refundAvailableTypes: ['full', 'partial'] as Array<'full' | 'partial'>,
     refundForm: createDefaultRefundForm(),
+    refundIdempotencyKey: '',
     retryingPrintJobId: 0,
     queryingPrintJobStatusId: 0,
     manualPrinting: false,
@@ -447,6 +452,7 @@ Page({
         refund_amount: (payment.remaining_refund_amount / 100).toFixed(2),
         refund_reason: ''
       },
+      refundIdempotencyKey: buildRefundIdempotencyKey(this.data.orderId, payment.id),
       refundNoticeMessage: ''
     })
   },
@@ -455,7 +461,8 @@ Page({
     if (this.data.refundSubmitting) return
     this.setData({
       refundPopupVisible: false,
-      refundForm: createDefaultRefundForm()
+      refundForm: createDefaultRefundForm(),
+      refundIdempotencyKey: ''
     })
   },
 
@@ -470,7 +477,8 @@ Page({
     if (!value) return
 
     this.setData({
-      'refundForm.refund_type': value
+      'refundForm.refund_type': value,
+      refundIdempotencyKey: buildRefundIdempotencyKey(this.data.orderId, this.data.payment?.id || 0)
     })
   },
 
@@ -478,7 +486,8 @@ Page({
     const { field } = e.currentTarget.dataset as { field?: keyof RefundFormData }
     if (!field) return
     this.setData({
-      [`refundForm.${field}`]: e.detail.value || ''
+      [`refundForm.${field}`]: e.detail.value || '',
+      refundIdempotencyKey: buildRefundIdempotencyKey(this.data.orderId, this.data.payment?.id || 0)
     })
   },
 
@@ -508,6 +517,7 @@ Page({
       }
     }
 
+    const idempotencyKey = this.data.refundIdempotencyKey || buildRefundIdempotencyKey(this.data.orderId, payment.id)
     this.setData({ refundSubmitting: true })
     wx.showLoading({ title: '提交中...' })
     let createdRefundId = 0
@@ -517,12 +527,15 @@ Page({
         refund_type: refundType,
         refund_amount: refundAmount,
         refund_reason: refundReason || undefined
+      }, {
+        idempotencyKey
       })
       createdRefundId = refund.id
 
       this.setData({
         refundPopupVisible: false,
         refundForm: createDefaultRefundForm(),
+        refundIdempotencyKey: '',
         refundNoticeMessage: '退款申请已提交，正在确认退款结果。'
       })
       wx.showLoading({ title: '确认退款结果...' })
