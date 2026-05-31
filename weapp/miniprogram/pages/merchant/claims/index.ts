@@ -50,14 +50,14 @@ interface MerchantClaimView {
   isClosedFlow: boolean
 }
 
-type ClaimFilterTab = 'all' | 'pending_action' | 'appealed' | 'closed'
+type ClaimFilterTab = 'all' | 'pending_action' | 'disputed' | 'closed'
 
 const PAGE_SIZE = 20
 
 interface ClaimSummary {
   total: number
   pendingAction: number
-  appealed: number
+  disputed: number
   closed: number
 }
 
@@ -70,9 +70,9 @@ function getClaimTypeTheme(claimType: string): ClaimTagTheme {
 const getErrorMessage = getErrorUserMessage
 
 function buildBaseClaimView(claim: ClaimResponse): MerchantClaimView {
-  const appealStatus = claim.appeal_status
+  const appealStatus = claim.recovery_dispute_status || claim.appeal_status
   const recoveryStatus = claim.recovery_status
-  const hasAppeal = Boolean(claim.appeal_id)
+  const hasAppeal = Boolean(claim.recovery_dispute_id || claim.appeal_id)
   const actionState = getMerchantClaimListActionState({
     status: claim.status,
     appealStatus,
@@ -109,7 +109,7 @@ function buildBaseClaimView(claim: ClaimResponse): MerchantClaimView {
   }
 }
 
-function toBucket(tab: ClaimFilterTab): 'pending_action' | 'appealed' | 'closed' | undefined {
+function toBucket(tab: ClaimFilterTab): 'pending_action' | 'disputed' | 'closed' | undefined {
   return tab === 'all' ? undefined : tab
 }
 
@@ -119,7 +119,7 @@ async function fetchClaimSummary(): Promise<ClaimSummary> {
   return {
     total: summary.total || 0,
     pendingAction: summary.pending_action || 0,
-    appealed: summary.appealed || 0,
+    disputed: summary.disputed || summary.appealed || 0,
     closed: summary.closed || 0
   }
 }
@@ -161,7 +161,7 @@ Page({
     summary: {
       total: 0,
       pendingAction: 0,
-      appealed: 0,
+      disputed: 0,
       closed: 0
     }
   },

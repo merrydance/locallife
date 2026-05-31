@@ -21,9 +21,12 @@ func TestEvaluateAutomaticRecoveryDisputeResolutionUsesRecoveryDisputeContext(t 
 
 	store := mockdb.NewMockStore(ctrl)
 	store.EXPECT().
-		GetClaimRecoveryContextByClaimID(gomock.Any(), claimID).
+		GetClaimRecoveryContextByClaimIDAndTarget(gomock.Any(), db.GetClaimRecoveryContextByClaimIDAndTargetParams{
+			ClaimID:        claimID,
+			RecoveryTarget: pgtype.Text{String: "merchant", Valid: true},
+		}).
 		Times(1).
-		Return(db.GetClaimRecoveryContextByClaimIDRow{
+		Return(db.GetClaimRecoveryContextByClaimIDAndTargetRow{
 			ClaimID:        claimID,
 			OrderID:        orderID,
 			ClaimCreatedAt: time.Now(),

@@ -3,14 +3,17 @@ package db
 import (
 	"context"
 	"fmt"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type CreateRecoveryDisputeWithRecoveryTxParams struct {
-	ClaimID       int64
-	AppellantType string
-	AppellantID   int64
-	Reason        string
-	RegionID      int64
+	ClaimID        int64
+	RecoveryTarget string
+	AppellantType  string
+	AppellantID    int64
+	Reason         string
+	RegionID       int64
 }
 
 type CreateRecoveryDisputeWithRecoveryTxResult struct {
@@ -19,6 +22,10 @@ type CreateRecoveryDisputeWithRecoveryTxResult struct {
 
 func (store *SQLStore) CreateRecoveryDisputeWithRecoveryTx(ctx context.Context, arg CreateRecoveryDisputeWithRecoveryTxParams) (CreateRecoveryDisputeWithRecoveryTxResult, error) {
 	var result CreateRecoveryDisputeWithRecoveryTxResult
+	recoveryTarget := arg.RecoveryTarget
+	if recoveryTarget == "" {
+		recoveryTarget = arg.AppellantType
+	}
 
 	err := store.execTx(ctx, func(q *Queries) error {
 		appeal, err := q.CreateRecoveryDispute(ctx, CreateRecoveryDisputeParams{
@@ -33,7 +40,10 @@ func (store *SQLStore) CreateRecoveryDisputeWithRecoveryTx(ctx context.Context, 
 		}
 		result.RecoveryDispute = appeal
 
-		recovery, err := q.GetClaimRecoveryByClaimID(ctx, arg.ClaimID)
+		recovery, err := q.GetClaimRecoveryByClaimIDAndTarget(ctx, GetClaimRecoveryByClaimIDAndTargetParams{
+			ClaimID:        arg.ClaimID,
+			RecoveryTarget: pgtype.Text{String: recoveryTarget, Valid: recoveryTarget != ""},
+		})
 		if err == ErrRecordNotFound {
 			return nil
 		}

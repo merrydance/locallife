@@ -64,7 +64,7 @@ interface MerchantClaimListActionState {
 
 const WARNING_RECOVERY_STATUSES = new Set(['pending', 'overdue'])
 const SUCCESS_RECOVERY_STATUSES = new Set(['paid', 'waived'])
-const SUCCESS_APPEAL_STATUSES = new Set(['approved', 'compensated'])
+const SUCCESS_APPEAL_STATUSES = new Set(['approved'])
 
 export function formatMoney(cents?: number): string {
   const value = typeof cents === 'number' ? cents : 0
@@ -114,10 +114,9 @@ export function getClaimStatusTheme(status?: string): ClaimTagTheme {
 
 export function formatAppealStatus(status?: string): string {
   const map: Record<string, string> = {
-    pending: '异议待审核',
+    submitted: '异议待审核',
     approved: '异议已通过',
-    rejected: '异议已驳回',
-    compensated: '异议已赔付'
+    rejected: '异议已驳回'
   }
   if (!status) return '未提交异议'
   return map[status] || status
@@ -127,7 +126,7 @@ export function getAppealStatusTheme(status?: string): ClaimTagTheme {
   const normalizedStatus = String(status || '').trim().toLowerCase()
 
   if (!normalizedStatus) return 'default'
-  if (normalizedStatus === 'pending') return 'warning'
+  if (normalizedStatus === 'submitted') return 'warning'
   if (SUCCESS_APPEAL_STATUSES.has(normalizedStatus)) return 'success'
   if (normalizedStatus === 'rejected') return 'danger'
   return 'default'
@@ -139,7 +138,7 @@ export function formatRecoveryStatus(status?: string): string {
     overdue: '已逾期',
     paid: '已支付',
     waived: '已核销',
-    appealed: '异议中'
+    disputed: '异议中'
   }
   if (!status) return '无追偿单'
   return map[status] || status
@@ -151,7 +150,7 @@ export function getRecoveryStatusTheme(status?: string): ClaimTagTheme {
   if (!normalizedStatus) return 'default'
   if (WARNING_RECOVERY_STATUSES.has(normalizedStatus)) return 'warning'
   if (SUCCESS_RECOVERY_STATUSES.has(normalizedStatus)) return 'success'
-  if (normalizedStatus === 'appealed') return 'danger'
+  if (normalizedStatus === 'disputed') return 'danger'
   return 'default'
 }
 
@@ -284,7 +283,7 @@ export function getMerchantClaimListActionState(input: {
   const claimStatus = String(input.status || '').trim().toLowerCase()
   const isPendingAction = WARNING_RECOVERY_STATUSES.has(recoveryStatus)
     || (appealStatus === 'rejected' && !SUCCESS_RECOVERY_STATUSES.has(recoveryStatus))
-  const isAppealedFlow = recoveryStatus === 'appealed' || appealStatus === 'pending'
+  const isAppealedFlow = recoveryStatus === 'disputed' || appealStatus === 'submitted'
   const isClosedFlow = SUCCESS_RECOVERY_STATUSES.has(recoveryStatus)
     || SUCCESS_APPEAL_STATUSES.has(appealStatus)
 

@@ -86,10 +86,9 @@ export function formatClaimStatus(status?: string): string {
 
 export function formatAppealStatus(status?: string): string {
   const map: Record<string, string> = {
-    pending: '申诉处理中',
+    submitted: '申诉处理中',
     approved: '申诉通过',
-    rejected: '申诉驳回',
-    compensated: '申诉已赔付'
+    rejected: '申诉驳回'
   }
   if (!status) return '未提交申诉'
   return map[status] || status
@@ -101,7 +100,7 @@ export function formatRecoveryStatus(status?: string): string {
     overdue: '追偿已逾期',
     paid: '追偿已支付',
     waived: '追偿已豁免',
-    appealed: '追偿申诉中'
+    disputed: '追偿申诉中'
   }
   if (!status) return '无追偿单'
   return map[status] || status

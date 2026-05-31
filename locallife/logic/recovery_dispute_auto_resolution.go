@@ -19,7 +19,7 @@ type AutomaticRecoveryDisputeResolutionResult struct {
 }
 
 func EvaluateAutomaticRecoveryDisputeResolution(ctx context.Context, store db.Store, recoveryDispute db.RecoveryDispute) (AutomaticRecoveryDisputeResolution, error) {
-	disputeCtx, err := getRecoveryDisputeContext(ctx, store, recoveryDispute.ClaimID)
+	disputeCtx, err := getRecoveryDisputeContext(ctx, store, recoveryDispute.ClaimID, recoveryDispute.AppellantType)
 	if err != nil {
 		return AutomaticRecoveryDisputeResolution{}, err
 	}

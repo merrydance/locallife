@@ -197,7 +197,7 @@ func TestProcessTaskAutomaticRecoveryDisputeResolution_ResolvesSubmittedRecovery
 	task := asynq.NewTask(TaskAutomaticRecoveryDisputeResolution, payloadBytes)
 
 	store.EXPECT().GetRecoveryDispute(gomock.Any(), recoveryDispute.ID).Return(recoveryDispute, nil)
-	store.EXPECT().GetClaimRecoveryContextByClaimID(gomock.Any(), recoveryDispute.ClaimID).Return(db.GetClaimRecoveryContextByClaimIDRow{
+	store.EXPECT().GetClaimRecoveryContextByClaimIDAndTarget(gomock.Any(), recoveryDisputeResolutionContextQuery(recoveryDispute.ClaimID, "rider")).Return(db.GetClaimRecoveryContextByClaimIDAndTargetRow{
 		ClaimID:        claim.ID,
 		OrderID:        claim.OrderID,
 		MerchantID:     claim.MerchantID,
@@ -218,7 +218,7 @@ func TestProcessTaskAutomaticRecoveryDisputeResolution_ResolvesSubmittedRecovery
 		PostProcess:     postProcess,
 	}, nil)
 	store.EXPECT().CreateAuditLog(gomock.Any(), gomock.Any()).Return(db.AuditLog{ID: 1}, nil)
-	store.EXPECT().GetClaimRecoveryByClaimID(gomock.Any(), recoveryDispute.ClaimID).Return(db.ClaimRecovery{}, db.ErrRecordNotFound)
+	store.EXPECT().GetClaimRecoveryByClaimIDAndTarget(gomock.Any(), recoveryDisputeResultRecoveryQuery(recoveryDispute.ClaimID, "rider")).Return(db.ClaimRecovery{}, db.ErrRecordNotFound)
 	store.EXPECT().GetRider(gomock.Any(), recoveryDispute.AppellantID).Return(db.Rider{ID: recoveryDispute.AppellantID, UserID: 301}, nil)
 
 	err = processor.ProcessTaskAutomaticRecoveryDisputeResolution(context.Background(), task)
@@ -289,7 +289,7 @@ func TestProcessTaskAutomaticRecoveryDisputeResolution_ReplaysPostProcessForReso
 
 	store.EXPECT().GetRecoveryDispute(gomock.Any(), recoveryDispute.ID).Return(recoveryDispute, nil)
 	store.EXPECT().GetRecoveryDisputeForPostProcess(gomock.Any(), recoveryDispute.ID).Return(postProcess, nil)
-	store.EXPECT().GetClaimRecoveryContextByClaimID(gomock.Any(), recoveryDispute.ClaimID).Return(db.GetClaimRecoveryContextByClaimIDRow{
+	store.EXPECT().GetClaimRecoveryContextByClaimIDAndTarget(gomock.Any(), recoveryDisputeResolutionContextQuery(recoveryDispute.ClaimID, "merchant")).Return(db.GetClaimRecoveryContextByClaimIDAndTargetRow{
 		ClaimID:        claim.ID,
 		OrderID:        claim.OrderID,
 		MerchantID:     claim.MerchantID,
@@ -298,7 +298,7 @@ func TestProcessTaskAutomaticRecoveryDisputeResolution_ReplaysPostProcessForReso
 	}, nil)
 	store.EXPECT().ListBehaviorDecisionsByOrder(gomock.Any(), pgtype.Int8{Int64: claim.OrderID, Valid: true}).Return([]db.BehaviorDecision{decision}, nil)
 	store.EXPECT().ListBehaviorActionsByDecision(gomock.Any(), decision.ID).Return(nil, nil)
-	store.EXPECT().GetClaimRecoveryByClaimID(gomock.Any(), recoveryDispute.ClaimID).Return(db.ClaimRecovery{}, db.ErrRecordNotFound).Times(2)
+	store.EXPECT().GetClaimRecoveryByClaimIDAndTarget(gomock.Any(), recoveryDisputeResultRecoveryQuery(recoveryDispute.ClaimID, "merchant")).Return(db.ClaimRecovery{}, db.ErrRecordNotFound).Times(2)
 	store.EXPECT().GetActiveBehaviorBlocklist(gomock.Any(), db.GetActiveBehaviorBlocklistParams{EntityType: "user", EntityID: postProcess.ClaimantUserID}).Return(db.BehaviorBlocklist{}, nil)
 	store.EXPECT().GetMerchant(gomock.Any(), recoveryDispute.AppellantID).Return(db.Merchant{ID: recoveryDispute.AppellantID, OwnerUserID: 302}, nil)
 
@@ -336,9 +336,10 @@ func TestBuildProcessRecoveryDisputeResultPayloadFindsReleaseActionAcrossRecover
 		DecisionID: pgtype.Int8{Int64: 702, Valid: true},
 	}
 	recovery := db.ClaimRecovery{
-		ID:         901,
-		ClaimID:    recoveryDispute.ClaimID,
-		DecisionID: pgtype.Int8{Int64: 701, Valid: true},
+		ID:             901,
+		ClaimID:        recoveryDispute.ClaimID,
+		DecisionID:     pgtype.Int8{Int64: 701, Valid: true},
+		RecoveryTarget: pgtype.Text{String: "merchant", Valid: true},
 	}
 	releaseDetailBytes, err := json.Marshal(claimRecoveryReleaseActionDetail{
 		Action:       "release_recovery_suspension",
@@ -358,7 +359,7 @@ func TestBuildProcessRecoveryDisputeResultPayloadFindsReleaseActionAcrossRecover
 	})
 	require.NoError(t, err)
 
-	store.EXPECT().GetClaimRecoveryByClaimID(gomock.Any(), recoveryDispute.ClaimID).Return(recovery, nil)
+	store.EXPECT().GetClaimRecoveryByClaimIDAndTarget(gomock.Any(), recoveryDisputeResultRecoveryQuery(recoveryDispute.ClaimID, "merchant")).Return(recovery, nil)
 	store.EXPECT().ListBehaviorActionsByDecision(gomock.Any(), int64(701)).Return([]db.BehaviorAction{{
 		ID:           801,
 		DecisionID:   701,

@@ -301,7 +301,7 @@ func TestProcessTaskClaimBehaviorAction_RecoveryOpenEnsuresLifecycleEvents(t *te
 	action := db.BehaviorAction{ID: 905, ActionType: "recovery", TargetEntity: "merchant", Status: "created", Detail: detailBytes}
 	store.EXPECT().GetBehaviorAction(gomock.Any(), action.ID).Return(action, nil)
 	store.EXPECT().UpdateBehaviorActionExecutionIfCurrent(gomock.Any(), gomock.Any()).Return(db.BehaviorAction{ID: action.ID, Status: "running"}, nil)
-	store.EXPECT().GetClaimRecoveryByClaimID(gomock.Any(), int64(181)).Return(recovery, nil)
+	store.EXPECT().GetClaimRecoveryByID(gomock.Any(), recovery.ID).Return(recovery, nil)
 	store.EXPECT().ListClaimRecoveryEventsByRecovery(gomock.Any(), recovery.ID).Return([]db.ClaimRecoveryEvent{}, nil)
 	store.EXPECT().CreateClaimRecoveryEvent(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, arg db.CreateClaimRecoveryEventParams) (db.ClaimRecoveryEvent, error) {
@@ -366,7 +366,7 @@ func TestProcessTaskClaimBehaviorAction_MerchantRecoveryReleaseClearsSuspensionI
 	store.EXPECT().GetOrder(gomock.Any(), int64(1201)).Return(db.Order{ID: 1201, MerchantID: 18}, nil)
 	store.EXPECT().HasBlockingClaimRecoveryForMerchant(gomock.Any(), int64(18)).Return(false, nil)
 	store.EXPECT().UnsuspendMerchantTakeout(gomock.Any(), int64(18)).Return(nil)
-	store.EXPECT().GetClaimRecoveryByClaimID(gomock.Any(), int64(82)).Return(recovery, nil)
+	store.EXPECT().GetClaimRecoveryByID(gomock.Any(), recovery.ID).Return(recovery, nil)
 	store.EXPECT().ListClaimRecoveryEventsByRecovery(gomock.Any(), recovery.ID).Return([]db.ClaimRecoveryEvent{{ID: 1, RecoveryID: recovery.ID, EventType: db.ClaimRecoveryEventTypePaid}}, nil)
 	store.EXPECT().CreateClaimRecoveryEvent(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, arg db.CreateClaimRecoveryEventParams) (db.ClaimRecoveryEvent, error) {
@@ -419,15 +419,12 @@ func TestProcessTaskClaimBehaviorAction_MerchantRecoveryReleaseTerminalMismatchS
 	action := db.BehaviorAction{ID: 914, ActionType: "release", TargetEntity: "merchant", Status: "created", Detail: detailBytes}
 	store.EXPECT().GetBehaviorAction(gomock.Any(), action.ID).Return(action, nil)
 	store.EXPECT().UpdateBehaviorActionExecutionIfCurrent(gomock.Any(), gomock.Any()).Return(db.BehaviorAction{ID: action.ID, Status: "running"}, nil)
-	store.EXPECT().GetOrder(gomock.Any(), int64(1201)).Return(db.Order{ID: 1201, MerchantID: 18}, nil)
-	store.EXPECT().HasBlockingClaimRecoveryForMerchant(gomock.Any(), int64(18)).Return(false, nil)
-	store.EXPECT().UnsuspendMerchantTakeout(gomock.Any(), int64(18)).Return(nil)
-	store.EXPECT().GetClaimRecoveryByClaimID(gomock.Any(), int64(82)).Return(db.ClaimRecovery{
-		ID:             93,
+	store.EXPECT().GetClaimRecoveryByID(gomock.Any(), int64(92)).Return(db.ClaimRecovery{
+		ID:             92,
 		ClaimID:        82,
 		OrderID:        1201,
 		Status:         "paid",
-		RecoveryTarget: pgtype.Text{String: "merchant", Valid: true},
+		RecoveryTarget: pgtype.Text{String: "rider", Valid: true},
 	}, nil)
 	store.EXPECT().UpdateBehaviorActionExecution(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, arg db.UpdateBehaviorActionExecutionParams) error {
@@ -435,7 +432,7 @@ func TestProcessTaskClaimBehaviorAction_MerchantRecoveryReleaseTerminalMismatchS
 			require.Equal(t, "failed", arg.Status)
 			var persisted claimRecoveryReleaseActionDetail
 			require.NoError(t, json.Unmarshal(arg.Detail, &persisted))
-			require.Equal(t, "claim recovery 93 does not match release action recovery 92", persisted.LastError)
+			require.Equal(t, "claim recovery 92 target \"rider\" does not match release action target \"merchant\"", persisted.LastError)
 			require.False(t, persisted.TerminalFailure)
 			return nil
 		},
@@ -467,20 +464,17 @@ func TestExecuteClaimReleaseAction_ReturnsTerminalMismatchFailure(t *testing.T) 
 	action := db.BehaviorAction{ID: 915, ActionType: "release", TargetEntity: "merchant", Status: "created", Detail: detailBytes}
 	store.EXPECT().GetBehaviorAction(gomock.Any(), action.ID).Return(action, nil)
 	store.EXPECT().UpdateBehaviorActionExecutionIfCurrent(gomock.Any(), gomock.Any()).Return(db.BehaviorAction{ID: action.ID, Status: "running"}, nil)
-	store.EXPECT().GetOrder(gomock.Any(), int64(1201)).Return(db.Order{ID: 1201, MerchantID: 18}, nil)
-	store.EXPECT().HasBlockingClaimRecoveryForMerchant(gomock.Any(), int64(18)).Return(false, nil)
-	store.EXPECT().UnsuspendMerchantTakeout(gomock.Any(), int64(18)).Return(nil)
-	store.EXPECT().GetClaimRecoveryByClaimID(gomock.Any(), int64(82)).Return(db.ClaimRecovery{
-		ID:             93,
+	store.EXPECT().GetClaimRecoveryByID(gomock.Any(), int64(92)).Return(db.ClaimRecovery{
+		ID:             92,
 		ClaimID:        82,
 		OrderID:        1201,
 		Status:         "paid",
-		RecoveryTarget: pgtype.Text{String: "merchant", Valid: true},
+		RecoveryTarget: pgtype.Text{String: "rider", Valid: true},
 	}, nil)
 	store.EXPECT().UpdateBehaviorActionExecution(gomock.Any(), gomock.Any()).Return(nil)
 
 	err = ExecuteClaimReleaseAction(context.Background(), store, action.ID)
-	require.ErrorContains(t, err, "claim recovery 93 does not match release action recovery 92")
+	require.ErrorContains(t, err, "claim recovery 92 target \"rider\" does not match release action target \"merchant\"")
 }
 
 func TestProcessTaskClaimBehaviorAction_NotificationReusesExistingNotification(t *testing.T) {

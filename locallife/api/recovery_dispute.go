@@ -128,6 +128,7 @@ type merchantClaimResponse struct {
 	ReviewedAt                 *time.Time `json:"reviewed_at,omitempty"`
 	RecoveryDisputeID          *int64     `json:"recovery_dispute_id,omitempty"`
 	RecoveryDisputeStatus      *string    `json:"recovery_dispute_status,omitempty"`
+	RecoveryID                 *int64     `json:"recovery_id,omitempty"`
 	RecoveryStatus             *string    `json:"recovery_status,omitempty"`
 	RecoveryDisputeReason      *string    `json:"recovery_dispute_reason,omitempty"`
 	RecoveryDisputeReviewNotes *string    `json:"recovery_dispute_review_notes,omitempty"`
@@ -356,6 +357,10 @@ func (server *Server) listMerchantClaims(ctx *gin.Context) {
 		if c.RecoveryDisputeStatus.Valid {
 			response[i].RecoveryDisputeStatus = &c.RecoveryDisputeStatus.String
 		}
+		if c.RecoveryID > 0 {
+			recoveryID := c.RecoveryID
+			response[i].RecoveryID = &recoveryID
+		}
 		if c.RecoveryStatus != "" {
 			response[i].RecoveryStatus = &c.RecoveryStatus
 		}
@@ -493,6 +498,14 @@ func (server *Server) getMerchantClaimDetail(ctx *gin.Context) {
 			n := claim.RecoveryDisputeReviewNotes.String
 			response.RecoveryDisputeReviewNotes = &n
 		}
+	}
+	if claim.RecoveryID > 0 {
+		recoveryID := claim.RecoveryID
+		response.RecoveryID = &recoveryID
+	}
+	if claim.RecoveryStatus != "" {
+		recoveryStatus := claim.RecoveryStatus
+		response.RecoveryStatus = &recoveryStatus
 	}
 
 	ctx.JSON(http.StatusOK, response)
@@ -995,6 +1008,10 @@ func (server *Server) listRiderClaims(ctx *gin.Context) {
 		if c.RecoveryDisputeStatus.Valid {
 			response[i].RecoveryDisputeStatus = &c.RecoveryDisputeStatus.String
 		}
+		if c.RecoveryID > 0 {
+			recoveryID := c.RecoveryID
+			response[i].RecoveryID = &recoveryID
+		}
 		if c.RecoveryStatus != "" {
 			response[i].RecoveryStatus = &c.RecoveryStatus
 		}
@@ -1131,6 +1148,10 @@ func (server *Server) getRiderClaimDetail(ctx *gin.Context) {
 			n := claim.RecoveryDisputeReviewNotes.String
 			rsp.RecoveryDisputeReviewNotes = &n
 		}
+	}
+	if claim.RecoveryID > 0 {
+		recoveryID := claim.RecoveryID
+		rsp.RecoveryID = &recoveryID
 	}
 	if claim.RecoveryStatus != "" {
 		rsp.RecoveryStatus = &claim.RecoveryStatus
@@ -1719,6 +1740,7 @@ func (server *Server) autoResolveRecoveryDispute(ctx *gin.Context, recoveryDispu
 	taskPayload := &worker.ProcessRecoveryDisputeResultPayload{
 		RecoveryDisputeID:    recoveryDispute.ID,
 		ClaimID:              reviewResult.PostProcess.ClaimID,
+		RecoveryTarget:       reviewResult.PostProcess.AppellantType,
 		CompensationActionID: 0,
 		ReleaseActionID: func() int64 {
 			if reviewResult.ReleaseAction != nil {

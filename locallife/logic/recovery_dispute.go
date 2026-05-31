@@ -42,7 +42,7 @@ type recoveryDisputeContext struct {
 }
 
 func CreateMerchantRecoveryDispute(ctx context.Context, store db.Store, input CreateMerchantRecoveryDisputeInput) (db.RecoveryDispute, error) {
-	disputeCtx, err := getRecoveryDisputeContext(ctx, store, input.ClaimID)
+	disputeCtx, err := getRecoveryDisputeContext(ctx, store, input.ClaimID, "merchant")
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
 			return db.RecoveryDispute{}, NewRequestError(http.StatusNotFound, errors.New("claim not found or not eligible for recovery dispute"))
@@ -72,11 +72,12 @@ func CreateMerchantRecoveryDispute(ctx context.Context, store db.Store, input Cr
 	}
 
 	result, err := store.CreateRecoveryDisputeWithRecoveryTx(ctx, db.CreateRecoveryDisputeWithRecoveryTxParams{
-		ClaimID:       input.ClaimID,
-		AppellantType: "merchant",
-		AppellantID:   input.MerchantID,
-		Reason:        input.Reason,
-		RegionID:      disputeCtx.RegionID,
+		ClaimID:        input.ClaimID,
+		RecoveryTarget: "merchant",
+		AppellantType:  "merchant",
+		AppellantID:    input.MerchantID,
+		Reason:         input.Reason,
+		RegionID:       disputeCtx.RegionID,
 	})
 	if err != nil {
 		return db.RecoveryDispute{}, err
@@ -88,7 +89,7 @@ func CreateMerchantRecoveryDispute(ctx context.Context, store db.Store, input Cr
 func CreateRiderRecoveryDispute(ctx context.Context, store db.Store, input CreateRiderRecoveryDisputeInput) (CreateRiderRecoveryDisputeResult, error) {
 	var result CreateRiderRecoveryDisputeResult
 
-	disputeCtx, err := getRecoveryDisputeContext(ctx, store, input.ClaimID)
+	disputeCtx, err := getRecoveryDisputeContext(ctx, store, input.ClaimID, "rider")
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
 			return result, NewRequestError(http.StatusNotFound, errors.New("claim not found or not eligible for recovery dispute"))
@@ -131,11 +132,12 @@ func CreateRiderRecoveryDispute(ctx context.Context, store db.Store, input Creat
 	}
 
 	txResult, err := store.CreateRecoveryDisputeWithRecoveryTx(ctx, db.CreateRecoveryDisputeWithRecoveryTxParams{
-		ClaimID:       input.ClaimID,
-		AppellantType: "rider",
-		AppellantID:   input.RiderID,
-		Reason:        input.Reason,
-		RegionID:      disputeCtx.RegionID,
+		ClaimID:        input.ClaimID,
+		RecoveryTarget: "rider",
+		AppellantType:  "rider",
+		AppellantID:    input.RiderID,
+		Reason:         input.Reason,
+		RegionID:       disputeCtx.RegionID,
 	})
 	if err != nil {
 		return result, err
@@ -145,8 +147,11 @@ func CreateRiderRecoveryDispute(ctx context.Context, store db.Store, input Creat
 	return result, nil
 }
 
-func getRecoveryDisputeContext(ctx context.Context, store db.Store, claimID int64) (recoveryDisputeContext, error) {
-	recoveryCtx, err := store.GetClaimRecoveryContextByClaimID(ctx, claimID)
+func getRecoveryDisputeContext(ctx context.Context, store db.Store, claimID int64, recoveryTarget string) (recoveryDisputeContext, error) {
+	recoveryCtx, err := store.GetClaimRecoveryContextByClaimIDAndTarget(ctx, db.GetClaimRecoveryContextByClaimIDAndTargetParams{
+		ClaimID:        claimID,
+		RecoveryTarget: pgtype.Text{String: recoveryTarget, Valid: recoveryTarget != ""},
+	})
 	if err == nil {
 		return recoveryDisputeContext{
 			ClaimID:        recoveryCtx.ClaimID,

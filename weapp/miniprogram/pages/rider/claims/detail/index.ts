@@ -41,6 +41,7 @@ Page({
   data: {
     navBarHeight: 88,
     claimId: 0,
+    recoveryId: 0,
     loading: true,
     initialError: false,
     initialErrorMessage: '',
@@ -117,10 +118,13 @@ Page({
 
     try {
       const claim = await claimManagementService.getRiderClaimDetail(this.data.claimId)
+      const recoveryId = claim.recovery_id || 0
+      const appealId = claim.recovery_dispute_id || claim.appeal_id
+      const appealStatus = claim.recovery_dispute_status || claim.appeal_status
       const [decisionResult, recoveryResult, appealResult, behaviorResult] = await settleAll([
         claimManagementService.getRiderClaimDecision(this.data.claimId),
-        claimManagementService.getRiderClaimRecovery(this.data.claimId),
-        claim.appeal_id ? appealManagementService.getRiderAppealDetail(claim.appeal_id) : Promise.resolve(null as AppealResponse | null),
+        recoveryId ? claimManagementService.getRiderClaimRecovery(recoveryId) : Promise.resolve(null as ClaimRecoveryResponse | null),
+        appealId ? appealManagementService.getRiderAppealDetail(appealId) : Promise.resolve(null as AppealResponse | null),
         claimManagementService.getRiderClaimBehaviorSummary(claim.order_id)
       ] as const)
 
@@ -147,7 +151,7 @@ Page({
 
       const claimStatus = String(claim.status)
       const detail: RiderClaimDetailView = {
-        appealId: claim.appeal_id,
+        appealId,
         orderId: claim.order_id,
         orderNo: claim.order_no || String(claim.order_id),
         claimTypeLabel: formatClaimType(claim.claim_type),
@@ -163,14 +167,14 @@ Page({
         recoveryStatusLabel: recoveryError ? '追偿信息加载失败' : formatRecoveryStatus(recovery?.status),
         recoveryAmountText: recovery ? formatMoney(recovery.recovery_amount) : undefined,
         dueAtLabel: recovery?.due_at ? formatTime(recovery.due_at) : undefined,
-        appealStatusLabel: formatAppealStatus(claim.appeal_status),
-        appealReasonText: appeal?.reason || claim.appeal_reason,
-        reviewNotes: appeal?.review_notes || claim.appeal_review_notes,
+        appealStatusLabel: formatAppealStatus(appeal?.status || appealStatus),
+        appealReasonText: appeal?.reason || claim.recovery_dispute_reason || claim.appeal_reason,
+        reviewNotes: appeal?.review_notes || claim.recovery_dispute_review_notes || claim.appeal_review_notes,
         reviewedAtLabel: appeal?.reviewed_at ? formatTime(appeal.reviewed_at) : undefined,
-        hasAppeal: Boolean(claim.appeal_id),
-        canSubmitAppeal: canSubmitRiderClaimAppeal(claimStatus, claim.appeal_id),
-        canPayRecovery: Boolean(recovery && canPayClaimRecovery(recovery.status)),
-        progressCurrent: getRiderClaimProgressCurrent(claimStatus, recovery?.status, Boolean(claim.appeal_id)),
+        hasAppeal: Boolean(appealId),
+        canSubmitAppeal: canSubmitRiderClaimAppeal(claimStatus, appealId),
+        canPayRecovery: Boolean(recoveryId && recovery && canPayClaimRecovery(recovery.status)),
+        progressCurrent: getRiderClaimProgressCurrent(claimStatus, recovery?.status, Boolean(appealId)),
         progressClaimText: formatTime(claim.created_at),
         progressRecoveryText: recovery?.due_at ? `待处理至 ${formatTime(recovery.due_at)}` : '等待平台生成或无需追偿',
         progressAppealText: appeal?.reviewed_at
@@ -182,13 +186,14 @@ Page({
 
       this.setData({
         detail,
+        recoveryId,
         loading: false,
         initialError: false,
         initialErrorMessage: '',
         refreshErrorMessage: '',
         actionNoticeMessage: preserveActionNotice ? this.data.actionNoticeMessage : '',
         actionNoticeRefreshable: preserveActionNotice ? this.data.actionNoticeRefreshable : false,
-        appealReason: claim.appeal_reason || '',
+        appealReason: claim.recovery_dispute_reason || claim.appeal_reason || '',
         decisionLoading: false,
         decisionError,
         decisionErrorMessage: decisionError ? getErrorMessage(decisionResult.reason, '责任判定加载失败，可单独重试') : '',
@@ -306,7 +311,7 @@ Page({
   },
 
   async onRetryRecovery() {
-    if (!this.data.claimId || this.data.recoveryLoading) return
+    if (!this.data.recoveryId || this.data.recoveryLoading) return
 
     this.setData({
       recoveryLoading: true,
@@ -315,7 +320,7 @@ Page({
     })
 
     try {
-      const recovery = await claimManagementService.getRiderClaimRecovery(this.data.claimId)
+      const recovery = await claimManagementService.getRiderClaimRecovery(this.data.recoveryId)
       this.setData({
         recoveryLoading: false,
         recoveryError: false,
@@ -414,7 +419,10 @@ Page({
   },
 
   async onPayRecovery() {
-    if (!this.data.claimId) return
+    if (!this.data.recoveryId) {
+      wx.showToast({ title: '追偿单暂未生成，请刷新后重试', icon: 'none' })
+      return
+    }
 
     const confirmed = await new Promise<boolean>((resolve) => {
       wx.showModal({
@@ -430,7 +438,7 @@ Page({
 
     try {
       this.setData({ recoveryPaying: true })
-      const paymentResult = await claimManagementService.payRiderClaimRecovery(this.data.claimId)
+      const paymentResult = await claimManagementService.payRiderClaimRecovery(this.data.recoveryId)
       const workflowResult = await this.handleRecoveryPayment(paymentResult)
       if (!workflowResult.shouldSync) {
         return

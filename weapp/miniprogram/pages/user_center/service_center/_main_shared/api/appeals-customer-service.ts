@@ -10,7 +10,7 @@ import { request } from '../../../../../utils/request'
 // ==================== 数据类型定义 ====================
 
 /** 申诉状态枚举 */
-export type AppealStatus = 'pending' | 'approved' | 'rejected' | 'compensated'
+export type AppealStatus = 'submitted' | 'approved' | 'rejected'
 
 /** 申诉人类型枚举 */
 export type AppellantType = 'merchant' | 'rider' | 'user'
@@ -35,7 +35,7 @@ export type ClaimType = 'refund' | 'compensation' | 'quality_issue' | 'delivery_
 export type ApprovalType = 'full' | 'partial' | 'rejected'
 
 /** 追偿单状态枚举 */
-export type ClaimRecoveryStatus = 'pending' | 'paid' | 'overdue' | 'waived' | 'appealed'
+export type ClaimRecoveryStatus = 'pending' | 'paid' | 'overdue' | 'waived' | 'disputed'
 export type AppealStatusTheme = 'warning' | 'success' | 'danger'
 export type ClaimRecoveryStatusTheme = 'warning' | 'success' | 'danger'
 
@@ -107,6 +107,11 @@ export interface ClaimResponse {
     order_amount?: number
     user_phone?: string
     user_name?: string
+    recovery_id?: number
+    recovery_dispute_id?: number
+    recovery_dispute_status?: AppealStatus
+    recovery_dispute_reason?: string
+    recovery_dispute_review_notes?: string
     appeal_id?: number
     appeal_status?: AppealStatus
     recovery_status?: ClaimRecoveryStatus
@@ -189,7 +194,7 @@ export interface ClaimsQueryParams extends Record<string, unknown> {
     page_id: number
     page_size: number
     status?: ClaimStatus
-    bucket?: 'pending_action' | 'appealed' | 'closed'
+    bucket?: 'pending_action' | 'disputed' | 'closed'
     claim_type?: ClaimType
 }
 
@@ -298,14 +303,16 @@ export interface MerchantReviewsQueryParams extends Record<string, unknown> {
 export interface ClaimSummaryDTO {
     total: number
     pending_action: number
-    appealed: number
+    disputed: number
+    appealed?: number
     closed: number
 }
 
 export interface AppealSummaryDTO {
     total: number
-    pending: number
+    submitted: number
     approved: number
+    pending?: number
     compensated?: number
     rejected: number
 }
@@ -329,7 +336,7 @@ export class AppealManagementService {
         has_more: boolean
     }> {
         return request({
-            url: '/v1/merchant/appeals',
+            url: '/v1/merchant/recovery-disputes',
             method: 'GET',
             data: params
         })
@@ -337,7 +344,7 @@ export class AppealManagementService {
 
     async getMerchantAppealsSummary(): Promise<AppealSummaryDTO> {
         return request({
-            url: '/v1/merchant/appeals/summary',
+            url: '/v1/merchant/recovery-disputes/summary',
             method: 'GET'
         })
     }
@@ -348,7 +355,7 @@ export class AppealManagementService {
      */
     async getAppealDetail(appealId: number): Promise<AppealResponse> {
         return request({
-            url: `/v1/merchant/appeals/${appealId}`,
+            url: `/v1/merchant/recovery-disputes/${appealId}`,
             method: 'GET'
         })
     }
@@ -359,7 +366,7 @@ export class AppealManagementService {
      */
     async getMerchantAppealDetail(appealId: number): Promise<AppealResponse> {
         return request({
-            url: `/v1/merchant/appeals/${appealId}`,
+            url: `/v1/merchant/recovery-disputes/${appealId}`,
             method: 'GET'
         })
     }
@@ -370,7 +377,7 @@ export class AppealManagementService {
      */
     async createAppeal(appealData: CreateAppealRequest): Promise<AppealResponse> {
         return request({
-            url: '/v1/merchant/appeals',
+            url: '/v1/merchant/recovery-disputes',
             method: 'POST',
             data: appealData
         })
@@ -451,9 +458,9 @@ export class ClaimManagementService {
     /**
      * 获取商户追偿单详情
      */
-    async getMerchantClaimRecovery(claimId: number): Promise<ClaimRecoveryResponse> {
+    async getMerchantClaimRecovery(recoveryId: number): Promise<ClaimRecoveryResponse> {
         return request({
-            url: `/v1/merchant/claims/${claimId}/recovery`,
+            url: `/v1/merchant/recoveries/${recoveryId}`,
             method: 'GET'
         })
     }
@@ -471,9 +478,9 @@ export class ClaimManagementService {
     /**
      * 商户支付追偿单
      */
-    async payMerchantClaimRecovery(claimId: number): Promise<ClaimRecoveryPaymentResponse> {
+    async payMerchantClaimRecovery(recoveryId: number): Promise<ClaimRecoveryPaymentResponse> {
         return request({
-            url: `/v1/merchant/claims/${claimId}/recovery/pay`,
+            url: `/v1/merchant/recoveries/${recoveryId}/pay`,
             method: 'POST'
         })
     }
@@ -481,9 +488,9 @@ export class ClaimManagementService {
     /**
      * 获取骑手追偿单详情
      */
-    async getRiderClaimRecovery(claimId: number): Promise<ClaimRecoveryResponse> {
+    async getRiderClaimRecovery(recoveryId: number): Promise<ClaimRecoveryResponse> {
         return request({
-            url: `/v1/rider/claims/${claimId}/recovery`,
+            url: `/v1/rider/recoveries/${recoveryId}`,
             method: 'GET'
         })
     }
@@ -491,9 +498,9 @@ export class ClaimManagementService {
     /**
      * 骑手支付追偿单
      */
-    async payRiderClaimRecovery(claimId: number): Promise<ClaimRecoveryPaymentResponse> {
+    async payRiderClaimRecovery(recoveryId: number): Promise<ClaimRecoveryPaymentResponse> {
         return request({
-            url: `/v1/rider/claims/${claimId}/recovery/pay`,
+            url: `/v1/rider/recoveries/${recoveryId}/pay`,
             method: 'POST'
         })
     }
@@ -852,7 +859,7 @@ export async function getMerchantCustomerServiceDashboard(merchantId: number): P
     const [appealsSummary, claimsSummary, appealsResult, claimsResult, reviewsResult] = await Promise.all([
         appealManagementService.getMerchantAppealsSummary(),
         claimManagementService.getMerchantClaimsSummary(),
-        appealManagementService.getMerchantAppeals({ page_id: 1, page_size: 10, status: 'pending' }),
+        appealManagementService.getMerchantAppeals({ page_id: 1, page_size: 10, status: 'submitted' }),
         claimManagementService.getMerchantClaims({ page_id: 1, page_size: 10, bucket: 'pending_action' }),
         reviewReplyService.getMerchantReviews(merchantId, { page_id: 1, page_size: 10, has_reply: false })
     ])
@@ -913,7 +920,7 @@ export async function getAppealStatistics(_startDate: string, _endDate: string):
     const totalAppeals = summary.total
     const approvedAppeals = summary.approved
     const rejectedAppeals = summary.rejected
-    const pendingAppeals = summary.pending
+    const pendingAppeals = summary.submitted || summary.pending || 0
     const approvalRate = totalAppeals > 0 ? (approvedAppeals / totalAppeals) * 100 : 0
 
     return {
@@ -968,27 +975,22 @@ export function validateReviewReply(reply: string): { valid: boolean, message?: 
  */
 export function formatAppealStatus(status: AppealStatus): string {
     const statusMap: Record<AppealStatus, string> = {
-        pending: '待审核',
+        submitted: '待审核',
         approved: '已通过',
-        rejected: '已拒绝',
-        compensated: '已赔付'
+        rejected: '已拒绝'
     }
     return statusMap[status] || status
 }
 
 export function getAppealStatusDisplay(status: AppealStatus | string) {
-    const normalizedStatus = String(status || 'pending') as AppealStatus | string
+    const normalizedStatus = String(status || 'submitted') as AppealStatus | string
 
-    if (normalizedStatus === 'pending') {
+    if (normalizedStatus === 'submitted') {
         return { label: '待审核', theme: 'warning' as AppealStatusTheme, isPending: true, isClosed: false, isApproved: false, isRejected: false, isCompensated: false }
     }
 
     if (normalizedStatus === 'approved') {
         return { label: '已通过', theme: 'success' as AppealStatusTheme, isPending: false, isClosed: true, isApproved: true, isRejected: false, isCompensated: false }
-    }
-
-    if (normalizedStatus === 'compensated') {
-        return { label: '已赔付', theme: 'success' as AppealStatusTheme, isPending: false, isClosed: true, isApproved: false, isRejected: false, isCompensated: true }
     }
 
     return { label: normalizedStatus === 'rejected' ? '已拒绝' : formatAppealStatus(normalizedStatus as AppealStatus), theme: 'danger' as AppealStatusTheme, isPending: false, isClosed: true, isApproved: false, isRejected: normalizedStatus === 'rejected', isCompensated: false }
@@ -1014,7 +1016,7 @@ export function getClaimRecoveryStatusDisplay(status: ClaimRecoveryStatus | stri
     }
 
     return {
-        label: normalizedStatus === 'appealed' ? '已申诉' : normalizedStatus,
+        label: normalizedStatus === 'disputed' ? '异议中' : normalizedStatus,
         theme: 'danger' as ClaimRecoveryStatusTheme,
         canWaive: false
     }

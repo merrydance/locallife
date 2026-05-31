@@ -41,6 +41,14 @@ WHERE claim_id = $1
 ORDER BY id DESC
 LIMIT 1;
 
+-- name: GetClaimRecoveryByClaimIDAndTarget :one
+SELECT id, claim_id, order_id, responsible_party, recovery_target, recovery_amount, status, due_at, decision_snapshot, created_at, updated_at, decision_id, recovery_basis
+FROM claim_recoveries
+WHERE claim_id = sqlc.arg('claim_id')
+  AND recovery_target = sqlc.arg('recovery_target')
+ORDER BY id DESC
+LIMIT 1;
+
 -- name: GetClaimRecoveryByID :one
 SELECT id, claim_id, order_id, responsible_party, recovery_target, recovery_amount, status, due_at, decision_snapshot, created_at, updated_at, decision_id, recovery_basis
 FROM claim_recoveries
@@ -73,6 +81,36 @@ JOIN orders o ON o.id = cr.order_id
 JOIN merchants m ON m.id = o.merchant_id
 LEFT JOIN deliveries d ON d.order_id = cr.order_id
 WHERE cr.claim_id = $1
+ORDER BY cr.id DESC
+LIMIT 1;
+
+-- name: GetClaimRecoveryContextByClaimIDAndTarget :one
+SELECT
+  cr.id,
+  cr.claim_id,
+  cr.order_id,
+  cr.responsible_party,
+  cr.recovery_target,
+  cr.recovery_amount,
+  cr.status,
+  cr.due_at,
+  cr.decision_snapshot,
+  cr.created_at,
+  cr.updated_at,
+  cr.decision_id,
+  cr.recovery_basis,
+  o.merchant_id,
+  m.region_id,
+  d.rider_id,
+  c.paid_at,
+  c.created_at AS claim_created_at
+FROM claim_recoveries cr
+JOIN claims c ON c.id = cr.claim_id
+JOIN orders o ON o.id = cr.order_id
+JOIN merchants m ON m.id = o.merchant_id
+LEFT JOIN deliveries d ON d.order_id = cr.order_id
+WHERE cr.claim_id = sqlc.arg('claim_id')
+  AND cr.recovery_target = sqlc.arg('recovery_target')
 ORDER BY cr.id DESC
 LIMIT 1;
 
@@ -110,6 +148,7 @@ SELECT EXISTS (
   FROM claim_recoveries cr
   JOIN orders o ON o.id = cr.order_id
   WHERE o.merchant_id = $1
+    AND cr.recovery_target = 'merchant'
     AND (
       cr.status = 'overdue'
       OR (cr.status = 'disputed' AND cr.due_at <= NOW())
@@ -122,6 +161,7 @@ SELECT EXISTS (
   FROM claim_recoveries cr
   JOIN deliveries d ON d.order_id = cr.order_id
   WHERE d.rider_id = $1
+    AND cr.recovery_target = 'rider'
     AND (
       cr.status = 'overdue'
       OR (cr.status = 'disputed' AND cr.due_at <= NOW())

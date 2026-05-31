@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -53,6 +55,37 @@ func reviewedRecoveryDispute(base db.RecoveryDispute, status, notes string) db.R
 		RegionID:           base.RegionID,
 		CreatedAt:          base.CreatedAt,
 	}
+}
+
+func recoveryDisputeContextQuery(claimID int64, recoveryTarget string) db.GetClaimRecoveryContextByClaimIDAndTargetParams {
+	return db.GetClaimRecoveryContextByClaimIDAndTargetParams{
+		ClaimID:        claimID,
+		RecoveryTarget: pgtype.Text{String: recoveryTarget, Valid: true},
+	}
+}
+
+func recoveryDisputeRecoveryQuery(claimID int64, recoveryTarget string) db.GetClaimRecoveryByClaimIDAndTargetParams {
+	return db.GetClaimRecoveryByClaimIDAndTargetParams{
+		ClaimID:        claimID,
+		RecoveryTarget: pgtype.Text{String: recoveryTarget, Valid: true},
+	}
+}
+
+func expectRecoveryDisputeResultTask(t *testing.T, taskDistributor *mockwk.MockTaskDistributor, recoveryTarget string) {
+	t.Helper()
+	taskDistributor.EXPECT().
+		DistributeTaskProcessRecoveryDisputeResult(gomock.Any(), gomock.Any()).
+		Times(1).
+		DoAndReturn(func(_ context.Context, payload *worker.ProcessRecoveryDisputeResultPayload, _ ...asynq.Option) error {
+			require.Equal(t, recoveryTarget, payload.RecoveryTarget)
+			return nil
+		})
+}
+
+func TestMerchantClaimResponseExposesRecoveryIDContract(t *testing.T) {
+	field, ok := reflect.TypeOf(merchantClaimResponse{}).FieldByName("RecoveryID")
+	require.True(t, ok, "merchant claim response must expose recovery_id for recovery read/pay routes")
+	require.Equal(t, "recovery_id,omitempty", string(field.Tag.Get("json")))
 }
 
 // randomRecoveryDisputeRider 生成随机骑手（带区域ID）用于申诉测试
@@ -105,6 +138,7 @@ func TestListMerchantClaimsAPI(t *testing.T) {
 		OrderAmount:    3000,
 		UserPhone:      pgtype.Text{String: "13800138000", Valid: true},
 		UserName:       "张三",
+		RecoveryID:     77,
 		RecoveryStatus: "pending",
 		CreatedAt:      time.Now(),
 	}
@@ -151,6 +185,9 @@ func TestListMerchantClaimsAPI(t *testing.T) {
 
 				claims := response["claims"].([]interface{})
 				require.Len(t, claims, 1)
+				claimItem := claims[0].(map[string]interface{})
+				require.Equal(t, float64(77), claimItem["recovery_id"])
+				require.Equal(t, "pending", claimItem["recovery_status"])
 				require.Equal(t, float64(1), response["total"])
 				require.Equal(t, false, response["has_more"])
 			},
@@ -294,7 +331,7 @@ func TestCreateMerchantRecoveryDisputeAPI(t *testing.T) {
 		CreatedAt:          time.Now(),
 		UpdatedAt:          time.Now(),
 	}
-	recoveryContext := db.GetClaimRecoveryContextByClaimIDRow{
+	recoveryContext := db.GetClaimRecoveryContextByClaimIDAndTargetRow{
 		ClaimID:        claim.ID,
 		OrderID:        claim.OrderID,
 		MerchantID:     claim.MerchantID,
@@ -322,7 +359,7 @@ func TestCreateMerchantRecoveryDisputeAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
-					GetClaimRecoveryContextByClaimID(gomock.Any(), claim.ID).
+					GetClaimRecoveryContextByClaimIDAndTarget(gomock.Any(), recoveryDisputeContextQuery(claim.ID, "merchant")).
 					Times(2).
 					Return(recoveryContext, nil)
 
@@ -368,10 +405,7 @@ func TestCreateMerchantRecoveryDisputeAPI(t *testing.T) {
 						},
 					}, nil)
 
-				taskDistributor.EXPECT().
-					DistributeTaskProcessRecoveryDisputeResult(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(nil)
+				expectRecoveryDisputeResultTask(t, taskDistributor, "merchant")
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusCreated, recorder.Code)
@@ -395,7 +429,7 @@ func TestCreateMerchantRecoveryDisputeAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
-					GetClaimRecoveryContextByClaimID(gomock.Any(), claim.ID).
+					GetClaimRecoveryContextByClaimIDAndTarget(gomock.Any(), recoveryDisputeContextQuery(claim.ID, "merchant")).
 					Times(1).
 					Return(recoveryContext, nil)
 
@@ -429,7 +463,7 @@ func TestCreateMerchantRecoveryDisputeAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
-					GetClaimRecoveryContextByClaimID(gomock.Any(), claim.ID).
+					GetClaimRecoveryContextByClaimIDAndTarget(gomock.Any(), recoveryDisputeContextQuery(claim.ID, "merchant")).
 					Times(2).
 					Return(recoveryContext, nil)
 
@@ -476,7 +510,7 @@ func TestCreateMerchantRecoveryDisputeAPI(t *testing.T) {
 					}, nil)
 
 				store.EXPECT().
-					GetClaimRecoveryByClaimID(gomock.Any(), claim.ID).
+					GetClaimRecoveryByClaimIDAndTarget(gomock.Any(), recoveryDisputeRecoveryQuery(claim.ID, "merchant")).
 					Times(1).
 					Return(db.ClaimRecovery{}, db.ErrRecordNotFound)
 
@@ -508,7 +542,10 @@ func TestCreateMerchantRecoveryDisputeAPI(t *testing.T) {
 				taskDistributor.EXPECT().
 					DistributeTaskProcessRecoveryDisputeResult(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(assertAnError("recovery dispute queue unavailable"))
+					DoAndReturn(func(_ context.Context, payload *worker.ProcessRecoveryDisputeResultPayload, _ ...asynq.Option) error {
+						require.Equal(t, "merchant", payload.RecoveryTarget)
+						return assertAnError("recovery dispute queue unavailable")
+					})
 
 				store.EXPECT().
 					GetMerchant(gomock.Any(), merchant.ID).
@@ -547,9 +584,9 @@ func TestCreateMerchantRecoveryDisputeAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
-					GetClaimRecoveryContextByClaimID(gomock.Any(), int64(99999)).
+					GetClaimRecoveryContextByClaimIDAndTarget(gomock.Any(), recoveryDisputeContextQuery(int64(99999), "merchant")).
 					Times(1).
-					Return(db.GetClaimRecoveryContextByClaimIDRow{}, db.ErrRecordNotFound)
+					Return(db.GetClaimRecoveryContextByClaimIDAndTargetRow{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -568,7 +605,7 @@ func TestCreateMerchantRecoveryDisputeAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
-					GetClaimRecoveryContextByClaimID(gomock.Any(), claim.ID).
+					GetClaimRecoveryContextByClaimIDAndTarget(gomock.Any(), recoveryDisputeContextQuery(claim.ID, "merchant")).
 					Times(1).
 					Return(recoveryContext, nil)
 
@@ -600,7 +637,7 @@ func TestCreateMerchantRecoveryDisputeAPI(t *testing.T) {
 				otherContext := recoveryContext
 				otherContext.MerchantID = merchant.ID + 1
 				store.EXPECT().
-					GetClaimRecoveryContextByClaimID(gomock.Any(), claim.ID).
+					GetClaimRecoveryContextByClaimIDAndTarget(gomock.Any(), recoveryDisputeContextQuery(claim.ID, "merchant")).
 					Times(1).
 					Return(otherContext, nil)
 			},
@@ -825,7 +862,7 @@ func TestCreateRiderRecoveryDisputeAPI(t *testing.T) {
 		CreatedAt:          time.Now(),
 		UpdatedAt:          time.Now(),
 	}
-	recoveryContext := db.GetClaimRecoveryContextByClaimIDRow{
+	recoveryContext := db.GetClaimRecoveryContextByClaimIDAndTargetRow{
 		ClaimID:        claim.ID,
 		OrderID:        claim.OrderID,
 		MerchantID:     claim.MerchantID,
@@ -857,7 +894,7 @@ func TestCreateRiderRecoveryDisputeAPI(t *testing.T) {
 					Return(rider, nil)
 
 				store.EXPECT().
-					GetClaimRecoveryContextByClaimID(gomock.Any(), claim.ID).
+					GetClaimRecoveryContextByClaimIDAndTarget(gomock.Any(), recoveryDisputeContextQuery(claim.ID, "rider")).
 					Times(2).
 					Return(recoveryContext, nil)
 
@@ -903,10 +940,7 @@ func TestCreateRiderRecoveryDisputeAPI(t *testing.T) {
 						},
 					}, nil)
 
-				taskDistributor.EXPECT().
-					DistributeTaskProcessRecoveryDisputeResult(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(nil)
+				expectRecoveryDisputeResultTask(t, taskDistributor, "rider")
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusCreated, recorder.Code)
@@ -954,7 +988,7 @@ func TestCreateRiderRecoveryDisputeAPI(t *testing.T) {
 				otherContext := recoveryContext
 				otherContext.RiderID = pgtype.Int8{Int64: rider.ID + 1, Valid: true}
 				store.EXPECT().
-					GetClaimRecoveryContextByClaimID(gomock.Any(), claim.ID).
+					GetClaimRecoveryContextByClaimIDAndTarget(gomock.Any(), recoveryDisputeContextQuery(claim.ID, "rider")).
 					Times(1).
 					Return(otherContext, nil)
 			},
@@ -1032,7 +1066,7 @@ func TestCreateMerchantRecoveryDisputeAPI_AutoResolveFailureWithoutTaskDistribut
 
 	store := mockdb.NewMockStore(ctrl)
 	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
-	recoveryContext := db.GetClaimRecoveryContextByClaimIDRow{
+	recoveryContext := db.GetClaimRecoveryContextByClaimIDAndTargetRow{
 		ClaimID:        claim.ID,
 		OrderID:        claim.OrderID,
 		MerchantID:     claim.MerchantID,
@@ -1041,7 +1075,7 @@ func TestCreateMerchantRecoveryDisputeAPI_AutoResolveFailureWithoutTaskDistribut
 	}
 
 	store.EXPECT().
-		GetClaimRecoveryContextByClaimID(gomock.Any(), claim.ID).
+		GetClaimRecoveryContextByClaimIDAndTarget(gomock.Any(), recoveryDisputeContextQuery(claim.ID, "merchant")).
 		Times(2).
 		Return(recoveryContext, nil)
 
@@ -1088,7 +1122,7 @@ func TestCreateMerchantRecoveryDisputeAPI_AutoResolveFailureWithoutTaskDistribut
 		}, nil)
 
 	store.EXPECT().
-		GetClaimRecoveryByClaimID(gomock.Any(), claim.ID).
+		GetClaimRecoveryByClaimIDAndTarget(gomock.Any(), recoveryDisputeRecoveryQuery(claim.ID, "merchant")).
 		Times(1).
 		Return(db.ClaimRecovery{}, db.ErrRecordNotFound)
 
@@ -1510,18 +1544,20 @@ func TestGetMerchantClaimDetailAPI(t *testing.T) {
 	merchant.RegionID = region.ID
 
 	claim := db.GetMerchantClaimDetailForMerchantRow{
-		ID:          1,
-		OrderID:     100,
-		UserID:      200,
-		ClaimType:   "missing-item",
-		Description: "缺少饮料",
-		ClaimAmount: 500,
-		Status:      "approved",
-		OrderNo:     "20240101120000123456",
-		OrderAmount: 3000,
-		UserPhone:   pgtype.Text{String: "13800138000", Valid: true},
-		UserName:    "张三",
-		CreatedAt:   time.Now(),
+		ID:             1,
+		OrderID:        100,
+		UserID:         200,
+		ClaimType:      "missing-item",
+		Description:    "缺少饮料",
+		ClaimAmount:    500,
+		Status:         "approved",
+		OrderNo:        "20240101120000123456",
+		OrderAmount:    3000,
+		UserPhone:      pgtype.Text{String: "13800138000", Valid: true},
+		UserName:       "张三",
+		RecoveryID:     88,
+		RecoveryStatus: "pending",
+		CreatedAt:      time.Now(),
 	}
 
 	testCases := []struct {
@@ -1550,6 +1586,12 @@ func TestGetMerchantClaimDetailAPI(t *testing.T) {
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
+				var response merchantClaimResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.NotNil(t, response.RecoveryID)
+				require.Equal(t, int64(88), *response.RecoveryID)
+				require.NotNil(t, response.RecoveryStatus)
+				require.Equal(t, "pending", *response.RecoveryStatus)
 			},
 		},
 		{
@@ -1721,6 +1763,7 @@ func TestListRiderClaimsAPI(t *testing.T) {
 		Description:    "代取延迟",
 		ClaimAmount:    300,
 		Status:         "approved",
+		RecoveryID:     66,
 		RecoveryStatus: "pending",
 		OrderNo:        "20240101120000123456",
 		OrderAmount:    3000,
@@ -1764,6 +1807,8 @@ func TestListRiderClaimsAPI(t *testing.T) {
 				var response merchantClaimsListResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Len(t, response.Claims, 1)
+				require.NotNil(t, response.Claims[0].RecoveryID)
+				require.Equal(t, claim.RecoveryID, *response.Claims[0].RecoveryID)
 				require.NotNil(t, response.Claims[0].RecoveryStatus)
 				require.Equal(t, claim.RecoveryStatus, *response.Claims[0].RecoveryStatus)
 			},
@@ -2089,18 +2134,20 @@ func TestGetRiderClaimDetailAPI(t *testing.T) {
 	rider := randomRecoveryDisputeRider(user.ID, region.ID)
 
 	claim := db.GetRiderClaimDetailForRiderRow{
-		ID:          1,
-		OrderID:     100,
-		UserID:      200,
-		ClaimType:   "delay",
-		Description: "代取延迟",
-		ClaimAmount: 300,
-		Status:      "approved",
-		OrderNo:     "20240101120000123456",
-		OrderAmount: 3000,
-		UserPhone:   pgtype.Text{String: "13800138000", Valid: true},
-		UserName:    "张三",
-		CreatedAt:   time.Now(),
+		ID:             1,
+		OrderID:        100,
+		UserID:         200,
+		ClaimType:      "delay",
+		Description:    "代取延迟",
+		ClaimAmount:    300,
+		Status:         "approved",
+		OrderNo:        "20240101120000123456",
+		OrderAmount:    3000,
+		UserPhone:      pgtype.Text{String: "13800138000", Valid: true},
+		UserName:       "张三",
+		RecoveryID:     99,
+		RecoveryStatus: "pending",
+		CreatedAt:      time.Now(),
 	}
 
 	testCases := []struct {
@@ -2134,6 +2181,8 @@ func TestGetRiderClaimDetailAPI(t *testing.T) {
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, float64(claim.ID), response["id"])
 				require.Equal(t, claim.ClaimType, response["claim_type"])
+				require.Equal(t, float64(claim.RecoveryID), response["recovery_id"])
+				require.Equal(t, claim.RecoveryStatus, response["recovery_status"])
 			},
 		},
 		{

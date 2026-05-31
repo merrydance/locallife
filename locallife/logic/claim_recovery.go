@@ -33,6 +33,9 @@ func GetClaimRecoveryForMerchant(ctx context.Context, store db.Store, input Merc
 	if recoveryCtx.MerchantID != input.MerchantID {
 		return db.ClaimRecovery{}, NewRequestError(http.StatusForbidden, errors.New("this claim does not belong to your merchant"))
 	}
+	if recoveryCtx.RecoveryTarget.String != "merchant" {
+		return db.ClaimRecovery{}, NewRequestError(http.StatusForbidden, errors.New("this claim recovery does not belong to your merchant"))
+	}
 
 	return claimRecoveryFromContextByID(recoveryCtx), nil
 }
@@ -45,6 +48,9 @@ func GetClaimRecoveryForRider(ctx context.Context, store db.Store, input RiderCl
 
 	if !recoveryCtx.RiderID.Valid || recoveryCtx.RiderID.Int64 != input.RiderID {
 		return db.ClaimRecovery{}, NewRequestError(http.StatusForbidden, errors.New("this claim does not belong to your rider"))
+	}
+	if recoveryCtx.RecoveryTarget.String != "rider" {
+		return db.ClaimRecovery{}, NewRequestError(http.StatusForbidden, errors.New("this claim recovery does not belong to your rider"))
 	}
 
 	return claimRecoveryFromContextByID(recoveryCtx), nil

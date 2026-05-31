@@ -336,7 +336,7 @@ func (processor *RedisTaskProcessor) executeClaimRecoveryOpenAction(ctx context.
 		}
 	}
 
-	recovery, err := processor.store.GetClaimRecoveryByClaimID(ctx, detail.ClaimID)
+	recovery, err := processor.store.GetClaimRecoveryByID(ctx, detail.RecoveryID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
 			detail.LastError = fmt.Sprintf("claim recovery for claim %d not found", detail.ClaimID)
@@ -472,34 +472,27 @@ func executeClaimRecoveryReleaseActionWithMode(ctx context.Context, store db.Sto
 		}
 	}
 
-	if err := db.ReleaseClaimRecoverySuspensionIfClear(ctx, store, db.ClaimRecovery{
-		ID:      detail.RecoveryID,
-		ClaimID: detail.ClaimID,
-		OrderID: detail.OrderID,
-		RecoveryTarget: pgtype.Text{
-			String: detail.TargetEntity,
-			Valid:  true,
-		},
-	}); err != nil {
-		detail.LastError = err.Error()
-		_ = markClaimBehaviorActionFailure(ctx, store, action.ID, detail)
-		return fmt.Errorf("release claim recovery suspension: %w", err)
-	}
-
-	recovery, err := store.GetClaimRecoveryByClaimID(ctx, detail.ClaimID)
+	recovery, err := store.GetClaimRecoveryByID(ctx, detail.RecoveryID)
 	if err != nil {
 		detail.LastError = err.Error()
 		_ = markClaimBehaviorActionFailure(ctx, store, action.ID, detail)
 		return fmt.Errorf("get claim recovery for release action: %w", err)
 	}
-	if recovery.ID != detail.RecoveryID {
-		detail.LastError = fmt.Sprintf("claim recovery %d does not match release action recovery %d", recovery.ID, detail.RecoveryID)
+	if err := validateClaimRecoveryReleaseAction(detail, recovery); err != nil {
+		detail.LastError = err.Error()
 		_ = markClaimBehaviorActionFailure(ctx, store, action.ID, detail)
 		if strict {
 			return errors.New(detail.LastError)
 		}
 		return nil
 	}
+
+	if err := db.ReleaseClaimRecoverySuspensionIfClear(ctx, store, recovery); err != nil {
+		detail.LastError = err.Error()
+		_ = markClaimBehaviorActionFailure(ctx, store, action.ID, detail)
+		return fmt.Errorf("release claim recovery suspension: %w", err)
+	}
+
 	if err := db.WriteClaimRecoveryClosedEventIfAbsent(ctx, store, recovery, map[string]any{
 		"claim_id":          recovery.ClaimID,
 		"recovery_target":   recovery.RecoveryTarget.String,
@@ -513,6 +506,22 @@ func executeClaimRecoveryReleaseActionWithMode(ctx context.Context, store db.Sto
 	}
 
 	return markClaimBehaviorActionSuccess(ctx, store, action.ID, detail)
+}
+
+func validateClaimRecoveryReleaseAction(detail claimRecoveryReleaseActionDetail, recovery db.ClaimRecovery) error {
+	if recovery.ID != detail.RecoveryID {
+		return fmt.Errorf("claim recovery %d does not match release action recovery %d", recovery.ID, detail.RecoveryID)
+	}
+	if recovery.ClaimID != detail.ClaimID {
+		return fmt.Errorf("claim recovery %d claim %d does not match release action claim %d", recovery.ID, recovery.ClaimID, detail.ClaimID)
+	}
+	if recovery.OrderID != detail.OrderID {
+		return fmt.Errorf("claim recovery %d order %d does not match release action order %d", recovery.ID, recovery.OrderID, detail.OrderID)
+	}
+	if !recovery.RecoveryTarget.Valid || recovery.RecoveryTarget.String != detail.TargetEntity {
+		return fmt.Errorf("claim recovery %d target %q does not match release action target %q", recovery.ID, recovery.RecoveryTarget.String, detail.TargetEntity)
+	}
+	return nil
 }
 
 func (processor *RedisTaskProcessor) executeClaimNotificationAction(ctx context.Context, action db.BehaviorAction) error {

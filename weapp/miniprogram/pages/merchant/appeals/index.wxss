@@ -64,10 +64,6 @@
   background: var(--td-success-color-1);
 }
 
-.accent-compensated {
-  background: var(--td-bg-color-secondarycontainer);
-}
-
 .accent-rejected {
   background: var(--td-error-color-1);
 }

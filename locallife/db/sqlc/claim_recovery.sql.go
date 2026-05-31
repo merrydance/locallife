@@ -144,6 +144,41 @@ func (q *Queries) GetClaimRecoveryByClaimID(ctx context.Context, claimID int64) 
 	return i, err
 }
 
+const getClaimRecoveryByClaimIDAndTarget = `-- name: GetClaimRecoveryByClaimIDAndTarget :one
+SELECT id, claim_id, order_id, responsible_party, recovery_target, recovery_amount, status, due_at, decision_snapshot, created_at, updated_at, decision_id, recovery_basis
+FROM claim_recoveries
+WHERE claim_id = $1
+  AND recovery_target = $2
+ORDER BY id DESC
+LIMIT 1
+`
+
+type GetClaimRecoveryByClaimIDAndTargetParams struct {
+	ClaimID        int64       `json:"claim_id"`
+	RecoveryTarget pgtype.Text `json:"recovery_target"`
+}
+
+func (q *Queries) GetClaimRecoveryByClaimIDAndTarget(ctx context.Context, arg GetClaimRecoveryByClaimIDAndTargetParams) (ClaimRecovery, error) {
+	row := q.db.QueryRow(ctx, getClaimRecoveryByClaimIDAndTarget, arg.ClaimID, arg.RecoveryTarget)
+	var i ClaimRecovery
+	err := row.Scan(
+		&i.ID,
+		&i.ClaimID,
+		&i.OrderID,
+		&i.ResponsibleParty,
+		&i.RecoveryTarget,
+		&i.RecoveryAmount,
+		&i.Status,
+		&i.DueAt,
+		&i.DecisionSnapshot,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DecisionID,
+		&i.RecoveryBasis,
+	)
+	return i, err
+}
+
 const getClaimRecoveryByID = `-- name: GetClaimRecoveryByID :one
 SELECT id, claim_id, order_id, responsible_party, recovery_target, recovery_amount, status, due_at, decision_snapshot, created_at, updated_at, decision_id, recovery_basis
 FROM claim_recoveries
@@ -249,6 +284,89 @@ func (q *Queries) GetClaimRecoveryContextByClaimID(ctx context.Context, claimID 
 	return i, err
 }
 
+const getClaimRecoveryContextByClaimIDAndTarget = `-- name: GetClaimRecoveryContextByClaimIDAndTarget :one
+SELECT
+  cr.id,
+  cr.claim_id,
+  cr.order_id,
+  cr.responsible_party,
+  cr.recovery_target,
+  cr.recovery_amount,
+  cr.status,
+  cr.due_at,
+  cr.decision_snapshot,
+  cr.created_at,
+  cr.updated_at,
+  cr.decision_id,
+  cr.recovery_basis,
+  o.merchant_id,
+  m.region_id,
+  d.rider_id,
+  c.paid_at,
+  c.created_at AS claim_created_at
+FROM claim_recoveries cr
+JOIN claims c ON c.id = cr.claim_id
+JOIN orders o ON o.id = cr.order_id
+JOIN merchants m ON m.id = o.merchant_id
+LEFT JOIN deliveries d ON d.order_id = cr.order_id
+WHERE cr.claim_id = $1
+  AND cr.recovery_target = $2
+ORDER BY cr.id DESC
+LIMIT 1
+`
+
+type GetClaimRecoveryContextByClaimIDAndTargetParams struct {
+	ClaimID        int64       `json:"claim_id"`
+	RecoveryTarget pgtype.Text `json:"recovery_target"`
+}
+
+type GetClaimRecoveryContextByClaimIDAndTargetRow struct {
+	ID               int64              `json:"id"`
+	ClaimID          int64              `json:"claim_id"`
+	OrderID          int64              `json:"order_id"`
+	ResponsibleParty string             `json:"responsible_party"`
+	RecoveryTarget   pgtype.Text        `json:"recovery_target"`
+	RecoveryAmount   int64              `json:"recovery_amount"`
+	Status           string             `json:"status"`
+	DueAt            time.Time          `json:"due_at"`
+	DecisionSnapshot []byte             `json:"decision_snapshot"`
+	CreatedAt        time.Time          `json:"created_at"`
+	UpdatedAt        time.Time          `json:"updated_at"`
+	DecisionID       pgtype.Int8        `json:"decision_id"`
+	RecoveryBasis    pgtype.Text        `json:"recovery_basis"`
+	MerchantID       int64              `json:"merchant_id"`
+	RegionID         int64              `json:"region_id"`
+	RiderID          pgtype.Int8        `json:"rider_id"`
+	PaidAt           pgtype.Timestamptz `json:"paid_at"`
+	ClaimCreatedAt   time.Time          `json:"claim_created_at"`
+}
+
+func (q *Queries) GetClaimRecoveryContextByClaimIDAndTarget(ctx context.Context, arg GetClaimRecoveryContextByClaimIDAndTargetParams) (GetClaimRecoveryContextByClaimIDAndTargetRow, error) {
+	row := q.db.QueryRow(ctx, getClaimRecoveryContextByClaimIDAndTarget, arg.ClaimID, arg.RecoveryTarget)
+	var i GetClaimRecoveryContextByClaimIDAndTargetRow
+	err := row.Scan(
+		&i.ID,
+		&i.ClaimID,
+		&i.OrderID,
+		&i.ResponsibleParty,
+		&i.RecoveryTarget,
+		&i.RecoveryAmount,
+		&i.Status,
+		&i.DueAt,
+		&i.DecisionSnapshot,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DecisionID,
+		&i.RecoveryBasis,
+		&i.MerchantID,
+		&i.RegionID,
+		&i.RiderID,
+		&i.PaidAt,
+		&i.ClaimCreatedAt,
+	)
+	return i, err
+}
+
 const getClaimRecoveryContextByID = `-- name: GetClaimRecoveryContextByID :one
 SELECT
   cr.id,
@@ -331,6 +449,7 @@ SELECT EXISTS (
   FROM claim_recoveries cr
   JOIN orders o ON o.id = cr.order_id
   WHERE o.merchant_id = $1
+    AND cr.recovery_target = 'merchant'
     AND (
       cr.status = 'overdue'
       OR (cr.status = 'disputed' AND cr.due_at <= NOW())
@@ -351,6 +470,7 @@ SELECT EXISTS (
   FROM claim_recoveries cr
   JOIN deliveries d ON d.order_id = cr.order_id
   WHERE d.rider_id = $1
+    AND cr.recovery_target = 'rider'
     AND (
       cr.status = 'overdue'
       OR (cr.status = 'disputed' AND cr.due_at <= NOW())

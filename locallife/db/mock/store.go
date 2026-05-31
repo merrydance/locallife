@@ -7077,6 +7077,21 @@ func (mr *MockStoreMockRecorder) GetClaimRecoveryByClaimID(ctx, claimID any) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClaimRecoveryByClaimID", reflect.TypeOf((*MockStore)(nil).GetClaimRecoveryByClaimID), ctx, claimID)
 }
 
+// GetClaimRecoveryByClaimIDAndTarget mocks base method.
+func (m *MockStore) GetClaimRecoveryByClaimIDAndTarget(ctx context.Context, arg db.GetClaimRecoveryByClaimIDAndTargetParams) (db.ClaimRecovery, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetClaimRecoveryByClaimIDAndTarget", ctx, arg)
+	ret0, _ := ret[0].(db.ClaimRecovery)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetClaimRecoveryByClaimIDAndTarget indicates an expected call of GetClaimRecoveryByClaimIDAndTarget.
+func (mr *MockStoreMockRecorder) GetClaimRecoveryByClaimIDAndTarget(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClaimRecoveryByClaimIDAndTarget", reflect.TypeOf((*MockStore)(nil).GetClaimRecoveryByClaimIDAndTarget), ctx, arg)
+}
+
 // GetClaimRecoveryByID mocks base method.
 func (m *MockStore) GetClaimRecoveryByID(ctx context.Context, id int64) (db.ClaimRecovery, error) {
 	m.ctrl.T.Helper()
@@ -7105,6 +7120,21 @@ func (m *MockStore) GetClaimRecoveryContextByClaimID(ctx context.Context, claimI
 func (mr *MockStoreMockRecorder) GetClaimRecoveryContextByClaimID(ctx, claimID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClaimRecoveryContextByClaimID", reflect.TypeOf((*MockStore)(nil).GetClaimRecoveryContextByClaimID), ctx, claimID)
+}
+
+// GetClaimRecoveryContextByClaimIDAndTarget mocks base method.
+func (m *MockStore) GetClaimRecoveryContextByClaimIDAndTarget(ctx context.Context, arg db.GetClaimRecoveryContextByClaimIDAndTargetParams) (db.GetClaimRecoveryContextByClaimIDAndTargetRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetClaimRecoveryContextByClaimIDAndTarget", ctx, arg)
+	ret0, _ := ret[0].(db.GetClaimRecoveryContextByClaimIDAndTargetRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetClaimRecoveryContextByClaimIDAndTarget indicates an expected call of GetClaimRecoveryContextByClaimIDAndTarget.
+func (mr *MockStoreMockRecorder) GetClaimRecoveryContextByClaimIDAndTarget(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClaimRecoveryContextByClaimIDAndTarget", reflect.TypeOf((*MockStore)(nil).GetClaimRecoveryContextByClaimIDAndTarget), ctx, arg)
 }
 
 // GetClaimRecoveryContextByID mocks base method.

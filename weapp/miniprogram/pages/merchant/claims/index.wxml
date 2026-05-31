@@ -27,9 +27,9 @@
         <text class="summary-label">待处理</text>
         <text class="summary-value">{{summary.pendingAction}}</text>
       </view>
-      <view class="summary-card accent-appealed">
+      <view class="summary-card accent-disputed">
         <text class="summary-label">异议中</text>
-        <text class="summary-value">{{summary.appealed}}</text>
+        <text class="summary-value">{{summary.disputed}}</text>
       </view>
       <view class="summary-card accent-closed">
         <text class="summary-label">已结案</text>
@@ -40,7 +40,7 @@
     <t-tabs value="{{currentTab}}" bind:change="onTabChange" t-class="claims-tabs">
       <t-tab-panel label="全部" value="all"><view /></t-tab-panel>
       <t-tab-panel label="待处理" value="pending_action"><view /></t-tab-panel>
-      <t-tab-panel label="异议中" value="appealed"><view /></t-tab-panel>
+      <t-tab-panel label="异议中" value="disputed"><view /></t-tab-panel>
       <t-tab-panel label="已结案" value="closed"><view /></t-tab-panel>
     </t-tabs>
 

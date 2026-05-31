@@ -15,7 +15,7 @@ interface RiderStatusView {
   theme: ClaimTagTheme
 }
 
-const SUCCESS_APPEAL_STATUSES = new Set(['approved', 'compensated'])
+const SUCCESS_APPEAL_STATUSES = new Set(['approved'])
 const WARNING_RECOVERY_STATUSES = new Set(['pending', 'overdue'])
 const SUCCESS_RECOVERY_STATUSES = new Set(['paid', 'waived'])
 const CLOSED_RIDER_CLAIM_RECOVERY_STATUSES = new Set(['paid', 'waived'])
@@ -34,13 +34,13 @@ export function getRiderAppealStatusView(status?: string): RiderStatusView {
     return { label: '未提交申诉', theme: 'default' }
   }
 
-  if (normalizedStatus === 'pending') {
+  if (normalizedStatus === 'submitted') {
     return { label: '申诉处理中', theme: 'warning' }
   }
 
   if (SUCCESS_APPEAL_STATUSES.has(normalizedStatus)) {
     return {
-      label: normalizedStatus === 'approved' ? '申诉通过' : '申诉已赔付',
+      label: '申诉通过',
       theme: 'success'
     }
   }
@@ -72,11 +72,11 @@ export function getRiderRecoveryStatusView(status?: string): RiderStatusView {
   return { label: '追偿申诉中', theme: 'danger' }
 }
 
-export function getRiderClaimActionHint(claim: Pick<ClaimResponse, 'appeal_status' | 'recovery_status'>): string {
-  const appealStatus = String(claim.appeal_status || '').trim().toLowerCase()
+export function getRiderClaimActionHint(claim: Pick<ClaimResponse, 'appeal_status' | 'recovery_dispute_status' | 'recovery_status'>): string {
+  const appealStatus = String(claim.recovery_dispute_status || claim.appeal_status || '').trim().toLowerCase()
   const recoveryStatus = String(claim.recovery_status || '').trim().toLowerCase()
 
-  if (recoveryStatus === 'appealed' || appealStatus === 'pending') {
+  if (recoveryStatus === 'disputed' || appealStatus === 'submitted') {
     return '平台正在复核申诉，进入详情可查看最新处理进度。'
   }
 

@@ -663,8 +663,10 @@ type Querier interface {
 	GetClaim(ctx context.Context, id int64) (Claim, error)
 	GetClaimForUpdate(ctx context.Context, id int64) (Claim, error)
 	GetClaimRecoveryByClaimID(ctx context.Context, claimID int64) (ClaimRecovery, error)
+	GetClaimRecoveryByClaimIDAndTarget(ctx context.Context, arg GetClaimRecoveryByClaimIDAndTargetParams) (ClaimRecovery, error)
 	GetClaimRecoveryByID(ctx context.Context, id int64) (ClaimRecovery, error)
 	GetClaimRecoveryContextByClaimID(ctx context.Context, claimID int64) (GetClaimRecoveryContextByClaimIDRow, error)
+	GetClaimRecoveryContextByClaimIDAndTarget(ctx context.Context, arg GetClaimRecoveryContextByClaimIDAndTargetParams) (GetClaimRecoveryContextByClaimIDAndTargetRow, error)
 	GetClaimRecoveryContextByID(ctx context.Context, id int64) (GetClaimRecoveryContextByIDRow, error)
 	// 获取索赔详情（包含订单、商户、用户信息）
 	GetClaimWithDetails(ctx context.Context, id int64) (GetClaimWithDetailsRow, error)

@@ -22,6 +22,7 @@ const (
 type ProcessRecoveryDisputeResultPayload struct {
 	RecoveryDisputeID    int64  `json:"recovery_dispute_id"`
 	ClaimID              int64  `json:"claim_id"`
+	RecoveryTarget       string `json:"recovery_target"`
 	CompensationActionID int64  `json:"compensation_action_id"`
 	ReleaseActionID      int64  `json:"release_action_id"`
 	Status               string `json:"status"`              // approved / rejected
@@ -108,7 +109,10 @@ func ExecuteRecoveryDisputeResultEffects(ctx context.Context, store db.Store, di
 				return fmt.Errorf("execute claim recovery release action for recovery dispute %d: %w", payload.RecoveryDisputeID, err)
 			}
 		} else if payload.ClaimID != 0 {
-			recovery, err := store.GetClaimRecoveryByClaimID(ctx, payload.ClaimID)
+			recovery, err := store.GetClaimRecoveryByClaimIDAndTarget(ctx, db.GetClaimRecoveryByClaimIDAndTargetParams{
+				ClaimID:        payload.ClaimID,
+				RecoveryTarget: pgtype.Text{String: payloadRecoveryTarget(payload), Valid: payloadRecoveryTarget(payload) != ""},
+			})
 			if err == nil {
 				return fmt.Errorf("approved recovery dispute result missing release action id for claim recovery %d", recovery.ID)
 			}
@@ -228,7 +232,10 @@ func resumeClaimRecoveryAfterRecoveryDispute(ctx context.Context, store db.Store
 		return nil
 	}
 
-	recovery, err := store.GetClaimRecoveryByClaimID(ctx, payload.ClaimID)
+	recovery, err := store.GetClaimRecoveryByClaimIDAndTarget(ctx, db.GetClaimRecoveryByClaimIDAndTargetParams{
+		ClaimID:        payload.ClaimID,
+		RecoveryTarget: pgtype.Text{String: payloadRecoveryTarget(payload), Valid: payloadRecoveryTarget(payload) != ""},
+	})
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
 			return nil
@@ -253,6 +260,13 @@ func resumeClaimRecoveryAfterRecoveryDispute(ctx context.Context, store db.Store
 		return err
 	}
 	return nil
+}
+
+func payloadRecoveryTarget(payload ProcessRecoveryDisputeResultPayload) string {
+	if payload.RecoveryTarget != "" {
+		return payload.RecoveryTarget
+	}
+	return payload.AppellantType
 }
 
 // sendAppellantNotification 发送通知给追偿争议发起人

@@ -47,7 +47,7 @@ func claimRecoveryContextFor(recovery db.ClaimRecovery, merchantID, regionID int
 func TestGetClaimRecoveryForMerchant(t *testing.T) {
 	claimID := int64(10)
 	merchantID := int64(20)
-	recovery := db.ClaimRecovery{ID: 30, ClaimID: claimID}
+	recovery := db.ClaimRecovery{ID: 30, ClaimID: claimID, RecoveryTarget: pgtype.Text{String: "merchant", Valid: true}}
 
 	testCases := []struct {
 		name       string
@@ -80,6 +80,22 @@ func TestGetClaimRecoveryForMerchant(t *testing.T) {
 				reqErr := assertRequestError(t, err)
 				require.Equal(t, 403, reqErr.Status)
 				require.Equal(t, "this claim does not belong to your merchant", reqErr.Err.Error())
+			},
+		},
+		{
+			name: "WrongRecoveryTarget",
+			buildStubs: func(store *mockdb.MockStore) {
+				riderRecovery := recovery
+				riderRecovery.RecoveryTarget = pgtype.Text{String: "rider", Valid: true}
+				store.EXPECT().
+					GetClaimRecoveryContextByID(gomock.Any(), claimID).
+					Times(1).
+					Return(claimRecoveryContextFor(riderRecovery, merchantID, 99, nil), nil)
+			},
+			check: func(t *testing.T, _ db.ClaimRecovery, err error) {
+				reqErr := assertRequestError(t, err)
+				require.Equal(t, 403, reqErr.Status)
+				require.Equal(t, "this claim recovery does not belong to your merchant", reqErr.Err.Error())
 			},
 		},
 		{
@@ -125,6 +141,96 @@ func TestGetClaimRecoveryForMerchant(t *testing.T) {
 			got, err := GetClaimRecoveryForMerchant(context.Background(), store, MerchantClaimRecoveryInput{
 				RecoveryID: claimID,
 				MerchantID: merchantID,
+			})
+			tc.check(t, got, err)
+		})
+	}
+}
+
+func TestGetClaimRecoveryForRider(t *testing.T) {
+	claimID := int64(10)
+	riderID := int64(20)
+	otherRiderID := riderID + 1
+	recovery := db.ClaimRecovery{ID: 30, ClaimID: claimID, RecoveryTarget: pgtype.Text{String: "rider", Valid: true}}
+
+	testCases := []struct {
+		name       string
+		buildStubs func(store *mockdb.MockStore)
+		check      func(t *testing.T, got db.ClaimRecovery, err error)
+	}{
+		{
+			name: "RecoveryNotFound",
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetClaimRecoveryContextByID(gomock.Any(), claimID).
+					Times(1).
+					Return(db.GetClaimRecoveryContextByIDRow{}, db.ErrRecordNotFound)
+			},
+			check: func(t *testing.T, _ db.ClaimRecovery, err error) {
+				reqErr := assertRequestError(t, err)
+				require.Equal(t, 404, reqErr.Status)
+				require.Equal(t, "claim recovery not found", reqErr.Err.Error())
+			},
+		},
+		{
+			name: "Forbidden",
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetClaimRecoveryContextByID(gomock.Any(), claimID).
+					Times(1).
+					Return(claimRecoveryContextFor(recovery, 99, 88, &otherRiderID), nil)
+			},
+			check: func(t *testing.T, _ db.ClaimRecovery, err error) {
+				reqErr := assertRequestError(t, err)
+				require.Equal(t, 403, reqErr.Status)
+				require.Equal(t, "this claim does not belong to your rider", reqErr.Err.Error())
+			},
+		},
+		{
+			name: "WrongRecoveryTarget",
+			buildStubs: func(store *mockdb.MockStore) {
+				merchantRecovery := recovery
+				merchantRecovery.RecoveryTarget = pgtype.Text{String: "merchant", Valid: true}
+				store.EXPECT().
+					GetClaimRecoveryContextByID(gomock.Any(), claimID).
+					Times(1).
+					Return(claimRecoveryContextFor(merchantRecovery, 99, 88, &riderID), nil)
+			},
+			check: func(t *testing.T, _ db.ClaimRecovery, err error) {
+				reqErr := assertRequestError(t, err)
+				require.Equal(t, 403, reqErr.Status)
+				require.Equal(t, "this claim recovery does not belong to your rider", reqErr.Err.Error())
+			},
+		},
+		{
+			name: "Success",
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetClaimRecoveryContextByID(gomock.Any(), claimID).
+					Times(1).
+					Return(claimRecoveryContextFor(recovery, 99, 88, &riderID), nil)
+			},
+			check: func(t *testing.T, got db.ClaimRecovery, err error) {
+				require.NoError(t, err)
+				require.Equal(t, recovery.ID, got.ID)
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			if tc.buildStubs != nil {
+				tc.buildStubs(store)
+			}
+
+			got, err := GetClaimRecoveryForRider(context.Background(), store, RiderClaimRecoveryInput{
+				RecoveryID: claimID,
+				RiderID:    riderID,
 			})
 			tc.check(t, got, err)
 		})

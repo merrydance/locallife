@@ -98,18 +98,32 @@ func createRandomRecoveryDispute(t *testing.T, claimID, appellantID int64, appel
 
 func createRandomClaimRecovery(t *testing.T, claimID, orderID int64, status string) ClaimRecovery {
 	decision := createClaimRecoveryDecisionForTest(t, claimID, orderID)
+	return createClaimRecoveryWithTargetAndDecision(t, claimID, orderID, status, "merchant", decision.ID)
+}
+
+func createClaimRecoveryWithTarget(t *testing.T, claimID, orderID int64, status, recoveryTarget string) ClaimRecovery {
+	decision := createClaimRecoveryDecisionForTest(t, claimID, orderID)
+	return createClaimRecoveryWithTargetAndDecision(t, claimID, orderID, status, recoveryTarget, decision.ID)
+}
+
+func createClaimRecoveryWithTargetAndDecision(t *testing.T, claimID, orderID int64, status, recoveryTarget string, decisionID int64) ClaimRecovery {
+	responsibleParty := recoveryTarget
+	recoveryBasis := ClaimRecoveryBasisMerchantRecovery
+	if recoveryTarget == "rider" {
+		recoveryBasis = ClaimRecoveryBasisRiderRecovery
+	}
 
 	arg := CreateClaimRecoveryParams{
 		ClaimID:          claimID,
 		OrderID:          orderID,
-		DecisionID:       pgtype.Int8{Int64: decision.ID, Valid: true},
-		ResponsibleParty: "merchant",
-		RecoveryTarget:   pgtype.Text{String: "merchant", Valid: true},
+		DecisionID:       pgtype.Int8{Int64: decisionID, Valid: true},
+		ResponsibleParty: responsibleParty,
+		RecoveryTarget:   pgtype.Text{String: recoveryTarget, Valid: true},
 		RecoveryAmount:   3000,
 		Status:           status,
 		DueAt:            time.Now().Add(24 * time.Hour),
 		DecisionSnapshot: []byte(`{"source":"test"}`),
-		RecoveryBasis:    pgtype.Text{String: ClaimRecoveryBasisMerchantRecovery, Valid: true},
+		RecoveryBasis:    pgtype.Text{String: recoveryBasis, Valid: true},
 	}
 
 	recovery, err := testStore.CreateClaimRecovery(context.Background(), arg)
@@ -117,6 +131,28 @@ func createRandomClaimRecovery(t *testing.T, claimID, orderID int64, status stri
 	require.NotZero(t, recovery.ID)
 
 	return recovery
+}
+
+func requireClaimByID(t *testing.T, claims []ListMerchantClaimsForMerchantRow, claimID int64) ListMerchantClaimsForMerchantRow {
+	t.Helper()
+	for _, claim := range claims {
+		if claim.ID == claimID {
+			return claim
+		}
+	}
+	require.Failf(t, "claim not found", "claim_id=%d len=%d", claimID, len(claims))
+	return ListMerchantClaimsForMerchantRow{}
+}
+
+func requireRiderClaimByID(t *testing.T, claims []ListRiderClaimsForRiderRow, claimID int64) ListRiderClaimsForRiderRow {
+	t.Helper()
+	for _, claim := range claims {
+		if claim.ID == claimID {
+			return claim
+		}
+	}
+	require.Failf(t, "claim not found", "claim_id=%d len=%d", claimID, len(claims))
+	return ListRiderClaimsForRiderRow{}
 }
 
 // ==================== CreateRecoveryDispute Tests ====================
@@ -238,16 +274,20 @@ func TestCreateRecoveryDisputeWithRecoveryTx_WritesDisputedRecoveryEvent(t *test
 	recovery := createRandomClaimRecovery(t, claim.ID, order.ID, "pending")
 
 	result, err := testStore.CreateRecoveryDisputeWithRecoveryTx(context.Background(), CreateRecoveryDisputeWithRecoveryTxParams{
-		ClaimID:       claim.ID,
-		AppellantType: "merchant",
-		AppellantID:   merchant.ID,
-		Reason:        "商户发起追偿争议",
-		RegionID:      merchant.RegionID,
+		ClaimID:        claim.ID,
+		RecoveryTarget: "merchant",
+		AppellantType:  "merchant",
+		AppellantID:    merchant.ID,
+		Reason:         "商户发起追偿争议",
+		RegionID:       merchant.RegionID,
 	})
 	require.NoError(t, err)
 	require.NotZero(t, result.RecoveryDispute.ID)
 
-	updatedRecovery, err := testStore.GetClaimRecoveryByClaimID(context.Background(), claim.ID)
+	updatedRecovery, err := testStore.GetClaimRecoveryByClaimIDAndTarget(context.Background(), GetClaimRecoveryByClaimIDAndTargetParams{
+		ClaimID:        claim.ID,
+		RecoveryTarget: pgtype.Text{String: "merchant", Valid: true},
+	})
 	require.NoError(t, err)
 	require.Equal(t, "disputed", updatedRecovery.Status)
 
@@ -280,7 +320,10 @@ func TestReviewRecoveryDisputeWithCompensationTx_ApprovedWaivesClaimRecovery(t *
 	require.Equal(t, "release", result.ReleaseAction.ActionType)
 	require.Equal(t, "merchant", result.ReleaseAction.TargetEntity)
 
-	updatedRecovery, err := testStore.GetClaimRecoveryByClaimID(context.Background(), claim.ID)
+	updatedRecovery, err := testStore.GetClaimRecoveryByClaimIDAndTarget(context.Background(), GetClaimRecoveryByClaimIDAndTargetParams{
+		ClaimID:        claim.ID,
+		RecoveryTarget: pgtype.Text{String: "merchant", Valid: true},
+	})
 	require.NoError(t, err)
 	require.Equal(t, "waived", updatedRecovery.Status)
 	recoveryEvents, err := testStore.ListClaimRecoveryEventsByRecovery(context.Background(), updatedRecovery.ID)
@@ -457,6 +500,76 @@ func TestListMerchantClaimsForMerchant_FilterByBucket(t *testing.T) {
 	require.Len(t, claims, 1)
 	require.Equal(t, disputedClaim.ID, claims[0].ID)
 	require.Equal(t, "disputed", claims[0].RecoveryStatus)
+}
+
+func TestListMerchantClaimsForMerchant_UsesMerchantRecoveryTarget(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	user := createRandomUser(t)
+	order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
+	claim := createRandomClaim(t, user.ID, order.ID)
+	decision := createClaimRecoveryDecisionForTest(t, claim.ID, order.ID)
+
+	merchantRecovery := createClaimRecoveryWithTargetAndDecision(t, claim.ID, order.ID, "pending", "merchant", decision.ID)
+	_ = createClaimRecoveryWithTargetAndDecision(t, claim.ID, order.ID, "paid", "rider", decision.ID)
+
+	claims, err := testStore.ListMerchantClaimsForMerchant(context.Background(), ListMerchantClaimsForMerchantParams{
+		MerchantID: merchant.ID,
+		Bucket:     pgtype.Text{},
+		Limit:      10,
+		Offset:     0,
+	})
+	require.NoError(t, err)
+	got := requireClaimByID(t, claims, claim.ID)
+	require.Equal(t, merchantRecovery.ID, got.RecoveryID)
+	require.Equal(t, merchantRecovery.Status, got.RecoveryStatus)
+
+	detail, err := testStore.GetMerchantClaimDetailForMerchant(context.Background(), GetMerchantClaimDetailForMerchantParams{
+		ID:         claim.ID,
+		MerchantID: merchant.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, merchantRecovery.ID, detail.RecoveryID)
+	require.Equal(t, merchantRecovery.Status, detail.RecoveryStatus)
+}
+
+func TestListRiderClaimsForRider_UsesRiderRecoveryTarget(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	riderUser := createRandomUser(t)
+	rider := createRandomRiderWithUser(t, riderUser.ID)
+	user := createRandomUser(t)
+	order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
+	delivery := createRandomDeliveryWithOrder(t, order.ID)
+	_, err := testStore.AssignDelivery(context.Background(), AssignDeliveryParams{
+		ID:      delivery.ID,
+		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+	})
+	require.NoError(t, err)
+	claim := createRandomClaim(t, user.ID, order.ID)
+	decision := createClaimRecoveryDecisionForTest(t, claim.ID, order.ID)
+
+	riderRecovery := createClaimRecoveryWithTargetAndDecision(t, claim.ID, order.ID, "pending", "rider", decision.ID)
+	_ = createClaimRecoveryWithTargetAndDecision(t, claim.ID, order.ID, "paid", "merchant", decision.ID)
+
+	claims, err := testStore.ListRiderClaimsForRider(context.Background(), ListRiderClaimsForRiderParams{
+		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+		Bucket:  pgtype.Text{},
+		Limit:   10,
+		Offset:  0,
+	})
+	require.NoError(t, err)
+	got := requireRiderClaimByID(t, claims, claim.ID)
+	require.Equal(t, riderRecovery.ID, got.RecoveryID)
+	require.Equal(t, riderRecovery.Status, got.RecoveryStatus)
+
+	detail, err := testStore.GetRiderClaimDetailForRider(context.Background(), GetRiderClaimDetailForRiderParams{
+		ID:      claim.ID,
+		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+	})
+	require.NoError(t, err)
+	require.Equal(t, riderRecovery.ID, detail.RecoveryID)
+	require.Equal(t, riderRecovery.Status, detail.RecoveryStatus)
 }
 
 func TestListMerchantClaimsForMerchant_UsesIDTieBreaker(t *testing.T) {

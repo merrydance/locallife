@@ -18,7 +18,7 @@ import {
 } from '../_utils/rider-claims-view'
 import { getStableBarHeights } from '../../../utils/responsive'
 import { getErrorUserMessage } from '../../../utils/user-facing'
-type ClaimBucketTab = 'all' | 'pending_action' | 'appealed' | 'closed'
+type ClaimBucketTab = 'all' | 'pending_action' | 'disputed' | 'closed'
 type ClaimsSectionTab = 'claims' | 'appeals'
 
 const PAGE_SIZE = 20
@@ -56,7 +56,7 @@ interface RiderAppealView {
 interface ClaimSummary {
   total: number
   pendingAction: number
-  appealed: number
+  disputed: number
   closed: number
 }
 
@@ -70,7 +70,7 @@ const getErrorMessage = getErrorUserMessage
 
 function buildClaimView(claim: ClaimResponse): RiderClaimView {
   const claimStatusView = getRiderClaimStatusView(String(claim.status))
-  const appealStatusView = getRiderAppealStatusView(claim.appeal_status)
+  const appealStatusView = getRiderAppealStatusView(claim.recovery_dispute_status || claim.appeal_status)
   const recoveryStatusView = getRiderRecoveryStatusView(claim.recovery_status)
 
   return {
@@ -108,7 +108,7 @@ function buildAppealView(appeal: AppealResponse): RiderAppealView {
   }
 }
 
-function toBucket(tab: ClaimBucketTab): 'pending_action' | 'appealed' | 'closed' | undefined {
+function toBucket(tab: ClaimBucketTab): 'pending_action' | 'disputed' | 'closed' | undefined {
   return tab === 'all' ? undefined : tab
 }
 
@@ -118,7 +118,7 @@ async function fetchClaimSummary(): Promise<ClaimSummary> {
   return {
     total: summary.total || 0,
     pendingAction: summary.pending_action || 0,
-    appealed: summary.appealed || 0,
+    disputed: summary.disputed || summary.appealed || 0,
     closed: summary.closed || 0
   }
 }
@@ -160,7 +160,7 @@ Page({
     summary: {
       total: 0,
       pendingAction: 0,
-      appealed: 0,
+      disputed: 0,
       closed: 0
     }
   },
@@ -257,7 +257,7 @@ Page({
           summary: {
             total: 0,
             pendingAction: 0,
-            appealed: 0,
+            disputed: 0,
             closed: 0
           }
         })

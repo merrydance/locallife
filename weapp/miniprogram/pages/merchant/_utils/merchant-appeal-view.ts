@@ -1,6 +1,6 @@
 export type MerchantAppealTagTheme = 'warning' | 'success' | 'danger' | 'primary'
 
-type MerchantAppealStatusCode = 'pending' | 'approved' | 'compensated' | 'rejected'
+type MerchantAppealStatusCode = 'submitted' | 'approved' | 'rejected'
 
 interface MerchantAppealStatusView {
   label: string
@@ -13,7 +13,7 @@ interface MerchantAppealResultSummary {
   description: string
 }
 
-const APPROVED_APPEAL_STATUSES = new Set<MerchantAppealStatusCode>(['approved', 'compensated'])
+const APPROVED_APPEAL_STATUSES = new Set<MerchantAppealStatusCode>(['approved'])
 
 export function getMerchantAppealStatusView(status?: string, emptyLabel = '-') : MerchantAppealStatusView {
   const normalizedStatus = String(status || '').trim().toLowerCase() as MerchantAppealStatusCode | ''
@@ -26,7 +26,7 @@ export function getMerchantAppealStatusView(status?: string, emptyLabel = '-') :
     }
   }
 
-  if (normalizedStatus === 'pending') {
+  if (normalizedStatus === 'submitted') {
     return {
       label: '待审核',
       theme: 'warning',
@@ -36,7 +36,7 @@ export function getMerchantAppealStatusView(status?: string, emptyLabel = '-') :
 
   if (APPROVED_APPEAL_STATUSES.has(normalizedStatus)) {
     return {
-      label: normalizedStatus === 'approved' ? '已通过' : '已赔付',
+      label: '已通过',
       theme: 'success',
       isPending: false
     }
@@ -57,9 +57,7 @@ export function getMerchantAppealResultHint(status?: string): string {
   }
 
   if (APPROVED_APPEAL_STATUSES.has(String(status || '').trim().toLowerCase() as MerchantAppealStatusCode)) {
-    return statusView.label === '已通过'
-      ? '异议已通过，进入结果生效阶段。'
-      : '平台已完成复核补偿，当前异议已收口。'
+    return '异议已通过，进入结果生效阶段。'
   }
 
   return '平台已驳回异议，需继续按原结果处理。'
@@ -72,13 +70,6 @@ export function getMerchantAppealResultSummary(status?: string): MerchantAppealR
     return {
       title: '异议已通过',
       description: '平台已认可商户异议，本条索赔会按复核结果重算责任或回收策略。'
-    }
-  }
-
-  if (normalizedStatus === 'compensated') {
-    return {
-      title: '异议已赔付',
-      description: '平台已完成复核补偿，当前结果已进入结案阶段。'
     }
   }
 

@@ -83,6 +83,7 @@ func (processor *RedisTaskProcessor) ProcessTaskAutomaticRecoveryDisputeResoluti
 		return processor.processRecoveryDisputeResult(ctx, ProcessRecoveryDisputeResultPayload{
 			RecoveryDisputeID: recoveryDispute.ID,
 			ClaimID:           postProcess.ClaimID,
+			RecoveryTarget:    postProcess.AppellantType,
 			CompensationActionID: func() int64 {
 				if result.ReviewResult.CompensationAction != nil {
 					return result.ReviewResult.CompensationAction.ID
@@ -131,6 +132,7 @@ func (processor *RedisTaskProcessor) buildProcessRecoveryDisputeResultPayload(ct
 	payload := ProcessRecoveryDisputeResultPayload{
 		RecoveryDisputeID:    recoveryDispute.ID,
 		ClaimID:              postProcess.ClaimID,
+		RecoveryTarget:       postProcess.AppellantType,
 		CompensationActionID: 0,
 		ReleaseActionID:      0,
 		Status:               recoveryDispute.Status,
@@ -142,7 +144,7 @@ func (processor *RedisTaskProcessor) buildProcessRecoveryDisputeResultPayload(ct
 		CompensationAmount:   compensationAmount,
 		OrderNo:              postProcess.OrderNo,
 	}
-	recovery, err := processor.claimRecoveryForRecoveryDisputeResult(ctx, recoveryDispute.ClaimID)
+	recovery, err := processor.claimRecoveryForRecoveryDisputeResult(ctx, recoveryDispute.ClaimID, postProcess.AppellantType)
 	if err != nil {
 		return ProcessRecoveryDisputeResultPayload{}, err
 	}
@@ -173,8 +175,11 @@ func (processor *RedisTaskProcessor) buildProcessRecoveryDisputeResultPayload(ct
 	return payload, nil
 }
 
-func (processor *RedisTaskProcessor) claimRecoveryForRecoveryDisputeResult(ctx context.Context, claimID int64) (*db.ClaimRecovery, error) {
-	recovery, err := processor.store.GetClaimRecoveryByClaimID(ctx, claimID)
+func (processor *RedisTaskProcessor) claimRecoveryForRecoveryDisputeResult(ctx context.Context, claimID int64, recoveryTarget string) (*db.ClaimRecovery, error) {
+	recovery, err := processor.store.GetClaimRecoveryByClaimIDAndTarget(ctx, db.GetClaimRecoveryByClaimIDAndTargetParams{
+		ClaimID:        claimID,
+		RecoveryTarget: pgtype.Text{String: recoveryTarget, Valid: recoveryTarget != ""},
+	})
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
 			return nil, nil

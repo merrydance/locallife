@@ -16,6 +16,20 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+func recoveryDisputeResultRecoveryQuery(claimID int64, recoveryTarget string) db.GetClaimRecoveryByClaimIDAndTargetParams {
+	return db.GetClaimRecoveryByClaimIDAndTargetParams{
+		ClaimID:        claimID,
+		RecoveryTarget: pgtype.Text{String: recoveryTarget, Valid: true},
+	}
+}
+
+func recoveryDisputeResolutionContextQuery(claimID int64, recoveryTarget string) db.GetClaimRecoveryContextByClaimIDAndTargetParams {
+	return db.GetClaimRecoveryContextByClaimIDAndTargetParams{
+		ClaimID:        claimID,
+		RecoveryTarget: pgtype.Text{String: recoveryTarget, Valid: true},
+	}
+}
+
 func TestExecuteRecoveryDisputeCompensation_ApprovedExecutesPayoutAction(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -111,20 +125,22 @@ func TestResumeClaimRecovery_RestoresOverdueWhenDueAtPassed(t *testing.T) {
 	store := mockdb.NewMockStore(ctrl)
 
 	recovery := db.ClaimRecovery{
-		ID:      66,
-		ClaimID: 55,
-		Status:  "disputed",
-		DueAt:   time.Now().Add(-time.Hour),
+		ID:             66,
+		ClaimID:        55,
+		Status:         "disputed",
+		DueAt:          time.Now().Add(-time.Hour),
+		RecoveryTarget: pgtype.Text{String: "merchant", Valid: true},
 	}
 	updated := recovery
 	updated.Status = "overdue"
 
-	store.EXPECT().GetClaimRecoveryByClaimID(gomock.Any(), int64(55)).Return(recovery, nil)
+	store.EXPECT().GetClaimRecoveryByClaimIDAndTarget(gomock.Any(), recoveryDisputeResultRecoveryQuery(55, "merchant")).Return(recovery, nil)
 	store.EXPECT().ResumeClaimRecoveryAfterDispute(gomock.Any(), recovery.ID).Return(updated, nil)
 
 	err := resumeClaimRecoveryAfterRecoveryDispute(context.Background(), store, ProcessRecoveryDisputeResultPayload{
-		ClaimID: 55,
-		Status:  "rejected",
+		ClaimID:        55,
+		RecoveryTarget: "merchant",
+		Status:         "rejected",
 	})
 	require.NoError(t, err)
 }
@@ -135,15 +151,17 @@ func TestResumeClaimRecovery_SkipsWhenRecoveryNotDisputed(t *testing.T) {
 
 	store := mockdb.NewMockStore(ctrl)
 
-	store.EXPECT().GetClaimRecoveryByClaimID(gomock.Any(), int64(55)).Return(db.ClaimRecovery{
-		ID:      66,
-		ClaimID: 55,
-		Status:  "pending",
+	store.EXPECT().GetClaimRecoveryByClaimIDAndTarget(gomock.Any(), recoveryDisputeResultRecoveryQuery(55, "merchant")).Return(db.ClaimRecovery{
+		ID:             66,
+		ClaimID:        55,
+		Status:         "pending",
+		RecoveryTarget: pgtype.Text{String: "merchant", Valid: true},
 	}, nil)
 
 	err := resumeClaimRecoveryAfterRecoveryDispute(context.Background(), store, ProcessRecoveryDisputeResultPayload{
-		ClaimID: 55,
-		Status:  "rejected",
+		ClaimID:        55,
+		RecoveryTarget: "merchant",
+		Status:         "rejected",
 	})
 	require.NoError(t, err)
 }
@@ -154,11 +172,12 @@ func TestResumeClaimRecovery_ReturnsLookupFailure(t *testing.T) {
 
 	store := mockdb.NewMockStore(ctrl)
 
-	store.EXPECT().GetClaimRecoveryByClaimID(gomock.Any(), int64(55)).Return(db.ClaimRecovery{}, errors.New("lookup unavailable"))
+	store.EXPECT().GetClaimRecoveryByClaimIDAndTarget(gomock.Any(), recoveryDisputeResultRecoveryQuery(55, "merchant")).Return(db.ClaimRecovery{}, errors.New("lookup unavailable"))
 
 	err := resumeClaimRecoveryAfterRecoveryDispute(context.Background(), store, ProcessRecoveryDisputeResultPayload{
-		ClaimID: 55,
-		Status:  "rejected",
+		ClaimID:        55,
+		RecoveryTarget: "merchant",
+		Status:         "rejected",
 	})
 	require.ErrorContains(t, err, "get claim recovery by claim id")
 }
@@ -170,10 +189,11 @@ func TestProcessRecoveryDisputeResult_ApprovedRequiresReleaseActionWhenRecoveryE
 	store := mockdb.NewMockStore(ctrl)
 	processor := NewTestTaskProcessor(store, nil, nil, nil)
 
-	store.EXPECT().GetClaimRecoveryByClaimID(gomock.Any(), int64(55)).Return(db.ClaimRecovery{
-		ID:      66,
-		ClaimID: 55,
-		Status:  "waived",
+	store.EXPECT().GetClaimRecoveryByClaimIDAndTarget(gomock.Any(), recoveryDisputeResultRecoveryQuery(55, "merchant")).Return(db.ClaimRecovery{
+		ID:             66,
+		ClaimID:        55,
+		Status:         "waived",
+		RecoveryTarget: pgtype.Text{String: "merchant", Valid: true},
 	}, nil)
 
 	err := processor.processRecoveryDisputeResult(context.Background(), ProcessRecoveryDisputeResultPayload{
@@ -216,16 +236,18 @@ func TestProcessRecoveryDisputeResult_RejectedReturnsResumeFailure(t *testing.T)
 	store := mockdb.NewMockStore(ctrl)
 	processor := NewTestTaskProcessor(store, nil, nil, nil)
 
-	store.EXPECT().GetClaimRecoveryByClaimID(gomock.Any(), int64(55)).Return(db.ClaimRecovery{
-		ID:      66,
-		ClaimID: 55,
-		Status:  "disputed",
+	store.EXPECT().GetClaimRecoveryByClaimIDAndTarget(gomock.Any(), recoveryDisputeResultRecoveryQuery(55, "rider")).Return(db.ClaimRecovery{
+		ID:             66,
+		ClaimID:        55,
+		Status:         "disputed",
+		RecoveryTarget: pgtype.Text{String: "rider", Valid: true},
 	}, nil)
 	store.EXPECT().ResumeClaimRecoveryAfterDispute(gomock.Any(), int64(66)).Return(db.ClaimRecovery{}, errors.New("resume unavailable"))
 
 	err := processor.processRecoveryDisputeResult(context.Background(), ProcessRecoveryDisputeResultPayload{
 		RecoveryDisputeID: 77,
 		ClaimID:           55,
+		RecoveryTarget:    "rider",
 		Status:            "rejected",
 	})
 	require.ErrorContains(t, err, "resume claim recovery after rejected recovery dispute 77")

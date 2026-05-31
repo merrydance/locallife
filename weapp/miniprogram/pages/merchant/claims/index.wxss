@@ -60,7 +60,7 @@
   background: var(--td-warning-color-1);
 }
 
-.accent-appealed {
+.accent-disputed {
   background: var(--td-bg-color-secondarycontainer);
 }
 
@@ -205,5 +205,4 @@
   color: var(--td-text-color-primary);
   line-height: 1.6;
 }
-
 

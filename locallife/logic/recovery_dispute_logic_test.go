@@ -13,8 +13,15 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func recoveryDisputeContextForTest(claimID, orderID, merchantID, regionID int64, riderID *int64, createdAt time.Time) db.GetClaimRecoveryContextByClaimIDRow {
-	row := db.GetClaimRecoveryContextByClaimIDRow{
+func recoveryDisputeContextQuery(claimID int64, recoveryTarget string) db.GetClaimRecoveryContextByClaimIDAndTargetParams {
+	return db.GetClaimRecoveryContextByClaimIDAndTargetParams{
+		ClaimID:        claimID,
+		RecoveryTarget: pgtype.Text{String: recoveryTarget, Valid: true},
+	}
+}
+
+func recoveryDisputeContextForTest(claimID, orderID, merchantID, regionID int64, riderID *int64, createdAt time.Time) db.GetClaimRecoveryContextByClaimIDAndTargetRow {
+	row := db.GetClaimRecoveryContextByClaimIDAndTargetRow{
 		ClaimID:        claimID,
 		OrderID:        orderID,
 		MerchantID:     merchantID,
@@ -35,9 +42,9 @@ func TestCreateMerchantRecoveryDisputeClaimNotFound(t *testing.T) {
 
 	store := mockdb.NewMockStore(ctrl)
 	store.EXPECT().
-		GetClaimRecoveryContextByClaimID(gomock.Any(), claimID).
+		GetClaimRecoveryContextByClaimIDAndTarget(gomock.Any(), recoveryDisputeContextQuery(claimID, "merchant")).
 		Times(1).
-		Return(db.GetClaimRecoveryContextByClaimIDRow{}, db.ErrRecordNotFound)
+		Return(db.GetClaimRecoveryContextByClaimIDAndTargetRow{}, db.ErrRecordNotFound)
 
 	_, err := CreateMerchantRecoveryDispute(context.Background(), store, CreateMerchantRecoveryDisputeInput{
 		MerchantID:        1,
@@ -60,7 +67,7 @@ func TestCreateMerchantRecoveryDisputeForbidden(t *testing.T) {
 
 	store := mockdb.NewMockStore(ctrl)
 	store.EXPECT().
-		GetClaimRecoveryContextByClaimID(gomock.Any(), claimID).
+		GetClaimRecoveryContextByClaimIDAndTarget(gomock.Any(), recoveryDisputeContextQuery(claimID, "merchant")).
 		Times(1).
 		Return(recoveryDisputeContextForTest(claimID, 99, 2, 0, nil, time.Now()), nil)
 
@@ -86,7 +93,7 @@ func TestCreateMerchantRecoveryDisputeWindowExpired(t *testing.T) {
 
 	store := mockdb.NewMockStore(ctrl)
 	store.EXPECT().
-		GetClaimRecoveryContextByClaimID(gomock.Any(), claimID).
+		GetClaimRecoveryContextByClaimIDAndTarget(gomock.Any(), recoveryDisputeContextQuery(claimID, "merchant")).
 		Times(1).
 		Return(recoveryDisputeContextForTest(claimID, 99, 1, 0, nil, now.AddDate(0, 0, -8)), nil)
 
@@ -111,7 +118,7 @@ func TestCreateMerchantRecoveryDisputeAlreadyExists(t *testing.T) {
 
 	store := mockdb.NewMockStore(ctrl)
 	store.EXPECT().
-		GetClaimRecoveryContextByClaimID(gomock.Any(), claimID).
+		GetClaimRecoveryContextByClaimIDAndTarget(gomock.Any(), recoveryDisputeContextQuery(claimID, "merchant")).
 		Times(1).
 		Return(recoveryDisputeContextForTest(claimID, 99, 1, 0, nil, time.Now()), nil)
 	store.EXPECT().
@@ -142,7 +149,7 @@ func TestCreateMerchantRecoveryDisputeSuccess(t *testing.T) {
 
 	store := mockdb.NewMockStore(ctrl)
 	store.EXPECT().
-		GetClaimRecoveryContextByClaimID(gomock.Any(), claimID).
+		GetClaimRecoveryContextByClaimIDAndTarget(gomock.Any(), recoveryDisputeContextQuery(claimID, "merchant")).
 		Times(1).
 		Return(recoveryDisputeContextForTest(claimID, 99, merchantID, regionID, nil, time.Now()), nil)
 	store.EXPECT().
@@ -177,7 +184,7 @@ func TestCreateMerchantRecoveryDisputeUsesRecoveryContext(t *testing.T) {
 
 	store := mockdb.NewMockStore(ctrl)
 	store.EXPECT().
-		GetClaimRecoveryContextByClaimID(gomock.Any(), claimID).
+		GetClaimRecoveryContextByClaimIDAndTarget(gomock.Any(), recoveryDisputeContextQuery(claimID, "merchant")).
 		Times(1).
 		Return(recoveryDisputeContextForTest(claimID, 99, merchantID, regionID, nil, createdAt), nil)
 	store.EXPECT().
@@ -211,7 +218,7 @@ func TestCreateMerchantRecoveryDisputeTransitionFailure(t *testing.T) {
 
 	store := mockdb.NewMockStore(ctrl)
 	store.EXPECT().
-		GetClaimRecoveryContextByClaimID(gomock.Any(), claimID).
+		GetClaimRecoveryContextByClaimIDAndTarget(gomock.Any(), recoveryDisputeContextQuery(claimID, "merchant")).
 		Times(1).
 		Return(recoveryDisputeContextForTest(claimID, 99, merchantID, regionID, nil, time.Now()), nil)
 	store.EXPECT().
@@ -243,7 +250,7 @@ func TestCreateRiderRecoveryDisputeClaimNotRelated(t *testing.T) {
 
 	store := mockdb.NewMockStore(ctrl)
 	store.EXPECT().
-		GetClaimRecoveryContextByClaimID(gomock.Any(), claimID).
+		GetClaimRecoveryContextByClaimIDAndTarget(gomock.Any(), recoveryDisputeContextQuery(claimID, "rider")).
 		Times(1).
 		Return(recoveryDisputeContextForTest(claimID, 99, 0, 0, &relatedRiderID, time.Now()), nil)
 
@@ -269,7 +276,7 @@ func TestCreateRiderRecoveryDisputeAlreadyExistsSameRider(t *testing.T) {
 
 	store := mockdb.NewMockStore(ctrl)
 	store.EXPECT().
-		GetClaimRecoveryContextByClaimID(gomock.Any(), claimID).
+		GetClaimRecoveryContextByClaimIDAndTarget(gomock.Any(), recoveryDisputeContextQuery(claimID, "rider")).
 		Times(1).
 		Return(recoveryDisputeContextForTest(claimID, 99, 0, 0, &riderID, time.Now()), nil)
 	store.EXPECT().
@@ -303,7 +310,7 @@ func TestCreateRiderRecoveryDisputeAlreadyExistsOtherRider(t *testing.T) {
 
 	store := mockdb.NewMockStore(ctrl)
 	store.EXPECT().
-		GetClaimRecoveryContextByClaimID(gomock.Any(), claimID).
+		GetClaimRecoveryContextByClaimIDAndTarget(gomock.Any(), recoveryDisputeContextQuery(claimID, "rider")).
 		Times(1).
 		Return(recoveryDisputeContextForTest(claimID, 99, 0, 0, &riderID, time.Now()), nil)
 	store.EXPECT().
@@ -338,7 +345,7 @@ func TestCreateRiderRecoveryDisputeSuccess(t *testing.T) {
 
 	store := mockdb.NewMockStore(ctrl)
 	store.EXPECT().
-		GetClaimRecoveryContextByClaimID(gomock.Any(), claimID).
+		GetClaimRecoveryContextByClaimIDAndTarget(gomock.Any(), recoveryDisputeContextQuery(claimID, "rider")).
 		Times(1).
 		Return(recoveryDisputeContextForTest(claimID, 99, 0, regionID, &riderID, time.Now()), nil)
 	store.EXPECT().

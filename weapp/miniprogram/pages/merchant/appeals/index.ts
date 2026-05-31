@@ -29,15 +29,14 @@ interface AppealRecordView {
   rawStatus: string
 }
 
-type AppealTab = 'all' | 'pending' | 'approved' | 'compensated' | 'rejected'
+type AppealTab = 'all' | 'submitted' | 'approved' | 'rejected'
 
 const PAGE_SIZE = 20
 
 interface AppealSummary {
   total: number
-  pending: number
+  submitted: number
   approved: number
-  compensated: number
   rejected: number
 }
 
@@ -100,9 +99,8 @@ async function fetchAppealSummary(): Promise<AppealSummary> {
 
   return {
     total: summary.total || 0,
-    pending: summary.pending || 0,
+    submitted: summary.submitted || summary.pending || 0,
     approved: summary.approved || 0,
-    compensated: summary.compensated || 0,
     rejected: summary.rejected || 0
   }
 }
@@ -142,9 +140,8 @@ Page({
     hasMore: false,
     summary: {
       total: 0,
-      pending: 0,
+      submitted: 0,
       approved: 0,
-      compensated: 0,
       rejected: 0
     }
   },

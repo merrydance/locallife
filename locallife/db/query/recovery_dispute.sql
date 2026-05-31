@@ -108,15 +108,17 @@ SELECT
     u.full_name AS user_name,
     a.id AS recovery_dispute_id,
     a.status AS recovery_dispute_status,
-    cr.status AS recovery_status
+    COALESCE(cr.id, 0)::bigint AS recovery_id,
+    COALESCE(cr.status, '')::text AS recovery_status
 FROM claims c
 JOIN orders o ON c.order_id = o.id
 JOIN users u ON c.user_id = u.id
 LEFT JOIN recovery_disputes a ON a.claim_id = c.id AND a.appellant_type = 'merchant'
 LEFT JOIN LATERAL (
-    SELECT status
+    SELECT id, status
     FROM claim_recoveries
     WHERE claim_id = c.id
+      AND recovery_target = 'merchant'
     ORDER BY id DESC
     LIMIT 1
 ) cr ON TRUE
@@ -153,6 +155,7 @@ LEFT JOIN LATERAL (
     SELECT status
     FROM claim_recoveries
     WHERE claim_id = c.id
+      AND recovery_target = 'merchant'
     ORDER BY id DESC
     LIMIT 1
 ) cr ON TRUE
@@ -189,11 +192,21 @@ SELECT
     a.id AS recovery_dispute_id,
     a.status AS recovery_dispute_status,
     a.reason AS recovery_dispute_reason,
-    a.review_notes AS recovery_dispute_review_notes
+    a.review_notes AS recovery_dispute_review_notes,
+    COALESCE(cr.id, 0)::bigint AS recovery_id,
+    COALESCE(cr.status, '')::text AS recovery_status
 FROM claims c
 JOIN orders o ON c.order_id = o.id
 JOIN users u ON c.user_id = u.id
 LEFT JOIN recovery_disputes a ON a.claim_id = c.id AND a.appellant_type = 'merchant'
+LEFT JOIN LATERAL (
+    SELECT id, status
+    FROM claim_recoveries
+    WHERE claim_id = c.id
+      AND recovery_target = 'merchant'
+    ORDER BY id DESC
+    LIMIT 1
+) cr ON TRUE
 WHERE c.id = $1
   AND o.merchant_id = $2
 LIMIT 1;
@@ -253,17 +266,19 @@ SELECT
     u.phone AS user_phone,
     u.full_name AS user_name,
     a.id AS recovery_dispute_id,
-  a.status AS recovery_dispute_status,
-  cr.status AS recovery_status
+    a.status AS recovery_dispute_status,
+    COALESCE(cr.id, 0)::bigint AS recovery_id,
+    COALESCE(cr.status, '')::text AS recovery_status
 FROM claims c
 JOIN orders o ON c.order_id = o.id
 JOIN deliveries d ON d.order_id = o.id
 JOIN users u ON c.user_id = u.id
 LEFT JOIN recovery_disputes a ON a.claim_id = c.id AND a.appellant_type = 'rider'
 LEFT JOIN LATERAL (
-  SELECT status
+  SELECT id, status
   FROM claim_recoveries
   WHERE claim_id = c.id
+    AND recovery_target = 'rider'
   ORDER BY id DESC
   LIMIT 1
 ) cr ON TRUE
@@ -301,6 +316,7 @@ LEFT JOIN LATERAL (
   SELECT status
   FROM claim_recoveries
   WHERE claim_id = c.id
+    AND recovery_target = 'rider'
   ORDER BY id DESC
   LIMIT 1
 ) cr ON TRUE
@@ -337,17 +353,19 @@ SELECT
     a.id AS recovery_dispute_id,
     a.status AS recovery_dispute_status,
     a.reason AS recovery_dispute_reason,
-  a.review_notes AS recovery_dispute_review_notes,
-  cr.status AS recovery_status
+    a.review_notes AS recovery_dispute_review_notes,
+    COALESCE(cr.id, 0)::bigint AS recovery_id,
+    COALESCE(cr.status, '')::text AS recovery_status
 FROM claims c
 JOIN orders o ON c.order_id = o.id
 JOIN deliveries d ON d.order_id = o.id
 JOIN users u ON c.user_id = u.id
 LEFT JOIN recovery_disputes a ON a.claim_id = c.id AND a.appellant_type = 'rider'
 LEFT JOIN LATERAL (
-  SELECT status
+  SELECT id, status
   FROM claim_recoveries
   WHERE claim_id = c.id
+    AND recovery_target = 'rider'
   ORDER BY id DESC
   LIMIT 1
 ) cr ON TRUE

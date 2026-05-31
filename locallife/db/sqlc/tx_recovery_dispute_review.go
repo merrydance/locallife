@@ -46,8 +46,13 @@ func (store *SQLStore) ReviewRecoveryDisputeWithCompensationTx(ctx context.Conte
 		}
 		result.PostProcess = postProcess
 
+		recoveryTarget := postProcess.AppellantType
+
 		if arg.Status == "rejected" {
-			recovery, recoveryErr := q.GetClaimRecoveryByClaimID(ctx, postProcess.ClaimID)
+			recovery, recoveryErr := q.GetClaimRecoveryByClaimIDAndTarget(ctx, GetClaimRecoveryByClaimIDAndTargetParams{
+				ClaimID:        postProcess.ClaimID,
+				RecoveryTarget: pgtype.Text{String: recoveryTarget, Valid: recoveryTarget != ""},
+			})
 			if recoveryErr == nil {
 				updatedRecovery, err := q.ResumeClaimRecoveryAfterDispute(ctx, recovery.ID)
 				if err != nil && err != ErrRecordNotFound {
@@ -70,7 +75,10 @@ func (store *SQLStore) ReviewRecoveryDisputeWithCompensationTx(ctx context.Conte
 		}
 
 		if arg.Status == "approved" {
-			recovery, recoveryErr := q.GetClaimRecoveryByClaimID(ctx, postProcess.ClaimID)
+			recovery, recoveryErr := q.GetClaimRecoveryByClaimIDAndTarget(ctx, GetClaimRecoveryByClaimIDAndTargetParams{
+				ClaimID:        postProcess.ClaimID,
+				RecoveryTarget: pgtype.Text{String: recoveryTarget, Valid: recoveryTarget != ""},
+			})
 			if recoveryErr == nil {
 				if recovery.Status == "disputed" {
 					updatedRecovery, err := q.MarkClaimRecoveryWaived(ctx, recovery.ID)
