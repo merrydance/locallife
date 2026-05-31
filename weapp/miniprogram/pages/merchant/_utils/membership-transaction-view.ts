@@ -14,7 +14,10 @@ export function getMembershipTransactionTagView(type: string): MembershipTransac
     case 'refund':
       return buildStatusTagView('退款', 'success')
     case 'adjust':
+    case 'adjustment_credit':
       return buildStatusTagView('人工调整', 'info')
+    case 'adjustment_debit':
+      return buildStatusTagView('人工扣减', 'warning')
     default:
       return buildStatusTagView(type || '交易', 'neutral')
   }

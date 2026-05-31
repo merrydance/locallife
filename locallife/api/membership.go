@@ -983,7 +983,7 @@ func (server *Server) listMerchantMembers(ctx *gin.Context) {
 		return
 	}
 
-	members, err := logic.ListMerchantMembers(ctx, server.store, logic.MerchantMembersInput{
+	result, err := logic.ListMerchantMembers(ctx, server.store, logic.MerchantMembersInput{
 		MerchantID:       merchant.ID,
 		TargetMerchantID: uriReq.MerchantID,
 		Limit:            queryReq.PageSize,
@@ -997,8 +997,8 @@ func (server *Server) listMerchantMembers(ctx *gin.Context) {
 		return
 	}
 
-	rsp := make([]merchantMemberResponse, len(members))
-	for i, m := range members {
+	rsp := make([]merchantMemberResponse, len(result.Members))
+	for i, m := range result.Members {
 		phone := ""
 		if m.Phone.Valid {
 			phone = m.Phone.String
@@ -1022,7 +1022,7 @@ func (server *Server) listMerchantMembers(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, listMerchantMembersResponse{
 		Members:  rsp,
-		Total:    int64(len(rsp)),
+		Total:    result.Total,
 		PageID:   queryReq.PageID,
 		PageSize: queryReq.PageSize,
 	})
@@ -1140,6 +1140,7 @@ type recordMemberRechargeBody struct {
 }
 
 const membershipRechargeIdempotencyHeader = "Idempotency-Key"
+const membershipAdjustmentIdempotencyHeader = "Idempotency-Key"
 
 type merchantMemberRechargeResponse struct {
 	UserID         int64     `json:"user_id"`
@@ -1166,6 +1167,7 @@ type merchantMemberRechargeResponse struct {
 // @Produce json
 // @Param id path int true "商户ID"
 // @Param user_id path int true "用户ID"
+// @Param Idempotency-Key header string true "幂等键，同一笔余额调整重试必须复用同一个值"
 // @Param request body adjustMemberBalanceBody true "调整信息"
 // @Success 200 {object} merchantMemberResponse "更新后的会员信息"
 // @Failure 400 {object} ErrorResponse "参数错误或余额不足"
@@ -1187,6 +1189,11 @@ func (server *Server) adjustMemberBalance(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
+	idempotencyKey := strings.TrimSpace(ctx.GetHeader(membershipAdjustmentIdempotencyHeader))
+	if idempotencyKey == "" {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("Idempotency-Key header is required")))
+		return
+	}
 
 	merchant, ok := GetMerchantFromContext(ctx)
 	if !ok {
@@ -1200,6 +1207,7 @@ func (server *Server) adjustMemberBalance(ctx *gin.Context) {
 		UserID:           uriReq.UserID,
 		Amount:           bodyReq.Amount,
 		Notes:            bodyReq.Notes,
+		IdempotencyKey:   idempotencyKey,
 	})
 	if err != nil {
 		if writeLogicRequestError(ctx, err) {

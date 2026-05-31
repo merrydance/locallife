@@ -27,6 +27,35 @@ func TestListMerchantMembersForbidden(t *testing.T) {
 	require.Equal(t, "not authorized for this merchant", reqErr.Err.Error())
 }
 
+func TestListMerchantMembersSuccessReturnsTotal(t *testing.T) {
+	merchantID := int64(10)
+	rows := []db.ListMerchantMembersRow{{ID: 1, MerchantID: merchantID, UserID: 20}}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		ListMerchantMembers(gomock.Any(), db.ListMerchantMembersParams{MerchantID: merchantID, Limit: 5, Offset: 5}).
+		Times(1).
+		Return(rows, nil)
+	store.EXPECT().
+		CountMerchantMembers(gomock.Any(), merchantID).
+		Times(1).
+		Return(int64(12), nil)
+
+	result, err := ListMerchantMembers(context.Background(), store, MerchantMembersInput{
+		MerchantID:       merchantID,
+		TargetMerchantID: merchantID,
+		Limit:            5,
+		Offset:           5,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, int64(12), result.Total)
+	require.Len(t, result.Members, 1)
+}
+
 func TestGetMerchantMemberDetailNotFound(t *testing.T) {
 	merchantID := int64(10)
 	userID := int64(20)

@@ -15,6 +15,7 @@ type AdjustMemberBalanceInput struct {
 	UserID           int64
 	Amount           int64
 	Notes            string
+	IdempotencyKey   string
 }
 
 type AdjustMemberBalanceResult struct {
@@ -27,6 +28,10 @@ func AdjustMemberBalance(ctx context.Context, store db.Store, input AdjustMember
 
 	if input.Amount == 0 {
 		return result, NewRequestError(http.StatusBadRequest, errors.New("amount cannot be zero"))
+	}
+	idempotencyKey := strings.TrimSpace(input.IdempotencyKey)
+	if idempotencyKey == "" {
+		return result, NewRequestError(http.StatusBadRequest, errors.New("idempotency key is required"))
 	}
 	if input.MerchantID != input.TargetMerchantID {
 		return result, NewRequestError(http.StatusForbidden, errors.New("not authorized for this merchant"))
@@ -44,13 +49,17 @@ func AdjustMemberBalance(ctx context.Context, store db.Store, input AdjustMember
 	}
 
 	adjusted, err := store.AdjustMemberBalanceTx(ctx, db.AdjustMemberBalanceTxParams{
-		MembershipID: membership.ID,
-		Amount:       input.Amount,
-		Notes:        input.Notes,
+		MembershipID:   membership.ID,
+		Amount:         input.Amount,
+		Notes:          strings.TrimSpace(input.Notes),
+		IdempotencyKey: idempotencyKey,
 	})
 	if err != nil {
-		if strings.Contains(err.Error(), "余额不足") {
-			return result, NewRequestError(http.StatusBadRequest, err)
+		if errors.Is(err, db.ErrMembershipBalanceInsufficient) {
+			return result, NewRequestErrorWithCause(http.StatusBadRequest, errors.New("会员余额不足"), err)
+		}
+		if errors.Is(err, db.ErrMembershipAdjustmentIdempotencyConflict) {
+			return result, NewRequestErrorWithCause(http.StatusConflict, errors.New("idempotency key already used by a different membership adjustment request"), err)
 		}
 		return result, err
 	}

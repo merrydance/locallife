@@ -597,6 +597,93 @@ func TestCancelOrderTx_PaidOrder(t *testing.T) {
 	require.Equal(t, "商户未接单，用户取消", result.Order.CancelReason.String)
 }
 
+func TestCancelOrderTx_RollbackMembershipBalancePreservesSplit(t *testing.T) {
+	user := createRandomUser(t)
+	merchantOwner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, merchantOwner.ID)
+
+	membershipResult, err := testStore.JoinMembershipTx(context.Background(), JoinMembershipTxParams{
+		MerchantID: merchant.ID,
+		UserID:     user.ID,
+	})
+	require.NoError(t, err)
+
+	recharged, err := testStore.RechargeTx(context.Background(), RechargeTxParams{
+		MembershipID:   membershipResult.Membership.ID,
+		RechargeAmount: 10000,
+		BonusAmount:    2000,
+		Notes:          "split rollback setup",
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(10000), recharged.Membership.PrincipalBalance)
+	require.Equal(t, int64(2000), recharged.Membership.BonusBalance)
+
+	balancePaid := int64(7000)
+	createResult, err := testStore.CreateOrderTx(context.Background(), CreateOrderTxParams{
+		CreateOrderParams: CreateOrderParams{
+			OrderNo:      util.RandomString(20),
+			UserID:       user.ID,
+			MerchantID:   merchant.ID,
+			OrderType:    OrderTypeDineIn,
+			Subtotal:     balancePaid,
+			TotalAmount:  balancePaid,
+			BalancePaid:  balancePaid,
+			MembershipID: pgtype.Int8{Int64: membershipResult.Membership.ID, Valid: true},
+			Status:       OrderStatusPending,
+		},
+		Items: []CreateOrderItemParams{{
+			DishID:    pgtype.Int8{Int64: 1, Valid: true},
+			Name:      "会员余额取消回滚测试菜品",
+			UnitPrice: balancePaid,
+			Quantity:  1,
+			Subtotal:  balancePaid,
+		}},
+		MembershipID: &membershipResult.Membership.ID,
+		BalancePaid:  balancePaid,
+	})
+	require.NoError(t, err)
+	require.Equal(t, OrderStatusPaid, createResult.Order.Status)
+	require.NotNil(t, createResult.Transaction)
+	require.Equal(t, int64(-5000), createResult.Transaction.PrincipalAmount)
+	require.Equal(t, int64(-2000), createResult.Transaction.BonusAmount)
+
+	afterConsume, err := testStore.GetMerchantMembership(context.Background(), membershipResult.Membership.ID)
+	require.NoError(t, err)
+	require.Equal(t, int64(5000), afterConsume.PrincipalBalance)
+	require.Equal(t, int64(0), afterConsume.BonusBalance)
+	require.Equal(t, afterConsume.Balance, afterConsume.PrincipalBalance+afterConsume.BonusBalance)
+
+	_, err = testStore.CancelOrderTx(context.Background(), CancelOrderTxParams{
+		OrderID:      createResult.Order.ID,
+		OldStatus:    OrderStatusPaid,
+		CancelReason: "商户取消余额单",
+		OperatorID:   merchantOwner.ID,
+		OperatorType: "merchant",
+	})
+	require.NoError(t, err)
+
+	rolledBack, err := testStore.GetMerchantMembership(context.Background(), membershipResult.Membership.ID)
+	require.NoError(t, err)
+	require.Equal(t, int64(12000), rolledBack.Balance)
+	require.Equal(t, int64(10000), rolledBack.PrincipalBalance)
+	require.Equal(t, int64(2000), rolledBack.BonusBalance)
+	require.Equal(t, rolledBack.Balance, rolledBack.PrincipalBalance+rolledBack.BonusBalance)
+
+	transactions, err := testStore.ListMembershipTransactions(context.Background(), ListMembershipTransactionsParams{
+		MembershipID: membershipResult.Membership.ID,
+		Limit:        10,
+		Offset:       0,
+	})
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(transactions), 3)
+	refund := transactions[0]
+	require.Equal(t, "refund", refund.Type)
+	require.Equal(t, balancePaid, refund.Amount)
+	require.Equal(t, int64(5000), refund.PrincipalAmount)
+	require.Equal(t, int64(2000), refund.BonusAmount)
+	require.Equal(t, int64(12000), refund.BalanceAfter)
+}
+
 func TestCancelOrderTx_UnfreezesAssignedDeliveryDeposit(t *testing.T) {
 	user := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)

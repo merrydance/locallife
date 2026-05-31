@@ -2,7 +2,9 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -292,9 +294,10 @@ func (store *SQLStore) RefundTx(ctx context.Context, arg RefundTxParams) (Refund
 
 // AdjustMemberBalanceTxParams 商户调整会员余额事务参数
 type AdjustMemberBalanceTxParams struct {
-	MembershipID int64
-	Amount       int64  // 正数增加，负数减少
-	Notes        string // 调整备注
+	MembershipID   int64
+	Amount         int64  // 正数增加，负数减少
+	Notes          string // 调整备注
+	IdempotencyKey string
 }
 
 // AdjustMemberBalanceTxResult 商户调整会员余额事务结果
@@ -307,6 +310,11 @@ type AdjustMemberBalanceTxResult struct {
 // 解决 P1-007: 余额变动与流水记录非原子问题
 func (store *SQLStore) AdjustMemberBalanceTx(ctx context.Context, arg AdjustMemberBalanceTxParams) (AdjustMemberBalanceTxResult, error) {
 	var result AdjustMemberBalanceTxResult
+	idempotencyKey := strings.TrimSpace(arg.IdempotencyKey)
+	if idempotencyKey == "" {
+		return result, fmt.Errorf("idempotency key is required")
+	}
+	notes := strings.TrimSpace(arg.Notes)
 
 	err := store.execTx(ctx, func(q *Queries) error {
 		var err error
@@ -317,12 +325,28 @@ func (store *SQLStore) AdjustMemberBalanceTx(ctx context.Context, arg AdjustMemb
 			return fmt.Errorf("get membership for update: %w", err)
 		}
 
+		existingTransaction, err := q.GetMembershipAdjustmentTransactionByIdempotencyKey(ctx, GetMembershipAdjustmentTransactionByIdempotencyKeyParams{
+			MembershipID:   arg.MembershipID,
+			IdempotencyKey: pgtype.Text{String: idempotencyKey, Valid: true},
+		})
+		if err == nil {
+			if existingTransaction.Amount != arg.Amount || strings.TrimSpace(existingTransaction.Notes.String) != notes {
+				return fmt.Errorf("%w: idempotency key already used by a different membership adjustment request", ErrMembershipAdjustmentIdempotencyConflict)
+			}
+			result.Transaction = existingTransaction
+			result.Membership = membership
+			return nil
+		}
+		if !errors.Is(err, ErrRecordNotFound) {
+			return fmt.Errorf("get membership adjustment by idempotency key: %w", err)
+		}
+
 		// 2. 计算新余额并验证（调整默认作用于本金）
 		newPrincipal := membership.PrincipalBalance + arg.Amount
 		newBonus := membership.BonusBalance
 		newBalance := newPrincipal + newBonus
 		if newBalance < 0 {
-			return fmt.Errorf("余额不足，当前余额 %d 分，需扣减 %d 分", membership.Balance, -arg.Amount)
+			return fmt.Errorf("%w: current balance %d, debit %d", ErrMembershipBalanceInsufficient, membership.Balance, -arg.Amount)
 		}
 
 		// 3. 计算新的累计充值/消费
@@ -361,9 +385,21 @@ func (store *SQLStore) AdjustMemberBalanceTx(ctx context.Context, arg AdjustMemb
 			BalanceAfter:    newBalance,
 			RelatedOrderID:  pgtype.Int8{},
 			RechargeRuleID:  pgtype.Int8{},
-			Notes:           pgtype.Text{String: arg.Notes, Valid: arg.Notes != ""},
+			Notes:           pgtype.Text{String: notes, Valid: notes != ""},
+			IdempotencyKey:  pgtype.Text{String: idempotencyKey, Valid: true},
 		})
 		if err != nil {
+			if ErrorCode(err) == UniqueViolation {
+				existingTransaction, existingErr := q.GetMembershipAdjustmentTransactionByIdempotencyKey(ctx, GetMembershipAdjustmentTransactionByIdempotencyKeyParams{
+					MembershipID:   arg.MembershipID,
+					IdempotencyKey: pgtype.Text{String: idempotencyKey, Valid: true},
+				})
+				if existingErr == nil && existingTransaction.Amount == arg.Amount && strings.TrimSpace(existingTransaction.Notes.String) == notes {
+					result.Transaction = existingTransaction
+					result.Membership = membership
+					return nil
+				}
+			}
 			return fmt.Errorf("create membership transaction: %w", err)
 		}
 

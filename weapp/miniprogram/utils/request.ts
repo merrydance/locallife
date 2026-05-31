@@ -18,6 +18,7 @@ interface RequestOptions {
   url: string
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'
   data?: unknown
+  header?: Record<string, string>
   timeout?: number
   loading?: boolean
   loadingText?: string
@@ -269,7 +270,8 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
     useCache = false,
     cacheTTL = 5 * 60 * 1000, // 默认5分钟
     skipAuth = false, // 是否跳过认证
-    strictEnvelope = false
+    strictEnvelope = false,
+    header
   } = options
 
   const normalizedData = method === 'GET' ? sanitizeGetParams(data) : data
@@ -350,6 +352,7 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
           data: requestData,
           timeout,
           header: {
+            ...(header || {}),
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${getToken()}`,
             'X-User-Latitude': String(latitude),

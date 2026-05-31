@@ -2,7 +2,6 @@ package logic
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	mockdb "github.com/merrydance/locallife/db/mock"
@@ -29,6 +28,24 @@ func TestAdjustMemberBalanceZeroAmount(t *testing.T) {
 	require.Equal(t, "amount cannot be zero", reqErr.Err.Error())
 }
 
+func TestAdjustMemberBalanceMissingIdempotencyKey(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	_, err := AdjustMemberBalance(context.Background(), store, AdjustMemberBalanceInput{
+		MerchantID:       1,
+		TargetMerchantID: 1,
+		UserID:           2,
+		Amount:           10,
+		Notes:            "test",
+	})
+
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 400, reqErr.Status)
+	require.Equal(t, "idempotency key is required", reqErr.Err.Error())
+}
+
 func TestAdjustMemberBalanceForbidden(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -40,6 +57,7 @@ func TestAdjustMemberBalanceForbidden(t *testing.T) {
 		UserID:           2,
 		Amount:           10,
 		Notes:            "test",
+		IdempotencyKey:   "adjust-forbidden-1",
 	})
 
 	reqErr := assertRequestError(t, err)
@@ -66,6 +84,7 @@ func TestAdjustMemberBalanceNotFound(t *testing.T) {
 		UserID:           userID,
 		Amount:           10,
 		Notes:            "test",
+		IdempotencyKey:   "adjust-not-found-1",
 	})
 
 	reqErr := assertRequestError(t, err)
@@ -89,7 +108,10 @@ func TestAdjustMemberBalanceInsufficient(t *testing.T) {
 	store.EXPECT().
 		AdjustMemberBalanceTx(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(db.AdjustMemberBalanceTxResult{}, errors.New("余额不足"))
+		DoAndReturn(func(_ context.Context, arg db.AdjustMemberBalanceTxParams) (db.AdjustMemberBalanceTxResult, error) {
+			require.Equal(t, "adjust-1", arg.IdempotencyKey)
+			return db.AdjustMemberBalanceTxResult{}, db.ErrMembershipBalanceInsufficient
+		})
 
 	_, err := AdjustMemberBalance(context.Background(), store, AdjustMemberBalanceInput{
 		MerchantID:       merchantID,
@@ -97,11 +119,47 @@ func TestAdjustMemberBalanceInsufficient(t *testing.T) {
 		UserID:           userID,
 		Amount:           -10,
 		Notes:            "test",
+		IdempotencyKey:   "adjust-1",
 	})
 
 	reqErr := assertRequestError(t, err)
 	require.Equal(t, 400, reqErr.Status)
-	require.Equal(t, "余额不足", reqErr.Err.Error())
+	require.Equal(t, "会员余额不足", reqErr.Err.Error())
+}
+
+func TestAdjustMemberBalanceIdempotencyConflict(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	merchantID := int64(1)
+	userID := int64(2)
+	membership := db.MerchantMembership{ID: 3, MerchantID: merchantID, UserID: userID}
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetMembershipByMerchantAndUser(gomock.Any(), db.GetMembershipByMerchantAndUserParams{
+			MerchantID: merchantID,
+			UserID:     userID,
+		}).
+		Times(1).
+		Return(membership, nil)
+	store.EXPECT().
+		AdjustMemberBalanceTx(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.AdjustMemberBalanceTxResult{}, db.ErrMembershipAdjustmentIdempotencyConflict)
+
+	_, err := AdjustMemberBalance(context.Background(), store, AdjustMemberBalanceInput{
+		MerchantID:       merchantID,
+		TargetMerchantID: merchantID,
+		UserID:           userID,
+		Amount:           10,
+		Notes:            "test",
+		IdempotencyKey:   "adjust-conflict-1",
+	})
+
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 409, reqErr.Status)
+	require.Equal(t, "idempotency key already used by a different membership adjustment request", reqErr.Err.Error())
 }
 
 func TestAdjustMemberBalanceSuccess(t *testing.T) {
@@ -120,7 +178,15 @@ func TestAdjustMemberBalanceSuccess(t *testing.T) {
 	store.EXPECT().
 		AdjustMemberBalanceTx(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(db.AdjustMemberBalanceTxResult{Membership: membership}, nil)
+		DoAndReturn(func(_ context.Context, arg db.AdjustMemberBalanceTxParams) (db.AdjustMemberBalanceTxResult, error) {
+			require.Equal(t, db.AdjustMemberBalanceTxParams{
+				MembershipID:   membership.ID,
+				Amount:         10,
+				Notes:          "test",
+				IdempotencyKey: "adjust-success-1",
+			}, arg)
+			return db.AdjustMemberBalanceTxResult{Membership: membership}, nil
+		})
 	store.EXPECT().
 		GetUser(gomock.Any(), userID).
 		Times(1).
@@ -132,6 +198,7 @@ func TestAdjustMemberBalanceSuccess(t *testing.T) {
 		UserID:           userID,
 		Amount:           10,
 		Notes:            "test",
+		IdempotencyKey:   "adjust-success-1",
 	})
 
 	require.NoError(t, err)

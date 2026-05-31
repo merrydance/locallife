@@ -1953,6 +1953,21 @@ func (mr *MockStoreMockRecorder) CountMerchantFinanceOrders(ctx, arg any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountMerchantFinanceOrders", reflect.TypeOf((*MockStore)(nil).CountMerchantFinanceOrders), ctx, arg)
 }
 
+// CountMerchantMembers mocks base method.
+func (m *MockStore) CountMerchantMembers(ctx context.Context, merchantID int64) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountMerchantMembers", ctx, merchantID)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountMerchantMembers indicates an expected call of CountMerchantMembers.
+func (mr *MockStoreMockRecorder) CountMerchantMembers(ctx, merchantID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountMerchantMembers", reflect.TypeOf((*MockStore)(nil).CountMerchantMembers), ctx, merchantID)
+}
+
 // CountMerchantOrdersByStatusAfterTime mocks base method.
 func (m *MockStore) CountMerchantOrdersByStatusAfterTime(ctx context.Context, arg db.CountMerchantOrdersByStatusAfterTimeParams) (int64, error) {
 	m.ctrl.T.Helper()
@@ -8530,6 +8545,21 @@ func (m *MockStore) GetMediaAssetByObjectKey(ctx context.Context, objectKey stri
 func (mr *MockStoreMockRecorder) GetMediaAssetByObjectKey(ctx, objectKey any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMediaAssetByObjectKey", reflect.TypeOf((*MockStore)(nil).GetMediaAssetByObjectKey), ctx, objectKey)
+}
+
+// GetMembershipAdjustmentTransactionByIdempotencyKey mocks base method.
+func (m *MockStore) GetMembershipAdjustmentTransactionByIdempotencyKey(ctx context.Context, arg db.GetMembershipAdjustmentTransactionByIdempotencyKeyParams) (db.MembershipTransaction, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMembershipAdjustmentTransactionByIdempotencyKey", ctx, arg)
+	ret0, _ := ret[0].(db.MembershipTransaction)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMembershipAdjustmentTransactionByIdempotencyKey indicates an expected call of GetMembershipAdjustmentTransactionByIdempotencyKey.
+func (mr *MockStoreMockRecorder) GetMembershipAdjustmentTransactionByIdempotencyKey(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMembershipAdjustmentTransactionByIdempotencyKey", reflect.TypeOf((*MockStore)(nil).GetMembershipAdjustmentTransactionByIdempotencyKey), ctx, arg)
 }
 
 // GetMembershipByMerchantAndUser mocks base method.

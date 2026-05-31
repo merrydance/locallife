@@ -523,6 +523,97 @@ func TestRecordMemberRechargeAPI(t *testing.T) {
 	}
 }
 
+func TestAdjustMemberBalanceAPIRequiresIdempotencyKey(t *testing.T) {
+	merchantOwner, _ := randomUser(t)
+	merchant := randomMerchant(merchantOwner.ID)
+	memberUser, _ := randomUser(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+	store.EXPECT().GetMembershipByMerchantAndUser(gomock.Any(), gomock.Any()).Times(0)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	data, err := json.Marshal(map[string]interface{}{
+		"amount": int64(1000),
+		"notes":  "人工补偿",
+	})
+	require.NoError(t, err)
+
+	url := fmt.Sprintf("/v1/merchants/%d/members/%d/balance", merchant.ID, memberUser.ID)
+	request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(data))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "Idempotency-Key header is required")
+}
+
+func TestAdjustMemberBalanceAPIForwardsIdempotencyKey(t *testing.T) {
+	merchantOwner, _ := randomUser(t)
+	merchant := randomMerchant(merchantOwner.ID)
+	memberUser, _ := randomUser(t)
+	membership := randomMembership(memberUser.ID)
+	membership.MerchantID = merchant.ID
+	updatedMembership := membership
+	updatedMembership.Balance = 1000
+	updatedMembership.PrincipalBalance = 1000
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+	store.EXPECT().
+		GetMembershipByMerchantAndUser(gomock.Any(), db.GetMembershipByMerchantAndUserParams{MerchantID: merchant.ID, UserID: memberUser.ID}).
+		Times(1).
+		Return(membership, nil)
+	store.EXPECT().
+		AdjustMemberBalanceTx(gomock.Any(), db.AdjustMemberBalanceTxParams{
+			MembershipID:   membership.ID,
+			Amount:         1000,
+			Notes:          "人工补偿",
+			IdempotencyKey: "adjust-api-1",
+		}).
+		Times(1).
+		Return(db.AdjustMemberBalanceTxResult{Membership: updatedMembership}, nil)
+	store.EXPECT().
+		GetUser(gomock.Any(), memberUser.ID).
+		Times(1).
+		Return(memberUser, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	data, err := json.Marshal(map[string]interface{}{
+		"amount": int64(1000),
+		"notes":  "人工补偿",
+	})
+	require.NoError(t, err)
+
+	url := fmt.Sprintf("/v1/merchants/%d/members/%d/balance", merchant.ID, memberUser.ID)
+	request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(data))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Idempotency-Key", " adjust-api-1 ")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var rsp merchantMemberResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &rsp)
+	require.Equal(t, memberUser.ID, rsp.UserID)
+	require.Equal(t, int64(1000), rsp.Balance)
+}
+
 func TestGetMembershipAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	membership := randomMembership(user.ID)

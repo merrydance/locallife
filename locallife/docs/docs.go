@@ -14662,6 +14662,13 @@ const docTemplate = `{
                         "required": true
                     },
                     {
+                        "type": "string",
+                        "description": "幂等键，同一笔余额调整重试必须复用同一个值",
+                        "name": "Idempotency-Key",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
                         "description": "调整信息",
                         "name": "request",
                         "in": "body",

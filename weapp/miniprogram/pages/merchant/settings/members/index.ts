@@ -81,6 +81,10 @@ function defaultAdjustForm(): AdjustFormData {
   }
 }
 
+function buildAdjustIdempotencyKey(merchantId: number, userId: number) {
+  return `merchant-member-adjust:${merchantId}:${userId}:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`
+}
+
 const getErrorMessage = getErrorUserMessage
 
 Page({
@@ -104,6 +108,7 @@ Page({
     adjustSubmitting: false,
     adjustTargetUserId: 0,
     adjustTargetName: '',
+    adjustIdempotencyKey: '',
     adjustForm: defaultAdjustForm()
   },
 
@@ -170,7 +175,7 @@ Page({
       this.setData({
         members,
         pageId: nextPageId,
-        hasMore: incoming.length >= this.data.pageSize,
+        hasMore: members.length < (response.total || 0),
         initialLoading: false,
         initialError: false,
         initialErrorMessage: '',
@@ -248,6 +253,7 @@ Page({
       adjustVisible: true,
       adjustTargetUserId: member.user_id,
       adjustTargetName: member.display_name,
+      adjustIdempotencyKey: buildAdjustIdempotencyKey(this.data.merchantId, member.user_id),
       adjustForm: defaultAdjustForm()
     })
   },
@@ -259,13 +265,19 @@ Page({
   onChangeAdjustDirection(e: WechatMiniprogram.TouchEvent) {
     const { direction } = e.currentTarget.dataset as { direction?: AdjustDirection }
     if (!direction) return
-    this.setData({ 'adjustForm.direction': direction })
+    this.setData({
+      'adjustForm.direction': direction,
+      adjustIdempotencyKey: buildAdjustIdempotencyKey(this.data.merchantId, this.data.adjustTargetUserId)
+    })
   },
 
   onAdjustInput(e: WechatMiniprogram.Input) {
     const { field } = e.currentTarget.dataset as { field?: keyof AdjustFormData }
     if (!field) return
-    this.setData({ [`adjustForm.${field}`]: e.detail.value })
+    this.setData({
+      [`adjustForm.${field}`]: e.detail.value,
+      adjustIdempotencyKey: buildAdjustIdempotencyKey(this.data.merchantId, this.data.adjustTargetUserId)
+    })
   },
 
   async onSubmitAdjust() {
@@ -282,6 +294,7 @@ Page({
     }
 
     const signedAmount = Math.round(amountYuan * 100) * (this.data.adjustForm.direction === 'decrease' ? -1 : 1)
+    const idempotencyKey = this.data.adjustIdempotencyKey || buildAdjustIdempotencyKey(this.data.merchantId, this.data.adjustTargetUserId)
 
     this.setData({ adjustSubmitting: true })
     wx.showLoading({ title: '提交中...' })
@@ -289,6 +302,8 @@ Page({
       const updated = await adjustMerchantMemberBalance(this.data.merchantId, this.data.adjustTargetUserId, {
         amount: signedAmount,
         notes: this.data.adjustForm.notes.trim()
+      }, {
+        idempotencyKey
       })
 
       const updatedView = buildMemberView(updated)

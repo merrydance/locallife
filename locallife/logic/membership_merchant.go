@@ -28,9 +28,16 @@ type MerchantMemberDetailResult struct {
 	Transactions []db.MembershipTransaction
 }
 
-func ListMerchantMembers(ctx context.Context, store db.Store, input MerchantMembersInput) ([]db.ListMerchantMembersRow, error) {
+type MerchantMembersResult struct {
+	Members []db.ListMerchantMembersRow
+	Total   int64
+}
+
+func ListMerchantMembers(ctx context.Context, store db.Store, input MerchantMembersInput) (MerchantMembersResult, error) {
+	var result MerchantMembersResult
+
 	if input.MerchantID != input.TargetMerchantID {
-		return nil, NewRequestError(http.StatusForbidden, errors.New("not authorized for this merchant"))
+		return result, NewRequestError(http.StatusForbidden, errors.New("not authorized for this merchant"))
 	}
 
 	members, err := store.ListMerchantMembers(ctx, db.ListMerchantMembersParams{
@@ -39,10 +46,17 @@ func ListMerchantMembers(ctx context.Context, store db.Store, input MerchantMemb
 		Offset:     input.Offset,
 	})
 	if err != nil {
-		return nil, err
+		return result, err
 	}
 
-	return members, nil
+	total, err := store.CountMerchantMembers(ctx, input.TargetMerchantID)
+	if err != nil {
+		return result, err
+	}
+
+	result.Members = members
+	result.Total = total
+	return result, nil
 }
 
 func GetMerchantMemberDetail(ctx context.Context, store db.Store, input MerchantMemberDetailInput) (MerchantMemberDetailResult, error) {

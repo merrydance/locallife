@@ -305,6 +305,99 @@ func TestRefundTx(t *testing.T) {
 	require.Equal(t, int64(7000), result.Transaction.BalanceAfter)
 }
 
+func TestAdjustMemberBalanceTxRequiresIdempotencyKey(t *testing.T) {
+	user := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+
+	membership, err := testStore.CreateMerchantMembership(context.Background(), CreateMerchantMembershipParams{
+		MerchantID: merchant.ID,
+		UserID:     user.ID,
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.AdjustMemberBalanceTx(context.Background(), AdjustMemberBalanceTxParams{
+		MembershipID: membership.ID,
+		Amount:       1000,
+		Notes:        "manual credit",
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "idempotency key is required")
+}
+
+func TestAdjustMemberBalanceTxReplaysSameIdempotencyKey(t *testing.T) {
+	user := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+
+	membership, err := testStore.CreateMerchantMembership(context.Background(), CreateMerchantMembershipParams{
+		MerchantID: merchant.ID,
+		UserID:     user.ID,
+	})
+	require.NoError(t, err)
+
+	arg := AdjustMemberBalanceTxParams{
+		MembershipID:   membership.ID,
+		Amount:         2500,
+		Notes:          "manual credit",
+		IdempotencyKey: "adjust-replay-key",
+	}
+
+	first, err := testStore.AdjustMemberBalanceTx(context.Background(), arg)
+	require.NoError(t, err)
+	require.Equal(t, int64(2500), first.Membership.Balance)
+	require.Equal(t, int64(2500), first.Membership.PrincipalBalance)
+	require.Equal(t, int64(0), first.Membership.BonusBalance)
+	require.Equal(t, int64(2500), first.Transaction.Amount)
+	require.Equal(t, "adjustment_credit", first.Transaction.Type)
+	require.True(t, first.Transaction.IdempotencyKey.Valid)
+	require.Equal(t, "adjust-replay-key", first.Transaction.IdempotencyKey.String)
+
+	second, err := testStore.AdjustMemberBalanceTx(context.Background(), arg)
+	require.NoError(t, err)
+	require.Equal(t, first.Transaction.ID, second.Transaction.ID)
+	require.Equal(t, first.Membership.ID, second.Membership.ID)
+	require.Equal(t, int64(2500), second.Membership.Balance)
+	require.Equal(t, int64(2500), second.Membership.PrincipalBalance)
+
+	dbMembership, err := testStore.GetMerchantMembership(context.Background(), membership.ID)
+	require.NoError(t, err)
+	require.Equal(t, int64(2500), dbMembership.Balance)
+	require.Equal(t, dbMembership.Balance, dbMembership.PrincipalBalance+dbMembership.BonusBalance)
+}
+
+func TestAdjustMemberBalanceTxRejectsConflictingIdempotencyKey(t *testing.T) {
+	user := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+
+	membership, err := testStore.CreateMerchantMembership(context.Background(), CreateMerchantMembershipParams{
+		MerchantID: merchant.ID,
+		UserID:     user.ID,
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.AdjustMemberBalanceTx(context.Background(), AdjustMemberBalanceTxParams{
+		MembershipID:   membership.ID,
+		Amount:         2500,
+		Notes:          "manual credit",
+		IdempotencyKey: "adjust-conflict-key",
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.AdjustMemberBalanceTx(context.Background(), AdjustMemberBalanceTxParams{
+		MembershipID:   membership.ID,
+		Amount:         2600,
+		Notes:          "manual credit",
+		IdempotencyKey: "adjust-conflict-key",
+	})
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrMembershipAdjustmentIdempotencyConflict)
+	require.Contains(t, err.Error(), "idempotency key already used by a different membership adjustment request")
+
+	dbMembership, err := testStore.GetMerchantMembership(context.Background(), membership.ID)
+	require.NoError(t, err)
+	require.Equal(t, int64(2500), dbMembership.Balance)
+	require.Equal(t, dbMembership.Balance, dbMembership.PrincipalBalance+dbMembership.BonusBalance)
+}
+
 // ==================== Concurrent Tests ====================
 
 // 测试并发充值（验证行锁）

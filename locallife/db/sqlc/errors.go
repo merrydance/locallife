@@ -14,3 +14,11 @@ var ErrRiderDepositFrozen = errors.New("rider deposit is currently frozen")
 // entered a delivery stage where cancellation can no longer release rider
 // deposit automatically.
 var ErrOrderCancellationBlockedByDeliveryState = errors.New("order cancellation blocked by delivery state")
+
+// ErrMembershipBalanceInsufficient is returned when a membership balance
+// mutation would drive the stored balance below zero.
+var ErrMembershipBalanceInsufficient = errors.New("insufficient membership balance")
+
+// ErrMembershipAdjustmentIdempotencyConflict is returned when the same
+// idempotency key is reused for a different manual membership adjustment.
+var ErrMembershipAdjustmentIdempotencyConflict = errors.New("membership adjustment idempotency conflict")

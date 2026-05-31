@@ -12,6 +12,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countMerchantMembers = `-- name: CountMerchantMembers :one
+SELECT COUNT(*) FROM merchant_memberships
+WHERE merchant_id = $1
+`
+
+func (q *Queries) CountMerchantMembers(ctx context.Context, merchantID int64) (int64, error) {
+	row := q.db.QueryRow(ctx, countMerchantMembers, merchantID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createMembershipRechargeTransaction = `-- name: CreateMembershipRechargeTransaction :one
 INSERT INTO membership_transactions (
     membership_id,
@@ -83,9 +95,10 @@ INSERT INTO membership_transactions (
     balance_after,
     related_order_id,
     recharge_rule_id,
-    notes
+    notes,
+    idempotency_key
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 ) RETURNING id, membership_id, type, amount, balance_after, related_order_id, recharge_rule_id, notes, created_at, payment_order_id, principal_amount, bonus_amount, idempotency_key
 `
 
@@ -99,6 +112,7 @@ type CreateMembershipTransactionParams struct {
 	RelatedOrderID  pgtype.Int8 `json:"related_order_id"`
 	RechargeRuleID  pgtype.Int8 `json:"recharge_rule_id"`
 	Notes           pgtype.Text `json:"notes"`
+	IdempotencyKey  pgtype.Text `json:"idempotency_key"`
 }
 
 // Membership Transactions
@@ -113,6 +127,7 @@ func (q *Queries) CreateMembershipTransaction(ctx context.Context, arg CreateMem
 		arg.RelatedOrderID,
 		arg.RechargeRuleID,
 		arg.Notes,
+		arg.IdempotencyKey,
 	)
 	var i MembershipTransaction
 	err := row.Scan(
@@ -347,6 +362,42 @@ func (q *Queries) GetMatchingRechargeRule(ctx context.Context, arg GetMatchingRe
 		&i.ValidUntil,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getMembershipAdjustmentTransactionByIdempotencyKey = `-- name: GetMembershipAdjustmentTransactionByIdempotencyKey :one
+SELECT id, membership_id, type, amount, balance_after, related_order_id, recharge_rule_id, notes, created_at, payment_order_id, principal_amount, bonus_amount, idempotency_key
+FROM membership_transactions
+WHERE membership_id = $1
+    AND type IN ('adjustment_credit', 'adjustment_debit')
+    AND idempotency_key = $2
+ORDER BY created_at DESC, id DESC
+LIMIT 1
+`
+
+type GetMembershipAdjustmentTransactionByIdempotencyKeyParams struct {
+	MembershipID   int64       `json:"membership_id"`
+	IdempotencyKey pgtype.Text `json:"idempotency_key"`
+}
+
+func (q *Queries) GetMembershipAdjustmentTransactionByIdempotencyKey(ctx context.Context, arg GetMembershipAdjustmentTransactionByIdempotencyKeyParams) (MembershipTransaction, error) {
+	row := q.db.QueryRow(ctx, getMembershipAdjustmentTransactionByIdempotencyKey, arg.MembershipID, arg.IdempotencyKey)
+	var i MembershipTransaction
+	err := row.Scan(
+		&i.ID,
+		&i.MembershipID,
+		&i.Type,
+		&i.Amount,
+		&i.BalanceAfter,
+		&i.RelatedOrderID,
+		&i.RechargeRuleID,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.PaymentOrderID,
+		&i.PrincipalAmount,
+		&i.BonusAmount,
+		&i.IdempotencyKey,
 	)
 	return i, err
 }

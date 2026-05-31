@@ -293,18 +293,35 @@ func (store *SQLStore) CancelOrderTx(ctx context.Context, arg CancelOrderTxParam
 				}
 				// 会员卡已删除，记录日志但不阻塞取消流程
 			} else {
-				// 回滚余额：加回已支付金额
+				consumeTx, consumeErr := q.GetMembershipConsumeByOrder(ctx, GetMembershipConsumeByOrderParams{
+					MembershipID:   membership.ID,
+					RelatedOrderID: pgtype.Int8{Int64: result.Order.ID, Valid: true},
+				})
+				var principalRollback, bonusRollback int64
+				if consumeErr == nil {
+					principalRollback = -consumeTx.PrincipalAmount
+					bonusRollback = -consumeTx.BonusAmount
+				} else if errors.Is(consumeErr, ErrRecordNotFound) {
+					principalRollback = result.Order.BalancePaid
+				} else {
+					return fmt.Errorf("get membership consume transaction for rollback: %w", consumeErr)
+				}
+
 				newBalance := membership.Balance + result.Order.BalancePaid
+				newPrincipal := membership.PrincipalBalance + principalRollback
+				newBonus := membership.BonusBalance + bonusRollback
 				newTotalConsumed := membership.TotalConsumed - result.Order.BalancePaid
 				if newTotalConsumed < 0 {
 					newTotalConsumed = 0
 				}
 
 				_, err = q.UpdateMembershipBalance(ctx, UpdateMembershipBalanceParams{
-					ID:             membership.ID,
-					Balance:        newBalance,
-					TotalRecharged: membership.TotalRecharged,
-					TotalConsumed:  newTotalConsumed,
+					ID:               membership.ID,
+					Balance:          newBalance,
+					PrincipalBalance: newPrincipal,
+					BonusBalance:     newBonus,
+					TotalRecharged:   membership.TotalRecharged,
+					TotalConsumed:    newTotalConsumed,
 				})
 				if err != nil {
 					return fmt.Errorf("rollback membership balance: %w", err)
@@ -312,13 +329,15 @@ func (store *SQLStore) CancelOrderTx(ctx context.Context, arg CancelOrderTxParam
 
 				// 创建退款流水记录
 				_, err = q.CreateMembershipTransaction(ctx, CreateMembershipTransactionParams{
-					MembershipID:   membership.ID,
-					Type:           "refund",
-					Amount:         result.Order.BalancePaid,
-					BalanceAfter:   newBalance,
-					RelatedOrderID: pgtype.Int8{Int64: result.Order.ID, Valid: true},
-					RechargeRuleID: pgtype.Int8{},
-					Notes:          pgtype.Text{String: fmt.Sprintf("订单取消退回余额: %s", result.Order.OrderNo), Valid: true},
+					MembershipID:    membership.ID,
+					Type:            "refund",
+					Amount:          result.Order.BalancePaid,
+					PrincipalAmount: principalRollback,
+					BonusAmount:     bonusRollback,
+					BalanceAfter:    newBalance,
+					RelatedOrderID:  pgtype.Int8{Int64: result.Order.ID, Valid: true},
+					RechargeRuleID:  pgtype.Int8{},
+					Notes:           pgtype.Text{String: fmt.Sprintf("订单取消退回余额: %s", result.Order.OrderNo), Valid: true},
 				})
 				if err != nil {
 					return fmt.Errorf("create membership refund transaction: %w", err)

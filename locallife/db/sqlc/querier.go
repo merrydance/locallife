@@ -181,6 +181,7 @@ type Querier interface {
 	// 统计商户的顾客总数
 	CountMerchantCustomers(ctx context.Context, merchantID int64) (int32, error)
 	CountMerchantFinanceOrders(ctx context.Context, arg CountMerchantFinanceOrdersParams) (int64, error)
+	CountMerchantMembers(ctx context.Context, merchantID int64) (int64, error)
 	// 统计商户在某时间后特定状态的订单数
 	CountMerchantOrdersByStatusAfterTime(ctx context.Context, arg CountMerchantOrdersByStatusAfterTimeParams) (int64, error)
 	CountMerchantPrintAnomalies(ctx context.Context, arg CountMerchantPrintAnomaliesParams) (int64, error)
@@ -793,6 +794,7 @@ type Querier interface {
 	GetMediaAssetByID(ctx context.Context, id int64) (MediaAsset, error)
 	GetMediaAssetByModerationTraceID(ctx context.Context, moderationTraceID pgtype.Text) (MediaAsset, error)
 	GetMediaAssetByObjectKey(ctx context.Context, objectKey string) (MediaAsset, error)
+	GetMembershipAdjustmentTransactionByIdempotencyKey(ctx context.Context, arg GetMembershipAdjustmentTransactionByIdempotencyKeyParams) (MembershipTransaction, error)
 	GetMembershipByMerchantAndUser(ctx context.Context, arg GetMembershipByMerchantAndUserParams) (MerchantMembership, error)
 	GetMembershipByMerchantAndUserForUpdate(ctx context.Context, arg GetMembershipByMerchantAndUserForUpdateParams) (MerchantMembership, error)
 	GetMembershipConsumeByOrder(ctx context.Context, arg GetMembershipConsumeByOrderParams) (MembershipTransaction, error)

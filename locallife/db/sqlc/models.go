@@ -1036,7 +1036,7 @@ type MembershipTransaction struct {
 	PaymentOrderID  pgtype.Int8 `json:"payment_order_id"`
 	PrincipalAmount int64       `json:"principal_amount"`
 	BonusAmount     int64       `json:"bonus_amount"`
-	// 商户代录会员充值请求幂等键，仅 recharge 交易使用
+	// 商户代录会员充值和人工余额调整请求幂等键
 	IdempotencyKey pgtype.Text `json:"idempotency_key"`
 }
 

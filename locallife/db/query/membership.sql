@@ -30,6 +30,10 @@ WHERE m.merchant_id = $1
 ORDER BY m.total_consumed DESC
 LIMIT $2 OFFSET $3;
 
+-- name: CountMerchantMembers :one
+SELECT COUNT(*) FROM merchant_memberships
+WHERE merchant_id = $1;
+
 -- name: UpdateMembershipBalance :one
 UPDATE merchant_memberships
 SET 
@@ -140,9 +144,10 @@ INSERT INTO membership_transactions (
     balance_after,
     related_order_id,
     recharge_rule_id,
-    notes
+    notes,
+    idempotency_key
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 ) RETURNING *;
 
 -- name: CreateMembershipTransactionWithPaymentOrderID :one
@@ -196,6 +201,15 @@ SELECT id, membership_id, type, amount, balance_after, related_order_id, recharg
 FROM membership_transactions
 WHERE membership_id = sqlc.arg('membership_id')
     AND type = 'recharge'
+    AND idempotency_key = sqlc.arg('idempotency_key')
+ORDER BY created_at DESC, id DESC
+LIMIT 1;
+
+-- name: GetMembershipAdjustmentTransactionByIdempotencyKey :one
+SELECT id, membership_id, type, amount, balance_after, related_order_id, recharge_rule_id, notes, created_at, payment_order_id, principal_amount, bonus_amount, idempotency_key
+FROM membership_transactions
+WHERE membership_id = sqlc.arg('membership_id')
+    AND type IN ('adjustment_credit', 'adjustment_debit')
     AND idempotency_key = sqlc.arg('idempotency_key')
 ORDER BY created_at DESC, id DESC
 LIMIT 1;

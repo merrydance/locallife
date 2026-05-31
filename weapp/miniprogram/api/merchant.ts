@@ -739,6 +739,10 @@ export interface AdjustMerchantMemberBalanceRequest {
   notes: string
 }
 
+export interface AdjustMerchantMemberBalanceOptions {
+  idempotencyKey: string
+}
+
 export interface MerchantDiscountRuleResponse {
   id: number
   merchant_id: number
@@ -870,11 +874,19 @@ export function getMerchantMemberDetail(merchantId: number, userId: number) {
  * 调整商户会员余额
  * POST /v1/merchants/{id}/members/{user_id}/balance
  */
-export function adjustMerchantMemberBalance(merchantId: number, userId: number, data: AdjustMerchantMemberBalanceRequest) {
+export function adjustMerchantMemberBalance(
+  merchantId: number,
+  userId: number,
+  data: AdjustMerchantMemberBalanceRequest,
+  options: AdjustMerchantMemberBalanceOptions
+) {
   return request<MerchantMemberSummary>({
     url: `/v1/merchants/${merchantId}/members/${userId}/balance`,
     method: 'POST',
-    data
+    data,
+    header: {
+      'Idempotency-Key': options.idempotencyKey
+    }
   })
 }
 
