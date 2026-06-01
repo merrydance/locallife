@@ -87,7 +87,7 @@ func TestHub_RegisterAndUnregisterMerchant(t *testing.T) {
 	require.Equal(t, 0, hub.GetOnlineMerchantCount())
 }
 
-func TestHub_ReplaceOldConnection(t *testing.T) {
+func TestHub_ReplaceOldRiderConnection(t *testing.T) {
 	ctx := context.Background()
 	hub := NewHub(ctx)
 
@@ -133,6 +133,79 @@ func TestHub_ReplaceOldConnection(t *testing.T) {
 	// 新连接应该在线
 	require.True(t, hub.IsRiderOnline(100))
 	require.Equal(t, 1, hub.GetOnlineRiderCount())
+}
+
+func TestHub_AllowsMultipleMerchantConnections(t *testing.T) {
+	ctx := context.Background()
+	hub := NewHub(ctx)
+
+	go hub.Run()
+	defer hub.Shutdown()
+
+	firstClient := &Client{
+		info: ClientInfo{
+			UserID:     2,
+			ClientType: ClientTypeMerchant,
+			EntityID:   200,
+		},
+		hub:  hub,
+		send: make(chan Message, 256),
+		done: make(chan struct{}),
+	}
+	secondClient := &Client{
+		info: ClientInfo{
+			UserID:     2,
+			ClientType: ClientTypeMerchant,
+			EntityID:   200,
+		},
+		hub:  hub,
+		send: make(chan Message, 256),
+		done: make(chan struct{}),
+	}
+
+	hub.Register(firstClient)
+	eventually(t, func() bool { return hub.IsMerchantOnline(200) }, "merchant should be online after first register")
+	hub.Register(secondClient)
+	eventually(t, func() bool {
+		return hub.GetOnlineMerchantCount() == 1 &&
+			hub.GetOnlineMerchantConnectionCount() == 2
+	}, "both merchant connections should remain online")
+
+	select {
+	case <-firstClient.done:
+		t.Fatal("first merchant connection should not be closed by second connection")
+	default:
+	}
+
+	testMsg := Message{
+		Type:      "new_order",
+		Data:      json.RawMessage(`{"order_id": 123}`),
+		Timestamp: time.Now(),
+	}
+	hub.SendToMerchant(200, testMsg)
+
+	for _, client := range []*Client{firstClient, secondClient} {
+		select {
+		case received := <-client.send:
+			require.Equal(t, "new_order", received.Type)
+		case <-time.After(time.Second):
+			t.Fatal("expected each merchant connection to receive message")
+		}
+	}
+
+	hub.Unregister(firstClient)
+	eventually(t, func() bool {
+		return hub.IsMerchantOnline(200) &&
+			hub.GetOnlineMerchantCount() == 1 &&
+			hub.GetOnlineMerchantConnectionCount() == 1
+	}, "merchant should stay online while one connection remains")
+	require.Equal(t, 1, hub.GetOnlineMerchantCount())
+	require.Equal(t, 1, hub.GetOnlineMerchantConnectionCount())
+
+	hub.Unregister(secondClient)
+	eventually(t, func() bool { return !hub.IsMerchantOnline(200) }, "merchant should be offline after all connections unregister")
+	require.Equal(t, 0, hub.GetOnlineMerchantCount())
+	require.Equal(t, 0, hub.GetOnlineMerchantConnectionCount())
 }
 
 func TestHub_UnregisterWrongClient(t *testing.T) {
@@ -567,6 +640,71 @@ func TestHub_Replay(t *testing.T) {
 		require.Equal(t, msgID, replayed.ID)
 	case <-time.After(200 * time.Millisecond):
 		t.Fatal("expected replayed message")
+	}
+}
+
+func TestHub_ReplayToMerchantConnectionUsesRequestedClient(t *testing.T) {
+	ctx := context.Background()
+	hub := NewHub(ctx)
+
+	go hub.Run()
+	defer hub.Shutdown()
+
+	firstClient := &Client{
+		info: ClientInfo{
+			UserID:     2,
+			ClientType: ClientTypeMerchant,
+			EntityID:   200,
+		},
+		hub:  hub,
+		send: make(chan Message, 10),
+		done: make(chan struct{}),
+	}
+	secondClient := &Client{
+		info: ClientInfo{
+			UserID:     2,
+			ClientType: ClientTypeMerchant,
+			EntityID:   200,
+		},
+		hub:  hub,
+		send: make(chan Message, 10),
+		done: make(chan struct{}),
+	}
+
+	hub.Register(firstClient)
+	hub.Register(secondClient)
+	eventually(t, func() bool { return hub.GetOnlineMerchantConnectionCount() == 2 }, "both merchant connections should be online")
+
+	msgID := "merchant-replay-1"
+	hub.SendToMerchant(200, Message{
+		ID:        msgID,
+		Type:      "new_order",
+		Timestamp: time.Now(),
+	})
+
+	for _, client := range []*Client{firstClient, secondClient} {
+		select {
+		case received := <-client.send:
+			require.Equal(t, msgID, received.ID)
+		case <-time.After(200 * time.Millisecond):
+			t.Fatal("expected initial message")
+		}
+	}
+
+	hub.ReplayToClientConnection(secondClient, 0, 1)
+
+	select {
+	case replayed := <-secondClient.send:
+		require.Equal(t, msgID, replayed.ID)
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("expected replay on requested merchant connection")
+	}
+
+	select {
+	case <-firstClient.send:
+		t.Fatal("expected replay to stay on requested merchant connection")
+	case <-time.After(100 * time.Millisecond):
+		// expected
 	}
 }
 

@@ -71,10 +71,12 @@ class SettingsPage extends ConsumerWidget {
                       context: context,
                       icon: Icons.cloud_sync_outlined,
                       title: '厂商推送与设备心跳',
-                      subtitle: _deviceSyncSubtitle(deviceSyncState),
+                      subtitle: deviceSyncSubtitle(deviceSyncState),
                       badge: MerchantStatusBadge(
-                        label: deviceSyncState.isDegraded ? '降级' : '正常',
-                        tone: deviceSyncState.isDegraded
+                        label: deviceSyncState.hasUserVisibleDegradation
+                            ? '降级'
+                            : '正常',
+                        tone: deviceSyncState.hasUserVisibleDegradation
                             ? MerchantStatusTone.warning
                             : MerchantStatusTone.positive,
                       ),
@@ -374,8 +376,8 @@ class SettingsPage extends ConsumerWidget {
   }
 }
 
-String _deviceSyncSubtitle(DeviceSyncState state) {
-  final messages = state.degradationMessages;
+String deviceSyncSubtitle(DeviceSyncState state) {
+  final messages = state.userVisibleDegradationMessages;
   if (messages.isNotEmpty) {
     return messages.join('；');
   }
@@ -390,5 +392,5 @@ String _deviceSyncSubtitle(DeviceSyncState state) {
   if (state.deviceRegistrationStatus == DeviceRegistrationStatus.success) {
     return '$providerLabel 已注册，等待下一次心跳确认。';
   }
-  return '正在检测厂商推送、设备注册和心跳状态。';
+  return '正在检测设备连接和心跳状态。';
 }

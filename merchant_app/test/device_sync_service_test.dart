@@ -33,7 +33,7 @@ void main() {
     expect(service.state.degradationMessages, isEmpty);
   });
 
-  test('missing push token is visible as degraded state', () async {
+  test('missing push token is reported as operator diagnostic only', () async {
     final apiClient = _FakeApiClient();
     final pushManager = _FakeNativePushManager(
       registrationId: null,
@@ -49,7 +49,7 @@ void main() {
 
     await service.ensureRegistered();
 
-    expect(apiClient.lastPostPath, isNull);
+    expect(apiClient.lastPostPath, '/logs/error');
     expect(service.state.nativePushStatus, NativePushStatus.missingToken);
     expect(
       service.state.deviceRegistrationStatus,
@@ -59,34 +59,54 @@ void main() {
       service.state.degradationMessages,
       contains('厂商推送 Token 未获取，杀进程后可能收不到新订单'),
     );
-  });
-
-  test('device registration failure is visible as degraded state', () async {
-    final apiClient = _FakeApiClient(failPost: true);
-    final pushManager = _FakeNativePushManager(
-      registrationId: 'push-token-1',
-      provider: 'oppo',
-    );
-    final service = DeviceSyncService(
-      apiClient,
-      pushManager,
-      deviceIdProvider: () async => 'device-1',
-      registeredTokenReader: () async => null,
-      registeredTokenWriter: (_) async {},
-    );
-
-    await service.ensureRegistered();
-
-    expect(service.state.nativePushStatus, NativePushStatus.registered);
+    expect(service.state.operatorDiagnosticMessages, isNotEmpty);
+    expect(service.state.userVisibleDegradationMessages, isEmpty);
     expect(
-      service.state.deviceRegistrationStatus,
-      DeviceRegistrationStatus.failure,
+      apiClient.lastPostData,
+      containsPair('reason', 'native_push_token_missing'),
     );
-    expect(service.state.degradationMessages, contains('设备注册失败，后台推送路由可能不可用'));
+    expect(apiClient.lastPostData, isNot(contains('push_token')));
   });
 
   test(
-    'native push initialization failure is visible as degraded state',
+    'device registration failure is reported as operator diagnostic only',
+    () async {
+      final apiClient = _FakeApiClient(failPost: true);
+      final pushManager = _FakeNativePushManager(
+        registrationId: 'push-token-1',
+        provider: 'oppo',
+      );
+      final service = DeviceSyncService(
+        apiClient,
+        pushManager,
+        deviceIdProvider: () async => 'device-1',
+        registeredTokenReader: () async => null,
+        registeredTokenWriter: (_) async {},
+      );
+
+      await service.ensureRegistered();
+
+      expect(service.state.nativePushStatus, NativePushStatus.registered);
+      expect(
+        service.state.deviceRegistrationStatus,
+        DeviceRegistrationStatus.failure,
+      );
+      expect(service.state.degradationMessages, contains('设备注册失败，后台推送路由可能不可用'));
+      expect(service.state.operatorDiagnosticMessages, isNotEmpty);
+      expect(service.state.userVisibleDegradationMessages, isEmpty);
+      expect(apiClient.postPaths, <String>[
+        '/merchant/device/register',
+        '/logs/error',
+      ]);
+      expect(
+        apiClient.lastPostData,
+        containsPair('reason', 'device_registration_failed'),
+      );
+    },
+  );
+
+  test(
+    'native push initialization failure is reported as operator diagnostic only',
     () async {
       final apiClient = _FakeApiClient();
       final pushManager = _FakeNativePushManager(
@@ -104,7 +124,7 @@ void main() {
 
       await service.ensureRegistered();
 
-      expect(apiClient.lastPostPath, isNull);
+      expect(apiClient.lastPostPath, '/logs/error');
       expect(service.state.nativePushStatus, NativePushStatus.failed);
       expect(
         service.state.deviceRegistrationStatus,
@@ -113,6 +133,12 @@ void main() {
       expect(
         service.state.degradationMessages,
         contains('厂商推送初始化失败，请检查系统通知和保活设置'),
+      );
+      expect(service.state.operatorDiagnosticMessages, isNotEmpty);
+      expect(service.state.userVisibleDegradationMessages, isEmpty);
+      expect(
+        apiClient.lastPostData,
+        containsPair('reason', 'native_push_initialization_failed'),
       );
     },
   );
@@ -135,12 +161,17 @@ void main() {
 
     expect(service.state.heartbeatStatus, DeviceHeartbeatStatus.failure);
     expect(service.state.degradationMessages, contains('设备心跳失败，后台可能误判商户离线'));
+    expect(
+      service.state.userVisibleDegradationMessages,
+      contains('设备心跳失败，后台可能误判商户离线'),
+    );
 
     apiClient.failPut = false;
     await service.sendHeartbeat();
 
     expect(service.state.heartbeatStatus, DeviceHeartbeatStatus.success);
     expect(service.state.degradationMessages, isEmpty);
+    expect(service.state.userVisibleDegradationMessages, isEmpty);
   });
 }
 
@@ -170,6 +201,7 @@ class _FakeApiClient implements ApiClient {
 
   bool failPost;
   bool failPut;
+  final List<String> postPaths = <String>[];
   String? lastPostPath;
   Map<String, dynamic>? lastPostData;
 
@@ -179,9 +211,10 @@ class _FakeApiClient implements ApiClient {
     dynamic data,
     bool requiresAuth = true,
   }) async {
+    postPaths.add(path);
     lastPostPath = path;
     lastPostData = Map<String, dynamic>.from(data as Map);
-    if (failPost) {
+    if (failPost && path != '/logs/error') {
       throw DioException(
         requestOptions: RequestOptions(path: path),
         type: DioExceptionType.connectionError,

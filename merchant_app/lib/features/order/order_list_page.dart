@@ -72,7 +72,7 @@ class _OrderListPageState extends ConsumerState<OrderListPage> {
     final degradedMessages = <String>[
       if (authState.isSessionDegraded) authState.error ?? '登录状态暂未确认，网络恢复后会自动重试',
       if (notificationPermissionGranted == false) '通知权限未开启，后台订单可能没有系统提醒',
-      ...deviceSyncState.degradationMessages,
+      ...deviceSyncState.userVisibleDegradationMessages,
     ];
 
     return DefaultTabController(

@@ -104,9 +104,9 @@ func (c *Client) trySend(message Message) clientSendResult {
 // Hub 管理所有WebSocket连接
 type Hub struct {
 	// 注册的客户端，按类型和实体ID索引
-	riders    map[int64]*Client // key: rider_id
-	merchants map[int64]*Client // key: merchant_id
-	platforms map[int64]*Client // key: user_id（平台运营人员）
+	riders    map[int64]*Client              // key: rider_id
+	merchants map[int64]map[*Client]struct{} // key: merchant_id, value: active connections
+	platforms map[int64]*Client              // key: user_id（平台运营人员）
 
 	// 注册/注销通道
 	register   chan *Client
@@ -282,7 +282,7 @@ func NewHub(ctx context.Context, opts ...HubOption) *Hub {
 	ctx, cancel := context.WithCancel(ctx)
 	h := &Hub{
 		riders:       make(map[int64]*Client),
-		merchants:    make(map[int64]*Client),
+		merchants:    make(map[int64]map[*Client]struct{}),
 		platforms:    make(map[int64]*Client),
 		register:     make(chan *Client, 10),
 		unregister:   make(chan *Client, 10),
@@ -353,11 +353,10 @@ func (h *Hub) registerClient(client *Client) {
 		go h.flushQueue(client, "rider")
 
 	case ClientTypeMerchant:
-		if old, exists := h.merchants[client.info.EntityID]; exists {
-			// 关闭旧连接
-			old.closeDone()
+		if _, exists := h.merchants[client.info.EntityID]; !exists {
+			h.merchants[client.info.EntityID] = make(map[*Client]struct{})
 		}
-		h.merchants[client.info.EntityID] = client
+		h.merchants[client.info.EntityID][client] = struct{}{}
 		h.updateConnectionMetricsLocked()
 		log.Info().
 			Int64("merchant_id", client.info.EntityID).
@@ -401,9 +400,14 @@ func (h *Hub) unregisterClient(client *Client) {
 		}
 
 	case ClientTypeMerchant:
-		// ✅ 修复：只有当 map 中的 client 就是当前要注销的 client 时才删除
-		if existing, exists := h.merchants[client.info.EntityID]; exists && existing == client {
-			delete(h.merchants, client.info.EntityID)
+		if connections, exists := h.merchants[client.info.EntityID]; exists {
+			if _, exists := connections[client]; !exists {
+				return
+			}
+			delete(connections, client)
+			if len(connections) == 0 {
+				delete(h.merchants, client.info.EntityID)
+			}
 			h.updateConnectionMetricsLocked()
 			atomic.AddInt64(&h.alertDisconnects, 1)
 			client.closeDone()
@@ -449,13 +453,17 @@ func (h *Hub) broadcastMessage(msg BroadcastMessage) {
 	case ClientTypeMerchant:
 		if msg.EntityID == 0 {
 			// 广播给所有商户
-			for _, client := range h.merchants {
-				h.sendToClient(client, msg.Message, "merchant")
+			for _, connections := range h.merchants {
+				for client := range connections {
+					h.sendToClient(client, msg.Message, "merchant")
+				}
 			}
 		} else {
 			// 发送给特定商户
-			if client, exists := h.merchants[msg.EntityID]; exists {
-				h.sendToClient(client, msg.Message, "merchant")
+			if connections, exists := h.merchants[msg.EntityID]; exists {
+				for client := range connections {
+					h.sendToClient(client, msg.Message, "merchant")
+				}
 			}
 		}
 
@@ -578,7 +586,15 @@ func (h *Hub) updateConnectionMetricsLocked() {
 	if h.metrics == nil {
 		return
 	}
-	h.metrics.RecordConnections(len(h.riders), len(h.merchants), len(h.platforms))
+	h.metrics.RecordConnections(len(h.riders), h.onlineMerchantConnectionCountLocked(), len(h.platforms))
+}
+
+func (h *Hub) onlineMerchantConnectionCountLocked() int {
+	count := 0
+	for _, connections := range h.merchants {
+		count += len(connections)
+	}
+	return count
 }
 
 // Register 注册客户端到Hub
@@ -673,13 +689,26 @@ func (h *Hub) ReplayToClient(info ClientInfo, afterSequence uint64, limit int) {
 		return
 	}
 
-	messages := h.messageStore.Replay(h.ctx, info, afterSequence, limit)
+	h.replayToClientConnection(client, afterSequence, limit)
+}
+
+// ReplayToClientConnection replays messages to the specific connected client.
+func (h *Hub) ReplayToClientConnection(client *Client, afterSequence uint64, limit int) {
+	if h.messageStore == nil || client == nil {
+		return
+	}
+
+	h.replayToClientConnection(client, afterSequence, limit)
+}
+
+func (h *Hub) replayToClientConnection(client *Client, afterSequence uint64, limit int) {
+	messages := h.messageStore.Replay(h.ctx, client.info, afterSequence, limit)
 	if len(messages) == 0 {
 		return
 	}
 
 	label := "platform"
-	switch info.ClientType {
+	switch client.info.ClientType {
 	case ClientTypeRider:
 		label = "rider"
 	case ClientTypeMerchant:
@@ -688,7 +717,7 @@ func (h *Hub) ReplayToClient(info ClientInfo, afterSequence uint64, limit int) {
 
 	for _, msg := range messages {
 		// 若注入了业务过滤器（如骑手场景剔除已被抢走的订单），先过滤再投递
-		if h.replayFilter != nil && !h.replayFilter(h.ctx, info, msg) {
+		if h.replayFilter != nil && !h.replayFilter(h.ctx, client.info, msg) {
 			continue
 		}
 		h.sendStoredToClient(client, msg, label)
@@ -703,7 +732,10 @@ func (h *Hub) getClient(info ClientInfo) *Client {
 	case ClientTypeRider:
 		return h.riders[info.EntityID]
 	case ClientTypeMerchant:
-		return h.merchants[info.EntityID]
+		for client := range h.merchants[info.EntityID] {
+			return client
+		}
+		return nil
 	case ClientTypePlatform:
 		return h.platforms[info.EntityID]
 	default:
@@ -964,8 +996,7 @@ func (h *Hub) IsRiderOnline(riderID int64) bool {
 func (h *Hub) IsMerchantOnline(merchantID int64) bool {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	_, exists := h.merchants[merchantID]
-	return exists
+	return len(h.merchants[merchantID]) > 0
 }
 
 // GetOnlineRiderCount 获取在线骑手数量
@@ -980,6 +1011,13 @@ func (h *Hub) GetOnlineMerchantCount() int {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return len(h.merchants)
+}
+
+// GetOnlineMerchantConnectionCount 获取在线商户 WebSocket 连接数量
+func (h *Hub) GetOnlineMerchantConnectionCount() int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.onlineMerchantConnectionCountLocked()
 }
 
 // GetOnlinePlatformCount 获取在线平台运营人员数量
@@ -1070,9 +1108,11 @@ func (h *Hub) Shutdown() {
 	}
 
 	// 关闭所有商户连接
-	for _, client := range h.merchants {
-		client.closeDone()
-		client.closeSend()
+	for _, connections := range h.merchants {
+		for client := range connections {
+			client.closeDone()
+			client.closeSend()
+		}
 	}
 
 	// 关闭所有平台运营人员连接

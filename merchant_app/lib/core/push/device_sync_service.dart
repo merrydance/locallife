@@ -35,8 +35,15 @@ class DeviceSyncState {
   final DateTime? lastHeartbeatAt;
 
   bool get isDegraded => degradationMessages.isNotEmpty;
+  bool get hasUserVisibleDegradation =>
+      userVisibleDegradationMessages.isNotEmpty;
+  bool get hasOperatorDiagnostics => operatorDiagnosticMessages.isNotEmpty;
 
   List<String> get degradationMessages {
+    return [...operatorDiagnosticMessages, ...userVisibleDegradationMessages];
+  }
+
+  List<String> get operatorDiagnosticMessages {
     final messages = <String>[];
     if (nativePushStatus == NativePushStatus.noProvider) {
       messages.add('当前机型未启用厂商推送，杀进程后只能依赖系统通知点击和下次打开补单');
@@ -48,6 +55,11 @@ class DeviceSyncState {
     if (deviceRegistrationStatus == DeviceRegistrationStatus.failure) {
       messages.add('设备注册失败，后台推送路由可能不可用');
     }
+    return messages;
+  }
+
+  List<String> get userVisibleDegradationMessages {
+    final messages = <String>[];
     if (heartbeatStatus == DeviceHeartbeatStatus.failure) {
       messages.add('设备心跳失败，后台可能误判商户离线');
     }
@@ -93,9 +105,11 @@ class DeviceSyncService {
     Future<String> Function()? deviceIdProvider,
     Future<String?> Function()? registeredTokenReader,
     Future<void> Function(String token)? registeredTokenWriter,
+    DateTime Function()? now,
   }) : _deviceIdProvider = deviceIdProvider,
        _registeredTokenReader = registeredTokenReader,
-       _registeredTokenWriter = registeredTokenWriter {
+       _registeredTokenWriter = registeredTokenWriter,
+       _now = now ?? DateTime.now {
     _pushManager.onTokenRegistered = (token, provider) => ensureRegistered();
     _pushManager.onInitializationFailed = (provider, message) async {
       _updateState(
@@ -103,6 +117,11 @@ class DeviceSyncService {
         provider: provider,
         deviceRegistrationStatus: DeviceRegistrationStatus.failure,
         lastRegistrationError: message,
+      );
+      await _reportOperatorDiagnostic(
+        reason: 'native_push_initialization_failed',
+        provider: provider,
+        registrationError: message,
       );
     };
   }
@@ -115,6 +134,7 @@ class DeviceSyncService {
   final Future<String> Function()? _deviceIdProvider;
   final Future<String?> Function()? _registeredTokenReader;
   final Future<void> Function(String token)? _registeredTokenWriter;
+  final DateTime Function() _now;
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
   Future<void>? _registrationFuture;
@@ -142,6 +162,11 @@ class DeviceSyncService {
         deviceRegistrationStatus: DeviceRegistrationStatus.failure,
         lastRegistrationError: initializationFailure,
       );
+      await _reportOperatorDiagnostic(
+        reason: 'native_push_initialization_failed',
+        provider: provider,
+        registrationError: initializationFailure,
+      );
       return;
     }
     if (registrationId == null || registrationId.isEmpty) {
@@ -152,6 +177,12 @@ class DeviceSyncService {
             : NativePushStatus.missingToken,
         provider: provider,
         deviceRegistrationStatus: DeviceRegistrationStatus.missingToken,
+      );
+      await _reportOperatorDiagnostic(
+        reason: provider == null || provider.trim().isEmpty
+            ? 'native_push_provider_unavailable'
+            : 'native_push_token_missing',
+        provider: provider,
       );
       return;
     }
@@ -189,6 +220,11 @@ class DeviceSyncService {
           deviceRegistrationStatus: DeviceRegistrationStatus.failure,
           lastRegistrationError: '设备注册接口暂不可用',
         );
+        await _reportOperatorDiagnostic(
+          reason: 'device_registration_failed',
+          provider: provider,
+          registrationError: '设备注册接口暂不可用',
+        );
         return;
       }
 
@@ -198,6 +234,11 @@ class DeviceSyncService {
       _updateState(
         deviceRegistrationStatus: DeviceRegistrationStatus.failure,
         lastRegistrationError: error.message ?? '设备注册失败',
+      );
+      await _reportOperatorDiagnostic(
+        reason: 'device_registration_failed',
+        provider: provider,
+        registrationError: error.message ?? '设备注册失败',
       );
     }
   }
@@ -286,6 +327,13 @@ class DeviceSyncService {
     String registrationId,
     String? provider,
   ) async {
+    return _buildDevicePayloadWithOptionalToken(registrationId, provider);
+  }
+
+  Future<Map<String, dynamic>> _buildDevicePayloadWithOptionalToken(
+    String? registrationId,
+    String? provider,
+  ) async {
     final deviceInfo = DeviceInfoPlugin();
     var deviceModel = 'Unknown';
     var osVersion = 'Unknown';
@@ -325,13 +373,44 @@ class DeviceSyncService {
 
     return {
       'device_id': deviceId,
-      'push_token': registrationId,
+      if (registrationId != null && registrationId.isNotEmpty)
+        'push_token': registrationId,
       'provider': provider?.trim().isNotEmpty == true ? provider!.trim() : null,
       'device_model': deviceModel,
       'os_version': osVersion,
       'app_version': appVersion,
       'platform': kIsWeb ? 'web' : (Platform.isIOS ? 'ios' : 'android'),
     };
+  }
+
+  Future<void> _reportOperatorDiagnostic({
+    required String reason,
+    String? provider,
+    String? registrationError,
+  }) async {
+    final payload = await _buildDevicePayloadWithOptionalToken(null, provider);
+    payload.addAll({
+      'source': 'merchant_app_device_sync',
+      'event': 'merchant_app_push_diagnostic',
+      'reason': reason,
+      'native_push_status': state.nativePushStatus.name,
+      'device_registration_status': state.deviceRegistrationStatus.name,
+      'heartbeat_status': state.heartbeatStatus.name,
+      'operator_messages': state.operatorDiagnosticMessages,
+      'reported_at': _now().toIso8601String(),
+    });
+
+    if (registrationError != null && registrationError.trim().isNotEmpty) {
+      payload['registration_error'] = registrationError.trim();
+    }
+
+    try {
+      await _apiClient.post('/logs/error', data: payload);
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('Failed to report push diagnostic: $error');
+      }
+    }
   }
 
   Future<String> _getOrCreateDeviceId() async {

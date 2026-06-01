@@ -717,7 +717,7 @@ func (server *Server) handleWebSocket(ctx *gin.Context) {
 	// 可选：断线重连后的消息回放（客户端带 last_sequence）
 	if lastSeq := ctx.Query("last_sequence"); lastSeq != "" {
 		if seq, err := strconv.ParseUint(lastSeq, 10, 64); err == nil {
-			server.wsHub.ReplayToClient(clientInfo, seq, 200)
+			server.wsHub.ReplayToClientConnection(client, seq, 200)
 		}
 	}
 }
@@ -772,7 +772,7 @@ func (server *Server) handlePlatformWebSocket(ctx *gin.Context) {
 	// 可选：断线重连后的消息回放（客户端带 last_sequence）
 	if lastSeq := ctx.Query("last_sequence"); lastSeq != "" {
 		if seq, err := strconv.ParseUint(lastSeq, 10, 64); err == nil {
-			server.wsHub.ReplayToClient(clientInfo, seq, 200)
+			server.wsHub.ReplayToClientConnection(client, seq, 200)
 		}
 	}
 }
