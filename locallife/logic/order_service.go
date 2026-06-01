@@ -609,11 +609,21 @@ func (s *OrderService) RejectMerchantOrder(ctx context.Context, input MerchantOr
 		OrderID:    result.Order.ID,
 		Reason:     input.Reason,
 	})
+	if refundResult.Submission.Status != "" {
+		submission := refundResult.Submission
+		result.RefundSubmission = &submission
+	}
 	if refundErr != nil {
 		if refundResult.RefundOrder != nil {
 			log.Error().Err(refundErr).Int64("refund_order_id", refundResult.RefundOrder.ID).Msg("merchant reject refund failed")
 		} else {
 			log.Error().Err(refundErr).Int64("order_id", result.Order.ID).Msg("merchant reject refund failed")
+		}
+		if result.RefundSubmission == nil {
+			result.RefundSubmission = &MerchantRefundSubmission{
+				Status:  MerchantRefundSubmissionStatusManualRequired,
+				Message: "订单已取消，但退款提交状态未知，请联系平台处理。",
+			}
 		}
 	}
 

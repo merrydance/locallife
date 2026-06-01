@@ -1,6 +1,6 @@
 # Merchant Order Operations Slice
 
-Status: merchant-state flow slice created; manual refund idempotency and pending order-refund recovery repaired 2026-05-31
+Status: merchant-state flow slice created; manual refund idempotency and pending order-refund recovery repaired 2026-05-31; reject refund submission truth repaired 2026-06-01
 Risk class: G3 where merchant actions create or recover refunds; G2 for non-money order status and print transitions
 Scope: merchant order list/detail/kitchen/print anomaly pages -> merchant and kitchen order APIs -> order status/refund/print durable state -> notification, websocket, worker, callback, and recovery paths
 
@@ -40,7 +40,7 @@ Merchant order operations must converge from merchant action to durable order/re
 2. Order list refreshes from `MerchantOrderManagementService.getOrderList`, maps backend `orders/total`, and preserves current rows when a silent refresh fails.
    Evidence: `weapp/miniprogram/pages/merchant/orders/list/index.ts:281`, `weapp/miniprogram/pages/merchant/orders/list/index.ts:313`, `weapp/miniprogram/pages/merchant/orders/list/index.ts:320`, `weapp/miniprogram/pages/merchant/orders/list/index.ts:322`, `weapp/miniprogram/pages/merchant/orders/list/index.ts:342`.
 
-3. List page actions call accept, reject, ready, and complete wrappers. Reject copy says the system will initiate a refund.
+3. List page actions call accept, reject, ready, and complete wrappers. Reject copy now comes from the backend `refund_submission.message` when present.
    Evidence: `weapp/miniprogram/pages/merchant/orders/list/index.ts:523`, `weapp/miniprogram/pages/merchant/orders/list/index.ts:529`, `weapp/miniprogram/pages/merchant/orders/list/index.ts:536`, `weapp/miniprogram/pages/merchant/orders/list/index.ts:541`, `weapp/miniprogram/pages/merchant/orders/list/index.ts:554`, `weapp/miniprogram/pages/merchant/orders/list/index.ts:560`.
 
 4. `performAction` sets per-order submitting state, calls the wrapper, then reloads the list from backend truth.
@@ -70,13 +70,19 @@ Merchant order operations must converge from merchant action to durable order/re
 12. Merchant order wrappers map status and print actions to `GET/POST /v1/merchant/orders/**`; kitchen wrappers map KDS actions to `GET/POST /v1/kitchen/orders/**`.
     Evidence: `weapp/miniprogram/pages/merchant/_api/order-management.ts:320`, `weapp/miniprogram/pages/merchant/_api/order-management.ts:386`, `weapp/miniprogram/pages/merchant/_api/order-management.ts:397`, `weapp/miniprogram/pages/merchant/_api/order-management.ts:409`, `weapp/miniprogram/pages/merchant/_api/order-management.ts:420`, `weapp/miniprogram/pages/merchant/_api/order-management.ts:431`, `weapp/miniprogram/pages/merchant/_api/order-management.ts:442`, `weapp/miniprogram/pages/merchant/_api/order-management.ts:453`, `weapp/miniprogram/pages/merchant/_api/order-management.ts:464`, `weapp/miniprogram/pages/merchant/_api/order-management.ts:500`, `weapp/miniprogram/pages/merchant/_api/order-management.ts:522`, `weapp/miniprogram/pages/merchant/_api/order-management.ts:533`.
 
-13. Flutter merchant App `OrderNotifier` reads the same merchant order list/detail APIs and calls the same accept/reject/ready endpoints. It uses per-order single-flight guards and readback confirmation when a mutation response does not include an order snapshot.
+13. Fixed 2026-06-01: the merchant reject wrapper accepts the compatible backend response shape with top-level order fields plus nested `order/refund_submission`, so Mini Program pages can display backend refund submission truth after reject.
+    Evidence: `weapp/miniprogram/pages/merchant/_api/order-management.ts`, `weapp/miniprogram/pages/merchant/orders/list/index.ts`, `weapp/miniprogram/pages/merchant/orders/detail/index.ts`.
+
+14. Flutter merchant App `OrderNotifier` reads the same merchant order list/detail APIs and calls the same accept/reject/ready endpoints. It uses per-order single-flight guards and readback confirmation when a mutation response does not include an order snapshot.
     Evidence: `merchant_app/lib/features/order/order_provider.dart:28`, `merchant_app/lib/features/order/order_provider.dart:45`, `merchant_app/lib/features/order/order_provider.dart:74`, `merchant_app/lib/features/order/order_provider.dart:96`, `merchant_app/lib/features/order/order_provider.dart:116`, `merchant_app/lib/features/order/order_provider.dart:135`, `merchant_app/lib/features/order/order_provider.dart:149`.
 
-14. Flutter App can auto-accept a newly alerted order from push/poll/backfill if local `notificationSettings.autoAcceptEnabled` is true. This is an App-local SharedPreferences setting and does not read backend `order_display_configs.auto_accept_paid_orders`.
+15. Fixed 2026-06-01: Flutter reject handling extracts nested `order` and backend `refund_submission.message`, then shows that message after a successful reject.
+    Evidence: `merchant_app/lib/features/order/order_provider.dart`, `merchant_app/lib/features/order/order_detail_page.dart`, `merchant_app/lib/features/order/order_alert_page.dart`.
+
+16. Flutter App can auto-accept a newly alerted order from push/poll/backfill if local `notificationSettings.autoAcceptEnabled` is true. This is an App-local SharedPreferences setting and does not read backend `order_display_configs.auto_accept_paid_orders`.
     Evidence: `merchant_app/lib/features/order/order_alert_coordinator.dart:127`, `merchant_app/lib/features/order/order_alert_coordinator.dart:140`, `merchant_app/lib/features/order/order_alert_coordinator.dart:378`, `merchant_app/lib/features/settings/notification_settings_provider.dart:41`, `merchant_app/lib/features/settings/notification_settings_provider.dart:68`.
 
-15. Flutter App can print a local Bluetooth receipt after manual or automatic accept when local `autoPrintAfterAcceptEnabled` is true and a BLE printer is connected. This does not create backend `print_logs`.
+17. Flutter App can print a local Bluetooth receipt after manual or automatic accept when local `autoPrintAfterAcceptEnabled` is true and a BLE printer is connected. This does not create backend `print_logs`.
     Evidence: `merchant_app/lib/features/order/order_alert_coordinator.dart:388`, `merchant_app/lib/features/order/order_alert_coordinator.dart:390`, `merchant_app/lib/features/order/order_detail_page.dart:513`, `merchant_app/lib/features/order/order_detail_page.dart:521`, `merchant_app/lib/features/order/order_list_page.dart:724`, `merchant_app/lib/features/order/order_list_page.dart:735`, `merchant_app/lib/features/printer/printer_provider.dart:146`, `merchant_app/lib/features/printer/printer_provider.dart:198`.
 
 16. Backend merchant order routes are protected for `owner`, `manager`, and `cashier`; kitchen routes are protected for `owner`, `manager`, and `chef`; refund routes are under authenticated routes and rely on service ownership checks.
@@ -100,10 +106,10 @@ Merchant order operations must converge from merchant action to durable order/re
 22. `OrderService` sends customer notifications, publishes merchant order snapshots as message type `order_update`, enqueues takeout delivery-pool events, and schedules print tasks after accepted/ready.
     Evidence: `locallife/logic/order_service.go:553`, `locallife/logic/order_service.go:559`, `locallife/logic/order_service.go:574`, `locallife/logic/order_service.go:575`, `locallife/logic/order_service.go:577`, `locallife/logic/order_service.go:581`, `locallife/logic/order_service.go:627`, `locallife/logic/order_service.go:648`, `locallife/logic/order_service.go:652`.
 
-23. Reject flow cancels the order first, then calls `ProcessMerchantRejectRefund`; any refund error is logged but the service still returns the cancelled order as success.
+23. Reject flow cancels the order first, then calls `ProcessMerchantRejectRefund`; any refund error is logged and the service still returns the cancelled order as success, but since 2026-06-01 the result also carries `RefundSubmission`.
     Evidence: `locallife/logic/merchant_order.go:85`, `locallife/logic/merchant_order.go:104`, `locallife/logic/merchant_order.go:115`, `locallife/logic/order_service.go:586`, `locallife/logic/order_service.go:607`, `locallife/logic/order_service.go:612`, `locallife/logic/order_service.go:620`, `locallife/logic/order_service.go:624`.
 
-24. Merchant reject refund creates a refund order, then calls Baofu refund before share. Missing facade leaves the row pending; provider error marks failed; accepted provider request may still leave pending if updating to processing fails.
+24. Merchant reject refund creates a refund order, then calls Baofu refund before share. Missing facade leaves the row pending and maps to `pending_recovery`; provider error marks failed and maps to `manual_required`; accepted provider request maps to `accepted`; no paid payment order maps to `not_needed`.
     Evidence: `locallife/logic/merchant_reject_refund.go:79`, `locallife/logic/merchant_reject_refund.go:92`, `locallife/logic/merchant_reject_refund.go:94`, `locallife/logic/merchant_reject_refund.go:108`, `locallife/logic/merchant_reject_refund.go:115`, `locallife/logic/merchant_reject_refund.go:132`, `locallife/logic/merchant_reject_refund.go:134`, `locallife/logic/merchant_reject_refund.go:144`, `locallife/logic/merchant_reject_refund.go:148`.
 
 25. Manual refund backend requires `Idempotency-Key` in the handler and service before creating or replaying refund orders.
@@ -131,7 +137,7 @@ Merchant order operations must converge from merchant action to durable order/re
 - Kitchen `startPreparing` is semantically the same backend state transition as merchant accept: it calls `AcceptMerchantOrder`.
 - `CompleteOrderTx` is broader than merchant completion logic. Merchant logic allows ready-only non-takeout completion, while the SQL primitive allows any non-cancelled/non-completed order. DB tests use it from non-merchant flows, so it should be documented as a broad shared primitive/refactor risk rather than immediately called a defect.
 - Fixed 2026-05-31 in `6a19a9c0`: manual refund creation now satisfies the frontend/backend idempotency header contract and has a Mini Program wrapper contract test.
-- Reject-order refund is a two-step product workflow: cancellation is durable before refund submission. Current API/UI wording overstates convergence when refund submission fails.
+- Fixed 2026-06-01: reject-order refund remains a two-step product workflow, but the API/UI now exposes refund submission truth through `refund_submission` instead of overclaiming that refund submission always started.
 - Partially fixed 2026-05-31 in `d3e84050`: refund rows that exist and are stuck in `pending` for cancelled paid normal orders are now recovered with their original `out_refund_no`. Existing terminal `failed` rows still need provider error-classification before automatic retry can be safe.
 - Merchant order websocket status updates may not refresh across terminals because `order_update` is not in the Mini Program enum/subscribers.
 - Kitchen realtime stops entirely when open-status refresh fails, which can turn an auxiliary status-check failure into stale kitchen order realtime.
@@ -168,7 +174,7 @@ Merchant order operations must converge from merchant action to durable order/re
 - Backend status writes are conditional on expected status, so a repeated accept/ready/reject after the first successful transition fails instead of reapplying the same state.
 - Merchant status actions do not accept request idempotency keys. Re-entry behavior depends on state-conditional updates and frontend reload.
 - Manual refund backend requires `Idempotency-Key`, computes a request hash, and replays or rejects duplicate create attempts. Since `6a19a9c0`, the Mini Program wrapper sends the key and order detail reuses the same key for retry of an unchanged draft.
-- Merchant reject refund path creates a new refund row directly and does not use the public manual-refund idempotency table. Since `d3e84050`, pending normal-order refund rows for cancelled paid orders are recovered by original `out_refund_no`; automatic retry of terminal `failed` rows remains intentionally open.
+- Merchant reject refund path creates a new refund row directly and does not use the public manual-refund idempotency table. Since `d3e84050`, pending normal-order refund rows for cancelled paid orders are recovered by original `out_refund_no`; since 2026-06-01, provider submission outcome is surfaced as `refund_submission`; automatic retry of terminal `failed` rows remains intentionally open.
 - Print worker dedupes accepted/ready re-entry per printer by task key; manual print intentionally creates a new task when manual mode is enabled.
 - Feieyun callback updates by vendor order id. Unknown vendor order returns a retryable failure response to the provider.
 
@@ -217,7 +223,7 @@ Backend state branches:
 
 - Accept path branches by order type: takeout uses takeout-specific accept transaction and delivery-pool enqueue; non-takeout uses general order-status transaction.
 - Ready path branches by order type: takeout uses takeout-specific ready transaction; non-takeout uses general order-status transaction.
-- Reject path branches: order cancellation commits first; refund creation/provider submission runs after cancellation and does not currently make the API fail when refund submission fails.
+- Reject path branches: order cancellation commits first; refund creation/provider submission runs after cancellation and does not make the API fail when refund submission fails; since 2026-06-01 the response returns `refund_submission` so clients can distinguish accepted, pending recovery, manual required, and not-needed states.
 - Complete path branch: merchant logic guards ready-only non-takeout completion, while `CompleteOrderTx` itself is broader and should remain treated as a shared primitive, not a merchant-only invariant.
 - Print scheduling branches: accepted/ready automatic print via display config; manual print requires manual trigger mode; worker filters printer type/order type/role and dedupes by task key.
 - Refund branches: manual refund uses idempotency table and refund orchestrator; merchant-reject refund creates a refund order directly and uses Baofu refund-before-share command path.
@@ -235,7 +241,7 @@ Failure and retry branches:
 - Mini Program status actions have local duplicate-tap guards and rehydrate through HTTP reload; backend duplicate/replay behavior is state-conditional rather than idempotency-keyed.
 - Flutter status actions have per-order single-flight futures; incoming alerts have message/order dedupe and pending-alert stores. Cross-channel duplicate proof still needs tests because push, websocket, and polling can race.
 - Fixed 2026-05-31 in `6a19a9c0`: manual refund retry reuses the same idempotency key for the same unchanged refund draft.
-- Reject refund ambiguous failures can leave `orders.status=cancelled` with no truthful UI indication that refund submission failed or is unrecoverable.
+- Fixed 2026-06-01: reject refund ambiguous/provider failures still leave `orders.status=cancelled`, but the API/UI now exposes pending-recovery or manual-required refund submission state.
 - Fixed 2026-05-31 in `d3e84050`: provider-accepted or locally-created order refund rows left in `pending` can now be picked up by refund recovery for cancelled paid normal orders.
 - BLE print failure is App-local and has no backend recovery, print log, or merchant-visible reconciliation path.
 
@@ -265,7 +271,7 @@ Zombie and unreachable branches:
 Test-proof gaps:
 
 - Fixed 2026-05-31 in `6a19a9c0`: Mini Program contract test proves the wrapper sends `Idempotency-Key` and order detail generates/reuses the draft key.
-- Prove merchant reject either reports refund failure truthfully or persists a recoverable compensation state for every provider/local failure branch.
+- Fixed 2026-06-01: logic/API tests prove merchant reject reports pending-recovery and manual-required refund submission states while preserving durable order cancellation success.
 - Fixed for `pending` on 2026-05-31 in `d3e84050`: worker and sqlc tests prove recovery includes existing normal-order refund rows stuck in `pending`. Eligible retryable `failed` rows remain open.
 - Prove `order_update` refreshes Mini Program list/kitchen/detail across terminals, or deliberately replace it with the notification event shape those pages consume.
 - Prove Flutter push/websocket/polling duplicate alerts cannot double-accept or double-print local BLE receipts.
@@ -286,7 +292,7 @@ Observed tests:
 
 Missing high-value tests:
 
-- API/logic test proving merchant reject surfaces refund-submission failure honestly, or persists a compensating recoverable state and returns truthful UI-facing semantics.
+- Fixed 2026-06-01: API/logic tests prove merchant reject surfaces refund-submission state for not-needed, pending-recovery, and manual-required branches.
 - Refund recovery tests for eligible retryable `failed` rows after merchant reject, once provider error classification defines safe retry behavior.
 - Merchant websocket test or integration fixture proving `order_update` refreshes order list/kitchen state across terminals.
 - Kitchen realtime degradation test for open-status refresh failure.
@@ -295,7 +301,7 @@ Missing high-value tests:
 ## Gaps And Refactor Notes
 
 - Fixed 2026-05-31 in `6a19a9c0`: manual refund wrapper/header is now present and covered by a Mini Program contract test.
-- Change reject-order copy or backend contract so "refund initiated" is only shown when a durable refund row/provider request or explicit recovery path exists.
+- Fixed 2026-06-01: reject-order copy now comes from backend `refund_submission.message`, and the backend contract distinguishes accepted, pending recovery, manual required, and not needed.
 - Partially fixed 2026-05-31 in `d3e84050`: refund recovery now covers order refund rows stuck in `pending` and uses original `out_refund_no`; `failed` retry remains open pending provider duplicate/error classification.
 - Align websocket message types: either publish the notification type the Mini Program listens for, or add `order_update` handling in the Mini Program order/kitchen flows.
 - Keep `CompleteOrderTx` broad only if all callers deliberately guard it before use. If refactoring, rename or split it to avoid accidental merchant-like use without ready-state checks.

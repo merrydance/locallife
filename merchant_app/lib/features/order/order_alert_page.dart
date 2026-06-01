@@ -243,6 +243,11 @@ class OrderAlertPage extends ConsumerWidget {
                                                       message.orderId,
                                                       reason: reason.trim(),
                                                     );
+                                                final refundMessage = ref
+                                                    .read(
+                                                      orderProvider.notifier,
+                                                    )
+                                                    .takeLastRejectRefundMessage();
                                                 if (!context.mounted) {
                                                   return;
                                                 }
@@ -252,7 +257,8 @@ class OrderAlertPage extends ConsumerWidget {
                                                   SnackBar(
                                                     content: Text(
                                                       success
-                                                          ? '已拒绝订单'
+                                                          ? (refundMessage ??
+                                                                '已拒绝订单，退款状态请在订单详情中查看')
                                                           : ref
                                                                     .read(
                                                                       orderProvider,

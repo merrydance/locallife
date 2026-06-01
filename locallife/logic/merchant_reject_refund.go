@@ -25,6 +25,7 @@ type MerchantRejectRefundInput struct {
 type MerchantRejectRefundResult struct {
 	PaymentOrder *db.PaymentOrder
 	RefundOrder  *db.RefundOrder
+	Submission   MerchantRefundSubmission
 }
 
 // ProcessMerchantRejectRefund handles full refund for a merchant-rejected order.
@@ -42,6 +43,10 @@ func ProcessMerchantRejectRefund(
 	})
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
+			result.Submission = MerchantRefundSubmission{
+				Status:  MerchantRefundSubmissionStatusNotNeeded,
+				Message: "订单未找到已支付支付单，无需发起退款。",
+			}
 			return result, nil
 		}
 		return result, err
@@ -62,6 +67,10 @@ func ProcessMerchantRejectRefund(
 		}
 
 		if !foundPaid {
+			result.Submission = MerchantRefundSubmission{
+				Status:  MerchantRefundSubmissionStatusNotNeeded,
+				Message: "订单未找到已支付支付单，无需发起退款。",
+			}
 			return result, nil
 		}
 	}
@@ -92,9 +101,53 @@ func ProcessMerchantRejectRefund(
 	refundOrder := txResult.RefundOrder
 	result.RefundOrder = &refundOrder
 	if err := processMerchantRejectBaofuRefund(ctx, store, paymentFacade, paymentOrder, refundOrder, reason); err != nil {
+		latest := refundOrder
+		if loaded, getErr := store.GetRefundOrder(ctx, refundOrder.ID); getErr == nil {
+			latest = loaded
+			result.RefundOrder = &latest
+		}
+		result.Submission = merchantRejectRefundSubmissionForError(latest, err)
 		return result, err
 	}
+	latest := refundOrder
+	if loaded, getErr := store.GetRefundOrder(ctx, refundOrder.ID); getErr == nil {
+		latest = loaded
+		result.RefundOrder = &latest
+	}
+	result.Submission = MerchantRefundSubmission{
+		Status:      MerchantRefundSubmissionStatusAccepted,
+		Message:     "退款申请已提交，系统会继续同步退款结果。",
+		RefundOrder: &latest,
+	}
 	return result, nil
+}
+
+func merchantRejectRefundSubmissionForError(refundOrder db.RefundOrder, err error) MerchantRefundSubmission {
+	status := MerchantRefundSubmissionStatusManualRequired
+	message := "订单已取消，但退款提交失败，请联系平台处理。"
+	if refundOrder.Status == "pending" {
+		status = MerchantRefundSubmissionStatusPendingRecovery
+		message = "订单已取消，退款提交暂未确认，系统会稍后自动重试。"
+	}
+	if refundOrder.Status == "failed" {
+		message = "订单已取消，但退款提交被支付通道拒绝，请联系平台处理。"
+	}
+
+	var reqErr *RequestError
+	if errors.As(err, &reqErr) && reqErr.Err != nil {
+		if reqErr.Status == http.StatusServiceUnavailable && refundOrder.Status == "pending" {
+			message = "订单已取消，退款通道暂不可用，系统会稍后自动重试。"
+		}
+		if reqErr.Status == http.StatusServiceUnavailable && refundOrder.Status == "failed" {
+			message = "订单已取消，但退款通道暂不可用，请联系平台处理。"
+		}
+	}
+
+	return MerchantRefundSubmission{
+		Status:      status,
+		Message:     message,
+		RefundOrder: &refundOrder,
+	}
 }
 
 func processMerchantRejectBaofuRefund(

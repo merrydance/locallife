@@ -83,6 +83,24 @@ export interface OrderFeeBreakdown {
   rider_net_earnings_amount?: number
 }
 
+export type OrderRefundSubmissionStatus =
+  | 'accepted'
+  | 'pending_recovery'
+  | 'manual_required'
+  | 'not_needed'
+
+export interface OrderRefundSubmission {
+  status: OrderRefundSubmissionStatus | string
+  message: string
+  refund_id?: number
+  out_refund_no?: string
+}
+
+export interface MerchantRejectOrderResponse {
+  order: OrderResponse
+  refund_submission?: OrderRefundSubmission
+}
+
 const TRACKABLE_ORDER_STATUSES = new Set<OrderStatus>(['delivering', 'rider_delivered', 'picked'])
 const COMPLETED_ORDER_STATUSES = new Set<OrderStatus>(['completed'])
 const CANCELLED_ORDER_STATUSES = new Set<OrderStatus>(['cancelled'])

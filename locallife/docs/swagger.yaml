@@ -4996,6 +4996,185 @@ definitions:
         description: 总销售额(分)
         type: integer
     type: object
+  api.merchantRejectOrderResponse:
+    properties:
+      actions:
+        items:
+          type: string
+        type: array
+      address_id:
+        example: 5001
+        type: integer
+      auto_user_delivered_at:
+        type: string
+      badges:
+        items:
+          $ref: '#/definitions/api.orderBadge'
+        type: array
+      cancel_reason:
+        example: 商品缺货
+        type: string
+      cancelled_at:
+        example: "2025-12-01T12:25:00Z"
+        type: string
+      claim_channel:
+        type: string
+      completed_at:
+        example: "2025-12-01T13:15:00Z"
+        type: string
+      courier_accept_at:
+        type: string
+      created_at:
+        example: "2025-12-01T12:20:00Z"
+        type: string
+      delivery_address:
+        example: 北京市朝阳区某小区1号楼
+        type: string
+      delivery_contact_name:
+        example: 张三
+        type: string
+      delivery_contact_phone:
+        example: "13800138000"
+        type: string
+      delivery_distance:
+        example: 2500
+        type: integer
+      delivery_eta_minutes:
+        example: 38
+        type: integer
+      delivery_fee:
+        example: 500
+        type: integer
+      delivery_fee_discount:
+        example: 200
+        type: integer
+      discount_amount:
+        example: 500
+        type: integer
+      dispatch_order_id:
+        type: integer
+      estimated_delivery_at:
+        example: "2025-12-01T12:30:00Z"
+        type: string
+      exception_state:
+        type: string
+      fee_breakdown:
+        $ref: '#/definitions/api.merchantOrderFeeBreakdownResponse'
+      flow_id:
+        type: integer
+      fulfillment_status:
+        enum:
+        - scheduled
+        - pending_kitchen
+        - preparing
+        - ready
+        - completed
+        - cancelled
+        example: pending_kitchen
+        type: string
+      id:
+        example: 100001
+        type: integer
+      items:
+        items:
+          $ref: '#/definitions/api.orderItemResponse'
+        type: array
+      merchant_id:
+        example: 20001
+        type: integer
+      merchant_name:
+        example: 张三餐厅
+        type: string
+      merchant_phone:
+        example: "13800138000"
+        type: string
+      notes:
+        example: 不要香菜
+        type: string
+      order:
+        $ref: '#/definitions/api.orderResponse'
+      order_no:
+        example: ORD20251201123456
+        type: string
+      order_type:
+        enum:
+        - takeout
+        - dine_in
+        - takeaway
+        - reservation
+        example: takeout
+        type: string
+      overtime:
+        type: boolean
+      paid_at:
+        example: "2025-12-01T12:30:00Z"
+        type: string
+      payment_context:
+        $ref: '#/definitions/api.orderPaymentContextResponse'
+      payment_method:
+        enum:
+        - wechat
+        - balance
+        example: wechat
+        type: string
+      picked_at:
+        type: string
+      pickup_code:
+        type: string
+      pickup_code_masked:
+        type: string
+      prep_start_at:
+        type: string
+      ready_at:
+        type: string
+      refund_submission:
+        $ref: '#/definitions/api.orderRefundSubmissionResponse'
+      replaced_by_order_id:
+        example: 100009
+        type: integer
+      reservation_id:
+        example: 8001
+        type: integer
+      rider_delivered_at:
+        type: string
+      status:
+        enum:
+        - pending
+        - paid
+        - preparing
+        - ready
+        - courier_accepted
+        - picked
+        - delivering
+        - rider_delivered
+        - user_delivered
+        - completed
+        - cancelled
+        example: paid
+        type: string
+      status_hint:
+        type: string
+      subtotal:
+        example: 5760
+        type: integer
+      table_id:
+        example: 301
+        type: integer
+      total_amount:
+        example: 5760
+        type: integer
+      updated_at:
+        example: "2025-12-01T12:30:00Z"
+        type: string
+      user_delivered_at:
+        type: string
+      user_id:
+        example: 10001
+        type: integer
+      wechat_transaction_id:
+        description: 微信或上游支付交易号，用于支付查询与历史兼容展示
+        type: string
+    type: object
   api.merchantRepurchaseRateResponse:
     properties:
       avg_orders_per_user:
@@ -5977,6 +6156,21 @@ definitions:
       type:
         description: discount, delivery_fee_return, voucher
         example: discount
+        type: string
+    type: object
+  api.orderRefundSubmissionResponse:
+    properties:
+      message:
+        example: 订单已取消，退款提交暂未确认，系统会稍后自动重试。
+        type: string
+      out_refund_no:
+        example: RF202606010001
+        type: string
+      refund_id:
+        example: 7001
+        type: integer
+      status:
+        example: pending_recovery
         type: string
     type: object
   api.orderResponse:
@@ -18280,7 +18474,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: 商户拒绝订单并说明原因，将触发自动退款
+      description: 商户拒绝订单并说明原因，将触发自动退款；响应兼容顶层订单字段并通过 order/refund_submission 返回退款提交状态，订单取消成功不代表支付通道已受理退款
       parameters:
       - description: 订单ID
         in: path
@@ -18298,9 +18492,9 @@ paths:
       - application/json
       responses:
         "200":
-          description: 拒单成功
+          description: 拒单成功，包含退款提交状态
           schema:
-            $ref: '#/definitions/api.orderResponse'
+            $ref: '#/definitions/api.merchantRejectOrderResponse'
         "400":
           description: 订单状态不允许拒单
           schema:

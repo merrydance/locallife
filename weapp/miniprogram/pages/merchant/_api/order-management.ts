@@ -166,6 +166,20 @@ export interface MerchantOrderSummaryResponse {
     cancelled_count: number
 }
 
+export type OrderRefundSubmissionStatus = 'accepted' | 'pending_recovery' | 'manual_required' | 'not_needed' | string
+
+export interface OrderRefundSubmission {
+    status: OrderRefundSubmissionStatus
+    message: string
+    refund_id?: number
+    out_refund_no?: string
+}
+
+export interface MerchantRejectOrderResponse {
+    order: OrderResponse
+    refund_submission?: OrderRefundSubmission
+}
+
 export interface MerchantOrderPrintJobResponse {
     id: number
     order_id: number
@@ -394,12 +408,16 @@ export class MerchantOrderManagementService {
      * 商户拒单
      * POST /v1/merchant/orders/{id}/reject
      */
-    static async rejectOrder(orderId: number, data: RejectOrderRequest): Promise<OrderResponse> {
-        return await request({
+    static async rejectOrder(orderId: number, data: RejectOrderRequest): Promise<MerchantRejectOrderResponse> {
+        const response = await request<OrderResponse | MerchantRejectOrderResponse>({
             url: `/v1/merchant/orders/${orderId}/reject`,
             method: 'POST',
             data
         })
+        if ('order' in response && response.order) {
+            return response
+        }
+        return { order: response as OrderResponse }
     }
 
     /**

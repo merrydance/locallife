@@ -484,12 +484,19 @@ class OrderDetailPage extends ConsumerWidget {
                     final success = await ref
                         .read(orderProvider.notifier)
                         .rejectOrder(order.id, reason: reason.trim());
+                    final refundMessage = ref
+                        .read(orderProvider.notifier)
+                        .takeLastRejectRefundMessage();
                     if (!context.mounted) {
                       return;
                     }
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text(success ? '已拒绝订单' : '拒绝订单失败，请稍后再试'),
+                        content: Text(
+                          success
+                              ? (refundMessage ?? '已拒绝订单，退款状态请在订单详情中查看')
+                              : '拒绝订单失败，请稍后再试',
+                        ),
                       ),
                     );
                     if (success) {

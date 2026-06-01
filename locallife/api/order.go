@@ -237,6 +237,19 @@ type orderResponse struct {
 	FeeBreakdown        *merchantOrderFeeBreakdownResponse `json:"fee_breakdown,omitempty"`
 }
 
+type orderRefundSubmissionResponse struct {
+	Status      string `json:"status" example:"pending_recovery"`
+	Message     string `json:"message" example:"订单已取消，退款提交暂未确认，系统会稍后自动重试。"`
+	RefundID    *int64 `json:"refund_id,omitempty" example:"7001"`
+	OutRefundNo string `json:"out_refund_no,omitempty" example:"RF202606010001"`
+}
+
+type merchantRejectOrderResponse struct {
+	orderResponse
+	Order            orderResponse                  `json:"order"`
+	RefundSubmission *orderRefundSubmissionResponse `json:"refund_submission,omitempty"`
+}
+
 func newOrderPaymentContext(combinedPaymentID pgtype.Int8, combineOutTradeNo string) *orderPaymentContextResponse {
 	if !combinedPaymentID.Valid || combineOutTradeNo == "" {
 		return nil
@@ -246,6 +259,22 @@ func newOrderPaymentContext(combinedPaymentID pgtype.Int8, combineOutTradeNo str
 		CombinedPaymentID: combinedPaymentID.Int64,
 		CombineOutTradeNo: combineOutTradeNo,
 	}
+}
+
+func newOrderRefundSubmissionResponse(submission *logic.MerchantRefundSubmission) *orderRefundSubmissionResponse {
+	if submission == nil || submission.Status == "" {
+		return nil
+	}
+	resp := &orderRefundSubmissionResponse{
+		Status:  submission.Status,
+		Message: submission.Message,
+	}
+	if submission.RefundOrder != nil {
+		refundID := submission.RefundOrder.ID
+		resp.RefundID = &refundID
+		resp.OutRefundNo = submission.RefundOrder.OutRefundNo
+	}
+	return resp
 }
 
 func newOrderResponse(o db.Order) (orderResponse, error) {
@@ -1383,13 +1412,13 @@ type rejectOrderBody struct {
 
 // rejectOrder godoc
 // @Summary 商户拒单
-// @Description 商户拒绝订单并说明原因，将触发自动退款
+// @Description 商户拒绝订单并说明原因，将触发自动退款；响应兼容顶层订单字段并通过 order/refund_submission 返回退款提交状态，订单取消成功不代表支付通道已受理退款
 // @Tags 商户订单管理
 // @Accept json
 // @Produce json
 // @Param id path int true "订单ID" minimum(1)
 // @Param request body rejectOrderBody true "拒单原因"
-// @Success 200 {object} orderResponse "拒单成功"
+// @Success 200 {object} merchantRejectOrderResponse "拒单成功，包含退款提交状态"
 // @Failure 400 {object} ErrorResponse "订单状态不允许拒单"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "订单不属于当前商户"
@@ -1475,7 +1504,11 @@ func (server *Server) rejectOrder(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	ctx.JSON(http.StatusOK, resp)
+	ctx.JSON(http.StatusOK, merchantRejectOrderResponse{
+		orderResponse:    resp,
+		Order:            resp,
+		RefundSubmission: newOrderRefundSubmissionResponse(result.RefundSubmission),
+	})
 }
 
 // markOrderReady 标记订单出餐完成

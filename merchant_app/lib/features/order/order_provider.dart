@@ -40,6 +40,7 @@ class OrderState {
 class OrderNotifier extends StateNotifier<OrderState> {
   final ApiClient _apiClient;
   final Map<String, Future<bool>> _pendingOrderActions = {};
+  String? _lastRejectRefundMessage;
 
   OrderNotifier(this._apiClient) : super(OrderState());
 
@@ -120,6 +121,7 @@ class OrderNotifier extends StateNotifier<OrderState> {
           '/merchant/orders/$orderId/reject',
           data: {'reason': reason},
         );
+        _lastRejectRefundMessage = _extractRejectRefundMessage(response.data);
         final updatedOrder = _extractOrderFromResponse(response.data);
         if (updatedOrder != null) {
           addOrUpdateOrder(updatedOrder);
@@ -129,9 +131,16 @@ class OrderNotifier extends StateNotifier<OrderState> {
         return _confirmActionWithReadback(orderId, _isRejectConfirmed);
       } catch (e) {
         state = state.copyWith(error: ErrorHandler.getErrorMessage(e));
+        _lastRejectRefundMessage = null;
         return false;
       }
     });
+  }
+
+  String? takeLastRejectRefundMessage() {
+    final message = _lastRejectRefundMessage;
+    _lastRejectRefundMessage = null;
+    return message;
   }
 
   Future<bool> markOrderReady(String orderId) async {
@@ -279,7 +288,15 @@ class OrderNotifier extends StateNotifier<OrderState> {
       if (payload is Map<String, dynamic>) {
         final dynamic data = payload['data'];
         if (data is Map<String, dynamic>) {
+          final nestedOrder = data['order'];
+          if (nestedOrder is Map) {
+            return OrderModel.fromJson(Map<String, dynamic>.from(nestedOrder));
+          }
           return OrderModel.fromJson(data);
+        }
+        final nestedOrder = payload['order'];
+        if (nestedOrder is Map) {
+          return OrderModel.fromJson(Map<String, dynamic>.from(nestedOrder));
         }
         if (payload.containsKey('id') && payload.containsKey('status')) {
           return OrderModel.fromJson(payload);
@@ -287,6 +304,25 @@ class OrderNotifier extends StateNotifier<OrderState> {
       }
     } catch (error) {
       debugPrint('Failed to parse order response: $error');
+    }
+    return null;
+  }
+
+  String? _extractRejectRefundMessage(dynamic payload) {
+    try {
+      if (payload is Map<String, dynamic>) {
+        final dynamic data = payload['data'];
+        final source = data is Map<String, dynamic> ? data : payload;
+        final refundSubmission = source['refund_submission'];
+        if (refundSubmission is Map) {
+          final message = refundSubmission['message']?.toString().trim();
+          if (message != null && message.isNotEmpty) {
+            return message;
+          }
+        }
+      }
+    } catch (error) {
+      debugPrint('Failed to parse reject refund submission: $error');
     }
     return null;
   }

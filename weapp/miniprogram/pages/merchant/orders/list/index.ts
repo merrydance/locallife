@@ -540,8 +540,14 @@ Page({
 
       await this.performAction(
         id,
-        () => MerchantOrderManagementService.rejectOrder(id, { reason }),
-        '已拒单并发起退款'
+        async () => {
+          const response = await MerchantOrderManagementService.rejectOrder(id, { reason })
+          return {
+            order: response.order,
+            message: response.refund_submission?.message || '已拒单，退款状态请在订单详情中查看'
+          }
+        },
+        '已拒单，退款状态请在订单详情中查看'
       )
     } catch (error) {
       const err = error as { errMsg?: string }
@@ -563,17 +569,23 @@ Page({
     await this.performAction(id, () => MerchantOrderManagementService.completeOrder(id), '订单已核销')
   },
 
-  async performAction(id: number, request: () => Promise<unknown>, _successMsg: string) {
+  async performAction(id: number, request: () => Promise<unknown>, successMsg: string) {
     const index = this.data.orders.findIndex((order) => order.id === id)
     if (index === -1) return
 
     this.setData({ [`orders[${index}].submitting`]: true })
     try {
-      await request()
+      const response = await request() as OrderResponse | { order: OrderResponse, message?: string } | undefined
       await this.loadOrders(true, {
         showLoading: false,
         preserveCurrent: this.data.orders.length > 0
       })
+      const message = response && typeof response === 'object' && 'order' in response
+        ? response.message
+        : successMsg
+      if (message) {
+        wx.showToast({ title: message, icon: 'none', duration: 3000 })
+      }
     } catch (err) {
       logger.error('Order action failed', err)
       wx.showToast({ title: getErrorMessage(err, '操作失败，请稍后重试'), icon: 'none' })

@@ -19,9 +19,23 @@ type MerchantOrderUpdateInput struct {
 
 // MerchantOrderUpdateResult includes previous and updated order states.
 type MerchantOrderUpdateResult struct {
-	Order    db.Order
-	Previous db.Order
-	PoolItem *db.DeliveryPool
+	Order            db.Order
+	Previous         db.Order
+	PoolItem         *db.DeliveryPool
+	RefundSubmission *MerchantRefundSubmission
+}
+
+const (
+	MerchantRefundSubmissionStatusAccepted        = "accepted"
+	MerchantRefundSubmissionStatusPendingRecovery = "pending_recovery"
+	MerchantRefundSubmissionStatusManualRequired  = "manual_required"
+	MerchantRefundSubmissionStatusNotNeeded       = "not_needed"
+)
+
+type MerchantRefundSubmission struct {
+	Status      string
+	Message     string
+	RefundOrder *db.RefundOrder
 }
 
 // AcceptMerchantOrder validates and accepts a paid order.

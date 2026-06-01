@@ -344,10 +344,13 @@ Page({
       const reason = MERCHANT_REJECT_REASON_OPTIONS[result.tapIndex]
       if (!reason) return
 
-      await this.performAction(
-        () => MerchantOrderManagementService.rejectOrder(this.data.orderId, { reason }),
-        '已拒单并发起退款'
-      )
+      await this.performAction(async () => {
+        const response = await MerchantOrderManagementService.rejectOrder(this.data.orderId, { reason })
+        return {
+          order: response.order,
+          message: response.refund_submission?.message || '已拒单，退款状态请在订单退款记录中查看'
+        }
+      }, '已拒单，退款状态请在订单退款记录中查看')
     } catch (error) {
       const err = error as { errMsg?: string }
       if (err?.errMsg?.includes('cancel')) return
@@ -560,15 +563,20 @@ Page({
     }
   },
 
-  async performAction(request: () => Promise<unknown>, _successText: string) {
+  async performAction(request: () => Promise<unknown>, successText: string) {
     this.setData({ submitting: true })
     try {
-      const updatedOrder = await request() as OrderResponse
+      const response = await request() as OrderResponse | { order: OrderResponse, message?: string }
+      const updatedOrder = 'order' in response ? response.order : response
       this.setData({
         order: this.formatDetail(updatedOrder),
         refreshErrorMessage: ''
       })
       await this.loadDetail(false)
+      const message = 'order' in response ? response.message : successText
+      if (message) {
+        wx.showToast({ title: message, icon: 'none', duration: 3000 })
+      }
 
       const pages = getCurrentPages()
       const listPage = pages[pages.length - 2] as { loadOrders?: (reset?: boolean, showLoading?: boolean) => void } | undefined

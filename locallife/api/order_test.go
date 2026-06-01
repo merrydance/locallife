@@ -2059,6 +2059,12 @@ func TestRejectOrderAPI(t *testing.T) {
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp merchantRejectOrderResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, "cancelled", resp.Order.Status)
+				require.Equal(t, "cancelled", resp.Status)
+				require.NotNil(t, resp.RefundSubmission)
+				require.Equal(t, logic.MerchantRefundSubmissionStatusNotNeeded, resp.RefundSubmission.Status)
 			},
 		},
 		{
