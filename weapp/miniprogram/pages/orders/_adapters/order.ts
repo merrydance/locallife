@@ -2,6 +2,7 @@ import { Order, OrderDetail, OrderItem } from '../_models/order'
 import { OrderResponse, getPayableAmount } from '../_main_shared/api/order'
 import { getPublicImageUrl } from '../../../utils/image'
 import { buildCustomerOrderFeeBreakdownView } from '../_main_shared/utils/order-fee-breakdown-view'
+import { buildCustomerOrderStatusView } from '../_utils/customer-order-status-view'
 import dayjs from '../_main_shared/miniprogram_npm/dayjs/index'
 
 /**
@@ -14,38 +15,12 @@ const ORDER_TYPE_MAP: Record<string, string> = {
   'reservation': '预定'
 }
 
-/**
- * 订单状态映射 - 对齐swagger枚举值
- */
-const ORDER_STATUS_MAP: Record<string, { text: string, color: string }> = {
-  'pending': { text: '待支付', color: '#E34D59' },
-  'paid': { text: '已支付', color: '#ED7B2F' },
-  'preparing': { text: '制作中', color: '#0052D9' },
-  'ready': { text: '待代取', color: '#0052D9' },
-  'courier_accepted': { text: '骑手已接单', color: '#0052D9' },
-  'picked': { text: '骑手已取餐', color: '#0052D9' },
-  'delivering': { text: '代取中', color: '#0052D9' },
-  'rider_delivered': { text: '已送达待确认', color: '#0052D9' },
-  'user_delivered': { text: '已送达', color: '#00A870' },
-  'completed': { text: '已完成', color: '#00A870' },
-  'cancelled': { text: '已取消', color: '#999999' }
-}
-
-const FULFILLMENT_STATUS_TEXT: Record<string, string> = {
-  'scheduled': '已预约',
-  'pending_kitchen': '待出餐',
-  'preparing': '制作中',
-  'ready': '待取/待代取',
-  'completed': '已完成',
-  'cancelled': '已取消'
-}
-
 export class OrderAdapter {
   /**
    * 将API响应转换为列表视图模型
    */
   static toViewModel(dto: OrderResponse): Order {
-    const statusInfo = ORDER_STATUS_MAP[dto.status] || { text: dto.status, color: '#999999' }
+    const statusView = buildCustomerOrderStatusView(dto)
     const statusHint = dto.status_hint?.trim()
     const badgeTexts = normalizeBadges(dto.badges)
 
@@ -57,8 +32,8 @@ export class OrderAdapter {
       type: dto.order_type,
       typeText: ORDER_TYPE_MAP[dto.order_type] || '订单',
       status: dto.status,
-      statusText: statusHint || statusInfo.text,
-      statusColor: statusInfo.color,
+      statusText: statusView.label,
+      statusColor: statusView.color,
       statusHint: statusHint || undefined,
       badges: badgeTexts,
       actions: dto.actions,
@@ -129,7 +104,7 @@ export class OrderAdapter {
       feeBreakdownView: buildCustomerOrderFeeBreakdownView(dto.fee_breakdown),
       timeline: dto.fulfillment_status ? [{
         time: dto.updated_at || dto.created_at,
-        title: FULFILLMENT_STATUS_TEXT[dto.fulfillment_status] || dto.fulfillment_status
+        title: buildCustomerOrderStatusView(dto).label
       }] : undefined
     }
   }

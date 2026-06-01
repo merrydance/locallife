@@ -1,15 +1,17 @@
 import DeliveryService, {
-  buildDeliveryProgress,
   DeliveryProgressView,
-  DeliveryResponse,
-  getDeliveryStatusDisplay,
-  shouldPollDeliveryTrackingState
+  DeliveryResponse
 } from '../_main_shared/api/delivery'
 import { BicyclingDirectionResponse, getBicyclingDirection } from '../../../api/location'
 import { mapService } from '../_main_shared/services/map'
 import { logger } from '../../../utils/logger'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 import { confirmReceiptWithRecovery } from '../_services/order-receipt-confirmation'
+import {
+  buildCustomerDeliveryTrackingStatusView,
+  buildCustomerOrderDeliveryProgress,
+  shouldPollCustomerDeliveryTrackingState
+} from '../_utils/customer-order-status-view'
 
 interface MapPoint {
   latitude: number
@@ -155,10 +157,10 @@ Page({
       const riderPhoneDisplay = riderPhone
         ? riderPhone.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2')
         : ''
-      const statusDisplay = getDeliveryStatusDisplay(delivery.status)
+      const statusDisplay = buildCustomerDeliveryTrackingStatusView(delivery)
 
       // 3. 生成代取进度
-      const progress = buildDeliveryProgress(delivery, this.formatTime)
+      const progress = buildCustomerOrderDeliveryProgress(delivery, this.formatTime)
 
       // 4. 设置地图标记点
       const merchantPoint: MapPoint = {
@@ -180,7 +182,7 @@ Page({
           ? this.formatTime(delivery.estimated_delivery_at)
           : '计算中',
         deliveryStatus: delivery.status,
-        deliveryStatusText: statusDisplay.text,
+        deliveryStatusText: statusDisplay.label,
         showConfirmReceipt: statusDisplay.canConfirmReceipt,
         progress,
         loading: false
@@ -330,7 +332,7 @@ Page({
   },
 
   shouldPollTrackingState(status?: DeliveryResponse['status']): boolean {
-    return shouldPollDeliveryTrackingState(status)
+    return shouldPollCustomerDeliveryTrackingState(status)
   },
 
   async refreshTrackingState() {
@@ -338,14 +340,14 @@ Page({
 
     try {
       const delivery = await DeliveryService.getDeliveryByOrder(this.data.orderId)
-      const statusDisplay = getDeliveryStatusDisplay(delivery.status)
-      const progress = buildDeliveryProgress(delivery, this.formatTime)
+      const statusDisplay = buildCustomerDeliveryTrackingStatusView(delivery)
+      const progress = buildCustomerOrderDeliveryProgress(delivery, this.formatTime)
 
       this.setData({
         delivery,
         deliveryId: delivery.id,
         deliveryStatus: delivery.status,
-        deliveryStatusText: statusDisplay.text,
+        deliveryStatusText: statusDisplay.label,
         showConfirmReceipt: statusDisplay.canConfirmReceipt,
         progress,
         estimatedDeliveryTime: delivery.estimated_delivery_at
@@ -467,23 +469,24 @@ Page({
   },
 
   shouldAdvanceRouteByRider(): boolean {
-    return getDeliveryStatusDisplay(this.data.delivery?.status).isLocationTracked
+    const delivery = this.data.delivery
+    return delivery ? buildCustomerDeliveryTrackingStatusView(delivery).isLocationTracked : false
   },
 
   getRemainingRouteTarget(): MapPoint | null {
-    const statusDisplay = getDeliveryStatusDisplay(this.data.delivery?.status)
-    if (statusDisplay.isAssignedStage) {
+    const status = this.data.delivery?.status
+    if (status === 'assigned' || status === 'picking') {
       return this.data.merchantPoint
     }
-    if (statusDisplay.isPickedStage || statusDisplay.isDeliveringStage) {
+    if (status === 'picked' || status === 'delivering') {
       return this.data.customerPoint
     }
     return null
   },
 
   getRemainingStageText(): string {
-    const statusDisplay = getDeliveryStatusDisplay(this.data.delivery?.status)
-    return statusDisplay.isAssignedStage ? '距取餐点' : '距送达点'
+    const status = this.data.delivery?.status
+    return status === 'assigned' || status === 'picking' ? '距取餐点' : '距送达点'
   },
 
   renderRoutePolyline(

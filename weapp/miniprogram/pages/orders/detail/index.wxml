@@ -66,7 +66,7 @@
        <view class="action-content">
           <view class="action-text">
             <text wx:if="{{showPayButton}}">订单等待支付，请在15分钟内完成</text>
-            <text wx:if="{{showTrackingButton}}">骑手正在为您代取中</text>
+            <text wx:if="{{showTrackingButton}}">{{statusHeaderDesc}}</text>
           </view>
           <t-button wx:if="{{showPayButton}}" theme="primary" size="small" shape="round" loading="{{paying}}" disabled="{{paying}}" bindtap="onPayOrder">立即支付</t-button>
           <t-button wx:if="{{showTrackingButton}}" size="small" shape="round" bindtap="onViewTracking">查看进度</t-button>

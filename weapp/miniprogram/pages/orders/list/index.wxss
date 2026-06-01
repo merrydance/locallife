@@ -121,6 +121,7 @@
 
 .status-tag.class-pending { color: var(--td-brand-color); background: var(--td-brand-color-light); }
 .status-tag.class-preparing { color: var(--td-success-color); background: var(--td-success-color-light); }
+.status-tag.class-ready { color: var(--td-brand-color-9); background: var(--td-brand-color-1); }
 .status-tag.class-delivering { color: var(--td-brand-color-9); background: var(--td-brand-color-1); }
 .status-tag.class-completed { color: var(--td-text-color-placeholder); background: var(--td-bg-color-secondarycontainer); }
 .status-tag.class-cancelled { color: var(--td-text-color-disabled); background: var(--td-bg-color-secondarycontainer); }

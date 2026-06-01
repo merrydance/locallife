@@ -3,6 +3,7 @@
  */
 
 import { OrderResponse } from '../_main_shared/api/order'
+import { buildCustomerOrderStatusView } from './customer-order-status-view'
 
 export interface TimelineNode {
     title: string
@@ -16,14 +17,16 @@ export interface TimelineNode {
  */
 export function generateOrderTimeline(order: OrderResponse): TimelineNode[] {
     const nodes: TimelineNode[] = []
+    const statusView = buildCustomerOrderStatusView(order)
 
     // 根据订单状态生成对应的时间线节点
     switch (order.status) {
         case 'completed':
+        case 'user_delivered':
             nodes.push({
-                title: '订单完成',
-                desc: '感谢您的惠顾',
-                time: order.completed_at || '',
+                title: statusView.label,
+                desc: statusView.description,
+                time: order.completed_at || order.user_delivered_at || '',
                 status: 'finished'
             })
             // 继续添加之前的节点
@@ -31,16 +34,19 @@ export function generateOrderTimeline(order: OrderResponse): TimelineNode[] {
                 nodes.push({
                     title: '确认收货',
                     desc: '已确认收到订单',
-                    time: order.completed_at || '',
+                    time: order.user_delivered_at || order.completed_at || '',
                     status: 'finished'
                 })
             }
             break
 
         case 'delivering':
+        case 'courier_accepted':
+        case 'picked':
+        case 'rider_delivered':
             nodes.push({
-                title: '代取中',
-                desc: '骑手正在代取，请耐心等待',
+                title: statusView.label,
+                desc: statusView.description,
                 time: '进行中',
                 status: 'active'
             })
@@ -48,17 +54,18 @@ export function generateOrderTimeline(order: OrderResponse): TimelineNode[] {
 
         case 'ready':
             nodes.push({
-                title: '待代取',
-                desc: '商家已备餐完成，等待骑手取餐',
+                title: statusView.label,
+                desc: statusView.description,
                 time: '待代取',
                 status: 'active'
             })
             break
 
         case 'preparing':
+        case 'paid':
             nodes.push({
-                title: '制作中',
-                desc: '商家正在制作您的餐品',
+                title: statusView.label,
+                desc: statusView.description,
                 time: '制作中',
                 status: 'active'
             })

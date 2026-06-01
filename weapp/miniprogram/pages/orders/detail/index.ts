@@ -4,20 +4,18 @@ import CartService from '../../../services/cart'
 import {
   urgeOrder,
   isCancelledOrderStatus,
-  isDeliveringOrderStatus,
   OrderResponse,
   OrderType,
   isCompletedOrderStatus,
-  isPendingOrderStatus,
   isFoodSafetyReportableOrder,
-  isReadyOrderStatus,
-  isTrackableOrderStatus
+  isReadyOrderStatus
 } from '../_main_shared/api/order'
 import { startPaymentOrderWorkflow } from '../_main_shared/services/payment-workflow'
 import { confirmReceiptWithRecovery } from '../_services/order-receipt-confirmation'
 import { OrderAdapter } from '../_adapters/order'
 import { OrderDetail } from '../_models/order'
 import { generateOrderTimeline } from '../_utils/timeline'
+import { buildCustomerOrderStatusView } from '../_utils/customer-order-status-view'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 import { loadOrderDetailBundle, getOrderReview, type OrderDetailReservation } from '../_services/order-detail'
 import {
@@ -106,11 +104,12 @@ Page({
           ? { ...fetchedOrderDTO, paid_at: this.data.orderDTO.paid_at }
         : fetchedOrderDTO
       const order = OrderAdapter.toDetailViewModel(orderDTO)
+      const statusView = buildCustomerOrderStatusView(orderDTO)
 
       const actions = orderDTO.actions || []
 
       // 按钮显示逻辑
-      const showTrackingButton = orderDTO.order_type === 'takeout' && isTrackableOrderStatus(orderDTO.status)
+      const showTrackingButton = statusView.canTrack
 
       const showConfirmButton = actions.includes('confirm')
       const showPayButton = actions.includes('pay')
@@ -120,25 +119,12 @@ Page({
       const showReorderButton = isCompletedOrderStatus(orderDTO.status)
       const showFoodSafetyButton = isFoodSafetyReportableOrder(orderDTO)
 
-      let statusHeaderDesc = `订单编号: ${order.orderNo}`
+      let statusHeaderDesc = statusView.description || `订单编号: ${order.orderNo}`
       if (order.expectDeliverTime) {
         statusHeaderDesc = `预计 ${order.expectDeliverTime} 送达`
-      } else if (isCompletedOrderStatus(orderDTO.status)) {
-        statusHeaderDesc = `感谢您对${order.merchantName}的信任`
-      } else if (isCancelledOrderStatus(orderDTO.status)) {
-        statusHeaderDesc = orderDTO.cancel_reason || '订单已取消'
       }
 
-      let statusHeaderIcon = 'time'
-      if (isCompletedOrderStatus(orderDTO.status)) {
-        statusHeaderIcon = 'check-circle'
-      } else if (isCancelledOrderStatus(orderDTO.status)) {
-        statusHeaderIcon = 'close-circle'
-      } else if (isDeliveringOrderStatus(orderDTO.status)) {
-        statusHeaderIcon = 'cart'
-      } else if (isPendingOrderStatus(orderDTO.status)) {
-        statusHeaderIcon = 'timer'
-      }
+      const statusHeaderIcon = statusView.icon
 
       // 生成订单时间线 (如果需要展示详细Timeline)
       const timeline = generateOrderTimeline(orderDTO)

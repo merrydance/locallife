@@ -5,12 +5,13 @@
 
 import { OrderPaymentContext, OrderResponse, getPayableAmount } from '../_main_shared/api/order'
 import { getPublicImageUrl } from '../../../utils/image'
+import { buildCustomerOrderStatusView, CustomerOrderStatusGroup } from '../_utils/customer-order-status-view'
 
 export interface OrderCardViewModel {
     id: number
     orderNo: string
     merchantName: string
-    status: 'ready' | 'delivering' | 'preparing' | 'completed' | 'pending' | 'cancelled'
+    status: CustomerOrderStatusGroup
     statusClass: string
     statusLabel: string
     highlight: string
@@ -42,7 +43,7 @@ export const OrderCardAdapter = {
      * 将OrderResponse转换为OrderCardViewModel
      */
     toCardViewModel(order: OrderResponse): OrderCardViewModel {
-        const status = mapStatus(order)
+        const statusView = buildCustomerOrderStatusView(order)
         const actions = order.actions || []
         const canCancel = actions.includes('cancel')
         const canPay = actions.includes('pay')
@@ -50,9 +51,9 @@ export const OrderCardAdapter = {
             id: order.id,
             orderNo: order.order_no,
             merchantName: order.merchant_name || '未知商户',
-            status,
-            statusClass: status,
-            statusLabel: getStatusLabel(order),
+            status: statusView.group,
+            statusClass: statusView.className,
+            statusLabel: statusView.label,
             highlight: generateHighlight(order),
             createTimeDisplay: formatCreatedAt(order.created_at),
             totalDisplay: formatPrice(getPayableAmount(order)),
@@ -96,88 +97,13 @@ export const OrderCardAdapter = {
 }
 
 /**
- * 映射订单状态到展示状态
- */
-function mapStatus(order: OrderResponse): 'ready' | 'delivering' | 'preparing' | 'completed' | 'pending' | 'cancelled' {
-    const status = order.status
-    
-    // Reservations: Prevent premature "preparing" mapping
-    if (order.order_type === 'reservation' && status === 'paid') {
-        if (order.fulfillment_status !== 'preparing' && order.fulfillment_status !== 'ready' && order.fulfillment_status !== 'completed') {
-            return 'pending'
-        }
-    }
-
-    switch (status) {
-        case 'user_delivered':
-        case 'completed':
-            return 'completed'
-        case 'cancelled':
-            return 'cancelled'
-        case 'courier_accepted':
-        case 'picked':
-        case 'rider_delivered':
-        case 'delivering':
-            return 'delivering'
-        case 'ready':
-            return 'ready'
-        case 'preparing':
-        case 'paid':
-            return 'preparing'
-        case 'pending':
-            return 'pending'
-        default:
-            return 'pending'
-    }
-}
-
-/**
- * 获取状态标签
- */
-function getStatusLabel(order: OrderResponse): string {
-    if (order.status_hint && order.status_hint.trim()) {
-        return order.status_hint
-    }
-    
-    const status = order.status
-    
-    // Reservations: Prevent premature "制作中"
-    if (order.order_type === 'reservation' && status === 'paid') {
-        if (order.fulfillment_status !== 'preparing' && order.fulfillment_status !== 'ready' && order.fulfillment_status !== 'completed') {
-            return '等待制作'
-        }
-    }
-
-    // Contextual ready labels
-    if (status === 'ready') {
-        if (order.order_type === 'takeaway') return '请到店取餐'
-        if (order.order_type === 'dine_in' || order.order_type === 'reservation') return '已出餐/已上齐'
-        return '等待跑腿接单'
-    }
-
-    const labels: Record<string, string> = {
-        'pending': '待支付',
-        'paid': '商家已接单',
-        'preparing': '制作中',
-        'courier_accepted': '骑手已接单',
-        'picked': '骑手已取餐',
-        'delivering': '派送中',
-        'rider_delivered': '待确认收货',
-        'user_delivered': '已送达',
-        'completed': '已完成',
-        'cancelled': '已取消'
-    }
-    return labels[status] || status
-}
-
-/**
  * 生成高亮信息
  */
 function generateHighlight(order: OrderResponse): string {
     if (order.status_hint && order.status_hint.trim()) {
         return order.status_hint
     }
-    
+
     if (order.order_type === 'reservation') {
         const time = order.estimated_delivery_at ? formatCreatedAt(order.estimated_delivery_at) : ''
         return time ? `预约时间: ${time.replace('今天 · ', '').replace('昨天 · ', '')}` : '预订点菜订单'
@@ -189,24 +115,7 @@ function generateHighlight(order: OrderResponse): string {
         return '打包自取订单'
     }
 
-    switch (order.status) {
-        case 'courier_accepted':
-            return '骑手已接单，正在前往取餐'
-        case 'picked':
-            return '骑手已取餐，正在代取'
-        case 'delivering':
-            return '骑手正在代取中，请耐心等待'
-        case 'rider_delivered':
-            return '订单已送达，请确认收餐'
-        case 'ready':
-            return '商家已备餐，等待跑腿接单'
-        case 'preparing':
-            return '商家正在制作您的餐品'
-        case 'completed':
-            return '订单已完成，感谢您的惠顾'
-        default:
-            return ''
-    }
+    return buildCustomerOrderStatusView(order).description
 }
 
 /**
@@ -296,4 +205,3 @@ function formatCreatedAt(timeStr: string): string {
         return timeStr
     }
 }
-
