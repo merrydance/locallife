@@ -422,6 +422,70 @@ func TestBaofuSettlementAccountMerchantProfileDefaultsUseApprovedApplication(t *
 	require.NotContains(t, recorder.Body.String(), app.LegalPersonIDNumber)
 }
 
+func TestBaofuSettlementAccountMerchantFailedFlowReturnsProfileDefaultsForRetry(t *testing.T) {
+	owner, _ := randomUser(t)
+	merchant := randomMerchant(owner.ID)
+	app := approvedMerchantApplicationForBaofuDefaults(owner.ID)
+	flow := db.BaofuAccountOpeningFlow{
+		ID:             4201,
+		OwnerType:      db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:        merchant.ID,
+		AccountType:    db.BaofuAccountTypeBusiness,
+		State:          db.BaofuAccountOpeningStateFailed,
+		FailureCode:    pgtype.Text{String: "BF_PROFILE_REJECTED", Valid: true},
+		FailureMessage: pgtype.Text{String: "raw upstream rejected license " + app.BusinessLicenseNumber, Valid: true},
+		CreatedAt:      time.Now().Add(-10 * time.Minute),
+		UpdatedAt:      time.Now(),
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+	store.EXPECT().
+		GetBaofuAccountBindingByOwner(gomock.Any(), gomock.Eq(db.GetBaofuAccountBindingByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:   merchant.ID,
+		})).
+		Return(db.BaofuAccountBinding{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetBaofuAccountOpeningProfileByOwner(gomock.Any(), gomock.Eq(db.GetBaofuAccountOpeningProfileByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:   merchant.ID,
+		})).
+		Return(db.BaofuAccountOpeningProfile{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetLatestBaofuAccountOpeningFlowByOwner(gomock.Any(), gomock.Eq(db.GetLatestBaofuAccountOpeningFlowByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:   merchant.ID,
+		})).
+		Return(flow, nil)
+	store.EXPECT().
+		GetUserMerchantApplication(gomock.Any(), owner.ID).
+		Return(app, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodGet, "/v1/merchant/settlement-account", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response baofuSettlementAccountResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.Equal(t, db.BaofuAccountOpeningStateFailed, response.Status)
+	require.NotNil(t, response.ProfileDefaults)
+	require.Equal(t, "merchant_application", response.ProfileDefaults.Source)
+	require.Equal(t, app.MerchantName, response.ProfileDefaults.LegalName)
+	require.Equal(t, app.BusinessLicenseNumber, response.ProfileDefaults.BusinessLicenseNumber)
+	require.Equal(t, app.LegalPersonName, response.ProfileDefaults.LegalPersonName)
+	require.NotContains(t, recorder.Body.String(), flow.FailureMessage.String)
+	require.NotContains(t, recorder.Body.String(), app.LegalPersonIDNumber)
+}
+
 func TestBaofuSettlementAccountMerchantApplicationDefaultsOverrideMistypedBaofuProfileIdentity(t *testing.T) {
 	owner, _ := randomUser(t)
 	merchant := randomMerchant(owner.ID)

@@ -43,6 +43,7 @@ func (server *Server) loadBaofuSettlementAccount(ctx *gin.Context, scope baofuSe
 		}
 	}
 
+	failedOpeningFlowFound := false
 	flow, flowFound, err := server.loadLatestBaofuAccountOpeningFlow(ctx, scope)
 	if err != nil {
 		return baofuSettlementAccountResponse{}, err
@@ -66,6 +67,7 @@ func (server *Server) loadBaofuSettlementAccount(ctx *gin.Context, scope baofuSe
 				resp.FlowState = strings.TrimSpace(recovered.Flow.State)
 			}
 		}
+		failedOpeningFlowFound = strings.TrimSpace(flow.State) == db.BaofuAccountOpeningStateFailed
 		resp.FlowID = flow.ID
 		resp.FlowState = strings.TrimSpace(flow.State)
 		resp.SubmittedAt = &flow.CreatedAt
@@ -92,12 +94,23 @@ func (server *Server) loadBaofuSettlementAccount(ctx *gin.Context, scope baofuSe
 	} else {
 		resp.MissingFields = nil
 	}
-	if resp.Status == db.BaofuAccountOpeningStateProfilePending {
+	if shouldIncludeBaofuSettlementAccountProfileDefaults(scope, resp.Status, failedOpeningFlowFound) {
 		if err := server.applyBaofuSettlementAccountProfileDefaults(ctx, scope, &resp, profile, profileFound); err != nil {
 			return baofuSettlementAccountResponse{}, err
 		}
 	}
 	return resp, nil
+}
+
+func shouldIncludeBaofuSettlementAccountProfileDefaults(scope baofuSettlementAccountScope, status string, failedOpeningFlowFound bool) bool {
+	switch strings.TrimSpace(status) {
+	case db.BaofuAccountOpeningStateProfilePending:
+		return true
+	case db.BaofuAccountOpeningStateFailed:
+		return failedOpeningFlowFound && strings.TrimSpace(scope.OwnerType) == db.BaofuAccountOwnerTypeMerchant
+	default:
+		return false
+	}
 }
 
 func (server *Server) tryRecoverBaofuSettlementAccountFlow(ctx *gin.Context, scope baofuSettlementAccountScope, flow db.BaofuAccountOpeningFlow) (*logic.BaofuAccountOpenApplyResult, *db.BaofuAccountBinding, db.BaofuAccountOpeningFlow, bool) {
