@@ -1162,7 +1162,12 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 				if len(reviewAddresses) > 0 {
 					reviewAddress = reviewAddresses[0]
 				}
-				return apierr(ErrInvalidAddress.Code, fmt.Sprintf("地图定位与营业执照注册地址不一致，请重新在地图上选择店铺位置。营业执照地址：%s；当前定位解析地址：%s。", documentReview.LicenseAddress, strings.TrimSpace(reviewAddress)))
+				log.Warn().
+					Int64("application_id", app.ID).
+					Str("license_address", documentReview.LicenseAddress).
+					Str("review_address", strings.TrimSpace(reviewAddress)).
+					Int("radius_m", merchantApplicationAddressValidationRadiusMeters).
+					Msg("merchant application address evidence ambiguous; continue automatic approval")
 			}
 		}
 	}

@@ -742,7 +742,7 @@ func TestSubmitMerchantApplication(t *testing.T) {
 			},
 		},
 		{
-			name: "BadRequest_ReverseGeocodeAddressMismatch",
+			name: "Approved_ReverseGeocodeAddressMismatchIsSoftEvidence",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
@@ -752,6 +752,44 @@ func TestSubmitMerchantApplication(t *testing.T) {
 					GetMerchantApplicationDraft(gomock.Any(), user.ID).
 					Times(1).
 					Return(app, nil)
+
+				submittedApp := app
+				submittedApp.Status = "submitted"
+				store.EXPECT().
+					SubmitMerchantApplication(gomock.Any(), app.ID).
+					Times(1).
+					Return(submittedApp, nil)
+
+				store.EXPECT().
+					ListMerchantLocationsInRegion(gomock.Any(), submittedApp.RegionID.Int64).
+					Times(1).
+					Return([]db.ListMerchantLocationsInRegionRow{}, nil)
+
+				store.EXPECT().
+					CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
+						BusinessLicenseNumber: submittedApp.BusinessLicenseNumber,
+						ID:                    submittedApp.ID,
+					}).
+					Times(1).
+					Return(int64(0), nil)
+
+				store.EXPECT().
+					CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
+						LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
+						ID:                  submittedApp.ID,
+					}).
+					Times(1).
+					Return(int64(0), nil)
+
+				approvedApp := submittedApp
+				approvedApp.Status = "approved"
+				store.EXPECT().
+					ApproveMerchantApplicationTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.ApproveMerchantApplicationTxResult{
+						Application: approvedApp,
+						Merchant:    db.Merchant{ID: 1},
+					}, nil)
 			},
 			configureServer: func(server *Server) {
 				server.mapClient = stubMapClient{reverseResult: &maps.ReverseGeocodeResult{
@@ -765,12 +803,11 @@ func TestSubmitMerchantApplication(t *testing.T) {
 				}}
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
-				var response ErrorResponse
-				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
-				require.Equal(t, ErrInvalidAddress.Code, response.Code)
-				require.Contains(t, response.Error, "地图定位与营业执照注册地址不一致")
-				require.Contains(t, response.Error, "北京市海淀区光华路200号")
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var resp merchantApplicationDraftResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, "approved", resp.Status)
 			},
 		},
 		{
@@ -944,7 +981,7 @@ func TestSubmitMerchantApplication(t *testing.T) {
 			},
 		},
 		{
-			name: "BadRequest_GeocodedLicenseAddressBeyond1000Meters",
+			name: "Approved_GeocodedLicenseAddressBeyond1000MetersIsSoftEvidence",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
@@ -954,6 +991,44 @@ func TestSubmitMerchantApplication(t *testing.T) {
 					GetMerchantApplicationDraft(gomock.Any(), user.ID).
 					Times(1).
 					Return(app, nil)
+
+				submittedApp := app
+				submittedApp.Status = "submitted"
+				store.EXPECT().
+					SubmitMerchantApplication(gomock.Any(), app.ID).
+					Times(1).
+					Return(submittedApp, nil)
+
+				store.EXPECT().
+					ListMerchantLocationsInRegion(gomock.Any(), submittedApp.RegionID.Int64).
+					Times(1).
+					Return([]db.ListMerchantLocationsInRegionRow{}, nil)
+
+				store.EXPECT().
+					CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
+						BusinessLicenseNumber: submittedApp.BusinessLicenseNumber,
+						ID:                    submittedApp.ID,
+					}).
+					Times(1).
+					Return(int64(0), nil)
+
+				store.EXPECT().
+					CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
+						LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
+						ID:                  submittedApp.ID,
+					}).
+					Times(1).
+					Return(int64(0), nil)
+
+				approvedApp := submittedApp
+				approvedApp.Status = "approved"
+				store.EXPECT().
+					ApproveMerchantApplicationTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.ApproveMerchantApplicationTxResult{
+						Application: approvedApp,
+						Merchant:    db.Merchant{ID: 1},
+					}, nil)
 			},
 			configureServer: func(server *Server) {
 				server.mapClient = stubMapClient{
@@ -973,11 +1048,11 @@ func TestSubmitMerchantApplication(t *testing.T) {
 				}
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
-				var response ErrorResponse
-				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
-				require.Equal(t, ErrInvalidAddress.Code, response.Code)
-				require.Contains(t, response.Error, "地图定位与营业执照注册地址不一致")
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var resp merchantApplicationDraftResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, "approved", resp.Status)
 			},
 		},
 		{
