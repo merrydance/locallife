@@ -326,16 +326,26 @@ export interface PublicMerchantDishesResponse {
   dishes: PublicDish[]
 }
 
+type PublicMerchantDishesEnvelope = {
+  categories?: PublicDishCategory[] | null
+  dishes?: PublicDish[] | null
+}
+
 /**
  * 获取商户菜品列表（消费者端）
  */
 export async function getPublicMerchantDishes(merchantId: number): Promise<PublicMerchantDishesResponse> {
-  return await request({
+  const response = await request<PublicMerchantDishesEnvelope>({
     url: `/v1/public/merchants/${merchantId}/dishes`,
     method: 'GET',
     useCache: true,
     cacheTTL: 5 * 60 * 1000
   })
+
+  return {
+    categories: Array.isArray(response?.categories) ? response.categories.filter(Boolean) : [],
+    dishes: Array.isArray(response?.dishes) ? response.dishes.filter(Boolean) : []
+  }
 }
 
 /**

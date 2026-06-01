@@ -60,11 +60,16 @@
   gap: 6rpx;
   padding: 6rpx 12rpx;
   border-radius: var(--radius-round);
-  background: var(--td-brand-color-light);
-  color: var(--td-brand-color);
+  background: #1f1714;
+  color: #ffffff;
   font-size: 22rpx;
   font-weight: 600;
   line-height: 1;
+  box-shadow: 0 4rpx 12rpx rgba(31, 23, 20, 0.16);
+}
+
+.activity-card-badge-icon {
+  color: #ffb35b;
 }
 
 .activity-card-main {

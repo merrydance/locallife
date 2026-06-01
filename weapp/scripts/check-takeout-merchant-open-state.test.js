@@ -96,6 +96,26 @@ const takeoutSupport = loadTsModule('miniprogram/utils/takeout-index-support.ts'
   './util': { formatPrice: (value) => `¥${(value / 100).toFixed(2)}` }
 })
 
+const merchantApi = loadTsModule('miniprogram/api/merchant.ts', {
+  '../utils/request': {
+    request: async ({ url }) => {
+      if (url === '/v1/public/merchants/1/dishes') {
+        return { categories: null, dishes: null }
+      }
+      throw new Error(`unexpected request: ${url}`)
+    }
+  },
+  './types': {
+    normalizePaginatedResult: (items, _response, fallback) => ({
+      items,
+      page: fallback.page,
+      pageSize: fallback.pageSize,
+      total: items.length,
+      hasMore: false
+    })
+  }
+})
+
 function merchantDetail(isOpen) {
   return {
     id: 1,
@@ -123,6 +143,27 @@ assert.strictEqual(
   true,
   'feed lite detail hydration should keep list isOpen=true when detail says open'
 )
+const nullDishesFeed = takeoutSupport.buildTakeoutFeaturedDishes(null, 1)
+assert(Array.isArray(nullDishesFeed), 'feed dish hydration should return an array for null dishes responses')
+assert.strictEqual(
+  nullDishesFeed.length,
+  0,
+  'feed dish hydration should treat a null dishes response as empty instead of crashing'
+)
+const missingDishesFeed = takeoutSupport.buildTakeoutFeaturedDishes(undefined, 1)
+assert(Array.isArray(missingDishesFeed), 'feed dish hydration should return an array for missing dishes responses')
+assert.strictEqual(
+  missingDishesFeed.length,
+  0,
+  'feed dish hydration should treat a missing dishes response as empty instead of crashing'
+)
+
+const publicMerchantDishesBoundaryCheck = merchantApi.getPublicMerchantDishes(1).then((result) => {
+  assert(Array.isArray(result.categories), 'public merchant dishes API should normalize null categories to an array')
+  assert(Array.isArray(result.dishes), 'public merchant dishes API should normalize null dishes to an array')
+  assert.strictEqual(result.categories.length, 0, 'public merchant dishes API should treat null categories as empty')
+  assert.strictEqual(result.dishes.length, 0, 'public merchant dishes API should treat null dishes as empty')
+})
 
 const closedMerchantDetailView = ConsumerMerchantDetailAdapter.toViewModel(merchantDetail(false))
 assert.strictEqual(
@@ -230,4 +271,11 @@ assert(
   'public merchant detail should not cache dynamic open-state data'
 )
 
-console.log('takeout merchant open-state tests passed')
+publicMerchantDishesBoundaryCheck
+  .then(() => {
+    console.log('takeout merchant open-state tests passed')
+  })
+  .catch((error) => {
+    console.error(error)
+    process.exitCode = 1
+  })

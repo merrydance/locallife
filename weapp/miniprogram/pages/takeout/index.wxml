@@ -49,7 +49,7 @@
       <swiper-item wx:for="{{activityBanners}}" wx:key="id">
         <view class="{{item.cardClass}}" bindtap="onActivityBannerTap" data-url="{{item.url}}">
           <view class="activity-card-badge">
-            <t-icon name="{{item.icon}}" size="26rpx" />
+            <t-icon name="{{item.icon}}" size="26rpx" class="activity-card-badge-icon" />
             <text>{{item.badge}}</text>
           </view>
           <view class="activity-card-main">

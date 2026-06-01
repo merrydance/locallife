@@ -24,7 +24,7 @@
   <view class="submit-panel">
     <view class="submit-title-row">
       <text class="submit-title">告诉我们，优先邀请他入驻</text>
-      <t-tag wx:if="{{regionName}}" theme="primary" variant="light">{{regionName}}</t-tag>
+      <view wx:if="{{regionName}}" class="region-chip">{{regionName}}</view>
     </view>
     <view class="pick-row">
       <view class="name-input-wrap">
