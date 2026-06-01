@@ -1149,11 +1149,21 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 				Int("radius_m", merchantApplicationAddressValidationRadiusMeters).
 				Msg("merchant application address matched by geocoded license radius")
 		} else {
-			reviewAddress := app.BusinessAddress
-			if len(reviewAddresses) > 0 {
-				reviewAddress = reviewAddresses[0]
+			query, poiDistanceMeters, poiMatched := server.merchantNameLocationWithinValidationRadius(ctx, app, documentReview)
+			if poiMatched {
+				log.Info().
+					Int64("application_id", app.ID).
+					Str("merchant_location_query", query).
+					Int("distance_m", poiDistanceMeters).
+					Int("radius_m", merchantApplicationAddressValidationRadiusMeters).
+					Msg("merchant application address matched by geocoded merchant name")
+			} else {
+				reviewAddress := app.BusinessAddress
+				if len(reviewAddresses) > 0 {
+					reviewAddress = reviewAddresses[0]
+				}
+				return apierr(ErrInvalidAddress.Code, fmt.Sprintf("地图定位与营业执照注册地址不一致，请重新在地图上选择店铺位置。营业执照地址：%s；当前定位解析地址：%s。", documentReview.LicenseAddress, strings.TrimSpace(reviewAddress)))
 			}
-			return apierr(ErrInvalidAddress.Code, fmt.Sprintf("地图定位与营业执照注册地址不一致，请重新在地图上选择店铺位置。营业执照地址：%s；当前定位解析地址：%s。", documentReview.LicenseAddress, strings.TrimSpace(reviewAddress)))
 		}
 	}
 	if matchedAddress != "" && matchedAddress != app.BusinessAddress {
@@ -1239,10 +1249,34 @@ func (server *Server) merchantLicenseAddressWithinValidationRadius(ctx context.C
 		return 0, false
 	}
 
-	result, err := server.mapClient.Geocode(ctx, licenseAddress)
+	return server.merchantGeocodedAddressWithinValidationRadius(ctx, app, licenseAddress)
+}
+
+func (server *Server) merchantNameLocationWithinValidationRadius(ctx context.Context, app db.MerchantApplication, review logic.MerchantDocumentReviewResult) (string, int, bool) {
+	if server.mapClient == nil || !app.Latitude.Valid || !app.Longitude.Valid {
+		return "", 0, false
+	}
+
+	for _, query := range merchantNameLocationQueries(app, review) {
+		distanceMeters, matched := server.merchantGeocodedAddressWithinValidationRadius(ctx, app, query)
+		if matched {
+			return query, distanceMeters, true
+		}
+	}
+
+	return "", 0, false
+}
+
+func (server *Server) merchantGeocodedAddressWithinValidationRadius(ctx context.Context, app db.MerchantApplication, query string) (int, bool) {
+	query = strings.TrimSpace(query)
+	if server.mapClient == nil || !app.Latitude.Valid || !app.Longitude.Valid || query == "" {
+		return 0, false
+	}
+
+	result, err := server.mapClient.Geocode(ctx, query)
 	if err != nil || result == nil {
 		if err != nil {
-			log.Warn().Err(err).Int64("application_id", app.ID).Msg("merchant application: geocode license address for radius match failed")
+			log.Warn().Err(err).Int64("application_id", app.ID).Str("geocode_query", query).Msg("merchant application: geocode location for radius match failed")
 		}
 		return 0, false
 	}
@@ -1257,6 +1291,48 @@ func (server *Server) merchantLicenseAddressWithinValidationRadius(ctx context.C
 	}
 	distanceMeters := algorithm.HaversineDistance(appLoc, licenseLoc)
 	return distanceMeters, distanceMeters <= merchantApplicationAddressValidationRadiusMeters
+}
+
+func merchantNameLocationQueries(app db.MerchantApplication, review logic.MerchantDocumentReviewResult) []string {
+	names := merchantLocationEvidenceNames(app.MerchantName, review.LicenseName)
+	if len(names) == 0 {
+		return nil
+	}
+
+	prefixes := uniqueNonEmptyAddresses(
+		merchantAdministrativeAddressPrefix(app.BusinessAddress),
+		merchantAdministrativeAddressPrefix(review.LicenseAddress),
+	)
+
+	queries := make([]string, 0, len(names)*(len(prefixes)+2))
+	for _, name := range names {
+		for _, prefix := range prefixes {
+			queries = append(queries, prefix+name)
+		}
+		if strings.TrimSpace(review.LicenseAddress) != "" {
+			queries = append(queries, strings.TrimSpace(review.LicenseAddress)+" "+name)
+		}
+		queries = append(queries, name)
+	}
+
+	return uniqueNonEmptyAddresses(queries...)
+}
+
+func merchantLocationEvidenceNames(merchantName, licenseName string) []string {
+	licenseName = strings.TrimSpace(licenseName)
+	merchantName = strings.TrimSpace(merchantName)
+	if licenseName == "" {
+		return nil
+	}
+	if merchantName == "" || !merchantCompanyNamesRoughlyEqual(merchantName, licenseName) {
+		return []string{licenseName}
+	}
+	return uniqueNonEmptyAddresses(merchantName, licenseName)
+}
+
+func merchantAdministrativeAddressPrefix(address string) string {
+	parsed := parseChineseAddress(address)
+	return strings.TrimSpace(parsed.Province + parsed.City + parsed.District)
 }
 
 func merchantDocumentReviewAPIError(err error) error {
@@ -1455,8 +1531,10 @@ func isAddressMatch(licenseAddr, businessAddr string) bool {
 	road1, number1, isFuzzy1 := extractRoadAndNumberWithFuzzy(detail1)
 	road2, number2, isFuzzy2 := extractRoadAndNumberWithFuzzy(detail2)
 
+	roadsEquivalent := road1 != "" && road2 != "" && merchantRoadNamesEquivalent(road1, road2)
+
 	// 路名必须相同（这是核心匹配条件）
-	if road1 == "" || road2 == "" || road1 != road2 {
+	if road1 == "" || road2 == "" || (road1 != road2 && !roadsEquivalent) {
 		// 检查路名后缀匹配：营业执照地址可能带区域前缀（如"经济开发区吉祥路" vs "吉祥路"）
 		if road1 != "" && road2 != "" && (strings.HasSuffix(road1, road2) || strings.HasSuffix(road2, road1)) {
 			// 任一方为模糊描述（无数字门牌，如"北段路东"、"晶龙集团"）：
@@ -1481,6 +1559,10 @@ func isAddressMatch(licenseAddr, businessAddr string) bool {
 	// 4a. 如果任一方使用模糊位置描述（如"中段东侧"、"路口"），视为匹配
 	if isFuzzy1 || isFuzzy2 {
 		return true
+	}
+
+	if roadsEquivalent && road1 != road2 {
+		return false
 	}
 
 	// 4b. 门牌号相同
@@ -1639,6 +1721,23 @@ func extractRoadAndNumberWithFuzzy(detail string) (road, number string, isFuzzy 
 		}
 	}
 	return
+}
+
+func merchantRoadNamesEquivalent(a, b string) bool {
+	normalizedA := normalizeMerchantRoadName(a)
+	normalizedB := normalizeMerchantRoadName(b)
+	return normalizedA != "" && normalizedA == normalizedB
+}
+
+func normalizeMerchantRoadName(road string) string {
+	road = strings.TrimSpace(road)
+	road = strings.TrimSuffix(road, "辅路")
+	for _, suffix := range []string{"西街", "东街", "南街", "北街", "西路", "东路", "南路", "北路"} {
+		if strings.HasSuffix(road, suffix) {
+			return strings.TrimSuffix(road, suffix) + string([]rune(suffix)[len([]rune(suffix))-1])
+		}
+	}
+	return road
 }
 
 // isFuzzyLocation 判断是否为模糊位置描述（非精确门牌号）

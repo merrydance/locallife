@@ -8,6 +8,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -166,6 +167,23 @@ func TestMerchantFoodPermitOfficialVerificationMatchesLicense(t *testing.T) {
 	require.False(t, merchantFoodPermitOfficialVerificationMatchesLicense(app, license, logic.MerchantFoodPermitOfficialVerification{
 		CreditCode: "91110000MA12345678",
 	}))
+}
+
+func TestMerchantNameLocationQueriesUseOnlyLicenseBoundNames(t *testing.T) {
+	app := randomMerchantAppDraftWithData(1)
+	app.MerchantName = "附近热门店"
+	review := logic.MerchantDocumentReviewResult{
+		LicenseName:    "张三饭店",
+		LicenseAddress: "河北省邢台市宁晋县天宝西街",
+	}
+
+	queries := merchantNameLocationQueries(app, review)
+
+	require.NotEmpty(t, queries)
+	for _, query := range queries {
+		require.NotContains(t, query, "附近热门店")
+	}
+	require.Contains(t, queries, "张三饭店")
 }
 
 func TestCheckMerchantApplicationApproval_UsesBusinessLicenseReadiness(t *testing.T) {
@@ -819,6 +837,105 @@ func TestSubmitMerchantApplication(t *testing.T) {
 						District:         "海淀区",
 						Street:           "光华路",
 						StreetNumber:     "200号",
+					},
+				}
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+			},
+		},
+		{
+			name: "Approved_AddressMatchesMerchantNamePOIWithin1000Meters",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(t *testing.T, store *mockdb.MockStore) {
+				app := randomMerchantAppDraftWithData(user.ID)
+				app.MerchantName = "宁晋县周鹏饭店"
+				app.BusinessAddress = "河北省邢台市宁晋县凤凰路辅路"
+				licenseOCR, err := json.Marshal(BusinessLicenseOCRData{
+					EnterpriseName:      "宁晋县周鹏饭店",
+					CreditCode:          "92130528MA0A5XB46A",
+					BusinessScope:       "餐饮服务",
+					ValidPeriod:         "2020年01月01日至2040年01月01日",
+					Address:             "邢台市宁晋县天宝西街与宁米路交叉口北行100米路东",
+					LegalRepresentative: "张三",
+					OCRAt:               time.Now().Format(time.RFC3339),
+				})
+				require.NoError(t, err)
+				app.BusinessLicenseOcr = licenseOCR
+				foodPermitOCR, err := json.Marshal(FoodPermitOCRData{
+					PermitNo:    "JY11105000000001",
+					CompanyName: "宁晋县周鹏饭店",
+					ValidTo:     "2030年12月31日",
+					OCRAt:       time.Now().Format(time.RFC3339),
+				})
+				require.NoError(t, err)
+				app.FoodPermitOcr = foodPermitOCR
+				store.EXPECT().
+					GetMerchantApplicationDraft(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+
+				submittedApp := app
+				submittedApp.Status = "submitted"
+				store.EXPECT().
+					SubmitMerchantApplication(gomock.Any(), app.ID).
+					Times(1).
+					Return(submittedApp, nil)
+
+				store.EXPECT().
+					ListMerchantLocationsInRegion(gomock.Any(), submittedApp.RegionID.Int64).
+					Times(1).
+					Return([]db.ListMerchantLocationsInRegionRow{}, nil)
+
+				store.EXPECT().
+					CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
+						BusinessLicenseNumber: submittedApp.BusinessLicenseNumber,
+						ID:                    submittedApp.ID,
+					}).
+					Times(1).
+					Return(int64(0), nil)
+
+				store.EXPECT().
+					CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
+						LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
+						ID:                  submittedApp.ID,
+					}).
+					Times(1).
+					Return(int64(0), nil)
+
+				approvedApp := submittedApp
+				approvedApp.Status = "approved"
+				store.EXPECT().
+					ApproveMerchantApplicationTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.ApproveMerchantApplicationTxResult{
+						Application: approvedApp,
+						Merchant:    db.Merchant{ID: 1},
+					}, nil)
+			},
+			configureServer: func(server *Server) {
+				server.mapClient = stubMapClient{
+					geocodeFunc: func(_ context.Context, address string) (*maps.GeocodeResult, error) {
+						if strings.Contains(address, "宁晋县周鹏饭店") {
+							return &maps.GeocodeResult{
+								Location: maps.Location{Lat: 39.9080, Lng: 116.3210},
+								Address:  "河北省邢台市宁晋县天宝街辅路宁晋县周鹏饭店",
+							}, nil
+						}
+						return &maps.GeocodeResult{
+							Location: maps.Location{Lat: 39.9350, Lng: 116.3500},
+							Address:  "河北省邢台市宁晋县天宝西街",
+						}, nil
+					},
+					reverseResult: &maps.ReverseGeocodeResult{
+						Address:          "河北省邢台市宁晋县凤凰路辅路",
+						FormattedAddress: "河北省邢台市宁晋县凤凰路辅路",
+						Province:         "河北省",
+						City:             "邢台市",
+						District:         "宁晋县",
+						Street:           "凤凰路辅路",
 					},
 				}
 			},
@@ -2131,6 +2248,18 @@ func TestIsAddressMatch(t *testing.T) {
 			license:  "上海市浦东新区世纪大道200号",
 			business: "上海市浦东新区世纪大道200号环球金融中心",
 			expected: true,
+		},
+		{
+			name:     "腾讯逆解析省略道路方位并返回辅路",
+			license:  "邢台市宁晋县天宝西街与宁米路交叉口北行100米路东",
+			business: "河北省邢台市宁晋县天宝街辅路",
+			expected: true,
+		},
+		{
+			name:     "明确门牌号的方位道路不与主路合并",
+			license:  "河北省邢台市宁晋县天宝西街100号",
+			business: "河北省邢台市宁晋县天宝街100号",
+			expected: false,
 		},
 	}
 
