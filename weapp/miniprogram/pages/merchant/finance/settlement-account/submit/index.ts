@@ -76,7 +76,7 @@ Page({
       accessGuard: merchantAccessGuard,
       logTag: 'merchant-baofu-settlement-submit',
       loadErrorFallback: '商户宝付开户资料加载失败，请稍后重试',
-      refreshErrorFallback: '商户宝付开户状态刷新失败，请稍后重试'
+      refreshErrorFallback: '商户宝付开户状态同步失败，请稍后重试'
     })
   ],
 

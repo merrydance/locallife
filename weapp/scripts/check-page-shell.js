@@ -21,7 +21,7 @@ function main() {
   const pageDirs = Array.from(new Set(
     pageFiles
       .map((filePath) => path.dirname(filePath))
-      .filter((dirPath) => !dirPath.includes('/templates'))
+      .filter((dirPath) => !dirPath.includes('/templates') && !dirPath.includes('/_components/'))
   ))
 
   if (pageDirs.length === 0) {

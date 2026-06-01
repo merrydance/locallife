@@ -34,7 +34,7 @@ Page({
       getAccount: getOperatorBaofuSettlementAccount,
       logTag: 'operator-baofu-settlement-submit',
       loadErrorFallback: '运营商宝付开户资料加载失败，请稍后重试',
-      refreshErrorFallback: '运营商宝付开户状态刷新失败，请稍后重试'
+      refreshErrorFallback: '运营商宝付开户状态同步失败，请稍后重试'
     })
   ],
 

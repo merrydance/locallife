@@ -8,6 +8,7 @@ import { getStableBarHeights } from '../../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../../utils/user-facing'
 
 const WITHDRAWAL_LIST_PAGE_PATH = '/pages/platform/finance/withdrawals/index'
+const WITHDRAWAL_DETAIL_POLL_INTERVAL_MS = 15000
 
 Page({
   data: {
@@ -21,6 +22,9 @@ Page({
     loadingDetail: false,
     item: null as BaofuWithdrawalItemView | null
   },
+
+  _pollTimer: null as number | null,
+  _pageVisible: false,
 
   async onLoad(options: { id?: string, created?: string } = {}) {
     const { navBarHeight } = getStableBarHeights()
@@ -37,6 +41,24 @@ Page({
     }
     this.setData({ id, createdNotice: options.created === '1' })
     await this.loadDetail()
+    this.updatePolling()
+  },
+
+  onShow() {
+    this._pageVisible = true
+    if (this.data.id && this.data.item) {
+      void this.loadDetail({ silent: true }).then(() => this.updatePolling())
+    }
+  },
+
+  onHide() {
+    this._pageVisible = false
+    this.stopPolling()
+  },
+
+  onUnload() {
+    this._pageVisible = false
+    this.stopPolling()
   },
 
   onNavHeight(e: WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>) {
@@ -72,6 +94,7 @@ Page({
         refreshErrorMessage: '',
         loadingDetail: false
       })
+      this.updatePolling()
     } catch (error) {
       logger.warn('Platform baofu withdrawal detail load failed', error)
       const message = getErrorUserMessage(error, '提现详情加载失败，请稍后重试')
@@ -91,6 +114,28 @@ Page({
 
   onRefresh() {
     void this.loadDetail({ silent: true })
+  },
+
+  updatePolling() {
+    const shouldPoll = Boolean(this.data.item && !this.data.item.statusView.isTerminal)
+    if (!this._pageVisible || !shouldPoll) {
+      this.stopPolling()
+      return
+    }
+    if (this._pollTimer !== null) {
+      return
+    }
+    this._pollTimer = setInterval(() => {
+      void this.loadDetail({ silent: true })
+    }, WITHDRAWAL_DETAIL_POLL_INTERVAL_MS) as unknown as number
+  },
+
+  stopPolling() {
+    if (this._pollTimer === null) {
+      return
+    }
+    clearInterval(this._pollTimer)
+    this._pollTimer = null
   },
 
   onBackToList() {

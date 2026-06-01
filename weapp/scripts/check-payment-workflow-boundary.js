@@ -16,6 +16,7 @@ const ALLOWED_INVOKE_WECHAT_PAY_FILES = new Set([
   'weapp/miniprogram/services/claim-recovery-payment.ts'
 ])
 
+const PAYMENT_WORKFLOW_OWNER_SEGMENT = /\/_(?:api|main_shared\/api|main_shared\/services|services)\//
 const INVOKE_WECHAT_PAY = /\binvokeWechatPay\b/
 const PROCESS_PAYMENT_CALL = /\bprocessPayment\s*\(/
 const PROCESS_PAYMENT_IMPORT = /import\s*\{[^}]*\bprocessPayment\b[^}]*\}\s*from\s*['"][^'"]*api\/payment['"]/
@@ -46,6 +47,7 @@ function main() {
 
 function checkSurfacePaymentCalls(failures) {
   const files = getScopedFiles({ roots: SURFACE_ROOTS, extensions: ['.ts', '.js'] })
+    .filter((relativePath) => !PAYMENT_WORKFLOW_OWNER_SEGMENT.test(relativePath))
 
   for (const relativePath of files) {
     const content = readRelativeFile(relativePath)

@@ -3,8 +3,7 @@
 <template name="provider-onboarding-empty">
   <t-empty description="附近暂无可代取商户" />
   <view class="empty-actions">
-    <t-button theme="primary" size="large" block bind:tap="onRefresh" shape="round">重新加载</t-button>
-    <t-button size="large" block bind:tap="onManualLocation" shape="round">切换位置</t-button>
+    <t-button theme="primary" size="large" block bind:tap="onManualLocation" shape="round">切换位置</t-button>
   </view>
   <view class="provider-entry">
     <text bindtap="onMerchantRegister">我是商家</text>
@@ -35,17 +34,35 @@
     />
   </view>
 
-  <view class="wanted-hero-section" bindtap="onWantedMerchantTap">
-    <view class="wanted-hero">
-      <view class="wanted-hero-main">
-        <text class="wanted-hero-title">你想吃谁家外卖？</text>
-        <text class="wanted-hero-subtitle">告诉我们，优先邀请他入驻</text>
-      </view>
-      <view class="wanted-hero-action">
-        <text>去 +1</text>
-        <t-icon name="chevron-right" size="30rpx" />
-      </view>
-    </view>
+  <view class="activity-carousel-section">
+    <!-- weapp-gate allow-native-control: 当前 TDesign swiper 只支持图片列表，活动位需要承载自定义文案、标签和 CTA -->
+    <swiper
+      class="activity-carousel"
+      autoplay="{{activityBanners.length > 1}}"
+      circular="{{activityBanners.length > 1}}"
+      interval="4500"
+      duration="320"
+      indicator-dots="{{activityBanners.length > 1}}"
+      indicator-color="rgba(255,255,255,0.42)"
+      indicator-active-color="#ffffff"
+    >
+      <swiper-item wx:for="{{activityBanners}}" wx:key="id">
+        <view class="{{item.cardClass}}" bindtap="onActivityBannerTap" data-url="{{item.url}}">
+          <view class="activity-card-badge">
+            <t-icon name="{{item.icon}}" size="26rpx" />
+            <text>{{item.badge}}</text>
+          </view>
+          <view class="activity-card-main">
+            <text class="activity-card-title">{{item.title}}</text>
+            <text class="activity-card-subtitle">{{item.subtitle}}</text>
+          </view>
+          <view class="activity-card-action">
+            <text>{{item.cta}}</text>
+            <t-icon name="chevron-right" size="30rpx" />
+          </view>
+        </view>
+      </swiper-item>
+    </swiper>
   </view>
 
   <!-- 菜系品类网格（动态，按区域） -->

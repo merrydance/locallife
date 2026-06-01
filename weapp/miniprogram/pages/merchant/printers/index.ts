@@ -428,7 +428,7 @@ Page({
         this.setData({
           commandResultText: '打印机删除已提交',
           commandResultNote: this.data.refreshErrorMessage
-            ? '删除已提交，设备列表同步失败，可下拉刷新'
+            ? '删除已提交，设备列表同步失败，稍后重新进入查看'
             : '设备列表已按后端结果回读',
           commandResultPrinterId: 0
         })

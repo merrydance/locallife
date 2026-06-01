@@ -14,7 +14,7 @@
   >
     <view wx:if="{{accountError && !loading}}" class="state-shell">
       <t-empty icon="error-circle" description="{{accountError}}" />
-      <t-button theme="primary" bindtap="onRetryPage">重新加载</t-button>
+      <t-button theme="primary" bindtap="onRetryPage">重试</t-button>
     </view>
 
     <block wx:else>
@@ -67,9 +67,6 @@
             </view>
             <view class="status-card-inline__amount">{{pendingWithdrawalAmountDisplay}}</view>
           </view>
-          <view wx:if="{{pendingWithdrawalCanRefresh}}" class="status-card-inline__actions">
-            <t-button size="small" theme="primary" variant="outline" bindtap="onRefreshPendingWithdrawal" loading="{{syncingPendingWithdrawal}}" disabled="{{syncingPendingWithdrawal}}">刷新状态</t-button>
-          </view>
         </view>
 
         <view wx:if="{{actionFeedbackMessage}}" class="status-card-inline status-card-inline--feedback status-card-inline--{{actionFeedbackTheme}}">
@@ -93,7 +90,7 @@
 
         <view wx:elif="{{listError && transactions.length === 0}}" class="inline-state-card">
           <t-empty icon="error-circle" description="{{listError}}" />
-          <t-button theme="primary" bindtap="onRetryTransactions">重新加载账单</t-button>
+          <t-button theme="primary" bindtap="onRetryTransactions">重试</t-button>
         </view>
 
         <view class="history-list" wx:elif="{{transactions.length > 0}}">

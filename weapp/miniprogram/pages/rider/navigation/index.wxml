@@ -7,7 +7,7 @@
 
   <view class="error-box" wx:elif="{{errorMessage && !delivery}}">
     <t-empty icon="error-circle" description="{{errorMessage}}" />
-    <t-button theme="primary" bindtap="onRetry">重新加载</t-button>
+    <t-button theme="primary" bindtap="onRetry">重试</t-button>
   </view>
 
   <block wx:elif="{{delivery}}">
@@ -56,7 +56,7 @@
           <t-button theme="primary" variant="outline" bindtap="onOpenMerchant">到商家</t-button>
           <t-button theme="primary" variant="outline" bindtap="onOpenCustomer">到顾客</t-button>
           <t-button theme="default" variant="text" loading="{{locationRetrying}}" disabled="{{locationRetrying}}" bindtap="onRetryLocation">
-            {{needsLocationPermission ? '开启定位' : '刷新定位'}}
+            {{needsLocationPermission ? '开启定位' : '重新定位'}}
           </t-button>
         </view>
       </view>

@@ -86,7 +86,7 @@ Page({
     showRouteSummary: false,
     // 进度
     progress: [] as DeliveryProgressView[],
-    // 位置刷新定时器
+    // 位置同步定时器
     locationTimer: null as number | null
   },
 
@@ -113,7 +113,7 @@ Page({
   },
 
   onShow() {
-    // 页面重新显示时恢复轮询（副作用：也立即刷新状态和位置）
+    // 页面重新显示时恢复轮询（副作用：也立即同步状态和位置）
     if (this.data.deliveryId && this.data.delivery && this.shouldPollTrackingState(this.data.delivery.status)) {
       this.refreshTrackingState()
       this.startLocationTracking()
@@ -248,7 +248,7 @@ Page({
     // 规划路线
     await this.planRoute(merchantPoint, customerPoint)
 
-    // 获取骑手位置并按最新位置刷新剩余路线
+    // 获取骑手位置并按最新位置同步剩余路线
     await this.updateRiderLocation()
   },
 
@@ -321,7 +321,7 @@ Page({
   startLocationTracking() {
     if (this.data.locationTimer !== null) return
 
-    // 每10秒刷新一次代取状态和骑手位置
+    // 每10秒同步一次代取状态和骑手位置
     const timer = setInterval(() => {
       this.refreshTrackingState()
     }, 10000) as unknown as number
@@ -367,7 +367,7 @@ Page({
         this.stopLocationTracking()
       }
     } catch (error) {
-      logger.warn('刷新代取追踪状态失败', error, 'tracking.refreshTrackingState')
+      logger.warn('同步代取追踪状态失败', error, 'tracking.refreshTrackingState')
     }
   },
 
@@ -606,9 +606,5 @@ Page({
 
   onNavHeight(event: WechatMiniprogram.CustomEvent) {
     this.setData({ navBarHeight: event.detail.navBarHeight })
-  },
-
-  onRefresh() {
-    this.loadDeliveryData()
   }
 })

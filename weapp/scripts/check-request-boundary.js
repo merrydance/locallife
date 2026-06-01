@@ -7,11 +7,16 @@ const {
 } = require('./gate-utils')
 
 const SURFACE_ROOTS = ['weapp/miniprogram/pages/', 'weapp/miniprogram/components/']
+const API_OR_SERVICE_SEGMENT = /\/_(?:api|main_shared\/api|main_shared\/services|main_shared\/utils|services)\//
 const DIRECT_REQUEST = /\bwx\.request\s*\(/
 const REQUEST_IMPORT = /from\s+['"][^'"]*utils\/request['"]|require\(\s*['"][^'"]*utils\/request['"]\s*\)/
 
+function shouldCheckFile(filePath) {
+  return !API_OR_SERVICE_SEGMENT.test(filePath)
+}
+
 function main() {
-  const changedFiles = getScopedFiles({ roots: SURFACE_ROOTS, extensions: ['.ts', '.js'] })
+  const changedFiles = getScopedFiles({ roots: SURFACE_ROOTS, extensions: ['.ts', '.js'] }).filter(shouldCheckFile)
 
   if (changedFiles.length === 0) {
     console.log(`check-request-boundary: no ${getGateScope() === 'changed' ? 'changed' : 'scannable'} Mini Program page/component scripts detected`)

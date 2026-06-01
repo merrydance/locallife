@@ -16,7 +16,7 @@
 
   <view wx:elif="{{loadError}}" class="error-shell card">
     <t-empty icon="error-circle" description="{{loadError}}">
-      <t-button slot="action" theme="primary" size="small" bindtap="onRetryLoad" shape="round">重新加载</t-button>
+      <t-button slot="action" theme="primary" size="small" bindtap="onRetryLoad" shape="round">重试</t-button>
     </t-empty>
   </view>
 

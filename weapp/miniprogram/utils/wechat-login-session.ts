@@ -4,6 +4,7 @@ import { logger } from './logger'
 import { ErrorCode, type ApiResponse } from '../api/types'
 import { AppError, ErrorType } from './error-handler'
 import { getDeviceId } from './device-id'
+import { markNativeOperationStart } from './native-diagnostics'
 
 export interface WechatLoginSessionData {
   access_token: string
@@ -19,6 +20,7 @@ export interface WechatLoginSessionData {
 }
 
 const WECHAT_LOGIN_REQUEST_TIMEOUT = 10000
+const WECHAT_LOGIN_NATIVE_TIMEOUT_GUARD = 15000
 
 let _wechatLoginSessionPromise: Promise<WechatLoginSessionData> | null = null
 
@@ -26,6 +28,12 @@ async function requestWechatLoginSession(code: string): Promise<WechatLoginSessi
   const deviceId = getDeviceId()
 
   const response = await new Promise<WechatMiniprogram.RequestSuccessCallbackResult>((resolve, reject) => {
+    const finishNativeOperation = markNativeOperationStart('wx.request', {
+      source: 'requestWechatLoginSession',
+      method: 'POST',
+      path: '/v1/auth/wechat-login',
+      timeout: WECHAT_LOGIN_REQUEST_TIMEOUT
+    })
     wx.request({
       url: `${API_CONFIG.BASE_URL}/v1/auth/wechat-login`,
       method: 'POST',
@@ -39,8 +47,14 @@ async function requestWechatLoginSession(code: string): Promise<WechatLoginSessi
         'X-Response-Envelope': '1'
       },
       timeout: WECHAT_LOGIN_REQUEST_TIMEOUT,
-      success: resolve,
-      fail: reject
+      success: (res) => {
+        finishNativeOperation('success', { statusCode: res.statusCode })
+        resolve(res)
+      },
+      fail: (err) => {
+        finishNativeOperation('fail', err)
+        reject(err)
+      }
     })
   })
 
@@ -59,17 +73,56 @@ async function requestWechatLoginSession(code: string): Promise<WechatLoginSessi
 
 async function doWechatLoginSession(): Promise<WechatLoginSessionData> {
   const code = await new Promise<string>((resolve, reject) => {
-      wx.login({
-        success: (res) => {
-          if (res.code) {
+    let settled = false
+    const startedAt = Date.now()
+    const finishNativeOperation = markNativeOperationStart('wx.login', {
+      timeoutGuardMs: WECHAT_LOGIN_NATIVE_TIMEOUT_GUARD
+    })
+    const timeoutHandle = setTimeout(() => {
+      if (settled) return
+      settled = true
+      finishNativeOperation('timeout', { durationMs: Date.now() - startedAt })
+      reject(new AppError({
+        type: ErrorType.NETWORK,
+        message: 'wx.login JS guard timeout',
+        userMessage: '登录超时，请稍后重试'
+      }))
+    }, WECHAT_LOGIN_NATIVE_TIMEOUT_GUARD)
+
+    const settle = (callback: () => void) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeoutHandle)
+      callback()
+    }
+
+    logger.debug('开始调用 wx.login', undefined, 'doWechatLoginSession')
+    wx.login({
+      success: (res) => {
+        if (res.code) {
+          settle(() => {
+            finishNativeOperation('success', { durationMs: Date.now() - startedAt })
+            logger.info('wx.login 成功', { durationMs: Date.now() - startedAt }, 'doWechatLoginSession')
             resolve(res.code)
-            return
-          }
+          })
+          return
+        }
+        settle(() => {
+          finishNativeOperation('fail', { durationMs: Date.now() - startedAt, errMsg: res.errMsg })
           reject(new Error('wx.login success without code'))
-        },
-        fail: (err) => reject(err || new Error('wx.login failed')),
-        timeout: WECHAT_LOGIN_REQUEST_TIMEOUT
-      })
+        })
+      },
+      fail: (err) => {
+        settle(() => {
+          finishNativeOperation('fail', { durationMs: Date.now() - startedAt, err })
+          logger.warn('wx.login 失败', {
+            durationMs: Date.now() - startedAt,
+            err
+          }, 'doWechatLoginSession')
+          reject(err || new Error('wx.login failed'))
+        })
+      }
+    })
   })
 
   const loginData = await requestWechatLoginSession(code)

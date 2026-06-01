@@ -4,7 +4,7 @@ const path = require('path')
 const ts = require('typescript')
 const vm = require('vm')
 
-const sourcePath = path.join(__dirname, '..', 'miniprogram', 'utils', 'rider-delivery-view.ts')
+const sourcePath = path.join(__dirname, '..', 'miniprogram', 'pages', 'rider', '_utils', 'rider-delivery-view.ts')
 
 function plain(value) {
   return JSON.parse(JSON.stringify(value))
@@ -23,7 +23,7 @@ function loadModule() {
     exports: {},
     module: { exports: {} },
     require(modulePath) {
-      if (modulePath === '../api/delivery') {
+      if (modulePath === '../_main_shared/api/delivery') {
         return {}
       }
       throw new Error(`unexpected require: ${modulePath}`)

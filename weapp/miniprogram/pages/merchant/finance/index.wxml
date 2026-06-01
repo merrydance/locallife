@@ -23,14 +23,14 @@
 
   <view wx:elif="{{initialError}}" class="page-content">
     <t-empty icon="error-circle" description="{{initialErrorMessage || '财务信息加载失败，请重试'}}" />
-    <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
+    <t-button theme="primary" bind:tap="onRetry">重试</t-button>
   </view>
 
   <view wx:else class="page-content">
     <t-cell-group wx:if="{{refreshErrorMessage}}">
       <t-cell title="部分数据同步失败" note="{{refreshErrorMessage}}">
         <view slot="right-icon">
-          <t-button size="extra-small" theme="primary" variant="text" loading="{{loadingFinance}}" bind:tap="onManualRefresh">重试</t-button>
+          <t-button size="extra-small" theme="primary" variant="text" loading="{{loadingFinance}}" bind:tap="onRetrySync">重试</t-button>
         </view>
       </t-cell>
     </t-cell-group>

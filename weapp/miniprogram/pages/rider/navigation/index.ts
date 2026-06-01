@@ -302,7 +302,7 @@ Page({
     if (this.data.locationRetrying) return
 
     this.setData({ locationRetrying: true })
-    wx.showLoading({ title: '刷新定位中...' })
+    wx.showLoading({ title: '定位中...' })
     try {
       if (this.data.needsLocationPermission) {
         const granted = await riderLiveLocationSession.requestPermissionAndRestart()
@@ -316,7 +316,7 @@ Page({
       }
       this.applyLocationState(riderLiveLocationSession.getState())
     } catch (err: unknown) {
-      const message = getUserMessage(err, '定位刷新失败，请稍后重试')
+      const message = getUserMessage(err, '定位失败，请稍后重试')
       wx.showToast({ title: message, icon: 'none' })
     } finally {
       wx.hideLoading()

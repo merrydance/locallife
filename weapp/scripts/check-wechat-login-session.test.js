@@ -18,6 +18,26 @@ function loadModule() {
   const tokenWrites = []
   let loginCalls = 0
   let requestCalls = 0
+  const loginTimeoutHandles = []
+  const clearedLoginTimeoutHandles = []
+  let nextTimeoutId = 1
+
+  function trackedSetTimeout(callback, delay) {
+    if (delay === 15000) {
+      const handle = { id: nextTimeoutId += 1, callback, delay }
+      loginTimeoutHandles.push(handle)
+      return handle
+    }
+    return setTimeout(callback, delay)
+  }
+
+  function trackedClearTimeout(handle) {
+    if (handle && typeof handle === 'object' && handle.delay === 15000) {
+      clearedLoginTimeoutHandles.push(handle)
+      return
+    }
+    clearTimeout(handle)
+  }
 
   const sandbox = {
     exports: {},
@@ -36,6 +56,13 @@ function loadModule() {
       }
       if (modulePath === './logger') {
         return { logger: { debug() {}, info() {}, warn() {}, error() {} } }
+      }
+      if (modulePath === './native-diagnostics') {
+        return {
+          markNativeOperationStart() {
+            return () => {}
+          }
+        }
       }
       if (modulePath === './error-handler') {
         class AppError extends Error {
@@ -60,7 +87,10 @@ function loadModule() {
     wx: {
       login(options) {
         loginCalls += 1
-        assert.strictEqual(options.timeout, 10000)
+        assert(
+          !Object.prototype.hasOwnProperty.call(options, 'timeout'),
+          'wx.login must not use native timeout; use the JS guard so WAService timeouts are observable'
+        )
         setTimeout(() => options.success({ code: `wx-code-${loginCalls}` }), 0)
       },
       request(options) {
@@ -87,8 +117,8 @@ function loadModule() {
         }), 0)
       }
     },
-    setTimeout,
-    clearTimeout,
+    setTimeout: trackedSetTimeout,
+    clearTimeout: trackedClearTimeout,
     Date,
     Error
   }
@@ -98,7 +128,9 @@ function loadModule() {
     module: sandbox.module.exports,
     getLoginCalls: () => loginCalls,
     getRequestCalls: () => requestCalls,
-    getTokenWrites: () => tokenWrites
+    getTokenWrites: () => tokenWrites,
+    getLoginTimeoutHandles: () => loginTimeoutHandles,
+    getClearedLoginTimeoutHandles: () => clearedLoginTimeoutHandles
   }
 }
 
@@ -114,6 +146,8 @@ function loadModule() {
   assert.strictEqual(first, second)
   assert.strictEqual(loaded.getLoginCalls(), 1)
   assert.strictEqual(loaded.getRequestCalls(), 1)
+  assert.strictEqual(loaded.getLoginTimeoutHandles().length, 1)
+  assert.strictEqual(loaded.getClearedLoginTimeoutHandles().length, 1)
   assert.deepStrictEqual(loaded.getTokenWrites(), [{
     token: 'access-token-001',
     expiresAt: new Date('2026-05-19T07:00:00Z').getTime(),

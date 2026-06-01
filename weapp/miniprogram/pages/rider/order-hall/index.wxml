@@ -7,14 +7,14 @@
 
   <view wx:elif="{{initError && !riderInfo}}" class="page-state-card">
     <t-empty icon="error-circle" description="{{initError}}" />
-    <t-button wx:if="{{initErrorCanRetry}}" theme="primary" bindtap="onRetryLoad">重新加载</t-button>
+    <t-button wx:if="{{initErrorCanRetry}}" theme="primary" bindtap="onRetryLoad">重试</t-button>
   </view>
 
   <block wx:else>
     <view wx:if="{{dashboardInlineError}}" class="inline-sync-state">
       <t-icon name="error-circle" size="32rpx" />
       <text class="inline-sync-state__text">{{dashboardInlineError}}</text>
-      <t-button wx:if="{{initErrorCanRetry}}" size="small" theme="primary" variant="text" icon="refresh" bindtap="onRetryLoad">重试</t-button>
+      <t-button wx:if="{{initErrorCanRetry}}" size="small" theme="primary" variant="text" bindtap="onRetryLoad">重试</t-button>
     </view>
 
     <t-sticky offsetTop="{{navBarHeight}}">
@@ -51,7 +51,7 @@
         <view class="bar-inner">
           <t-icon name="notification" size="32rpx" />
           <text class="bar-text">{{newOrdersCount}} 个新单</text>
-          <view class="refresh-btn">刷新 <t-icon name="refresh" size="28rpx" class="refresh-icon" /></view>
+          <view class="new-orders-action">查看新单</view>
         </view>
       </view>
 
@@ -136,9 +136,7 @@
               wx:elif="{{!loading}}"
               icon="info-circle"
               description="{{isOnline ? '暂无可接订单' : '上线后查看订单'}}"
-            >
-              <t-button wx:if="{{isOnline}}" theme="primary" variant="outline" bindtap="onRefreshHall">刷新</t-button>
-            </t-empty>
+            />
           </view>
         </t-tab-panel>
 

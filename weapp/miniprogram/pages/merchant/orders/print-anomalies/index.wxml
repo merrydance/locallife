@@ -16,7 +16,7 @@
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty description="{{initialErrorMessage || '打印异常加载失败，请重试'}}" />
-    <t-button theme="primary" bindtap="onRetry">重新加载</t-button>
+    <t-button theme="primary" bindtap="onRetry">重试</t-button>
   </view>
 
   <block wx:else>
@@ -31,7 +31,7 @@
 
     <view wx:if="{{refreshErrorMessage}}" class="notice-banner">
       <t-notice-bar theme="error" visible="{{true}}" content="{{refreshErrorMessage}}">
-        <text slot="operation" class="notice-banner-operation" bindtap="onRetryRefresh">重新同步</text>
+        <text slot="operation" class="notice-banner-operation" bindtap="onRetryRefresh">重试</text>
       </t-notice-bar>
     </view>
 

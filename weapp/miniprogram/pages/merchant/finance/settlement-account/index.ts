@@ -39,7 +39,7 @@ Page({
       supportPaymentRecovery: false,
       logTag: 'merchant-baofu-settlement-account',
       loadErrorFallback: '商户宝付开户状态加载失败，请稍后重试',
-      refreshErrorFallback: '商户宝付开户状态刷新失败，请稍后重试'
+      refreshErrorFallback: '商户宝付开户状态同步失败，请稍后重试'
     })
   ]
 })

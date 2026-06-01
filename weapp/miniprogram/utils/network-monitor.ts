@@ -4,6 +4,7 @@
  */
 
 import { logger } from './logger'
+import { markNativeOperationStart } from './native-diagnostics'
 
 type NetworkType = 'wifi' | '2g' | '3g' | '4g' | '5g' | 'unknown' | 'none'
 
@@ -82,8 +83,13 @@ class NetworkMonitor {
      */
   async refreshStatus(silent: boolean = true): Promise<Readonly<NetworkState>> {
     return new Promise((resolve) => {
+      const finishNativeOperation = markNativeOperationStart('wx.getNetworkType', {
+        source: 'NetworkMonitor.refreshStatus',
+        silent
+      })
       wx.getNetworkType({
         success: (res) => {
+          finishNativeOperation('success', { networkType: res.networkType })
           const previous = this.networkState
           const networkType = res.networkType as NetworkType
           const nextState: NetworkState = {
@@ -106,6 +112,7 @@ class NetworkMonitor {
           resolve({ ...this.networkState })
         },
         fail: (err) => {
+          finishNativeOperation('fail', err)
           if (!silent) {
             logger.warn('获取网络状态失败', err, 'NetworkMonitor.refreshStatus')
           }

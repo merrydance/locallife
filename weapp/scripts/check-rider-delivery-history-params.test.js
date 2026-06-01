@@ -4,7 +4,7 @@ const path = require('path')
 const ts = require('typescript')
 const vm = require('vm')
 
-const sourcePath = path.join(__dirname, '..', 'miniprogram', 'api', 'delivery-task-management.ts')
+const sourcePath = path.join(__dirname, '..', 'miniprogram', 'pages', 'rider', '_api', 'delivery-task-management.ts')
 const pageTsPath = path.join(__dirname, '..', 'miniprogram', 'pages', 'rider', 'tasks', 'index.ts')
 const pageWxmlPath = path.join(__dirname, '..', 'miniprogram', 'pages', 'rider', 'tasks', 'index.wxml')
 const pageJsonPath = path.join(__dirname, '..', 'miniprogram', 'pages', 'rider', 'tasks', 'index.json')
@@ -27,7 +27,7 @@ function loadModule() {
     exports: {},
     module: { exports: {} },
     require(modulePath) {
-      if (modulePath === '../utils/request') {
+      if (modulePath === '../../../utils/request') {
         return {
           request(options) {
             requests.push(options)

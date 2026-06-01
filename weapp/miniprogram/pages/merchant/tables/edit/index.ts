@@ -465,7 +465,7 @@ Page({
           qrCodeErrorMessage: '',
           qrCodeImageUrl: fallbackUrl
         })
-        wx.showToast({ title: '二维码刷新失败，已展示当前版本', icon: 'none' })
+        wx.showToast({ title: '二维码生成失败，已展示当前版本', icon: 'none' })
         return
       }
 

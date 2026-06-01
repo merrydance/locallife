@@ -10,7 +10,7 @@
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty icon="error-circle" description="{{initialErrorMessage || '开户资料加载失败，请重试'}}" />
-    <t-button theme="primary" bindtap="onRetry">重新加载</t-button>
+    <t-button theme="primary" bindtap="onRetry">重试</t-button>
   </view>
 
   <view wx:else class="page-content">

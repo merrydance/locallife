@@ -5,8 +5,8 @@ const ts = require('typescript')
 const vm = require('vm')
 
 const repoRoot = path.join(__dirname, '..')
-const ownerPath = path.join(repoRoot, 'miniprogram', 'utils', 'merchant-store-registration-view.ts')
-const runtimePath = path.join(repoRoot, 'miniprogram', 'utils', 'merchant-store-registration-runtime.ts')
+const ownerPath = path.join(repoRoot, 'miniprogram', 'pages', 'register', 'merchant', 'store', '_utils', 'merchant-store-registration-view.ts')
+const runtimePath = path.join(repoRoot, 'miniprogram', 'pages', 'register', 'merchant', 'store', '_utils', 'merchant-store-registration-runtime.ts')
 
 function plain(value) {
   return JSON.parse(JSON.stringify(value))
@@ -25,7 +25,7 @@ function loadOwnerModule() {
     exports: {},
     module: { exports: {} },
     require(modulePath) {
-      if (modulePath === '../api/onboarding') {
+      if (modulePath === '../../../_main_shared/api/onboarding') {
         return {
           buildMerchantApplicationOCRStatusView(status) {
             const normalizedStatus = String(status || '').trim().toLowerCase()
@@ -39,7 +39,7 @@ function loadOwnerModule() {
           }
         }
       }
-      if (modulePath === '../api/location') {
+      if (modulePath === '../../../../../api/location') {
         return {}
       }
       throw new Error(`unexpected require: ${modulePath}`)

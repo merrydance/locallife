@@ -33,13 +33,13 @@ function loadTsModule(relativePath, requireStub = () => ({})) {
   return sandbox.module.exports
 }
 
-const apiSource = read('miniprogram/api/baofu-withdrawal.ts')
+const apiSource = read('miniprogram/pages/merchant/_main_shared/api/baofu-withdrawal.ts')
 assert(!apiSource.includes('owner_type'), 'Baofu withdrawal API must not expose owner_type')
 assert(!apiSource.includes('owner_id'), 'Baofu withdrawal API must not expose owner_id')
 
 const capturedRequests = []
-const api = loadTsModule('miniprogram/api/baofu-withdrawal.ts', (id) => {
-  if (id === '../utils/request') {
+const api = loadTsModule('miniprogram/pages/merchant/_main_shared/api/baofu-withdrawal.ts', (id) => {
+  if (id === '../../../../utils/request') {
     return {
       request(options) {
         capturedRequests.push(options)
@@ -70,7 +70,7 @@ assert.strictEqual(capturedRequests[3].data.amount, 1200)
 assert(!('owner_type' in capturedRequests[3].data), 'Create request must not include owner_type')
 assert(!('owner_id' in capturedRequests[3].data), 'Create request must not include owner_id')
 
-const workflow = loadTsModule('miniprogram/services/baofu-withdrawal-workflow.ts')
+const workflow = loadTsModule('miniprogram/pages/merchant/_main_shared/services/baofu-withdrawal-workflow.ts')
 
 assert.strictEqual(workflow.formatFenToYuanText(12345), '¥123.45')
 assert.strictEqual(workflow.parseYuanInputToFen('12.30').amount, 1230)
@@ -227,7 +227,7 @@ assert(!operatorFinanceOverview.includes('宝付结算账户'), 'Operator financ
 
 const platformDashboard = [
   read('miniprogram/pages/platform/dashboard/dashboard.ts'),
-  read('miniprogram/services/platform-dashboard-view.ts')
+  read('miniprogram/pages/platform/_services/platform-dashboard-view.ts')
 ].join('\n')
 assert(platformDashboard.includes("title: '结算账户'"), 'Platform dashboard must expose user-facing settlement account wording')
 assert(platformDashboard.includes("title: '提现'"), 'Platform dashboard must expose withdrawal entry')
@@ -236,7 +236,7 @@ assert(!platformDashboard.includes('宝付结算账户'), 'Platform dashboard mu
 
 const riderIncomePage = read('miniprogram/pages/rider/income/index.ts')
 const riderIncomeWxml = read('miniprogram/pages/rider/income/index.wxml')
-const riderIncomeService = read('miniprogram/services/rider-income.ts')
+const riderIncomeService = read('miniprogram/pages/rider/_services/rider-income.ts')
 assert(riderIncomePage.includes('loadRiderIncomePageData'), 'Rider income page must load withdrawal entry through the rider income task-domain service')
 assert(riderIncomeWxml.includes('title="收入提现"'), 'Rider income page must expose income withdrawal entry')
 assert(!riderIncomeWxml.includes('wx:if="{{withdrawalBalanceReady}}"'), 'Rider income page must not hide withdrawal entry when balance check fails')

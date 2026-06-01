@@ -23,9 +23,9 @@ function assertNotContains(content, pattern, message) {
   }
 }
 
-const orderApi = read('miniprogram/api/order-management.ts')
-const detailView = read('miniprogram/utils/merchant-order-detail-view.ts')
-const sharedFeeBreakdownView = read('miniprogram/utils/order-fee-breakdown-view.ts')
+const orderApi = read('miniprogram/pages/merchant/_api/order-management.ts')
+const detailView = read('miniprogram/pages/merchant/_utils/merchant-order-detail-view.ts')
+const sharedFeeBreakdownView = read('miniprogram/pages/merchant/_main_shared/utils/order-fee-breakdown-view.ts')
 const detailWxml = read('miniprogram/pages/merchant/orders/detail/index.wxml')
 const listWxml = read('miniprogram/pages/merchant/orders/list/index.wxml')
 const merchantOrderSources = [
@@ -104,9 +104,9 @@ function loadDetailViewModule() {
       exports: module.exports,
       module,
       require(modulePath) {
-        if (modulePath === 'dayjs') return require('dayjs')
-        if (modulePath === './order-fee-breakdown-view') {
-          return loadTsModule(path.join('miniprogram', 'utils', 'order-fee-breakdown-view.ts'))
+        if (modulePath === '../_main_shared/miniprogram_npm/dayjs/index') return require('dayjs')
+        if (modulePath === '../_main_shared/utils/order-fee-breakdown-view') {
+          return loadTsModule(path.join('miniprogram', 'pages', 'merchant', '_main_shared', 'utils', 'order-fee-breakdown-view.ts'))
         }
         throw new Error(`unexpected require: ${modulePath}`)
       },
@@ -119,7 +119,7 @@ function loadDetailViewModule() {
     return module.exports
   }
 
-  return loadTsModule(path.join('miniprogram', 'utils', 'merchant-order-detail-view.ts'))
+  return loadTsModule(path.join('miniprogram', 'pages', 'merchant', '_utils', 'merchant-order-detail-view.ts'))
 }
 
 const { buildMerchantOrderFeeBreakdownView } = loadDetailViewModule()

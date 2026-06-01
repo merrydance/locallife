@@ -14,7 +14,7 @@
       description="{{accessDenied ? '当前账号暂无预订管理权限' : accessErrorMessage || initialErrorMessage || '预订页暂时无法打开'}}"
     />
     <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">
-      {{accessDenied ? '重新校验权限' : '重新加载'}}
+      {{accessDenied ? '重新校验权限' : '重试'}}
     </t-button>
   </view>
 
@@ -33,12 +33,6 @@
               <view class="date-filter-label-group">
                 <text class="date-filter-label">营业日期</text>
                 <text class="date-filter-value">{{date}}</text>
-              </view>
-              <view class="date-filter-actions" catchtap="onActionsCatch">
-                <view class="date-filter-divider"></view>
-                <view class="date-filter-icon-button" bindtap="onManualRefresh">
-                  <t-icon name="refresh" size="36rpx" />
-                </view>
               </view>
             </view>
           </view>

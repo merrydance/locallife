@@ -35,8 +35,31 @@ const PAGE_CONTEXT = 'takeout_index'
 const TAKEOUT_HYDRATION_MERCHANT_LIMIT = 3
 const TAKEOUT_CART_REFRESH_INTERVAL_MS = 30000
 
+interface TakeoutActivityBanner {
+  id: string
+  title: string
+  subtitle: string
+  badge: string
+  cta: string
+  icon: string
+  url: string
+  cardClass: string
+}
+
 Page({
   data: {
+    activityBanners: [
+      {
+        id: 'wanted-merchants',
+        title: '你想吃谁家外卖？',
+        subtitle: '告诉我们，优先邀请他入驻',
+        badge: '活动征集',
+        cta: '去 +1',
+        icon: 'flag',
+        url: '/pages/takeout/wanted-merchants/index',
+        cardClass: 'activity-card activity-card--wanted'
+      }
+    ] as TakeoutActivityBanner[],
     merchantFeed: [] as MerchantFeedViewModel[],
     cuisineCategories: [] as TakeoutCategoryGridItem[],
     activeCategoryId: '',
@@ -57,7 +80,6 @@ Page({
   },
 
   _unsubscribeLocation: undefined as undefined | (() => void),
-  // 当前列表数据是使用哪套坐标加载的（用于跨城检测）
   _dataLoadedLat: null as number | null,
   _dataLoadedLng: null as number | null,
   _feedHydrationGeneration: 0,
@@ -71,7 +93,6 @@ Page({
       menus: ['shareAppMessage', 'shareTimeline']
     })
 
-    // custom-navbar 是 fixed，scroll-view 用整屏高度，顶部避让交给内层 padding-top。
     const { navBarHeight } = getStableBarHeights()
     const windowInfo = wx.getWindowInfo()
     const scrollViewHeight = windowInfo.windowHeight
@@ -81,43 +102,33 @@ Page({
       scrollViewHeight
     })
 
-    // 立即加载分类
     this.loadCategories()
 
-    // 从全局获取位置信息
     const app = getApp<IAppOption>()
     const loc = app.globalData.location
 
     if (loc && loc.name) {
-      // 有缓存位置信息,直接使用
       this.setData({ address: loc.name })
     } else {
-      // 没有位置信息，显示提示
       this.setData({ address: '定位中...' })
     }
 
-    // 订阅位置变化
     this._unsubscribeLocation = globalStore.subscribe('location', (newLocation) => {
       logger.info('[Takeout] 收到位置更新', newLocation, 'Takeout.onLoad')
       if (newLocation.name) {
-        // 隐藏位置引导提示，更新地址显示
         this.setData({
           address: newLocation.name,
           needLocation: false
         })
 
-        // 用 app.globalData 取新坐标：getLocationCoordinates 成功时最先写入
-        // globalData，早于所有 globalStore 操作，此处读值一定是最新的。
         const _appRef = getApp<IAppOption>()
         const newLat = _appRef.globalData.latitude
         const newLng = _appRef.globalData.longitude
 
         if (this.data.merchantFeed.length === 0 && !this.data.loading) {
-          // 还没有数据，直接加载
           logger.info('[Takeout] 位置已更新，开始加载数据', undefined, 'Takeout.onLoad')
           this.loadData()
         } else if (newLat && newLng && this._dataLoadedLat !== null && this._dataLoadedLng !== null) {
-          // 已有数据，检查是否跨城（距离 > 1km）
           const { haversineDistance } = require('../../utils/geo')
           const dist = haversineDistance(this._dataLoadedLat, this._dataLoadedLng, newLat, newLng)
           if (dist > 1.0) {
@@ -131,13 +142,10 @@ Page({
   },
 
   onLocationTap() {
-    // 导航栏已经处理位置获取，这里只需要响应位置变化事件
-    // 如果用户点击页面内的位置，可以打开位置选择器
     wx.chooseLocation({
       success: async (res) => {
         const app = getApp<IAppOption>()
 
-        // 更新全局位置
         app.globalData.latitude = res.latitude
         app.globalData.longitude = res.longitude
         app.globalData.location = {
@@ -145,24 +153,23 @@ Page({
           address: res.address
         }
 
-        // 更新页面显示
         this.setData({ address: res.name || res.address })
 
-        // 重新加载基于新位置的推荐
         this.onLocationChange()
       },
-      fail: () => {
-        // 用户取消选择
-      }
+      fail: () => {}
     })
   },
 
   onMerchantRegister() { wx.navigateTo({ url: '/pages/register/merchant/index' }) },
   onOperatorRegister() { wx.navigateTo({ url: '/pages/register/operator/index' }) },
   onSearchTap() { wx.navigateTo({ url: '/pages/takeout/search/index' }) },
-  onWantedMerchantTap() { wx.navigateTo({ url: '/pages/takeout/wanted-merchants/index' }) },
+  onActivityBannerTap(e: WechatMiniprogram.CustomEvent) {
+    const { url } = e.currentTarget.dataset as { url?: string }
+    if (!url) return
+    wx.navigateTo({ url })
+  },
 
-  // 品类网格点击：页内切换筛选，不再跳转独立页
   onCategoryTap(e: WechatMiniprogram.CustomEvent) {
     const { id } = e.currentTarget.dataset as { id: string }
     const nextCategoryId = String(id || '')
@@ -182,8 +189,6 @@ Page({
       loading: this.data.loading
     }, 'Takeout.onShow')
 
-    // 从购物车返回时更新购物车数据
-    // 先用 globalStore 缓存立即同步显示（避免每次切 tab 都等待网络），再后台静默刷新
     const cachedCart = globalStore.get('cart')
     if (cachedCart) {
       this.setData({ cartTotalCount: cachedCart.totalCount, cartTotalPrice: cachedCart.totalPrice })
@@ -192,14 +197,12 @@ Page({
       void this.updateCartDisplay()
     }
 
-    // 更新位置显示
     const app = getApp<IAppOption>()
     const loc = app.globalData.location
     if (loc && loc.name) {
       this.setData({ address: loc.name })
     }
 
-    // 检查是否需要加载数据
     if (this.data.merchantFeed.length === 0) {
       logger.info('[Takeout.onShow] 开始 tryLoadData', undefined, 'Takeout.onShow')
       this.tryLoadData()
@@ -208,46 +211,33 @@ Page({
     }
   },
 
-  // 尝试加载数据，等待 token 准备好，位置未授权则直接引导
   async tryLoadData(retryCount = 0) {
     await tryTakeoutLoadData(this, retryCount, () => this.showLocationGuide())
   },
 
-  /**
-   * 显示位置引导（页面内提示，不弹窗）
-   */
   showLocationGuide() {
     showTakeoutLocationGuide(this)
   },
 
   onManualLocation() { this.openLocationPicker() },
 
-  /**
-   * 用户点击"重新定位"按钮
-   */
   onRetryLocation() {
     retryTakeoutLocation(this)
   },
 
-  /**
-   * 打开位置选择器
-   */
   openLocationPicker() {
     openTakeoutLocationPicker(this, () => this.loadData())
   },
 
   onHide() {
-    // 页面隐藏时取消所有pending请求
     requestManager.cancelByContext(PAGE_CONTEXT)
     logger.debug('页面隐藏,已取消所有请求', undefined, 'Takeout.onHide')
   },
 
   onUnload() {
-    // 页面卸载时清理
     requestManager.cancelByContext(PAGE_CONTEXT)
     this.resetFeedHydration()
 
-    // 取消位置订阅
     if (this._unsubscribeLocation) {
       this._unsubscribeLocation()
     }
@@ -276,7 +266,6 @@ Page({
     this._isLoading = true
     this.setData({ loading: true, isError: false })
 
-    // 记录本次加载时使用的坐标，供跨城检测对比
     const _app = getApp<IAppOption>()
     this._dataLoadedLat = _app.globalData.latitude
     this._dataLoadedLng = _app.globalData.longitude
@@ -293,7 +282,6 @@ Page({
     } catch (error: unknown) {
       ErrorHandler.handle(error, 'Takeout.loadData')
       const userMessage = (error as UserMessageError).userMessage
-      // 如果是第一页重置加载失败，显示错误状态
       if (this.data.page === 1) {
         this.setData({
           isError: true,
@@ -345,11 +333,9 @@ Page({
         this.setData({ merchantFeed: [...this.data.merchantFeed, ...feedItems], hasMore })
       }
 
-      // 优先稳定首屏结构，再把详情和更多卡片放到后台渐进水合。
       const merchantIds = merchants.map((m) => m.id)
       this.scheduleMerchantHydration(merchantIds, generation)
 
-      // 预加载商户封面图
       const { preloadImages } = require('../../utils/image')
       const imageUrls = feedItems.map((f) => f.imageUrl).filter(Boolean)
       setTimeout(() => preloadImages(imageUrls, false), 100)
@@ -359,9 +345,6 @@ Page({
     }
   },
 
-  /**
-   * 将卡片水合拆成优先批次和后台批次，避免第一页首屏产生逐店请求风暴。
-   */
   scheduleMerchantHydration(merchantIds: number[], generation: number) {
     const priorityIds = merchantIds.slice(0, TAKEOUT_HYDRATION_MERCHANT_LIMIT)
 
@@ -478,9 +461,6 @@ Page({
     return Date.now() - this._lastCartRefreshAt > TAKEOUT_CART_REFRESH_INTERVAL_MS
   },
 
-  /**
-   * Feed 卡片中的菜品加购事件
-   */
   async onDishAddFromFeed(e: WechatMiniprogram.CustomEvent) {
     const { dishId, merchantId } = e.detail as { dishId: number, merchantId: number }
     if (!dishId || !merchantId) return
@@ -509,7 +489,6 @@ Page({
   async updateCartDisplay() {
     this._lastCartRefreshAt = Date.now()
     try {
-      // 直接从后端获取最新购物车汇总，确保数据准确
       const userCarts = await getUserCarts('takeout', { loading: false })
 
       const totalCount = userCarts.summary?.total_items || 0
@@ -520,7 +499,6 @@ Page({
         cartTotalPrice: totalPrice
       })
 
-      // 同时更新 globalStore 供其他组件使用
       globalStore.set('cart', {
         items: [],
         totalCount,
@@ -528,7 +506,6 @@ Page({
         totalPriceDisplay: formatPrice(totalPrice)
       })
     } catch (error) {
-      // API 调用失败时重置为 0
       logger.warn('获取购物车汇总失败', error, 'Takeout.updateCartDisplay')
       this.setData({
         cartTotalCount: 0,
@@ -548,35 +525,29 @@ Page({
   _searchTimer: null as SearchTimer | null,
 
   onReachBottom() {
-    // 增加防抖和状态检查 (增加 _isLoading 私有变量锁)
     if (!this.data.hasMore || this.data.loading || this._isLoading) {
       return
     }
 
-    // 增加时间戳防抖到 500ms
     const now = Date.now()
     if (this._lastLoadTime && now - this._lastLoadTime < 500) {
       return
     }
     this._lastLoadTime = now
 
-    // 记录上一页页码以便加载失败时恢复
     const previousPage = this.data.page
     const nextPage = previousPage + 1
     
-    // 设置新页码并加载
     this.setData({ page: nextPage })
 
     logger.debug('触发滚动加载', { nextPage }, 'Takeout.onReachBottom')
 
     this.loadData().catch((error) => {
-      // 只有真正的请求错误才回滚（而不是被 loadData 内部 guard 拦截的情况）
       if (this.data.page === nextPage) {
         logger.error('加载更多失败，回滚页码', { nextPage, previousPage }, 'Takeout.onReachBottom')
         this.setData({ page: previousPage })
       }
       
-      // 如果是 429 错误，显示更友好的提示
       if (isRateLimitError(error)) {
         wx.showToast({ title: '请求太频繁，请稍后再试', icon: 'none', duration: 2000 })
       } else {
@@ -588,29 +559,19 @@ Page({
   _lastLoadTime: 0,
   _isLoading: false,
 
-  /**
-   * scroll-view 下拉刷新事件处理
-   * 在 Skyline 模式下替代 onPullDownRefresh
-   */
   async onRefresh() {
-    // 刷新时清空搜索框，恢复推荐列表
     this.setData({ refresherTriggered: true, page: 1, searchKeyword: '' })
 
     try {
       await this.loadData()
     } finally {
-      // 延迟关闭刷新动画，给用户视觉反馈
       setTimeout(() => {
         this.setData({ refresherTriggered: false })
       }, 300)
     }
   },
 
-  /**
-   * 页面下拉刷新事件（WebView 兼容）
-   */
   onPullDownRefresh() {
-    // 刷新时清空搜索框，恢复推荐列表
     this.setData({ page: 1, searchKeyword: '' })
     this.loadData().then(() => {
       wx.stopPullDownRefresh()

@@ -18,7 +18,7 @@
       </view>
 
       <view class="overview-card__meta">
-        <text>最近刷新 {{summary.latestRefreshText}}</text>
+        <text>最近同步 {{summary.latestRefreshText}}</text>
         <text class="overview-card__link" bind:tap="onOpenNotifications">查看提醒</text>
       </view>
     </view>

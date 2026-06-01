@@ -174,7 +174,7 @@ export async function tryTakeoutLoadData(
       wx.showModal({
         title: '登录超时',
         content: '请检查网络连接后重试',
-        confirmText: '重新加载',
+        confirmText: '重试',
         success: (res) => {
           if (res.confirm) {
             wx.reLaunch({ url: '/pages/takeout/index' })

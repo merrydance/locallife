@@ -24,7 +24,7 @@
 
     <view wx:elif="{{initialError}}" class="initial-error">
       <t-empty description="{{initialErrorMessage || '搜索记录加载失败，请重试'}}" />
-      <t-button theme="primary" size="small" shape="round" bindtap="onRetryInitial">重新加载</t-button>
+      <t-button theme="primary" size="small" shape="round" bindtap="onRetryInitial">重试</t-button>
     </view>
 
     <block wx:else>

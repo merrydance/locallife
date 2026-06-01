@@ -227,7 +227,7 @@ Page({
         }
         this.setData({
           actionSubmitting: false,
-          actionError: getErrorUserMessage(err, '当前工单暂不能继续处理，请刷新后重试')
+          actionError: getErrorUserMessage(err, '当前工单暂不能继续处理，请稍后重试')
         })
         return
       }
@@ -258,7 +258,7 @@ Page({
       logger.error('[ClaimDetail] withdraw failed', err)
       this.setData({
         actionSubmitting: false,
-        actionError: getErrorUserMessage(err, '当前工单暂不能撤回，请刷新后重试')
+        actionError: getErrorUserMessage(err, '当前工单暂不能撤回，请稍后重试')
       })
     }
   },
@@ -279,7 +279,7 @@ Page({
       }
       logger.error('[ClaimDetail] confirm payout receipt failed', err)
       this.setData({
-        actionError: getErrorUserMessage(err, '当前无法拉起微信确认收款，请稍后刷新重试')
+        actionError: getErrorUserMessage(err, '当前无法拉起微信确认收款，请稍后重试')
       })
     } finally {
       this.setData({ actionSubmitting: false })

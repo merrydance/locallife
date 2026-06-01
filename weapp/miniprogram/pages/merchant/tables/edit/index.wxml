@@ -10,7 +10,7 @@
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty icon="error-circle" description="{{initialErrorMessage || '桌台编辑页加载失败，请重试'}}" />
-    <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
+    <t-button theme="primary" bind:tap="onRetry">重试</t-button>
   </view>
 
   <block wx:else>
@@ -163,7 +163,7 @@
         </view>
 
         <view class="qr-action-row">
-          <t-button theme="primary" bind:tap="onGenerateQRCode" loading="{{qrCodeLoading && qrCodeVisible}}" disabled="{{submitting || qrCodeDownloading}}">刷新二维码</t-button>
+          <t-button theme="primary" bind:tap="onGenerateQRCode" loading="{{qrCodeLoading && qrCodeVisible}}" disabled="{{submitting || qrCodeDownloading}}">重新生成二维码</t-button>
           <t-button theme="default" bind:tap="onShowQRCode">展示二维码</t-button>
         </view>
       </view>

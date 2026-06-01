@@ -3,7 +3,7 @@ import type { PaymentWorkflowStatus } from '../_main_shared/services/payment-wor
 export type { PaymentWorkflowStatus }
 
 export type PaymentResultTheme = 'success' | 'warning' | 'error' | 'default'
-export type PaymentResultAction = 'detail_page' | 'list_page' | 'refresh_status' | 'retry_payment' | 'home'
+export type PaymentResultAction = 'detail_page' | 'list_page' | 'retry_payment' | 'home'
 
 export interface PaymentResultView {
   navTitle: string
@@ -61,10 +61,10 @@ export function buildPaymentResultView(status?: string): PaymentResultView {
       return {
         navTitle: '结果待确认',
         title: '支付结果待确认',
-        description: '支付结果还在同步中，请稍后刷新或查看订单详情。',
+        description: '支付结果还在同步中，系统会自动确认。',
         theme: 'warning',
-        primaryButtonText: '刷新结果',
-        primaryAction: 'refresh_status',
+        primaryButtonText: '查看详情',
+        primaryAction: 'detail_page',
         secondaryButtonText: '返回订单列表',
         secondaryAction: 'list_page'
       }

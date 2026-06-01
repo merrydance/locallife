@@ -8,11 +8,16 @@ const ALLOWLIST = new Set([
   'weapp/miniprogram/pages/user_center/index.ts',
   'weapp/miniprogram/pages/register/operator/index.ts'
 ])
+const ROLE_BOUNDARY_SEGMENT = /\/_(?:api|main_shared\/api|main_shared\/services|main_shared\/utils|services|utils)\//
 const FORBIDDEN_CONSOLE_ROLES = new Set(['admin', 'operator', 'merchant', 'rider', 'customer', 'guest'])
+
+function shouldCheckFile(filePath) {
+  return !ALLOWLIST.has(filePath) && !ROLE_BOUNDARY_SEGMENT.test(filePath)
+}
 
 function main() {
   const changedFiles = getScopedFiles({ roots: SURFACE_ROOTS, extensions: ['.ts', '.js'] })
-    .filter((filePath) => !ALLOWLIST.has(filePath))
+    .filter(shouldCheckFile)
 
   if (changedFiles.length === 0) {
     console.log(`check-role-contract: no ${getGateScope() === 'changed' ? 'changed' : 'scannable'} Mini Program page/component scripts detected`)

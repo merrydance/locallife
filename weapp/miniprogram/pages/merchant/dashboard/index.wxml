@@ -20,7 +20,7 @@
   <block wx:else>
     <view wx:if="{{initialError}}" class="state-block">
       <t-empty icon="error-circle" description="{{initialErrorMessage || '商户首页加载失败，请重试'}}" />
-      <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
+      <t-button theme="primary" bind:tap="onRetry">重试</t-button>
     </view>
 
     <block wx:else>
@@ -34,9 +34,6 @@
                 </view>
                 <view class="hero-meta-row">
                   <text class="hero-period">{{monthRangeLabel}}</text>
-                    <view class="hero-refresh-trigger {{isPageSyncing ? 'is-syncing' : ''}}" bind:tap="onManualRefresh">
-                      <t-icon name="refresh" size="36rpx" color="var(--td-text-color-secondary)" />
-                    </view>
                 </view>
               </view>
 

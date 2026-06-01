@@ -5,6 +5,7 @@ import { AppError, ErrorHandler, ErrorType } from './utils/error-handler'
 import { getErrorDebugMessage, isRetryableNetworkError } from './utils/user-facing'
 import { installPromptFeedbackGuards } from './utils/prompt-feedback'
 import { ensureWechatLoginSession } from './utils/wechat-login-session'
+import { getNativeOperationDiagnostics, markNativeOperationStart } from './utils/native-diagnostics'
 
 App<IAppOption>({
   globalData: {
@@ -133,7 +134,10 @@ App<IAppOption>({
      * 全局错误捕获 - 捕获未处理的同步错误
      */
   onError(error: string) {
-    logger.error('全局错误捕获', { error }, 'App.onError')
+    logger.error('全局错误捕获', {
+      error,
+      nativeDiagnostics: getNativeOperationDiagnostics()
+    }, 'App.onError')
     ErrorHandler.handle(error, 'App.onError')
 
     // 上报到监控平台
@@ -156,12 +160,14 @@ App<IAppOption>({
     } else if (isNetworkAppError) {
       logger.warn('未处理的网络 Promise 拒绝（已抑制弹窗）', {
         reason: reasonStr,
-        promise: res.promise
+        promise: res.promise,
+        nativeDiagnostics: getNativeOperationDiagnostics()
       }, 'App.onUnhandledRejection')
     } else {
       logger.error('未处理的Promise拒绝', {
         reason: res.reason,
-        promise: res.promise
+        promise: res.promise,
+        nativeDiagnostics: getNativeOperationDiagnostics()
       }, 'App.onUnhandledRejection')
       ErrorHandler.handle(res.reason, 'App.onUnhandledRejection')
     }
@@ -200,10 +206,14 @@ App<IAppOption>({
      */
   reportErrorToMonitor(error: unknown, type: string) {
     try {
+      const nativeDiagnostics = getNativeOperationDiagnostics()
       // 使用微信小程序实时日志
       const realtimeLog = wx.getRealtimeLogManager ? wx.getRealtimeLogManager() : null
       if (realtimeLog) {
-        realtimeLog.error(`[${type}]`, error)
+        realtimeLog.error(`[${type}]`, {
+          error,
+          nativeDiagnostics
+        })
       }
 
       // TODO: 接入第三方监控平台(如腾讯云CLS、Sentry等)
@@ -394,10 +404,19 @@ App<IAppOption>({
 
     // 获取当前位置坐标（本地调用，不需要网络请求）
     logger.debug('调用 wx.getLocation', undefined, 'getLocationCoordinates')
+    const finishNativeOperation = markNativeOperationStart('wx.getLocation', {
+      source: 'App.getLocationCoordinates',
+      type: 'gcj02'
+    })
     wx.getLocation({
       type: 'gcj02', // 返回国测局坐标，适用于国内地图
       altitude: false, // 不需要高度信息
       success: (res) => {
+        finishNativeOperation('success', {
+          latitude: res.latitude,
+          longitude: res.longitude,
+          accuracy: res.accuracy
+        })
         // 保存坐标到全局变量
         this.globalData.latitude = res.latitude
         this.globalData.longitude = res.longitude
@@ -411,6 +430,7 @@ App<IAppOption>({
         this.reverseGeocodeWhenReady()
       },
       fail: (err) => {
+        finishNativeOperation('fail', err)
         logger.error('❌ 坐标获取失败', err, 'getLocationCoordinates')
 
         // 设置 "定位失败" 文本

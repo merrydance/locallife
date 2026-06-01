@@ -24,14 +24,14 @@
 
     <view wx:elif="{{initialError}}" class="state-block">
       <t-empty description="{{initialErrorMessage || '店铺资料加载失败，请重试'}}" />
-      <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
+      <t-button theme="primary" bind:tap="onRetry">重试</t-button>
     </view>
 
     <block wx:else>
       <view class="page-content">
         <view wx:if="{{refreshErrorMessage}}" class="notice-banner">
           <t-notice-bar theme="warning" visible="{{true}}" content="{{refreshErrorMessage}}">
-            <text slot="operation" class="notice-banner-operation" bind:tap="onRetryRefresh">重新同步</text>
+            <text slot="operation" class="notice-banner-operation" bind:tap="onRetryRefresh">重试</text>
           </t-notice-bar>
         </view>
 
@@ -76,7 +76,7 @@
         <merchant-section-card title="经营类目" subtitle="已选 {{selectedCategoryCount}}/5" bodyPadding="default" wx:elif="{{categoryErrorMessage && !tags.length}}">
           <view class="section-state">
             <t-empty description="{{categoryErrorMessage}}" />
-            <t-button theme="primary" bind:tap="onRetryCategories">重新加载</t-button>
+            <t-button theme="primary" bind:tap="onRetryCategories">重试</t-button>
           </view>
         </merchant-section-card>
 
@@ -123,7 +123,7 @@
 
           <view wx:if="{{categoryErrorMessage}}" class="inline-feedback">
             <text class="inline-feedback__text">{{categoryErrorMessage}}</text>
-            <text class="inline-feedback__action" bind:tap="onRetryCategories">重新同步</text>
+            <text class="inline-feedback__action" bind:tap="onRetryCategories">重试</text>
           </view>
 
           <t-picker

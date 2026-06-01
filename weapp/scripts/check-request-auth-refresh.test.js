@@ -72,6 +72,13 @@ function loadModule(options = {}) {
       if (modulePath === './logger') {
         return { logger: { debug() {}, info() {}, warn() {}, error() {} } }
       }
+      if (modulePath === './native-diagnostics') {
+        return {
+          markNativeOperationStart() {
+            return () => {}
+          }
+        }
+      }
       if (modulePath === './error-handler') {
         class AppError extends Error {
           constructor(config) {

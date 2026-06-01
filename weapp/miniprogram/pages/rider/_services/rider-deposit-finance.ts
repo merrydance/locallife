@@ -163,7 +163,7 @@ export function getRiderDepositWithdrawStatusView(status?: string): RiderDeposit
   if (status === 'failed') {
     return {
       isSuccess: false,
-      feedbackMessage: '提现未完成，资金会回到可用押金。请刷新账户后再重新申请。',
+      feedbackMessage: '提现未完成，资金会回到可用押金，请稍后查看账户后再重新申请。',
       feedbackTheme: 'warning',
       shouldScheduleRefresh: false
     }

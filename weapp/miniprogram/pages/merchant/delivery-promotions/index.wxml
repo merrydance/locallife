@@ -19,7 +19,7 @@
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty icon="error-circle" description="{{initialErrorMessage || '代取优惠加载失败，请重试'}}" />
-    <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
+    <t-button theme="primary" bind:tap="onRetry">重试</t-button>
   </view>
 
   <block wx:else>

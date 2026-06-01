@@ -11,7 +11,7 @@
   </view>
 
   <view wx:elif="{{error}}" class="page-content animate-fade-in">
-    <page-state icon="info-circle" description="{{error}}" actionText="{{errorCanRetry ? '重新加载' : ''}}" bind:action="onRetry" />
+    <page-state icon="info-circle" description="{{error}}" actionText="{{errorCanRetry ? '重试' : ''}}" bind:action="onRetry" />
   </view>
 
   <view wx:else class="page-content animate-fade-in">

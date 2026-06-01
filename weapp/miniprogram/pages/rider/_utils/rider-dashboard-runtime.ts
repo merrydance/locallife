@@ -727,7 +727,7 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
       }
     } catch (err: unknown) {
       logger.error('Pull down refresh error', err)
-      const errorState = getConsoleDashboardErrorState('rider', err, '骑手工作台刷新失败，请稍后重试。')
+      const errorState = getConsoleDashboardErrorState('rider', err, '骑手工作台同步失败，请稍后重试。')
       this.setData({
         initError: errorState.message,
         initErrorCanRetry: errorState.canRetry,

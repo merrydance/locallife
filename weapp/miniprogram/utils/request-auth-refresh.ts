@@ -4,6 +4,7 @@ import { logger } from './logger'
 import { ErrorType, AppError } from './error-handler'
 import { API_CONFIG } from '../config/index'
 import { ensureWechatLoginSession } from './wechat-login-session'
+import { markNativeOperationStart } from './native-diagnostics'
 
 interface RefreshTokenPayload {
   access_token: string
@@ -82,13 +83,25 @@ async function refreshTokenOnce(): Promise<void> {
       logger.info('尝试使用refresh_token刷新', undefined, 'refreshTokenOnce')
       try {
         const res = await new Promise<WechatMiniprogram.RequestSuccessCallbackResult>((resolve, reject) => {
+          const finishNativeOperation = markNativeOperationStart('wx.request', {
+            source: 'refreshTokenOnce',
+            method: 'POST',
+            path: '/v1/auth/refresh',
+            timeout: TOKEN_REFRESH_REQUEST_TIMEOUT
+          })
           wx.request({
             url: `${API_CONFIG.BASE_URL}/v1/auth/refresh`,
             method: 'POST',
             data: { refresh_token: refreshToken },
             header: { 'Content-Type': 'application/json', 'X-Response-Envelope': '1' },
-            success: resolve,
-            fail: reject,
+            success: (response) => {
+              finishNativeOperation('success', { statusCode: response.statusCode })
+              resolve(response)
+            },
+            fail: (err) => {
+              finishNativeOperation('fail', err)
+              reject(err)
+            },
             timeout: TOKEN_REFRESH_REQUEST_TIMEOUT
           })
         })

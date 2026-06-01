@@ -11,6 +11,7 @@ import { mapBackendMessageToUserMessage } from './user-facing'
 import { buildDefaultRequestId } from './request-id'
 import { buildGetSingleFlightKey, isRecord, sanitizeGetParams } from './request-core'
 import { ensureValidToken, performTokenRefresh, refreshAuthToken } from './request-auth-refresh'
+import { markNativeOperationStart } from './native-diagnostics'
 
 export const API_BASE = API_CONFIG.BASE_URL
 
@@ -346,6 +347,13 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
 
       const requestData = normalizedData as WechatMiniprogram.IAnyObject | string | ArrayBuffer | undefined
       const result = await new Promise<WechatMiniprogram.RequestSuccessCallbackResult>((resolve, reject) => {
+        const finishNativeOperation = markNativeOperationStart('wx.request', {
+          source: 'request',
+          method,
+          path: url,
+          requestId,
+          timeout
+        })
         const task = wx.request({
           url: `${API_BASE}${url}`,
           method: method as WechatMiniprogram.RequestOption['method'],
@@ -361,10 +369,12 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
           },
           success: (res) => {
             requestManager.unregister(requestId)
+            finishNativeOperation('success', { statusCode: res.statusCode })
             resolve(res)
           },
           fail: (err) => {
             requestManager.unregister(requestId)
+            finishNativeOperation('fail', err)
             // Ensure err is an object, not null or undefined
             const errorInfo = err || { errMsg: 'wx.request failed with no error info' }
             reject(errorInfo)

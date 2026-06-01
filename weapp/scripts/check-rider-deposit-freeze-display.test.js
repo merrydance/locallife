@@ -55,7 +55,7 @@ assert(
   'Rider deposit page must label active delivery hold as frozen, not deducted'
 )
 
-const { decorateDepositRecord } = loadTsModule('miniprogram/utils/rider-deposit-record-view.ts')
+const { decorateDepositRecord } = loadTsModule('miniprogram/pages/rider/_utils/rider-deposit-record-view.ts')
 
 const freezeRecord = decorateDepositRecord({
   id: 1,

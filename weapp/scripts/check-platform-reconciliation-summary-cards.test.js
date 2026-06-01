@@ -25,7 +25,7 @@ function loadTsModule(relativePath) {
     exports: {},
     module: { exports: {} },
     require(id) {
-      if (id === '../api/platform-dashboard') return {}
+      if (id === '../_api/platform-dashboard') return {}
       throw new Error(`unexpected require: ${id}`)
     },
     Date,
@@ -39,7 +39,7 @@ function loadTsModule(relativePath) {
   return sandbox.module.exports
 }
 
-const service = loadTsModule('miniprogram/services/platform-finance-reconciliation.ts')
+const service = loadTsModule('miniprogram/pages/platform/_services/platform-finance-reconciliation.ts')
 
 const view = service.buildPlatformFinanceReconciliationPageView({
   range: { start_date: '2026-05-01', end_date: '2026-05-07' },
@@ -125,8 +125,8 @@ assert.strictEqual(view.detailsHasMore, false)
 
 const pageSource = read('miniprogram/pages/platform/finance/reconciliation/index.wxml')
 const pageLogic = read('miniprogram/pages/platform/finance/reconciliation/index.ts')
-const serviceSource = read('miniprogram/services/platform-finance-reconciliation.ts')
-const dashboardApiSource = read('miniprogram/api/platform-dashboard.ts')
+const serviceSource = read('miniprogram/pages/platform/_services/platform-finance-reconciliation.ts')
+const dashboardApiSource = read('miniprogram/pages/platform/_api/platform-dashboard.ts')
 const summaryLoadStart = serviceSource.indexOf('export async function loadPlatformFinanceReconciliationPage')
 const detailLoadStart = serviceSource.indexOf('export async function loadPlatformFinanceReconciliationDetailsPage')
 const summaryLoadSource = summaryLoadStart >= 0 && detailLoadStart > summaryLoadStart

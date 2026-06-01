@@ -18,9 +18,9 @@ function assertIncludes(source, pattern, message) {
 }
 
 function main() {
-  const paymentWorkflow = read('miniprogram/services/payment-workflow.ts')
+  const paymentWorkflow = read('miniprogram/pages/payment/_main_shared/services/payment-workflow.ts')
   const paymentResult = read('miniprogram/pages/payment/result/index.ts')
-  const paymentResultView = read('miniprogram/utils/payment-result-view.ts')
+  const paymentResultView = read('miniprogram/pages/payment/_utils/payment-result-view.ts')
   const navigation = read('miniprogram/utils/navigation.ts')
 
   assertIncludes(paymentWorkflow, 'PaymentCancelledError', 'Payment workflow must distinguish user cancellation')
@@ -34,7 +34,7 @@ function main() {
   assertIncludes(paymentResult, 'waitForPaymentWorkflowTerminalResult(this.data.paymentOrderId, { maxAttempts: 1, interval: 0 })', 'Payment result page must support re-entry status refresh through backend truth')
   assertIncludes(paymentResult, 'applyPendingConfirmationState(paymentOrderId)', 'Payment result page must render unknown/pending confirmation states')
   assertIncludes(paymentResult, 'closeDineInCheckoutSessionIfNeeded', 'Payment result page must recover dine-in session close after paid result or re-entry')
-  assertIncludes(paymentResult, '支付结果还在同步中，请稍后刷新或返回订单详情查看。', 'Payment result page must give unknown-result recovery guidance')
+  assertIncludes(paymentResult, '支付结果还在同步中，系统会自动确认，也可返回订单详情查看。', 'Payment result page must give unknown-result recovery guidance')
   assertIncludes(paymentResultView, "case 'pending_confirmation'", 'Payment result view must model pending confirmation')
   assertIncludes(paymentResultView, "case 'cancelled'", 'Payment result view must model cancellation')
   assertIncludes(paymentResultView, "case 'create_failed'", 'Payment result view must model payment creation failure')
@@ -86,26 +86,26 @@ function main() {
     assert(!entry.source.includes('invokeWechatPay'), `${entry.label} must not call invokeWechatPay directly`)
   }
 
-  const riderDepositPayment = read('miniprogram/services/rider-deposit-payment.ts')
+  const riderDepositPayment = read('miniprogram/pages/user_center/payment-detail/_main_shared/services/rider-deposit-payment.ts')
   assertIncludes(riderDepositPayment, 'savePendingRiderDepositRecharge', 'Rider deposit flow must persist pending recharge for re-entry')
   assertIncludes(riderDepositPayment, 'continueStoredRiderDepositRecharge', 'Rider deposit flow must expose stored pending recharge recovery')
   assertIncludes(riderDepositPayment, 'getRiderDepositRechargePaymentTruth', 'Rider deposit recovery must query backend truth')
   assertIncludes(riderDepositPayment, "return buildRechargeResultFromPayment('pending_confirmation'", 'Rider deposit flow must distinguish pending confirmation')
   assertIncludes(riderDepositPayment, 'completePaymentWorkflow(payment', 'Rider deposit flow must use shared payment workflow')
 
-  const claimRecoveryPayment = read('miniprogram/services/claim-recovery-payment.ts')
+  const claimRecoveryPayment = read('miniprogram/pages/merchant/_main_shared/services/claim-recovery-payment.ts')
   assertIncludes(claimRecoveryPayment, 'completePaymentWorkflow(toClaimRecoveryPaymentOrder', 'Claim recovery payment must use shared payment workflow')
   assertIncludes(claimRecoveryPayment, "shouldSync: workflowResult.status !== 'cancelled'", 'Claim recovery payment must not sync as paid on cancellation')
   assertIncludes(claimRecoveryPayment, "pendingConfirmation: workflowResult.status === 'pending_confirmation'", 'Claim recovery payment must expose pending confirmation')
 
-  const baofuOnboarding = read('miniprogram/services/baofu-account-onboarding.ts')
+  const baofuOnboarding = read('miniprogram/pages/merchant/_main_shared/services/baofu-account-onboarding.ts')
   assertIncludes(baofuOnboarding, "business_type: 'baofu_account_verify_fee'", 'Baofoo account verification fee must use its own payment business type')
   assertIncludes(baofuOnboarding, 'savePendingWorkflowContext(pendingWorkflowContext)', 'Baofoo onboarding must persist pending payment workflow context')
   assertIncludes(baofuOnboarding, "paymentResult.status === 'pending_confirmation'", 'Baofoo onboarding must keep pending confirmation state after delayed callback')
   assertIncludes(baofuOnboarding, "paymentResult.status === 'cancelled'", 'Baofoo onboarding must distinguish user cancellation')
   assertIncludes(baofuOnboarding, 'pollBaofuSettlementAccountStatus', 'Baofoo onboarding must poll account status after paid verification fee')
 
-  const cancelRefundWorkflow = read('miniprogram/services/order-cancel-refund-workflow.ts')
+  const cancelRefundWorkflow = read('miniprogram/pages/orders/_services/order-cancel-refund-workflow.ts')
   assertIncludes(cancelRefundWorkflow, 'cancelRefundPending: true', 'Order cancel refund flow must expose refund processing state')
   assertIncludes(cancelRefundWorkflow, 'findLatestOrderRefund', 'Order cancel refund flow must query backend refund truth after cancel')
   assertIncludes(cancelRefundWorkflow, 'getRefundStatusView', 'Order cancel refund flow must render backend refund status semantics through the shared status view')
@@ -113,9 +113,9 @@ function main() {
   assertIncludes(cancelRefundWorkflow, 'REFUND_TRACK_POLL_INTERVAL_MS', 'Order cancel refund flow must use an explicit refund polling interval')
   assertIncludes(cancelRefundWorkflow, 'pollRefundTracking(page)', 'Order cancel refund flow must continue tracking delayed refund creation')
   assertIncludes(cancelRefundWorkflow, 'attempts >= REFUND_TRACK_MAX_ATTEMPTS', 'Order cancel refund flow must stop polling after the bounded attempt count')
-  assertIncludes(cancelRefundWorkflow, '退款结果还在同步中，请稍后在退款详情页刷新查看。', 'Order cancel refund flow must guide delayed refund callback recovery')
+  assertIncludes(cancelRefundWorkflow, '退款结果还在同步中，请稍后在退款详情页查看。', 'Order cancel refund flow must guide delayed refund callback recovery')
 
-  const refundWorkflow = read('miniprogram/services/refund-workflow.ts')
+  const refundWorkflow = read('miniprogram/pages/merchant/_main_shared/services/refund-workflow.ts')
   assertIncludes(refundWorkflow, 'waitForRefundTerminalResult', 'Refund detail workflow must expose a shared terminal wait helper')
   assertIncludes(refundWorkflow, 'isRefundStatusTerminal', 'Refund terminal wait must stop only on backend terminal refund statuses')
 

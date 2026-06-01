@@ -9,24 +9,41 @@ import Navigation from '../../../utils/navigation'
 import { logger } from '../../../utils/logger'
 import { getStableBarHeights } from '../../../utils/responsive'
 
+const WANTED_LEADERBOARD_POLL_INTERVAL_MS = 8000
+
 interface WantedMerchantViewItem extends WantedMerchantItem {
   rankLabel: string
+  rankCaption: string
   rankClass: string
   highlight: boolean
   voting: boolean
   plusAnimating: boolean
 }
 
+interface SelectedMapCandidate {
+  name: string
+  address?: string
+  latitude?: number
+  longitude?: number
+}
+
 function buildRankLabel(rank: number): string {
-  if (rank === 1) return '冠'
-  if (rank === 2) return '亚'
-  if (rank === 3) return '季'
   return String(rank)
 }
 
+function buildRankCaption(rank: number): string {
+  if (rank === 1) return '榜首'
+  if (rank === 2) return '亚军'
+  if (rank === 3) return '季军'
+  if (rank <= 5) return 'TOP'
+  return 'NO.'
+}
+
 function buildRankClass(rank: number): string {
-  if (rank <= 3) return `rank-badge rank-badge--top rank-badge--${rank}`
-  if (rank <= 5) return 'rank-badge rank-badge--medal'
+  if (rank === 1) return 'rank-badge rank-badge--champion'
+  if (rank === 2) return 'rank-badge rank-badge--silver'
+  if (rank === 3) return 'rank-badge rank-badge--bronze'
+  if (rank <= 5) return 'rank-badge rank-badge--top-five'
   return 'rank-badge'
 }
 
@@ -34,6 +51,7 @@ function toViewItem(item: WantedMerchantItem, focusId = 0): WantedMerchantViewIt
   return {
     ...item,
     rankLabel: buildRankLabel(item.rank),
+    rankCaption: buildRankCaption(item.rank),
     rankClass: buildRankClass(item.rank),
     highlight: item.id === focusId,
     voting: false,
@@ -47,22 +65,43 @@ Page({
     regionId: 0,
     regionName: '',
     loading: true,
-    refreshing: false,
     error: false,
     errorMessage: '',
     items: [] as WantedMerchantViewItem[],
     total: 0,
     inputName: '',
+    selectedMapCandidate: null as SelectedMapCandidate | null,
     submitting: false,
     votingId: 0,
     scrollIntoView: '',
     pageReady: false
   },
 
+  _leaderboardRequest: null as Promise<boolean> | null,
+  _leaderboardPollTimer: null as number | null,
+  _pageVisible: false,
+
   onLoad() {
     const { navBarHeight } = getStableBarHeights()
     this.setData({ navBarHeight })
     void this.initPage()
+  },
+
+  onShow() {
+    this._pageVisible = true
+    if (!this.data.pageReady) return
+    this.startLeaderboardPolling()
+    void this.loadLeaderboard(0, '', true)
+  },
+
+  onHide() {
+    this._pageVisible = false
+    this.stopLeaderboardPolling()
+  },
+
+  onUnload() {
+    this._pageVisible = false
+    this.stopLeaderboardPolling()
   },
 
   async initPage() {
@@ -75,6 +114,7 @@ Page({
         pageReady: true
       })
       await this.loadLeaderboard()
+      this.startLeaderboardPolling()
     } catch (error) {
       logger.warn('想吃榜初始化失败', error, 'WantedMerchants.initPage')
       this.setData({
@@ -112,46 +152,102 @@ Page({
     return currentRegion
   },
 
-  async loadLeaderboard(focusId = 0, focusToast = '') {
-    if (!this.data.regionId) return
-    this.setData({ loading: this.data.items.length === 0, error: false, errorMessage: '' })
-    try {
-      const result = await listWantedMerchants({
-        region_id: this.data.regionId,
-        page_id: 1,
-        page_size: 50
-      })
-      this.setData({
-        items: result.items.map((item) => toViewItem(item, focusId)),
-        total: result.total,
-        loading: false
-      })
-      if (focusId) {
-        this.focusWantedMerchant(focusId, focusToast)
+  async loadLeaderboard(focusId = 0, focusToast = '', silent = false): Promise<boolean> {
+    if (!this.data.regionId) return false
+    if (this._leaderboardRequest) {
+      if (!focusId) {
+        return this._leaderboardRequest
       }
-    } catch (error) {
-      logger.warn('想吃榜加载失败', error, 'WantedMerchants.loadLeaderboard')
-      this.setData({
-        loading: false,
-        error: true,
-        errorMessage: '榜单加载失败'
-      })
+      await this._leaderboardRequest
+      return this.loadLeaderboard(focusId, focusToast, silent)
     }
+    if (!silent) {
+      this.setData({ loading: this.data.items.length === 0, error: false, errorMessage: '' })
+    }
+
+    this._leaderboardRequest = (async () => {
+      try {
+        const result = await listWantedMerchants({
+          region_id: this.data.regionId,
+          page_id: 1,
+          page_size: 50
+        })
+        this.setData({
+          items: result.items.map((item) => toViewItem(item, focusId)),
+          total: result.total,
+          loading: false
+        })
+        if (focusId) {
+          this.focusWantedMerchant(focusId, focusToast)
+        }
+        return true
+      } catch (error) {
+        logger.warn('想吃榜加载失败', error, 'WantedMerchants.loadLeaderboard')
+        if (silent) {
+          return false
+        }
+        this.setData({
+          loading: false,
+          error: true,
+          errorMessage: '榜单加载失败'
+        })
+        return false
+      } finally {
+        this._leaderboardRequest = null
+      }
+    })()
+
+    return this._leaderboardRequest
+  },
+
+  startLeaderboardPolling() {
+    if (!this._pageVisible || this._leaderboardPollTimer !== null || !this.data.pageReady || !this.data.regionId) {
+      return
+    }
+    this._leaderboardPollTimer = setInterval(() => {
+      if (this.data.submitting || this.data.votingId || this._leaderboardRequest) {
+        return
+      }
+      void this.loadLeaderboard(0, '', true)
+    }, WANTED_LEADERBOARD_POLL_INTERVAL_MS) as unknown as number
+  },
+
+  stopLeaderboardPolling() {
+    if (this._leaderboardPollTimer === null) {
+      return
+    }
+    clearInterval(this._leaderboardPollTimer)
+    this._leaderboardPollTimer = null
   },
 
   onInputChange(e: WechatMiniprogram.CustomEvent) {
     const value = String(e.detail?.value ?? '')
-    this.setData({ inputName: value })
+    const selected = this.data.selectedMapCandidate
+    this.setData({
+      inputName: value,
+      selectedMapCandidate: selected && value.trim() === selected.name ? selected : null
+    })
   },
 
   onClearInput() {
-    this.setData({ inputName: '' })
+    this.setData({ inputName: '', selectedMapCandidate: null })
   },
 
   async onSubmitManual() {
     const name = this.data.inputName.trim()
     if (!name) {
       wx.showToast({ title: '先填店名', icon: 'none' })
+      return
+    }
+    const selected = this.data.selectedMapCandidate
+    if (selected && selected.name === name) {
+      await this.submitCandidate({
+        source: 'map',
+        name,
+        address: selected.address,
+        latitude: selected.latitude,
+        longitude: selected.longitude
+      })
       return
     }
     await this.submitCandidate({
@@ -161,6 +257,7 @@ Page({
   },
 
   onPickFromMap() {
+    if (this.data.submitting) return
     wx.chooseLocation({
       success: (res) => {
         const name = (res.name || '').trim()
@@ -168,13 +265,16 @@ Page({
           wx.showToast({ title: '没有选到店名', icon: 'none' })
           return
         }
-        void this.submitCandidate({
-          source: 'map',
-          name,
-          address: res.address,
-          latitude: res.latitude,
-          longitude: res.longitude
+        this.setData({
+          inputName: name,
+          selectedMapCandidate: {
+            name,
+            address: res.address,
+            latitude: res.latitude,
+            longitude: res.longitude
+          }
         })
+        wx.showToast({ title: '已填入店名', icon: 'success' })
       },
       fail: (error) => {
         if (String(error?.errMsg || '').includes('cancel')) return
@@ -208,7 +308,7 @@ Page({
       }
       await this.loadLeaderboard(result.wanted_merchant_id || 0)
       wx.showToast({ title: '已加入想吃榜', icon: 'success' })
-      this.setData({ inputName: '' })
+      this.setData({ inputName: '', selectedMapCandidate: null })
     } catch (error) {
       logger.warn('提交想吃商户失败', error, 'WantedMerchants.submitCandidate')
       const userMessage = (error as { userMessage?: string })?.userMessage
@@ -269,17 +369,14 @@ Page({
     setTimeout(() => this.setRowState(id, { plusAnimating: false }), 700)
   },
 
-  async onRefresh() {
-    this.setData({ refreshing: true })
-    try {
-      await this.loadLeaderboard()
-    } finally {
-      this.setData({ refreshing: false })
-    }
-  },
-
   onRetry() {
     void this.initPage()
+  },
+
+  onPullDownRefresh() {
+    this.loadLeaderboard().finally(() => {
+      wx.stopPullDownRefresh()
+    })
   },
 
   onShareAppMessage() {

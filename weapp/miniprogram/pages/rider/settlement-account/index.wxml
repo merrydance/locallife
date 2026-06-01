@@ -10,7 +10,7 @@
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty icon="error-circle" description="{{initialErrorMessage || '结算账户加载失败，请重试'}}" />
-    <t-button theme="primary" bindtap="onRetry">重新加载</t-button>
+    <t-button theme="primary" bindtap="onRetry">重试</t-button>
   </view>
 
   <view wx:else class="page-content">
@@ -34,7 +34,7 @@
       <view wx:if="{{refreshErrorMessage}}" class="sync-state">
         <t-icon name="error-circle" size="32rpx" />
         <text class="sync-state__text">{{refreshErrorMessage}}</text>
-        <t-button size="small" theme="primary" variant="text" icon="refresh" bindtap="onRetry">重试</t-button>
+        <t-button size="small" theme="primary" variant="text" bindtap="onRetry">重试</t-button>
       </view>
 
       <t-result

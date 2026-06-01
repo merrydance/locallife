@@ -10,7 +10,7 @@
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty description="{{initialErrorMessage || '经营统计加载失败，请重试'}}" />
-    <view class="retry-button" bindtap="onRetry">重新加载</view>
+    <view class="retry-button" bindtap="onRetry">重试</view>
   </view>
 
   <block wx:else>
@@ -35,7 +35,7 @@
     <view wx:if="{{summaryAvailable}}">
       <view wx:if="{{summaryError}}" class="section-error-hint">
         <text>{{summaryErrorMessage}}</text>
-        <text class="section-error-action" bindtap="onRetrySummary">重新同步</text>
+        <text class="section-error-action" bindtap="onRetrySummary">重试</text>
       </view>
 
       <view class="summary-grid">
@@ -79,7 +79,7 @@
 
     <view wx:else class="section-state-block">
       <t-empty description="{{summaryErrorMessage || '经营概览加载失败，请重试'}}" />
-      <view class="retry-button" bindtap="onRetrySummary">重新加载经营概览</view>
+      <view class="retry-button" bindtap="onRetrySummary">重试</view>
     </view>
 
     <view class="section-block">
@@ -90,7 +90,7 @@
 
       <view wx:if="{{topDishesError && topDishesAvailable}}" class="section-error-hint section-error-hint-spaced">
         <text>{{topDishesErrorMessage}}</text>
-        <text class="section-error-action" bindtap="onRetryTopDishes">重新同步</text>
+        <text class="section-error-action" bindtap="onRetryTopDishes">重试</text>
       </view>
 
       <view wx:if="{{topDishesAvailable}}">
@@ -115,7 +115,7 @@
 
       <view wx:else class="section-state-block section-state-block-compact">
         <t-empty description="{{topDishesErrorMessage || '热销菜加载失败，请重试'}}" />
-        <view class="retry-button" bindtap="onRetryTopDishes">重新加载热销菜</view>
+        <view class="retry-button" bindtap="onRetryTopDishes">重试</view>
       </view>
     </view>
 
@@ -127,7 +127,7 @@
 
       <view wx:if="{{dailyStatsError && dailyStatsAvailable}}" class="section-error-hint section-error-hint-spaced">
         <text>{{dailyStatsErrorMessage}}</text>
-        <text class="section-error-action" bindtap="onRetryDailyStats">重新同步</text>
+        <text class="section-error-action" bindtap="onRetryDailyStats">重试</text>
       </view>
 
       <view wx:if="{{dailyStatsAvailable}}">
@@ -153,7 +153,7 @@
 
       <view wx:else class="section-state-block section-state-block-compact">
         <t-empty description="{{dailyStatsErrorMessage || '日趋势加载失败，请重试'}}" />
-        <view class="retry-button" bindtap="onRetryDailyStats">重新加载日趋势</view>
+        <view class="retry-button" bindtap="onRetryDailyStats">重试</view>
       </view>
     </view>
 
@@ -165,7 +165,7 @@
 
       <view wx:if="{{sourceStatsError && sourceStatsAvailable}}" class="section-error-hint section-error-hint-spaced">
         <text>{{sourceStatsErrorMessage}}</text>
-        <text class="section-error-action" bindtap="onRetrySourceStats">重新同步</text>
+        <text class="section-error-action" bindtap="onRetrySourceStats">重试</text>
       </view>
 
       <view wx:if="{{sourceStatsAvailable}}">
@@ -190,7 +190,7 @@
 
       <view wx:else class="section-state-block section-state-block-compact">
         <t-empty description="{{sourceStatsErrorMessage || '订单来源加载失败，请重试'}}" />
-        <view class="retry-button" bindtap="onRetrySourceStats">重新加载订单来源</view>
+        <view class="retry-button" bindtap="onRetrySourceStats">重试</view>
       </view>
     </view>
 
@@ -202,7 +202,7 @@
 
       <view wx:if="{{hourlyStatsError && hourlyStatsAvailable}}" class="section-error-hint section-error-hint-spaced">
         <text>{{hourlyStatsErrorMessage}}</text>
-        <text class="section-error-action" bindtap="onRetryHourlyStats">重新同步</text>
+        <text class="section-error-action" bindtap="onRetryHourlyStats">重试</text>
       </view>
 
       <view wx:if="{{hourlyStatsAvailable}}">
@@ -226,7 +226,7 @@
 
       <view wx:else class="section-state-block section-state-block-compact">
         <t-empty description="{{hourlyStatsErrorMessage || '高峰时段加载失败，请重试'}}" />
-        <view class="retry-button" bindtap="onRetryHourlyStats">重新加载高峰时段</view>
+        <view class="retry-button" bindtap="onRetryHourlyStats">重试</view>
       </view>
     </view>
 
@@ -238,7 +238,7 @@
 
       <view wx:if="{{repurchaseError && repurchaseAvailable}}" class="section-error-hint section-error-hint-spaced">
         <text>{{repurchaseErrorMessage}}</text>
-        <text class="section-error-action" bindtap="onRetryRepurchase">重新同步</text>
+        <text class="section-error-action" bindtap="onRetryRepurchase">重试</text>
       </view>
 
       <view wx:if="{{repurchaseAvailable}}" class="insight-grid">
@@ -266,7 +266,7 @@
 
       <view wx:else class="section-state-block section-state-block-compact">
         <t-empty description="{{repurchaseErrorMessage || '顾客复购加载失败，请重试'}}" />
-        <view class="retry-button" bindtap="onRetryRepurchase">重新加载顾客复购</view>
+        <view class="retry-button" bindtap="onRetryRepurchase">重试</view>
       </view>
     </view>
 
@@ -278,7 +278,7 @@
 
       <view wx:if="{{categoryStatsError && categoryStatsAvailable}}" class="section-error-hint section-error-hint-spaced">
         <text>{{categoryStatsErrorMessage}}</text>
-        <text class="section-error-action" bindtap="onRetryCategoryStats">重新同步</text>
+        <text class="section-error-action" bindtap="onRetryCategoryStats">重试</text>
       </view>
 
       <view wx:if="{{categoryStatsAvailable}}">
@@ -304,7 +304,7 @@
 
       <view wx:else class="section-state-block section-state-block-compact">
         <t-empty description="{{categoryStatsErrorMessage || '分类小计加载失败，请重试'}}" />
-        <view class="retry-button" bindtap="onRetryCategoryStats">重新加载分类小计</view>
+        <view class="retry-button" bindtap="onRetryCategoryStats">重试</view>
       </view>
     </view>
 
@@ -316,7 +316,7 @@
 
       <view wx:if="{{reservationStatsError && reservationStatsAvailable}}" class="section-error-hint section-error-hint-spaced">
         <text>{{reservationStatsErrorMessage}}</text>
-        <text class="section-error-action" bindtap="onRetryReservationStats">重新同步</text>
+        <text class="section-error-action" bindtap="onRetryReservationStats">重试</text>
       </view>
 
       <view wx:if="{{reservationStatsAvailable}}" class="reservation-grid">
@@ -348,7 +348,7 @@
 
       <view wx:else class="section-state-block section-state-block-compact">
         <t-empty description="{{reservationStatsErrorMessage || '预订池加载失败，请重试'}}" />
-        <view class="retry-button" bindtap="onRetryReservationStats">重新加载预订池</view>
+        <view class="retry-button" bindtap="onRetryReservationStats">重试</view>
       </view>
     </view>
   </block>

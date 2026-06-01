@@ -163,7 +163,7 @@ Page({
       withdrawals: records?.withdrawals || [],
       recordsErrorMessage: records ? '' : getErrorUserMessage(
         isBaofuWithdrawalRequestRejected(recordsResult) ? recordsResult.reason : undefined,
-        '提现记录加载失败，请稍后刷新'
+        '提现记录加载失败，请稍后重试'
       ),
       page: records?.page || page,
       totalPages: records?.total_pages || 0

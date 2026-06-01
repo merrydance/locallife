@@ -271,7 +271,8 @@ function isDeliveryLocationBlocked(message: string): boolean {
     message.includes('骑手定位已过期') ||
     message.includes('定位获取失败') ||
     message.includes('开启定位权限') ||
-    message.includes('刷新定位')
+    message.includes('刷新定位') ||
+    message.includes('重新定位')
   )
 }
 
@@ -311,7 +312,7 @@ export function getRiderDeliveryActionState(deliveryOrStatus: RiderDeliveryActio
         actionKey: '',
         expectedStatus: null,
         locationSource: config?.locationSource || 'rider_task_detail_confirm_pickup',
-        disabledReason: delivery.pickup_block_reason || '当前任务状态暂不可用，请刷新后重试'
+        disabledReason: delivery.pickup_block_reason || '当前任务状态暂不可用，请稍后重试'
       }
     }
 

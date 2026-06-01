@@ -394,7 +394,7 @@ function getPrintJobSummary(job: MerchantOrderPrintJobResponse): string {
   if (job.status === 'success') return '打印任务已完成，可联系门店确认纸单是否正常出单。'
   if (job.status === 'failed') return job.error_message ? '打印任务未成功下发，请先根据失败原因排查后再重试。' : '打印任务未成功下发，建议重试以恢复门店打印。'
   if (job.status === 'pending' || job.status === 'processing') return '打印任务已提交，正在等待云打印平台返回结果。'
-  return '打印任务状态正在同步，请稍后刷新查看。'
+  return '打印任务状态正在同步，请稍后查看。'
 }
 
 export function buildPrintJobView(job: MerchantOrderPrintJobResponse): MerchantOrderPrintJobView {

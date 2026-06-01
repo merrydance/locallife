@@ -18,7 +18,7 @@ import { PAYMENT_STATUS_POLL_INTERVAL_MS, type PaymentOrderResponse } from '../a
 import { completePaymentWorkflow } from './payment-workflow'
 
 const PENDING_STORAGE_PREFIX = 'baofuSettlementAccountPendingWorkflow:'
-const GENERIC_RETRY_MESSAGE = '开户进度暂时无法同步，请稍后刷新'
+const GENERIC_RETRY_MESSAGE = '开户进度暂时无法同步，请稍后重试'
 const BAOFU_STATUS_POLL_UNTIL_TERMINAL = 0
 
 export type BaofuOnboardingWorkflowStatus =
@@ -228,8 +228,8 @@ function loadPendingWorkflowContext(role: BaofuAccountOwnerRole): PendingWorkflo
     return stored
   } catch (error: unknown) {
     logger.error(`读取宝付开户待确认支付上下文失败 role=${role}`, error, 'baofu-account-onboarding')
-    const recoverableError = new Error('开户进度暂时无法读取，请稍后刷新')
-    ;(recoverableError as Error & { userMessage?: string }).userMessage = '开户进度暂时无法读取，请稍后刷新'
+    const recoverableError = new Error('开户进度暂时无法读取，请稍后重试')
+    ;(recoverableError as Error & { userMessage?: string }).userMessage = '开户进度暂时无法读取，请稍后重试'
     throw recoverableError
   }
 }
@@ -368,7 +368,7 @@ export function buildBaofuOnboardingWaitView(result: BaofuOnboardingWorkflowResu
       ? '返回状态页'
       : primaryAction === 'retry'
         ? '重试'
-        : '刷新状态',
+        : '',
     primaryAction
   }
 }
@@ -389,7 +389,7 @@ export function buildBaofuOnboardingWaitViewFromText(
     description: options.description,
     theme: options.theme ?? 'warning',
     primaryAction: options.primaryAction ?? 'refresh_status',
-    primaryActionText: options.primaryActionText !== undefined ? options.primaryActionText : '刷新状态'
+    primaryActionText: options.primaryActionText !== undefined ? options.primaryActionText : ''
   }
 }
 
@@ -706,9 +706,9 @@ export function getBaofuOnboardingFeedbackMessage(result: BaofuOnboardingWorkflo
     case 'cancelled':
       return '支付未完成，可稍后继续'
     case 'pay_params_missing':
-      return '支付信息暂未就绪，请刷新后重试'
+      return '支付信息暂未就绪，请稍后重试'
     case 'pending_confirmation':
-      return '支付结果仍在同步，请稍后刷新'
+      return '支付结果仍在同步，系统会自动确认'
     default:
       return result.account.status_desc ||
         getBaofuAccountNextActionText(result.account.status, result.account.verify_fee_amount) ||

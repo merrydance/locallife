@@ -39,7 +39,7 @@ function showConfirmModal(content: string): Promise<boolean> {
 export async function confirmReceiptWithRecovery(options: ConfirmReceiptOptions): Promise<ConfirmReceiptResult> {
   const orderId = normalizeOrderId(options.orderId)
   if (!orderId) {
-    wx.showToast({ title: '订单信息缺失，请刷新后重试', icon: 'none' })
+    wx.showToast({ title: '订单信息缺失，请重新进入后重试', icon: 'none' })
     return { status: 'failed' }
   }
 

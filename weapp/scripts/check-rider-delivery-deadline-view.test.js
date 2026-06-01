@@ -6,7 +6,7 @@ const vm = require('vm')
 
 process.env.TZ = 'Asia/Shanghai'
 
-const sourcePath = path.join(__dirname, '..', 'miniprogram', 'utils', 'rider-delivery-view.ts')
+const sourcePath = path.join(__dirname, '..', 'miniprogram', 'pages', 'rider', '_utils', 'rider-delivery-view.ts')
 
 function loadModule() {
   const source = fs.readFileSync(sourcePath, 'utf8')
@@ -21,7 +21,7 @@ function loadModule() {
     exports: {},
     module: { exports: {} },
     require(modulePath) {
-      if (modulePath === '../api/delivery') {
+      if (modulePath === '../_main_shared/api/delivery') {
         return {}
       }
       throw new Error(`unexpected require: ${modulePath}`)

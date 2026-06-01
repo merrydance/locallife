@@ -49,19 +49,6 @@
   gap: var(--spacer-xs);
 }
 
-.hero-refresh-trigger {
-  width: 44rpx;
-  height: 44rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.hero-refresh-trigger.is-syncing {
-  opacity: 0.5;
-}
-
 .hero-title-main {
   min-width: 0;
   flex: 1;

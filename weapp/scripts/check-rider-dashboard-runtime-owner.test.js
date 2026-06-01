@@ -5,9 +5,9 @@ const ts = require('typescript')
 const vm = require('vm')
 
 const repoRoot = path.join(__dirname, '..')
-const ownerPath = path.join(repoRoot, 'miniprogram', 'utils', 'rider-dashboard-delivery-view.ts')
-const runtimePath = path.join(repoRoot, 'miniprogram', 'utils', 'rider-dashboard-runtime.ts')
-const workbenchPath = path.join(repoRoot, 'miniprogram', 'services', 'rider-workbench.ts')
+const ownerPath = path.join(repoRoot, 'miniprogram', 'pages', 'rider', '_utils', 'rider-dashboard-delivery-view.ts')
+const runtimePath = path.join(repoRoot, 'miniprogram', 'pages', 'rider', '_utils', 'rider-dashboard-runtime.ts')
+const workbenchPath = path.join(repoRoot, 'miniprogram', 'pages', 'rider', '_services', 'rider-workbench.ts')
 
 function plain(value) {
   return JSON.parse(JSON.stringify(value))
@@ -26,7 +26,7 @@ function loadOwnerModule() {
     exports: {},
     module: { exports: {} },
     require(modulePath) {
-      if (modulePath === '../api/delivery') {
+      if (modulePath === '../_main_shared/api/delivery') {
         return {
           getDeliveryStatusDisplay(status) {
             const map = {
@@ -40,10 +40,10 @@ function loadOwnerModule() {
           }
         }
       }
-      if (modulePath === '../api/rider-workbench') {
+      if (modulePath === '../_api/rider-workbench') {
         return {}
       }
-      if (modulePath === './rider-delivery-view') {
+      if (modulePath === '../_utils/rider-delivery-view') {
         return {
           buildRiderDeliveryDeadlineView(delivery) {
             return {
@@ -57,21 +57,21 @@ function loadOwnerModule() {
               return {
                 canUpdate: false,
                 label: delivery.pickup_action_label || '等待商户出餐',
-                disabledReason: delivery.pickup_block_reason || '当前任务状态暂不可用，请刷新后重试'
+                disabledReason: delivery.pickup_block_reason || '当前任务状态暂不可用，请稍后重试'
               }
             }
             return { canUpdate: true, label: '确认取餐', disabledReason: '' }
           }
         }
       }
-      if (modulePath === './rider-delivery-income-view') {
+      if (modulePath === '../_utils/rider-delivery-income-view') {
         return {
           buildRiderDeliveryIncomeView() {
             return { summaryText: '¥7.20', hasBill: true }
           }
         }
       }
-      if (modulePath === './status-tag') {
+      if (modulePath === '../_main_shared/utils/status-tag') {
         return {
           resolveStatusTagTheme(tone) {
             return tone === 'warning' ? 'warning' : 'success'

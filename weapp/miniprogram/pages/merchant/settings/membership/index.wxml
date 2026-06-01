@@ -20,12 +20,12 @@
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty description="{{initialErrorMessage || '会员设置加载失败，请重试'}}" />
-    <t-button theme="primary" bindtap="onRetry">重新加载</t-button>
+    <t-button theme="primary" bindtap="onRetry">重试</t-button>
   </view>
 
   <block wx:else>
     <view class="page-content">
-      <t-button wx:if="{{refreshErrorMessage}}" class="notice-action" theme="primary" bindtap="onRetryRefresh">重新同步</t-button>
+      <t-button wx:if="{{refreshErrorMessage}}" class="notice-action" theme="primary" bindtap="onRetryRefresh">重试</t-button>
 
       <merchant-section-card title="叠加规则" bodyPadding="none">
         <t-cell-group>

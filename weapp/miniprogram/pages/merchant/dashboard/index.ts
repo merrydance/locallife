@@ -342,11 +342,6 @@ Page({
     this.loadDashboard().catch((err) => logger.error('Merchant dashboard retry failed', err))
   },
 
-  onManualRefresh() {
-    if (this.data.accessDenied || this.data.accessErrorMessage || !this.data.accessReady) return
-    this.loadDashboard({ silent: true }).catch((err) => logger.error('Merchant dashboard manual refresh failed', err))
-  },
-
   clearAppBindCountdown() {
     if (this.appBindCountdownTimer) {
       clearInterval(this.appBindCountdownTimer)

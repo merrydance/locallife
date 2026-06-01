@@ -7,7 +7,7 @@
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty icon="error-circle" description="{{initialErrorMessage || '代取费结算加载失败，请重试'}}" />
-    <t-button theme="primary" bindtap="onRetryPage">重新加载</t-button>
+    <t-button theme="primary" bindtap="onRetryPage">重试</t-button>
   </view>
 
   <block wx:else>
@@ -15,7 +15,7 @@
       <view wx:if="{{refreshErrorMessage}}" class="sync-state">
         <t-icon name="error-circle" size="32rpx" />
         <text class="sync-state__text">{{refreshErrorMessage}}</text>
-        <t-button size="small" theme="primary" variant="text" icon="refresh" bindtap="onRetryRefresh">重试</t-button>
+        <t-button size="small" theme="primary" variant="text" bindtap="onRetryRefresh">重试</t-button>
       </view>
 
       <view wx:if="{{settlementNotice}}" class="sync-state">
@@ -91,12 +91,12 @@
         </t-tabs>
 
         <view wx:if="{{loading && ledgerItems.length === 0}}" class="state-block state-block-compact">
-          <t-loading theme="circular" size="40rpx" text="刷新明细中..." layout="vertical" />
+          <t-loading theme="circular" size="40rpx" text="同步明细中..." layout="vertical" />
         </view>
 
         <view wx:elif="{{listErrorMessage && ledgerItems.length === 0}}" class="state-block state-block-compact">
           <t-empty icon="error-circle" description="{{listErrorMessage}}" />
-          <t-button theme="primary" bindtap="onRetryLedger">重新加载明细</t-button>
+          <t-button theme="primary" bindtap="onRetryLedger">重试</t-button>
         </view>
 
         <view wx:elif="{{ledgerItems.length > 0}}" class="ledger-list">

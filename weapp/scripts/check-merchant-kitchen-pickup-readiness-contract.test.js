@@ -36,15 +36,15 @@ function loadModule(relativePath, stubs = {}) {
   return sandbox.module.exports
 }
 
-const { OrderManagementAdapter } = loadModule('api/order-management.ts', {
-  '../utils/request': { request: async () => ({}) },
-  '../utils/merchant-order-action-view': loadModule('utils/merchant-order-action-view.ts', {
-    '../api/order-management': {}
+const { OrderManagementAdapter } = loadModule('pages/merchant/_api/order-management.ts', {
+  '../../../utils/request': { request: async () => ({}) },
+  '../_utils/merchant-order-action-view': loadModule('pages/merchant/_utils/merchant-order-action-view.ts', {
+    '../_api/order-management': {}
   })
 })
 
-const { getKitchenStatusView } = loadModule('utils/merchant-kitchen-detail-view.ts', {
-  '../api/order-management': {}
+const { getKitchenStatusView } = loadModule('pages/merchant/_utils/merchant-kitchen-detail-view.ts', {
+  '../_api/order-management': {}
 })
 
 assert.strictEqual(OrderManagementAdapter.canMarkReady({

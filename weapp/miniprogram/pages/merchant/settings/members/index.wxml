@@ -7,13 +7,13 @@
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty description="{{initialErrorMessage || '会员列表加载失败，请重试'}}" />
-    <t-button theme="primary" bindtap="onRetry">重新加载</t-button>
+    <t-button theme="primary" bindtap="onRetry">重试</t-button>
   </view>
 
   <block wx:else>
     <view wx:if="{{refreshErrorMessage}}" class="list-meta-row list-meta-row--error">
       <text class="list-meta-text">{{refreshErrorMessage}}</text>
-      <text class="list-meta-action" bindtap="onRetryRefresh">重新同步</text>
+      <text class="list-meta-action" bindtap="onRetryRefresh">重试</text>
     </view>
 
     <view wx:if="{{!members.length}}" class="state-block state-compact">

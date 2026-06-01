@@ -61,7 +61,7 @@ function loadTaskDetailPage() {
     exports: {},
     module: { exports: {} },
     require(modulePath) {
-      if (modulePath === '../../../api/delivery') {
+      if (modulePath === '../_main_shared/api/delivery') {
         return { __esModule: true, default: {} }
       }
       if (modulePath === '../../../utils/logger') {
@@ -70,13 +70,13 @@ function loadTaskDetailPage() {
       if (modulePath === '../../../utils/location') {
         return { locationService: {} }
       }
-      if (modulePath === '../../../utils/rider-location') {
+      if (modulePath === '../_main_shared/utils/rider-location') {
         return { normalizeLocationError: (err) => err, syncRiderDeliveryLocation: () => Promise.resolve() }
       }
-      if (modulePath === '../../../utils/rider-live-location') {
+      if (modulePath === '../_utils/rider-live-location') {
         return { riderLiveLocationSession: { setActiveDelivery: () => Promise.resolve() } }
       }
-      if (modulePath === '../../../utils/rider-delivery-view') {
+      if (modulePath === '../_utils/rider-delivery-view') {
         return {
           buildRiderDeliveryActionConfirmFeedback: () => ({ title: '' }),
           buildRiderDeliveryActionFailureFeedback: () => ({ mode: 'toast', title: '' }),
@@ -87,7 +87,7 @@ function loadTaskDetailPage() {
           isRiderDeliveryTrackedStatus: () => false
         }
       }
-      if (modulePath === '../../../utils/rider-delivery-income-view') {
+      if (modulePath === '../_utils/rider-delivery-income-view') {
         return { buildRiderDeliveryIncomeView: () => ({}) }
       }
       if (modulePath === '../../../utils/responsive') {

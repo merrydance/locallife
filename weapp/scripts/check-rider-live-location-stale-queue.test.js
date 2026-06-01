@@ -4,7 +4,7 @@ const path = require('path')
 const ts = require('typescript')
 const vm = require('vm')
 
-const sourcePath = path.join(__dirname, '..', 'miniprogram', 'utils', 'rider-live-location.ts')
+const sourcePath = path.join(__dirname, '..', 'miniprogram', 'pages', 'rider', '_utils', 'rider-live-location.ts')
 const storageKey = 'rider_live_location_queue_v1'
 const fixedNowMs = Date.parse('2026-05-27T09:15:00.000Z')
 
@@ -50,7 +50,7 @@ function loadSession(storedQueue) {
     exports: {},
     module: { exports: {} },
     require(modulePath) {
-      if (modulePath === '@/api/rider') {
+      if (modulePath === '../_main_shared/api/rider') {
         return {
           __esModule: true,
           default: {
@@ -61,7 +61,7 @@ function loadSession(storedQueue) {
           }
         }
       }
-      if (modulePath === './network-monitor') {
+      if (modulePath === '../../../utils/network-monitor') {
         return {
           networkMonitor: {
             subscribe() {},
@@ -71,10 +71,10 @@ function loadSession(storedQueue) {
           }
         }
       }
-      if (modulePath === './location') {
+      if (modulePath === '../../../utils/location') {
         return { locationService: { getCurrentLocation: async () => ({ latitude: 1, longitude: 2 }) } }
       }
-      if (modulePath === './logger') {
+      if (modulePath === '../../../utils/logger') {
         return {
           logger: {
             warn() {},
@@ -84,10 +84,10 @@ function loadSession(storedQueue) {
           }
         }
       }
-      if (modulePath === './rider-location') {
+      if (modulePath === '../_main_shared/utils/rider-location') {
         return { normalizeLocationError: (error) => error instanceof Error ? error : new Error(String(error)) }
       }
-      if (modulePath === './current-region') {
+      if (modulePath === '../_main_shared/utils/current-region') {
         return { resolveCurrentRegionId: async () => 596 }
       }
       throw new Error(`unexpected require: ${modulePath}`)

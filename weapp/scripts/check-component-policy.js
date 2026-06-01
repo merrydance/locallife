@@ -13,6 +13,10 @@ const POLICY_FILE = 'component-policy.json'
 const ALLOWED_GROUPS = new Set(['feedback', 'data', 'navigation', 'base', 'form'])
 const ALLOWED_DECISIONS = new Set(['tdesign-wrapper', 'local-component'])
 
+function hasComponentFiles(dirPath) {
+  return fs.existsSync(dirPath) && fs.readdirSync(dirPath, { withFileTypes: true }).some((entry) => entry.isFile())
+}
+
 function main() {
   const scope = getGateScope()
   const diffBase = getDiffBase()
@@ -34,9 +38,9 @@ function main() {
   const targetComponentDirs = scope === 'changed'
     ? componentDirs.filter((dirName) => {
       const relativePath = `${COMPONENT_ROOT}${dirName}`
-      return !pathExistsInRevision(diffBase, relativePath)
+      return !pathExistsInRevision(diffBase, relativePath) && hasComponentFiles(path.join(componentRootPath, dirName))
     })
-    : componentDirs
+    : componentDirs.filter((dirName) => hasComponentFiles(path.join(componentRootPath, dirName)))
 
   if (targetComponentDirs.length === 0) {
     console.log(`check-component-policy: no ${scope === 'changed' ? 'new' : 'scannable'} shared Mini Program components detected`)

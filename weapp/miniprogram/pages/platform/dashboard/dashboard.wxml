@@ -12,7 +12,7 @@
     <view class="dashboard-container">
       <view wx:if="{{error}}" class="console-error-banner">
         <t-notice-bar theme="warning" visible="{{true}}" content="{{error}}" />
-        <t-button wx:if="{{errorCanRetry}}" theme="primary" bind:tap="onRetry">重新加载</t-button>
+        <t-button wx:if="{{errorCanRetry}}" theme="primary" bind:tap="onRetry">重试</t-button>
       </view>
 
       <view class="operations-header">
@@ -66,7 +66,7 @@
       <view class="section-card">
         <view class="section-head">
           <text class="section-title">实时履约</text>
-          <t-tag theme="success" variant="light">自动刷新</t-tag>
+          <t-tag theme="success" variant="light">自动同步</t-tag>
         </view>
 
         <view wx:if="{{loading}}" class="state-grid">

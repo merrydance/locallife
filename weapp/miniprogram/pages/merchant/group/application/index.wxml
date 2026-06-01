@@ -17,7 +17,7 @@
 
   <view wx:elif="{{draftErrorMessage}}" class="state-block">
     <t-empty icon="error-circle" description="{{draftErrorMessage}}" />
-    <t-button theme="primary" bind:tap="onRetryDraft">重新加载草稿</t-button>
+    <t-button theme="primary" bind:tap="onRetryDraft">重试</t-button>
   </view>
 
   <block wx:else>

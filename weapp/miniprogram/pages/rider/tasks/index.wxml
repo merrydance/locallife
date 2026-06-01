@@ -20,7 +20,7 @@
 
   <view wx:elif="{{errorMessage && deliveries.length === 0}}" class="history-error card-state">
     <t-empty icon="error-circle" description="{{errorMessage}}" />
-    <t-button theme="primary" bindtap="onRetry">重新加载</t-button>
+    <t-button theme="primary" bindtap="onRetry">重试</t-button>
   </view>
 
   <block wx:else>

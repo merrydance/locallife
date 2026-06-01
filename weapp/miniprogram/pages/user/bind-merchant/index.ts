@@ -211,7 +211,7 @@ Page({
     showInvalidWebLoginCode() {
         wx.showModal({
             title: '网页登录码无效',
-            content: '当前网页登录码无效或已失效，请返回网页刷新二维码后重试。',
+            content: '当前网页登录码无效或已失效，请返回网页重新生成二维码后重试。',
             showCancel: false,
             confirmText: '我知道了'
         })
@@ -237,7 +237,7 @@ Page({
                 if (!sig || !ts) {
                     wx.showModal({
                         title: '二维码无效',
-                        content: '当前二维码缺少校验信息，请在网页端刷新二维码后重试。',
+                        content: '当前二维码缺少校验信息，请在网页端重新生成二维码后重试。',
                         showCancel: false,
                         confirmText: '我知道了'
                     })

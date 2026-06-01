@@ -7,7 +7,7 @@ const wxmlPath = path.join(pageDir, 'index.wxml')
 const wxssPath = path.join(pageDir, 'index.wxss')
 const tsPath = path.join(pageDir, 'index.ts')
 const jsonPath = path.join(pageDir, 'index.json')
-const reviewApiPath = path.join(repoRoot, 'miniprogram/api/review.ts')
+const reviewApiPath = path.join(repoRoot, 'miniprogram/pages/user_center/reviews/_main_shared/api/review.ts')
 const userReviewsWxmlPath = path.join(repoRoot, 'miniprogram/pages/user_center/reviews/index.wxml')
 const userReviewsTsPath = path.join(repoRoot, 'miniprogram/pages/user_center/reviews/index.ts')
 const userReviewsJsonPath = path.join(repoRoot, 'miniprogram/pages/user_center/reviews/index.json')
@@ -16,6 +16,10 @@ const sharedReviewCardJsonPath = path.join(repoRoot, 'miniprogram/components/rev
 
 function read(filePath) {
   return fs.readFileSync(filePath, 'utf8')
+}
+
+function readOptional(filePath) {
+  return fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : ''
 }
 
 function assert(condition, message) {
@@ -49,8 +53,8 @@ function main() {
   const userReviewsWxml = read(userReviewsWxmlPath)
   const userReviewsTs = read(userReviewsTsPath)
   const userReviewsJson = read(userReviewsJsonPath)
-  const sharedReviewCardWxml = read(sharedReviewCardWxmlPath)
-  const sharedReviewCardJson = read(sharedReviewCardJsonPath)
+  const sharedReviewCardWxml = readOptional(sharedReviewCardWxmlPath)
+  const sharedReviewCardJson = readOptional(sharedReviewCardJsonPath)
 
   assert(
     wxml.includes('page-shell--page-gutter'),

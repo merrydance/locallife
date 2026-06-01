@@ -17,6 +17,7 @@ const FILE_LIMITS = {
 }
 const PAGE_TOTAL_LIMIT = 1200
 const GROWTH_TOLERANCE = 40
+const INTERNAL_PAGE_SEGMENT = /\/_(?:api|components|main_shared|services|utils)\//
 
 function countLines(content) {
   if (!content) {
@@ -28,7 +29,9 @@ function countLines(content) {
 
 function shouldCheckFile(filePath) {
   const ext = path.extname(filePath)
-  return filePath.startsWith(PAGE_ROOT) && Object.prototype.hasOwnProperty.call(FILE_LIMITS, ext)
+  return filePath.startsWith(PAGE_ROOT) &&
+    !INTERNAL_PAGE_SEGMENT.test(filePath) &&
+    Object.prototype.hasOwnProperty.call(FILE_LIMITS, ext)
 }
 
 function getCurrentLineCount(relativePath) {

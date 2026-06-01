@@ -6,7 +6,7 @@ const pageDir = path.join(repoRoot, 'miniprogram/pages/user_center/service_cente
 const wxmlPath = path.join(pageDir, 'index.wxml')
 const wxssPath = path.join(pageDir, 'index.wxss')
 const tsPath = path.join(pageDir, 'index.ts')
-const apiPath = path.join(repoRoot, 'miniprogram/api/food-safety.ts')
+const apiPath = path.join(repoRoot, 'miniprogram/pages/user_center/service_center/_api/food-safety.ts')
 const appWxssPath = path.join(repoRoot, 'miniprogram/app.wxss')
 
 function read(filePath) {

@@ -515,7 +515,7 @@ export function getCombinedPaymentFollowupMessage(paymentOrState: CombinedPaymen
   }
 
   if (resolution === 'syncing') {
-    return '支付状态正在同步，请稍后刷新'
+    return '支付状态正在同步，系统会自动确认'
   }
 
   return '可继续完成原合单支付'

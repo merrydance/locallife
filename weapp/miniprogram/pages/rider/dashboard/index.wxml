@@ -7,14 +7,14 @@
 
   <view wx:elif="{{initError && !riderInfo}}" class="page-state-card">
     <t-empty icon="error-circle" description="{{initError}}" />
-    <t-button wx:if="{{initErrorCanRetry}}" theme="primary" bindtap="onRetryLoad">重新加载</t-button>
+    <t-button wx:if="{{initErrorCanRetry}}" theme="primary" bindtap="onRetryLoad">重试</t-button>
   </view>
 
   <block wx:else>
     <view wx:if="{{dashboardInlineError}}" class="inline-sync-state">
       <t-icon name="error-circle" size="32rpx" />
       <text class="inline-sync-state__text">{{dashboardInlineError}}</text>
-      <t-button wx:if="{{initErrorCanRetry}}" size="small" theme="primary" variant="text" icon="refresh" bindtap="onRetryLoad">重试</t-button>
+      <t-button wx:if="{{initErrorCanRetry}}" size="small" theme="primary" variant="text" bindtap="onRetryLoad">重试</t-button>
     </view>
 
     <view class="workbench-summary-card">

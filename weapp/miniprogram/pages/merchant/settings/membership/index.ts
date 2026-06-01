@@ -126,7 +126,7 @@ Page({
     }
     if (this.data.hasChanges) {
       wx.stopPullDownRefresh()
-      this.showFeedbackToast('warning', '当前有未保存修改，请先保存后再刷新')
+      this.showFeedbackToast('warning', '当前有未保存修改，请先保存后再同步')
       return
     }
     this.loadSettings(false, true)

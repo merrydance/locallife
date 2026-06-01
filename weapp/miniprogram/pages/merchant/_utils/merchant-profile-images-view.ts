@@ -26,7 +26,7 @@ type ErrorWithSyncStatus = {
 }
 
 export const PROFILE_IMAGES_AUTO_REFRESH_WINDOW_MS = 60 * 1000
-export const CONTINUE_SYNC_TOAST = '正在继续同步，请稍后刷新查看'
+export const CONTINUE_SYNC_TOAST = '正在继续同步，请稍后查看'
 export const PENDING_DELETED_SHOP_IMAGES_STORAGE_PREFIX = 'merchant_profile_images_pending_deleted_v1'
 export const PENDING_DELETED_SHOP_IMAGES_ANONYMOUS_SCOPE = 'anonymous'
 export const SHOP_IMAGES_PERSIST_RETRY_BASE_DELAY_MS = 1500

@@ -274,7 +274,7 @@ Page({
     const actionNoticeMessage = paymentSucceeded
       ? '追偿支付已完成，页面状态稍后同步'
       : paymentFailed
-        ? '追偿支付未完成，请刷新追偿状态后重试'
+        ? '追偿支付未完成，请稍后重试'
         : '追偿支付已提交，系统正在确认到账结果'
 
     this.setData({
@@ -462,7 +462,7 @@ Page({
 
   async onPayRecovery() {
     if (!this.data.recoveryId) {
-      wx.showToast({ title: '追偿单暂未生成，请刷新后重试', icon: 'none' })
+      wx.showToast({ title: '追偿单暂未生成，请稍后重试', icon: 'none' })
       return
     }
 

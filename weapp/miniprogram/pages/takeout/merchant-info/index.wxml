@@ -4,7 +4,7 @@
   <!-- 1. 错误状态 -->
   <view wx:if="{{isError}}" class="error-container">
     <t-empty icon="info-circle" description="{{errorMsg}}" />
-    <t-button theme="primary" size="small" bindtap="loadMerchantInfo" style="margin-top: 24rpx;" shape="round">重新加载</t-button>
+    <t-button theme="primary" size="small" bindtap="loadMerchantInfo" style="margin-top: 24rpx;" shape="round">重试</t-button>
   </view>
 
   <!-- 2. 骨架屏状态 (App Shell + Skeleton) -->

@@ -318,14 +318,6 @@ Page({
     void this.refreshPage({ showLoading: true, preserveList: false })
   },
 
-  onManualRefresh() {
-    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) {
-      void this.onRetryAccess()
-      return
-    }
-    void this.refreshPage({ showLoading: false, preserveList: this.data.reservations.length > 0 })
-  },
-
   onRetryList() { void this.loadReservationList(true, { showLoading: true, preserveCurrent: false }) },
 
   async onRetryAccess() {

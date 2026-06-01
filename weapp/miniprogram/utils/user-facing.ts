@@ -148,10 +148,10 @@ function mapErrorByStatusCode(statusCode: number, fallback: string): string | un
     return '当前无权限执行该操作'
   }
   if (statusCode === 404) {
-    return '所需信息暂时不可用，请稍后刷新再试'
+    return '所需信息暂时不可用，请稍后重试'
   }
   if (statusCode === 409) {
-    return '当前操作暂时无法完成，请刷新后再试'
+    return '当前操作暂时无法完成，请稍后重试'
   }
   if (statusCode === 422) {
     return fallback
@@ -377,7 +377,7 @@ export function mapBackendMessageToUserMessage(rawMessage: string, fallback: str
     normalized.includes('conflict') ||
     normalized.includes('冲突')
   ) {
-    return '请勿重复提交，刷新后再试'
+    return '请勿重复提交，请稍后重试'
   }
 
   if (
@@ -385,7 +385,7 @@ export function mapBackendMessageToUserMessage(rawMessage: string, fallback: str
     normalized.includes('服务未找到') ||
     normalized.includes('no rows in result set')
   ) {
-    return '所需信息暂时不可用，请稍后刷新再试'
+    return '所需信息暂时不可用，请稍后重试'
   }
 
   if (isLikelyUserSafeCopy(message)) {

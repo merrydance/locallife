@@ -317,7 +317,7 @@ Page({
             const failedView = buildStoredRiderDepositWithdrawalSyncFailedView()
             this.applyWithdrawalStatusView(failedView)
             if (!options.silent) {
-                this.setActionFeedback('提现状态同步失败，请稍后刷新状态或查看账单明细。', 'warning')
+                this.setActionFeedback('提现状态同步失败，系统会继续同步，也可稍后查看账单明细。', 'warning')
             }
         } finally {
             this.setData({ syncingPendingWithdrawal: false })
@@ -583,7 +583,7 @@ Page({
                 this.setActionFeedback(
                     terminalResult.isTerminal
                         ? terminalResult.view.feedbackMessage
-                        : '微信仍在处理本次提现，请稍后刷新状态或查看账单明细。',
+                        : '微信仍在处理本次提现，系统会继续同步，也可稍后查看账单明细。',
                     terminalResult.view.feedbackTheme
                 )
                 this.setData({ isWithdrawVisible: false, withdrawAmount: '' })

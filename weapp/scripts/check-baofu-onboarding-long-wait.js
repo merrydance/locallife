@@ -8,11 +8,11 @@ function read(relativePath) {
   return fs.readFileSync(path.join(ROOT, relativePath), 'utf8')
 }
 
-const onboardingService = read('miniprogram/services/baofu-account-onboarding.ts')
-const statusBehavior = read('miniprogram/behaviors/baofu-settlement-status.ts')
-const submitBehavior = read('miniprogram/behaviors/baofu-settlement-submit.ts')
-const waitComponentTs = read('miniprogram/components/baofu-onboarding-wait/index.ts')
-const waitComponentWxml = read('miniprogram/components/baofu-onboarding-wait/index.wxml')
+const onboardingService = read('miniprogram/pages/merchant/_main_shared/services/baofu-account-onboarding.ts')
+const statusBehavior = read('miniprogram/pages/merchant/_main_shared/behaviors/baofu-settlement-status.ts')
+const submitBehavior = read('miniprogram/pages/merchant/_main_shared/behaviors/baofu-settlement-submit.ts')
+const waitComponentTs = read('miniprogram/pages/merchant/_components/baofu-onboarding-wait/index.ts')
+const waitComponentWxml = read('miniprogram/pages/merchant/_components/baofu-onboarding-wait/index.wxml')
 
 assert(
   onboardingService.includes('isBaofuSettlementOpeningProcessingStatus(normalizedAccountStatus)'),
@@ -71,7 +71,6 @@ const waitConsumers = [
   'miniprogram/pages/rider/settlement-account/index.wxml',
   'miniprogram/pages/merchant/finance/settlement-account/submit/index.wxml',
   'miniprogram/pages/operator/finance/settlement-account/submit/index.wxml',
-  'miniprogram/pages/platform/finance/settlement-account/submit/index.wxml',
   'miniprogram/pages/rider/settlement-account/submit/index.wxml'
 ]
 

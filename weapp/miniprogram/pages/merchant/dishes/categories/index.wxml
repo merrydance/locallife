@@ -10,14 +10,14 @@
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty icon="error-circle" description="{{initialErrorMessage || '分类列表加载失败，请重试'}}" />
-    <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
+    <t-button theme="primary" bind:tap="onRetry">重试</t-button>
   </view>
 
   <block wx:else>
     <view class="page-content">
       <view wx:if="{{refreshErrorMessage}}" class="notice-banner">
         <t-notice-bar theme="error" visible="{{true}}" content="{{refreshErrorMessage}}">
-          <text slot="operation" class="notice-banner-operation" bind:tap="onRetryRefresh">重新同步</text>
+          <text slot="operation" class="notice-banner-operation" bind:tap="onRetryRefresh">重试</text>
         </t-notice-bar>
       </view>
 
@@ -29,7 +29,6 @@
       <view class="list-section">
         <view class="list-header">
           <text class="list-title">当前分类列表</text>
-          <t-button theme="default" bind:tap="onRetryRefresh">刷新</t-button>
         </view>
 
         <view wx:if="{{!categories.length}}" class="section-empty">

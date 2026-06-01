@@ -5,7 +5,7 @@ const ts = require('typescript')
 const vm = require('vm')
 
 const ROOT = path.resolve(__dirname, '..')
-const orderApiPath = path.join(ROOT, 'miniprogram/api/order-management.ts')
+const orderApiPath = path.join(ROOT, 'miniprogram/pages/merchant/_api/order-management.ts')
 const orderListPagePath = path.join(ROOT, 'miniprogram/pages/merchant/orders/list/index.ts')
 
 function compile(filePath) {
@@ -22,10 +22,10 @@ function loadOrderManagementApi() {
     exports: {},
     module: { exports: {} },
     require(modulePath) {
-      if (modulePath === '../utils/request') {
+      if (modulePath === '../../../utils/request') {
         return { request: () => Promise.resolve({}) }
       }
-      if (modulePath === '../utils/merchant-order-action-view') {
+      if (modulePath === '../_utils/merchant-order-action-view') {
         return { canMerchantMarkOrderReady: (order) => order?.status === 'preparing' }
       }
       throw new Error(`unexpected require from order-management: ${modulePath}`)
@@ -45,7 +45,7 @@ function loadMerchantOrderListPage(orderManagementApi) {
       if (modulePath === '../../../../utils/responsive') {
         return { getStableBarHeights: () => ({ navBarHeight: 88 }) }
       }
-      if (modulePath === '../../../../api/order-management') {
+      if (modulePath === '../../_api/order-management') {
         return {
           ...orderManagementApi,
           MerchantOrderManagementService: { getOrderList: () => Promise.resolve({ orders: [], total: 0 }) },
@@ -56,7 +56,7 @@ function loadMerchantOrderListPage(orderManagementApi) {
       if (modulePath === '../../../../utils/logger') {
         return { logger: { error() {}, warn() {}, info() {} } }
       }
-      if (modulePath === 'dayjs') {
+      if (modulePath === '../../_main_shared/miniprogram_npm/dayjs/index') {
         return () => ({ format: () => '' })
       }
       if (modulePath === '../../../../utils/user-facing') {
@@ -70,10 +70,10 @@ function loadMerchantOrderListPage(orderManagementApi) {
           isMerchantConsoleAccessGranted: () => true
         }
       }
-      if (modulePath === '../../../../utils/merchant-order-detail-view') {
+      if (modulePath === '../../_utils/merchant-order-detail-view') {
         return { buildMerchantOrderFeeBreakdownView: () => ({ customer_payable_text: '', merchant_receivable_text: '', available: false }) }
       }
-      if (modulePath === '../../../../utils/websocket') {
+      if (modulePath === '../../_main_shared/utils/websocket') {
         return {
           wsManager: { connect() {}, disconnect() {}, on: () => () => {} },
           WSMessageType: { NOTIFICATION: 'notification', CONNECTION_BLOCKED: 'connection_blocked' }

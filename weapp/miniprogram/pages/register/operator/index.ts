@@ -538,7 +538,7 @@ Page({
     const existing = await getOperatorApplication()
     if (existing?.id) {
       if (existing.status && existing.status !== 'draft') {
-        throw new Error('当前申请状态不支持继续编辑，请刷新页面后重试')
+        throw new Error('当前申请状态不支持继续编辑，请重新进入后重试')
       }
 
       if (Number(existing.region_id || 0) !== Number(this.data.formData.regionId || 0)) {

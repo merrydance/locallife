@@ -181,7 +181,7 @@ Page({
             nextState.refundsError = false
             nextState.refundsErrorMessage = ''
             nextState.refundReturnsErrorMessage = returnLoadFailed
-              ? '分账回退同步失败，退款记录已保留；请稍后重新同步'
+              ? '分账回退同步失败，退款记录已保留；系统会稍后继续同步'
               : ''
           } catch (refundErr) {
             const message = getErrorMessage(refundErr, '退款记录加载失败，请稍后重试')
@@ -549,7 +549,7 @@ Page({
       if (createdRefundId) {
         logger.warn('Wait merchant refund terminal failed after creation', err, 'merchant-order-detail.onSubmitRefund')
         await this.loadDetail(false)
-        this.setData({ refundNoticeMessage: '退款申请已提交，结果还在同步中，请稍后重新同步退款记录。' })
+        this.setData({ refundNoticeMessage: '退款申请已提交，结果还在同步中，系统会稍后继续同步退款记录。' })
       } else {
         logger.error('Create merchant refund failed', err)
         wx.showToast({ title: getErrorMessage(err, '发起退款失败，请稍后重试'), icon: 'none' })

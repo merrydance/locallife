@@ -133,11 +133,6 @@
       <t-button theme="primary" size="large" shape="round" block bindtap="onConfirmReceipt">确认收货</t-button>
     </view>
 
-    <!-- 刷新按钮 -->
-    <view class="refresh-btn" bindtap="onRefresh">
-      <t-icon name="refresh" size="32rpx" />
-      <text>刷新位置</text>
-    </view>
   </block>
 
   <!-- 无代取信息 -->

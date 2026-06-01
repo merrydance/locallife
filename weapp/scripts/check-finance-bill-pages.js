@@ -92,7 +92,7 @@ requireContains('miniprogram/pages/operator/finance/bills/index.ts', 'onConfirmR
 requireContains('miniprogram/pages/operator/finance/bills/index.ts', 'onUseQuickRange')
 requireContains('miniprogram/pages/operator/finance/bills/index.ts', 'validateFinanceDateRange')
 requireContains('miniprogram/pages/operator/finance/bills/index.ts', '佣金账单最多选择365天')
-requireContains('miniprogram/services/operator-finance.ts', 'buildOperatorCommissionBillMonthRange')
+requireContains('miniprogram/pages/operator/_services/operator-finance.ts', 'buildOperatorCommissionBillMonthRange')
 
 requireContains('miniprogram/pages/merchant/finance/bills/index.json', '"t-calendar"')
 requireContains('miniprogram/pages/merchant/finance/bills/index.wxml', 'type="range"')
@@ -104,14 +104,14 @@ requireContains('miniprogram/pages/merchant/finance/bills/index.ts', 'onUseQuick
 requireContains('miniprogram/pages/merchant/finance/bills/index.ts', 'MERCHANT_FINANCE_BILL_MAX_RANGE_DAYS')
 requireContains('miniprogram/pages/merchant/finance/bills/index.ts', '订单流水最多选择90天')
 requireContains('miniprogram/pages/merchant/finance/bills/index.ts', 'loadMerchantFinanceBillPage')
-requireContains('miniprogram/services/merchant-finance-workflow.ts', 'getMerchantFinanceOverview')
-requireContains('miniprogram/services/merchant-finance-workflow.ts', 'loadMerchantFinanceBillPage')
-requireContains('miniprogram/services/merchant-finance-workflow.ts', 'settleMerchantFinanceRequest')
-requireContains('miniprogram/services/merchant-finance-workflow.ts', 'summaryErrorMessage')
-requireContains('miniprogram/services/merchant-finance-workflow.ts', 'MERCHANT_FINANCE_BILL_MAX_RANGE_DAYS = 90')
-requireContains('miniprogram/services/merchant-finance-workflow.ts', 'MERCHANT_FINANCE_SETTLEMENT_MAX_RANGE_DAYS = 365')
+requireContains('miniprogram/pages/merchant/_services/merchant-finance-workflow.ts', 'getMerchantFinanceOverview')
+requireContains('miniprogram/pages/merchant/_services/merchant-finance-workflow.ts', 'loadMerchantFinanceBillPage')
+requireContains('miniprogram/pages/merchant/_services/merchant-finance-workflow.ts', 'settleMerchantFinanceRequest')
+requireContains('miniprogram/pages/merchant/_services/merchant-finance-workflow.ts', 'summaryErrorMessage')
+requireContains('miniprogram/pages/merchant/_services/merchant-finance-workflow.ts', 'MERCHANT_FINANCE_BILL_MAX_RANGE_DAYS = 90')
+requireContains('miniprogram/pages/merchant/_services/merchant-finance-workflow.ts', 'MERCHANT_FINANCE_SETTLEMENT_MAX_RANGE_DAYS = 365')
 requireNotContains(
-  'miniprogram/services/merchant-finance-workflow.ts',
+  'miniprogram/pages/merchant/_services/merchant-finance-workflow.ts',
   'Promise.all([\n    getMerchantFinanceOverview(range),\n    listMerchantFinanceOrders'
 )
 requireContains('miniprogram/pages/merchant/finance/settlements/index.json', '"t-calendar"')
@@ -126,23 +126,23 @@ requireContains('miniprogram/pages/merchant/finance/settlements/index.ts', '结�
 requireContains('miniprogram/pages/merchant/finance/settlements/index.ts', 'loadMerchantFinanceSettlementPage')
 
 requireAnyContains(
-  ['miniprogram/pages/platform/dashboard/dashboard.ts', 'miniprogram/services/platform-dashboard-view.ts'],
+  ['miniprogram/pages/platform/dashboard/dashboard.ts', 'miniprogram/pages/platform/_services/platform-dashboard-view.ts'],
   'reconciliation',
   'platform dashboard entry surface'
 )
 requireAnyContains(
-  ['miniprogram/pages/platform/dashboard/dashboard.ts', 'miniprogram/services/platform-dashboard-view.ts'],
+  ['miniprogram/pages/platform/dashboard/dashboard.ts', 'miniprogram/pages/platform/_services/platform-dashboard-view.ts'],
   '/pages/platform/finance/reconciliation/index',
   'platform dashboard entry surface'
 )
 
-requireContains('miniprogram/api/platform-dashboard.ts', 'getProfitSharingReconciliation')
-requireContains('miniprogram/api/platform-dashboard.ts', 'getProfitSharingDetails')
-requireContains('miniprogram/api/platform-dashboard.ts', 'getProfitSharingSla')
-requireContains('miniprogram/api/platform-dashboard.ts', 'getBaofuDailyReconciliation')
+requireContains('miniprogram/pages/platform/_api/platform-dashboard.ts', 'getProfitSharingReconciliation')
+requireContains('miniprogram/pages/platform/_api/platform-dashboard.ts', 'getProfitSharingDetails')
+requireContains('miniprogram/pages/platform/_api/platform-dashboard.ts', 'getProfitSharingSla')
+requireContains('miniprogram/pages/platform/_api/platform-dashboard.ts', 'getBaofuDailyReconciliation')
 
-requireContains('miniprogram/services/operator-finance.ts', 'loadOperatorCommissionBillPage')
-requireContains('miniprogram/services/platform-finance-reconciliation.ts', 'loadPlatformFinanceReconciliationPage')
+requireContains('miniprogram/pages/operator/_services/operator-finance.ts', 'loadOperatorCommissionBillPage')
+requireContains('miniprogram/pages/platform/_services/platform-finance-reconciliation.ts', 'loadPlatformFinanceReconciliationPage')
 
 requireContains('miniprogram/pages/platform/finance/reconciliation/index.json', '"t-calendar"')
 requireContains('miniprogram/pages/platform/finance/reconciliation/index.wxml', 'type="range"')
@@ -156,13 +156,13 @@ requireContains('miniprogram/pages/platform/finance/reconciliation/index.wxml', 
 requireContains('miniprogram/pages/platform/finance/reconciliation/index.wxml', 'summary-card')
 requireContains('miniprogram/pages/platform/finance/reconciliation/index.wxml', 'view.detailRows')
 requireContains('miniprogram/pages/platform/finance/reconciliation/index.wxml', '分账明细')
-requireContains('miniprogram/services/platform-finance-reconciliation.ts', 'summary')
-requireContains('miniprogram/services/platform-finance-reconciliation.ts', 'merchantFlowText')
-requireContains('miniprogram/services/platform-finance-reconciliation.ts', 'riderFlowText')
-requireContains('miniprogram/services/platform-finance-reconciliation.ts', 'merchantShareText')
-requireContains('miniprogram/services/platform-finance-reconciliation.ts', 'riderShareText')
-requireContains('miniprogram/services/platform-finance-reconciliation.ts', 'platformCommissionText')
-requireContains('miniprogram/services/platform-finance-reconciliation.ts', 'buildProfitSharingDetailRows')
+requireContains('miniprogram/pages/platform/_services/platform-finance-reconciliation.ts', 'summary')
+requireContains('miniprogram/pages/platform/_services/platform-finance-reconciliation.ts', 'merchantFlowText')
+requireContains('miniprogram/pages/platform/_services/platform-finance-reconciliation.ts', 'riderFlowText')
+requireContains('miniprogram/pages/platform/_services/platform-finance-reconciliation.ts', 'merchantShareText')
+requireContains('miniprogram/pages/platform/_services/platform-finance-reconciliation.ts', 'riderShareText')
+requireContains('miniprogram/pages/platform/_services/platform-finance-reconciliation.ts', 'platformCommissionText')
+requireContains('miniprogram/pages/platform/_services/platform-finance-reconciliation.ts', 'buildProfitSharingDetailRows')
 requireNotContains('miniprogram/pages/platform/finance/reconciliation/index.wxml', '可选择区间日期的日历')
 requireNotContains('miniprogram/pages/platform/finance/reconciliation/index.wxml', '分账状态汇总')
 requireNotContains('miniprogram/pages/platform/finance/reconciliation/index.wxml', '日对账明细')
@@ -175,13 +175,13 @@ requireNotContains('miniprogram/pages/platform/finance/reconciliation/index.wxml
 requireNotContains('miniprogram/pages/platform/finance/reconciliation/index.wxml', 'bind:tap="onSummaryCardTap"')
 requireNotContains('miniprogram/pages/platform/finance/reconciliation/index.wxml', 'providerText')
 requireNotContains('miniprogram/pages/platform/finance/reconciliation/index.ts', 'onSummaryCardTap')
-requireNotContains('miniprogram/services/platform-finance-reconciliation.ts', 'withdrawSucceededText')
-requireNotContains('miniprogram/services/platform-finance-reconciliation.ts', 'currentAvailableAmountText')
-requireNotContains('miniprogram/services/platform-finance-reconciliation.ts', 'providerText')
-requireNotContains('miniprogram/services/platform-finance-reconciliation.ts', 'detailTarget')
-requireNotContains('miniprogram/services/platform-finance-reconciliation.ts', 'getProfitSharingSla')
-requireNotContains('miniprogram/services/platform-finance-reconciliation.ts', 'getBaofuDailyReconciliation')
-requireNotContains('miniprogram/services/platform-finance-reconciliation.ts', 'getBaofuWithdrawalBalance')
+requireNotContains('miniprogram/pages/platform/_services/platform-finance-reconciliation.ts', 'withdrawSucceededText')
+requireNotContains('miniprogram/pages/platform/_services/platform-finance-reconciliation.ts', 'currentAvailableAmountText')
+requireNotContains('miniprogram/pages/platform/_services/platform-finance-reconciliation.ts', 'providerText')
+requireNotContains('miniprogram/pages/platform/_services/platform-finance-reconciliation.ts', 'detailTarget')
+requireNotContains('miniprogram/pages/platform/_services/platform-finance-reconciliation.ts', 'getProfitSharingSla')
+requireNotContains('miniprogram/pages/platform/_services/platform-finance-reconciliation.ts', 'getBaofuDailyReconciliation')
+requireNotContains('miniprogram/pages/platform/_services/platform-finance-reconciliation.ts', 'getBaofuWithdrawalBalance')
 
 requireContains('miniprogram/pages/platform/finance/withdrawals/index.ts', 'buildBaofuWithdrawalLoadedSummaryView')
 requireContains('miniprogram/pages/platform/finance/withdrawals/index.wxml', '当前列表小计')
@@ -203,13 +203,13 @@ requireContains('miniprogram/pages/platform/finance/withdrawals/create/index.wxm
 requireContains('miniprogram/pages/platform/finance/withdrawals/create/index.wxml', '单笔最高提现')
 requireContains('miniprogram/pages/operator/finance/withdrawals/create/index.wxml', 'label="提现金额"')
 requireContains('miniprogram/pages/operator/finance/withdrawals/create/index.wxml', '单笔最高提现')
-requireContains('miniprogram/services/baofu-withdrawal-workflow.ts', 'buildBaofuWithdrawalLoadedSummaryView')
+requireContains('miniprogram/pages/merchant/_main_shared/services/baofu-withdrawal-workflow.ts', 'buildBaofuWithdrawalLoadedSummaryView')
 
 async function runMerchantFinanceWorkflowChecks() {
   let overviewShouldReject = false
   let ordersShouldReject = false
-  const workflow = loadTsModule('miniprogram/services/merchant-finance-workflow.ts', (id) => {
-    if (id === '../api/merchant-finance') {
+  const workflow = loadTsModule('miniprogram/pages/merchant/_services/merchant-finance-workflow.ts', (id) => {
+    if (id === '../_main_shared/api/merchant-finance') {
       return {
         getMerchantFinanceOrderStatusView() {
           return { text: '已完成', theme: 'success' }
@@ -260,15 +260,15 @@ async function runMerchantFinanceWorkflowChecks() {
         }
       }
     }
-    if (id === '../utils/user-facing') {
+    if (id === '../../../utils/user-facing') {
       return {
         getErrorUserMessage(_error, fallback) {
           return fallback
         }
       }
     }
-    if (id === '../utils/finance-date-range') {
-      return loadTsModule('miniprogram/utils/finance-date-range.ts')
+    if (id === '../_main_shared/utils/finance-date-range') {
+      return loadTsModule('miniprogram/pages/merchant/_main_shared/utils/finance-date-range.ts')
     }
     return {}
   })

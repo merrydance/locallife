@@ -5,7 +5,7 @@ const ts = require('typescript')
 const vm = require('vm')
 
 const ROOT = path.join(__dirname, '..')
-const sourcePath = path.join(ROOT, 'miniprogram', 'utils', 'order-fee-breakdown-view.ts')
+const sourcePath = path.join(ROOT, 'miniprogram', 'pages', 'orders', '_main_shared', 'utils', 'order-fee-breakdown-view.ts')
 
 function read(relativePath) {
   return fs.readFileSync(path.join(ROOT, relativePath), 'utf8')
@@ -81,9 +81,9 @@ assert.ok(Array.isArray(emptyView.settlement_groups))
 assert.strictEqual(emptyView.settlement_groups.length, 0)
 
 const customerOrderApi = read('miniprogram/api/order.ts')
-const customerOrderAdapter = read('miniprogram/adapters/order.ts')
+const customerOrderAdapter = read('miniprogram/pages/orders/_adapters/order.ts')
 const customerOrderDetailWxml = read('miniprogram/pages/orders/detail/index.wxml')
-const takeoutConfirmSupport = read('miniprogram/utils/takeout-order-confirm-support.ts')
+const takeoutConfirmSupport = read('miniprogram/pages/takeout/order-confirm/_utils/takeout-order-confirm-support.ts')
 const takeoutConfirmWxml = read('miniprogram/pages/takeout/order-confirm/index.wxml')
 
 assert.match(customerOrderApi, /export interface OrderFeeBreakdown\s*\{/, 'customer order API must expose fee breakdown type')

@@ -204,7 +204,7 @@ export function pollRefundTracking(page: OrderCancelRefundPageLike) {
         attempts
       }, 'Detail.pollRefundTracking')
       page.setData({
-        cancelRefundHint: '退款结果还在同步中，请稍后在退款详情页刷新查看。'
+        cancelRefundHint: '退款结果还在同步中，请稍后在退款详情页查看。'
       })
     }
   }, REFUND_TRACK_POLL_INTERVAL_MS)

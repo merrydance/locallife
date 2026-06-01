@@ -7,14 +7,14 @@
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty description="{{initialErrorMessage || '索赔与申诉加载失败，请重试'}}" />
-    <t-button theme="primary" bindtap="onRetry">重新加载</t-button>
+    <t-button theme="primary" bindtap="onRetry">重试</t-button>
   </view>
 
   <block wx:else>
     <view wx:if="{{refreshErrorMessage}}" class="sync-state">
       <t-icon name="error-circle" size="32rpx" />
       <text class="sync-state__text">{{refreshErrorMessage}}</text>
-      <t-button size="small" theme="primary" variant="text" icon="refresh" bindtap="onRetryRefresh">重试</t-button>
+      <t-button size="small" theme="primary" variant="text" bindtap="onRetryRefresh">重试</t-button>
     </view>
 
     <view class="summary-grid">
@@ -50,7 +50,7 @@
       </t-tabs>
 
       <view wx:if="{{loading && !claims.length}}" class="state-block state-block-compact">
-        <t-loading theme="circular" size="40rpx" text="刷新索赔中..." vertical />
+        <t-loading theme="circular" size="40rpx" text="同步索赔中..." vertical />
       </view>
 
       <view wx:elif="{{!loading && claims.length === 0}}" class="empty-wrap">
@@ -99,7 +99,7 @@
 
     <block wx:elif="{{sectionTab === 'appeals'}}">
       <view wx:if="{{loading && !appeals.length}}" class="state-block state-block-compact">
-        <t-loading theme="circular" size="40rpx" text="刷新申诉中..." vertical />
+        <t-loading theme="circular" size="40rpx" text="同步申诉中..." vertical />
       </view>
 
       <view wx:elif="{{!loading && appeals.length === 0}}" class="empty-wrap">

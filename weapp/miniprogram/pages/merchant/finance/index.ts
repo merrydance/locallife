@@ -148,7 +148,7 @@ Page({
     void this.loadFinance({ force: true })
   },
 
-  onManualRefresh() {
+  onRetrySync() {
     void this.loadFinance({ silent: this.data.lastLoadedAt > 0, force: true })
   }
 })

@@ -274,12 +274,12 @@ function buildRiderDepositWithdrawalSyncFailedView(
 
   return {
     title: '提现状态同步失败',
-    description: '本次提现已经提交，但当前无法确认最新结果。请稍后刷新状态或查看账单明细。',
+    description: '本次提现已经提交，但当前无法确认最新结果。系统会继续同步，也可稍后查看账单明细。',
     amountDisplay: formatFenToYuan(pendingWithdrawal.acceptedAmount),
     statusText: '同步失败',
     tagTheme: 'danger',
     panelTheme: 'error',
-    feedbackMessage: '提现状态同步失败，请稍后刷新状态或查看账单明细。',
+    feedbackMessage: '提现状态同步失败，系统会继续同步，也可稍后查看账单明细。',
     feedbackTheme: 'warning',
     isTerminal: false,
     shouldRefreshFinance: false,
@@ -315,12 +315,12 @@ export function buildRiderDepositWithdrawalStatusView(
     case 'failed':
       return {
         title: '提现未完成',
-        description: backendMessage || '本次提现未成功，资金会回到可用押金，请刷新后再决定是否重新申请。',
+        description: backendMessage || '本次提现未成功，资金会回到可用押金，请稍后查看账户后再决定是否重新申请。',
         amountDisplay,
         statusText,
         tagTheme: 'danger',
         panelTheme: 'error',
-        feedbackMessage: '提现未完成，资金会回到可用押金。请刷新账户后再重新申请。',
+        feedbackMessage: '提现未完成，资金会回到可用押金，请稍后查看账户后再重新申请。',
         feedbackTheme: 'warning',
         isTerminal: true,
         shouldRefreshFinance: true,
@@ -348,7 +348,7 @@ export function buildRiderDepositWithdrawalStatusView(
         statusText,
         tagTheme: 'primary',
         panelTheme: 'warning',
-        feedbackMessage: '提现正在处理中，请稍后刷新查看到账结果。',
+        feedbackMessage: '提现正在处理中，系统会自动同步到账结果。',
         feedbackTheme: 'warning',
         isTerminal: false,
         shouldRefreshFinance: false,
@@ -371,12 +371,12 @@ export function buildRiderDepositWithdrawalStatusView(
     default:
       return {
         title: '提现状态同步中',
-        description: backendMessage || '当前结果还在同步，请稍后刷新；未确认前请以账单明细为准。',
+        description: backendMessage || '当前结果还在同步，未确认前请以账单明细为准。',
         amountDisplay,
         statusText,
         tagTheme: 'default',
         panelTheme: 'warning',
-        feedbackMessage: '提现状态仍在同步，请稍后刷新查看结果。',
+        feedbackMessage: '提现状态仍在同步，系统会自动同步结果。',
         feedbackTheme: 'warning',
         isTerminal: false,
         shouldRefreshFinance: false,

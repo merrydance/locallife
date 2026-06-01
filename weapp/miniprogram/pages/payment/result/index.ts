@@ -4,6 +4,8 @@ import { buildPaymentResultView, normalizePaymentWorkflowStatus, PaymentResultAc
 import { getStableBarHeights } from '../../../utils/responsive'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 
+const PAYMENT_RESULT_POLL_INTERVAL_MS = 3000
+
 function formatAmount(amountFen?: number): string {
   return typeof amountFen === 'number' ? (amountFen / 100).toFixed(2) : ''
 }
@@ -26,8 +28,8 @@ Page({
     title: '',
     description: '',
     theme: 'warning',
-    primaryButtonText: '刷新状态',
-    primaryAction: 'refresh_status' as PaymentResultAction,
+    primaryButtonText: '查看详情',
+    primaryAction: 'detail_page' as PaymentResultAction,
     secondaryButtonText: '查看详情',
     secondaryAction: 'detail_page' as PaymentResultAction,
     status: 'pending_confirmation' as PaymentWorkflowStatus,
@@ -42,6 +44,8 @@ Page({
     waitingForTerminal: false,
     showSummary: false
   },
+
+  _pollTimer: null as number | null,
 
   onLoad(options: {
     status?: string
@@ -72,9 +76,24 @@ Page({
 
     if (status === 'pending_confirmation') {
       this.applyPendingConfirmationState(paymentOrderId)
+      this.startPaymentStatusPolling()
     } else if (isPaymentWorkflowPaid(status)) {
       void this.closeDineInCheckoutSessionIfNeeded()
     }
+  },
+
+  onHide() {
+    this.stopPaymentStatusPolling()
+  },
+
+  onShow() {
+    if (this.data.status === 'pending_confirmation') {
+      this.startPaymentStatusPolling()
+    }
+  },
+
+  onUnload() {
+    this.stopPaymentStatusPolling()
   },
 
   applyPendingConfirmationState(paymentOrderId: number) {
@@ -82,7 +101,7 @@ Page({
     this.setData({
       status: paymentOrderId ? 'pending_confirmation' : 'pay_params_missing',
       statusNote: paymentOrderId
-        ? '支付结果还在同步中，请稍后刷新或返回订单详情查看。'
+        ? '支付结果还在同步中，系统会自动确认，也可返回订单详情查看。'
         : '缺少可查询的支付单，请返回详情页查看最新状态。',
       waitingForTerminal: false,
       refreshing: false,
@@ -93,7 +112,7 @@ Page({
   async refreshPaymentStatus(silent: boolean = false) {
     if (!this.data.paymentOrderId || this.data.refreshing) {
       if (!this.data.paymentOrderId) {
-        this.setData({ statusNote: '暂无可刷新支付单，请返回详情页查看最新状态。' })
+        this.setData({ statusNote: '暂无可查询支付单，请返回详情页查看最新状态。' })
       }
       return
     }
@@ -115,14 +134,35 @@ Page({
         ...view
       })
       if (isPaymentWorkflowPaid(result.status)) {
+        this.stopPaymentStatusPolling()
         void this.closeDineInCheckoutSessionIfNeeded()
+      } else if (result.status !== 'pending_confirmation') {
+        this.stopPaymentStatusPolling()
       }
     } catch (error) {
       this.setData({
-        statusNote: getErrorUserMessage(error, '支付结果还在同步中，请稍后刷新或返回订单详情查看。'),
+        statusNote: getErrorUserMessage(error, '支付结果还在同步中，系统会自动确认，也可返回订单详情查看。'),
         refreshing: false
       })
     }
+  },
+
+  startPaymentStatusPolling() {
+    if (!this.data.paymentOrderId || this._pollTimer !== null) {
+      return
+    }
+    this._pollTimer = setInterval(() => {
+      void this.refreshPaymentStatus(true)
+    }, PAYMENT_RESULT_POLL_INTERVAL_MS) as unknown as number
+    void this.refreshPaymentStatus(true)
+  },
+
+  stopPaymentStatusPolling() {
+    if (this._pollTimer === null) {
+      return
+    }
+    clearInterval(this._pollTimer)
+    this._pollTimer = null
   },
 
   async closeDineInCheckoutSessionIfNeeded() {
@@ -135,7 +175,7 @@ Page({
       })
     } catch (error) {
       this.setData({
-        statusNote: getErrorUserMessage(error, '支付已完成，桌台状态正在同步，请稍后刷新。')
+        statusNote: getErrorUserMessage(error, '支付已完成，桌台状态正在同步，请稍后查看。')
       })
     } finally {
       dineInCheckoutClosing = false
@@ -151,11 +191,6 @@ Page({
   },
 
   applyAction(action: PaymentResultAction) {
-    if (action === 'refresh_status') {
-      this.refreshPaymentStatus(false)
-      return
-    }
-
     if (action === 'list_page') {
       if (isReservationPaymentBusinessType(this.data.businessType)) {
         wx.redirectTo({ url: buildReservationListUrl(this.data.returnStatus) })

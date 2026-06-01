@@ -276,17 +276,6 @@ button::after {
   margin-top: 4rpx;
 }
 
-/* 刷新按钮 */
-.refresh-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8rpx;
-  padding: 24rpx;
-  color: #1d63ff;
-  font-size: 26rpx;
-}
-
 .empty {
   padding-top: 200rpx;
 }

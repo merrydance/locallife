@@ -34,7 +34,7 @@ Page({
       getAccount: getRiderBaofuSettlementAccount,
       logTag: 'rider-settlement-account-submit',
       loadErrorFallback: '开户资料加载失败，请稍后重试',
-      refreshErrorFallback: '开户状态刷新失败，请稍后重试'
+      refreshErrorFallback: '开户状态同步失败，请稍后重试'
     })
   ],
 

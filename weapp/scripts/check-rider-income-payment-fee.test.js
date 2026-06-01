@@ -11,7 +11,7 @@ function read(relativePath) {
 }
 
 function loadRiderIncomeModule() {
-  const sourcePath = path.join(ROOT, 'miniprogram', 'services', 'rider-income.ts')
+  const sourcePath = path.join(ROOT, 'miniprogram', 'pages', 'rider', '_services', 'rider-income.ts')
   const source = fs.readFileSync(sourcePath, 'utf8')
   const compiled = ts.transpileModule(source, {
     compilerOptions: {
@@ -24,19 +24,19 @@ function loadRiderIncomeModule() {
     exports: {},
     module: { exports: {} },
     require(modulePath) {
-      if (modulePath === '../utils/logger') {
+      if (modulePath === '../../../utils/logger') {
         return { logger: { warn() {}, error() {} } }
       }
-      if (modulePath === '../api/rider-income') {
+      if (modulePath === '../_api/rider-income') {
         return { riderIncomeApi: {} }
       }
-      if (modulePath === '../api/baofu-withdrawal') {
+      if (modulePath === '../_main_shared/api/baofu-withdrawal') {
         return { getBaofuWithdrawalBalance: async () => null }
       }
-      if (modulePath === '../api/rider') {
+      if (modulePath === '../_main_shared/api/rider') {
         return { default: { getStatus: async () => ({}) } }
       }
-      if (modulePath === './baofu-withdrawal-workflow') {
+      if (modulePath === '../_main_shared/services/baofu-withdrawal-workflow') {
         return {
           buildBaofuWithdrawalBalanceView() {
             return {
@@ -60,8 +60,8 @@ function loadRiderIncomeModule() {
   return sandbox.module.exports
 }
 
-const riderIncomeApi = read('miniprogram/api/rider-income.ts')
-const riderIncomeService = read('miniprogram/services/rider-income.ts')
+const riderIncomeApi = read('miniprogram/pages/rider/_api/rider-income.ts')
+const riderIncomeService = read('miniprogram/pages/rider/_services/rider-income.ts')
 const riderIncomeWxml = read('miniprogram/pages/rider/income/index.wxml')
 
 assert.match(riderIncomeApi, /rider_payment_fee\s*:\s*number/, 'rider income ledger API type must expose rider_payment_fee')

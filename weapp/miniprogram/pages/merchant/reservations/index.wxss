@@ -81,25 +81,6 @@
   color: var(--td-text-color-primary);
 }
 
-.date-filter-actions {
-  display: flex;
-  align-items: stretch;
-}
-
-.date-filter-divider {
-  width: 1rpx;
-  margin: 20rpx 0;
-  background: var(--td-component-border);
-}
-
-.date-filter-icon-button {
-  width: 96rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--td-text-color-secondary);
-}
-
 .result-bar {
   display: flex;
   align-items: center;

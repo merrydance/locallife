@@ -229,7 +229,7 @@ Page({
     }
     if (this.data.hasChanges) {
       wx.stopPullDownRefresh()
-      wx.showToast({ title: '当前有未保存修改，请先保存后再刷新', icon: 'none' })
+      wx.showToast({ title: '当前有未保存修改，请先保存后再同步', icon: 'none' })
       return
     }
     this.loadBusinessHours(false, true)

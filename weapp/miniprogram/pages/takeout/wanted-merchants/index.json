@@ -1,12 +1,13 @@
 {
   "navigationBarTitleText": "想吃榜",
   "navigationStyle": "custom",
+  "enablePullDownRefresh": true,
   "usingComponents": {
     "custom-navbar": "/components/custom-navbar/index",
     "t-button": "tdesign-miniprogram/button/button",
     "t-empty": "tdesign-miniprogram/empty/empty",
     "t-loading": "tdesign-miniprogram/loading/loading",
-    "t-search": "tdesign-miniprogram/search/search",
+    "t-input": "tdesign-miniprogram/input/input",
     "t-icon": "tdesign-miniprogram/icon/icon",
     "t-tag": "tdesign-miniprogram/tag/tag"
   }

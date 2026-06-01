@@ -75,12 +75,12 @@ export function toFriendlyMessage(error: unknown, fallback: string) {
   if (!text) return fallback
   if (/[\u4e00-\u9fa5]/.test(text)) return text
   const lower = text.toLowerCase()
-  if (lower.includes('sig') && lower.includes('required')) return '二维码签名缺失，请刷新二维码后重试'
-  if ((lower.includes('ts') || lower.includes('timestamp')) && lower.includes('required')) return '二维码时间戳缺失，请刷新二维码后重试'
-  if (lower.includes('signature') || lower.includes('sig') || lower.includes('mismatch')) return '二维码校验失败，请刷新二维码后重试'
-  if (lower.includes('expired')) return '二维码已过期，请刷新二维码'
-  if (lower.includes('session not found') || lower.includes('not found')) return '登录码不存在或已失效，请刷新二维码'
-  if (lower.includes('already consumed')) return '该登录码已被使用，请刷新二维码'
+  if (lower.includes('sig') && lower.includes('required')) return '二维码签名缺失，请重新生成二维码后重试'
+  if ((lower.includes('ts') || lower.includes('timestamp')) && lower.includes('required')) return '二维码时间戳缺失，请重新生成二维码后重试'
+  if (lower.includes('signature') || lower.includes('sig') || lower.includes('mismatch')) return '二维码校验失败，请重新生成二维码后重试'
+  if (lower.includes('expired')) return '二维码已过期，请重新生成二维码'
+  if (lower.includes('session not found') || lower.includes('not found')) return '登录码不存在或已失效，请重新生成二维码'
+  if (lower.includes('already consumed')) return '该登录码已被使用，请重新生成二维码'
   if (lower.includes('not confirmed')) return '请先在小程序确认登录'
   if (lower.includes('merchant account') || lower.includes('merchant')) return '当前账号暂无商户权限'
   if (lower.includes('too many') || lower.includes('429')) return '操作太频繁，请稍后再试'

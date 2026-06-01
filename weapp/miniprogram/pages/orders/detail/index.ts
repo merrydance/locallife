@@ -187,7 +187,7 @@ Page({
       } else {
         this.setData({
           loading: false,
-          refreshErrorMessage: `${getErrorUserMessage(error, '刷新失败，请稍后重试')}，当前已保留上次结果`
+          refreshErrorMessage: `${getErrorUserMessage(error, '同步失败，请稍后重试')}，当前已保留上次结果`
         })
       }
     }
@@ -397,7 +397,7 @@ Page({
     } catch (error) {
       logger.error('支付失败', error, 'Detail.onPayOrder')
       await this.loadOrderDetail()
-      wx.showToast({ title: '支付结果确认中，请稍后刷新', icon: 'none' })
+      wx.showToast({ title: '支付结果确认中，请稍后查看', icon: 'none' })
     } finally {
       this.setData({ paying: false })
     }

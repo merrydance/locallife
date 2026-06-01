@@ -16,49 +16,93 @@
   z-index: var(--z-index-sticky);
 }
 
-.wanted-hero-section {
+.activity-carousel-section {
   padding: 0 var(--spacer-md) var(--spacer-sm);
 }
 
-.wanted-hero {
-  min-height: 136rpx;
+.activity-carousel {
+  height: 176rpx;
+  border-radius: 20rpx;
+  overflow: hidden;
+}
+
+.activity-card {
+  position: relative;
+  height: 176rpx;
   box-sizing: border-box;
-  border-radius: var(--radius-md);
-  padding: 24rpx;
-  background: linear-gradient(135deg, #fff7ed 0%, #fff5f3 54%, #eef8f5 100%);
+  border-radius: 20rpx;
+  padding: 22rpx 22rpx 22rpx 26rpx;
+  background: #ffffff;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  box-shadow: 0 4rpx 18rpx rgba(214, 91, 49, 0.12);
+  gap: 24rpx;
+  overflow: hidden;
+  box-shadow: 0 8rpx 26rpx rgba(31, 35, 41, 0.08);
 }
 
-.wanted-hero-main {
+.activity-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 8rpx;
+  height: 100%;
+  background: linear-gradient(180deg, var(--td-brand-color) 0%, #00897b 100%);
+}
+
+.activity-card-badge {
+  position: absolute;
+  left: 26rpx;
+  top: 18rpx;
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  padding: 6rpx 12rpx;
+  border-radius: var(--radius-round);
+  background: var(--td-brand-color-light);
+  color: var(--td-brand-color);
+  font-size: 22rpx;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.activity-card-main {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-width: 0;
+  padding-top: 42rpx;
+  z-index: 1;
 }
 
-.wanted-hero-title {
-  font-size: 34rpx;
+.activity-card-title {
+  font-size: 36rpx;
   line-height: 1.25;
-  color: #2f1f18;
+  color: var(--td-text-color-primary);
   font-weight: 700;
 }
 
-.wanted-hero-subtitle {
+.activity-card-subtitle {
   margin-top: 8rpx;
-  font-size: 24rpx;
-  color: #7c5042;
+  font-size: 25rpx;
+  color: var(--td-text-color-secondary);
 }
 
-.wanted-hero-action {
+.activity-card-action {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 4rpx;
+  gap: 2rpx;
   flex-shrink: 0;
-  color: var(--td-brand-color);
+  min-height: 56rpx;
+  padding: 0 18rpx 0 22rpx;
+  border-radius: var(--radius-round);
+  background: var(--td-brand-color);
+  color: #fff;
   font-size: 26rpx;
   font-weight: 600;
+  z-index: 1;
 }
 
 /* ========== 内容区域 ==========*/

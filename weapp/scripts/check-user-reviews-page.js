@@ -7,7 +7,7 @@ const wxmlPath = path.join(pageDir, 'index.wxml')
 const wxssPath = path.join(pageDir, 'index.wxss')
 const tsPath = path.join(pageDir, 'index.ts')
 const jsonPath = path.join(pageDir, 'index.json')
-const reviewApiPath = path.join(repoRoot, 'miniprogram/api/review.ts')
+const reviewApiPath = path.join(repoRoot, 'miniprogram/pages/user_center/reviews/_main_shared/api/review.ts')
 
 function read(filePath) {
   return fs.readFileSync(filePath, 'utf8')

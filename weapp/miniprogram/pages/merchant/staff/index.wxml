@@ -20,7 +20,7 @@
 
     <view wx:elif="{{initialError}}" class="state-block">
       <t-empty description="{{initialErrorMessage || '员工列表加载失败，请重试'}}" />
-      <t-button theme="primary" bindtap="onRetry">重新加载</t-button>
+      <t-button theme="primary" bindtap="onRetry">重试</t-button>
     </view>
 
     <block wx:else>
@@ -46,7 +46,7 @@
       </view>
 
       <view wx:if="{{refreshErrorMessage}}" class="refresh-action-wrap">
-        <t-button size="small" variant="text" theme="primary" bind:tap="onRetryRefresh">重新同步</t-button>
+        <t-button size="small" variant="text" theme="primary" bind:tap="onRetryRefresh">重试</t-button>
       </view>
     </view>
 

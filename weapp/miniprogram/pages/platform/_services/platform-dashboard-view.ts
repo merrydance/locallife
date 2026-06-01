@@ -312,7 +312,7 @@ function buildOperationsStatus(realtimeData: RealtimeDashboardData | null, alert
 
     return {
         summary: `近24h ${formatInteger(orders24h)} 单，履约中 ${formatInteger(activeOrders)} 单`,
-        syncText: '自动刷新',
+        syncText: '自动同步',
         healthText: hasRisk ? '有待处理事项' : '运行平稳',
         healthTheme: hasRisk ? 'warning' : 'success'
     }

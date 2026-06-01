@@ -1,30 +1,62 @@
 <custom-navbar title="想吃榜" showBack="{{true}}" />
 
-<view class="wanted-page" style="padding-top: calc({{navBarHeight}}px + var(--spacer-sm));">
-  <view class="wanted-header">
-    <view class="wanted-title-row">
-      <text class="wanted-title">你想吃谁家外卖？</text>
-      <t-tag wx:if="{{regionName}}" theme="primary" variant="light">{{regionName}}</t-tag>
+<view class="wanted-page page-shell page-shell--with-nav page-shell--bottom-safe" style="--page-shell-nav-height: {{navBarHeight}}px;">
+  <view class="poster-section">
+    <view class="poster-kicker">
+      <view class="poster-line"></view>
+      <text>LOCAL LIFE RANKING</text>
+      <view class="poster-line"></view>
     </view>
-    <text class="wanted-subtitle">告诉我们，平台优先邀请他入驻</text>
+    <text class="poster-title">想吃榜</text>
+    <text class="poster-subtitle">你想吃谁家外卖？</text>
+    <view class="poster-meta-row">
+      <view class="poster-meta-pill">
+        <t-icon name="location" size="24rpx" />
+        <text>{{regionName || '当前区县'}}</text>
+      </view>
+      <view class="poster-meta-pill">
+        <t-icon name="hotspot-wave" size="24rpx" />
+        <text>{{total}} 家上榜</text>
+      </view>
+    </view>
   </view>
 
   <view class="submit-panel">
-    <t-search
-      model:value="{{inputName}}"
-      placeholder="店名、档口名、品牌名"
-      disabled="{{submitting}}"
-      bind:change="onInputChange"
-      bind:submit="onSubmitManual"
-      bind:clear="onClearInput"
-    />
-    <view class="submit-actions">
-      <t-button theme="primary" size="small" shape="round" loading="{{submitting}}" bindtap="onSubmitManual">提交店名</t-button>
-      <t-button size="small" shape="round" bindtap="onPickFromMap">
-        <t-icon name="location" size="28rpx" />
-        <text>地图选择</text>
-      </t-button>
+    <view class="submit-title-row">
+      <text class="submit-title">告诉我们，优先邀请他入驻</text>
+      <t-tag wx:if="{{regionName}}" theme="primary" variant="light">{{regionName}}</t-tag>
     </view>
+    <view class="pick-row">
+      <view class="name-input-wrap">
+        <t-input
+          value="{{inputName}}"
+          placeholder="店名、档口名、品牌名"
+          disabled="{{submitting}}"
+          clearable
+          confirm-type="done"
+          borderless
+          bind:change="onInputChange"
+          bind:enter="onSubmitManual"
+          bind:clear="onClearInput"
+          t-class="name-input"
+          t-class-input="name-input-control"
+        />
+      </view>
+      <view class="map-pick {{submitting ? 'map-pick--disabled' : ''}}" bindtap="onPickFromMap">
+        <t-icon name="map-location" size="30rpx" class="map-pick-icon" />
+        <text>去地图选店</text>
+      </view>
+    </view>
+    <t-button
+      theme="primary"
+      size="large"
+      shape="round"
+      block
+      loading="{{submitting}}"
+      disabled="{{submitting}}"
+      bindtap="onSubmitManual"
+      t-class="submit-button"
+    >提交</t-button>
   </view>
 
   <view wx:if="{{loading}}" class="state-wrap">
@@ -38,10 +70,10 @@
 
   <view wx:else class="leaderboard-section">
     <view class="leaderboard-meta">
-      <text>上榜商户 {{total}} 家</text>
-      <t-button size="extra-small" variant="text" bindtap="onRefresh" loading="{{refreshing}}">
-        <t-icon name="refresh" size="26rpx" />
-      </t-button>
+      <view class="leaderboard-title-block">
+        <text class="leaderboard-title">本区热想榜</text>
+        <text class="leaderboard-subtitle">上榜商户 {{total}} 家</text>
+      </view>
     </view>
 
     <scroll-view
@@ -62,11 +94,17 @@
         id="wanted-{{item.id}}"
         class="rank-row {{item.highlight ? 'rank-row--highlight' : ''}}"
       >
-        <view class="{{item.rankClass}}">{{item.rankLabel}}</view>
+        <view class="{{item.rankClass}}">
+          <text class="rank-badge-caption">{{item.rankCaption}}</text>
+          <text class="rank-badge-number">{{item.rankLabel}}</text>
+        </view>
         <view class="rank-main">
+          <view wx:if="{{item.rank <= 5}}" class="rank-hotline">
+            <t-icon name="hotspot-wave" size="24rpx" />
+            <text>{{item.want_count}} 人想吃</text>
+          </view>
           <view class="rank-name-row">
             <text class="rank-name">{{item.name}}</text>
-            <text class="rank-count">{{item.want_count}} 人想吃</text>
           </view>
           <text wx:if="{{item.address}}" class="rank-address">{{item.address}}</text>
         </view>

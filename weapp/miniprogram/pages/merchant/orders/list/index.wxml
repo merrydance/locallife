@@ -19,7 +19,7 @@
 
   <view wx:elif="{{initialError}}" class="loading-state loading-state-page">
     <t-empty icon="info-circle" description="{{initialErrorMessage || '订单加载失败，请重试'}}" />
-    <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
+    <t-button theme="primary" bind:tap="onRetry">重试</t-button>
   </view>
 
   <block wx:else>
@@ -53,7 +53,7 @@
       <view class="list-section">
         <view wx:if="{{refreshErrorMessage}}" class="section-error-hint">
           <text>{{refreshErrorMessage}}</text>
-          <text class="section-error-action" bindtap="onRetryRefresh">重新同步</text>
+          <text class="section-error-action" bindtap="onRetryRefresh">重试</text>
         </view>
 
         <view wx:if="{{loading && !orders.length}}" class="loading-state">

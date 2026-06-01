@@ -8,6 +8,7 @@ const ALLOWLIST = new Set([
   'weapp/miniprogram/pages/user_center/index.ts',
   'weapp/miniprogram/pages/register/operator/index.ts'
 ])
+const STATUS_OWNER_SEGMENT = /\/_(?:adapters|api|main_shared\/adapters|main_shared\/api|main_shared\/behaviors|main_shared\/services|main_shared\/utils|services|utils)\//
 const BUSINESS_STATUS_LITERALS = new Set([
   'active',
   'approved',
@@ -55,7 +56,7 @@ const BUSINESS_STATUS_LITERALS = new Set([
 
 function main() {
   const changedFiles = getScopedFiles({ roots: SURFACE_ROOTS, extensions: ['.ts', '.js', '.wxml'] })
-    .filter((filePath) => !ALLOWLIST.has(filePath))
+    .filter((filePath) => !ALLOWLIST.has(filePath) && !STATUS_OWNER_SEGMENT.test(filePath))
 
   if (changedFiles.length === 0) {
     console.log(`check-business-status-boundary: no ${getGateScope() === 'changed' ? 'changed' : 'scannable'} Mini Program page/component files detected`)

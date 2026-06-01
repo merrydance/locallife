@@ -83,7 +83,7 @@ Page({
                 })
             } else {
                 this.setData({
-                    refreshErrorMessage: `${getErrorMessage(error, '刷新失败，请稍后重试')}，当前已保留上次结果`
+                    refreshErrorMessage: `${getErrorMessage(error, '同步失败，请稍后重试')}，当前已保留上次结果`
                 })
             }
         }

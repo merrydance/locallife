@@ -95,7 +95,7 @@ export function baofuSettlementStatusBehavior(config: BaofuSettlementStatusConfi
       waitUntilTerminal: true,
       waitTimerVisible: false,
       waitPrimaryAction: 'refresh_status' as BaofuOnboardingWaitAction,
-      waitPrimaryActionText: '刷新状态'
+      waitPrimaryActionText: ''
     },
 
     methods: {
@@ -415,15 +415,15 @@ export function baofuSettlementStatusBehavior(config: BaofuSettlementStatusConfi
           }
           logger.error(`Recover baofu onboarding failed action=recover_pending role=${config.role}`, error, config.logTag)
           this.setData({
-            refreshErrorMessage: '开户进度恢复失败，请稍后刷新。',
+            refreshErrorMessage: '开户进度恢复失败，请稍后重试。',
             waitVisible: true,
             ...buildBaofuOnboardingWaitViewFromText({
               state: 'error',
               title: '恢复失败',
-              description: '开户进度恢复失败，请稍后刷新。',
+              description: '开户进度恢复失败，请稍后重试。',
               theme: 'error',
-              primaryAction: 'refresh_status',
-              primaryActionText: '刷新状态'
+              primaryAction: 'retry',
+              primaryActionText: '重试'
             }),
             waitProgressText: '',
             waitElapsedSeconds: 0,

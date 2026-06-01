@@ -7,7 +7,7 @@
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty description="{{initialErrorMessage || '异议记录加载失败，请重试'}}" />
-    <view class="retry-button" bindtap="onRetry">重新加载</view>
+    <view class="retry-button" bindtap="onRetry">重试</view>
   </view>
 
   <block wx:else>
@@ -41,12 +41,12 @@
 
     <view wx:if="{{refreshErrorMessage}}" class="notice-banner">
       <t-notice-bar theme="error" visible="{{true}}" content="{{refreshErrorMessage}}">
-        <text slot="operation" class="notice-banner-operation" bindtap="onRetryRefresh">重新同步</text>
+        <text slot="operation" class="notice-banner-operation" bindtap="onRetryRefresh">重试</text>
       </t-notice-bar>
     </view>
 
     <view wx:if="{{loading && !filteredAppeals.length}}" class="state-block state-block-compact">
-      <t-loading theme="circular" size="40rpx" text="刷新异议中..." vertical />
+      <t-loading theme="circular" size="40rpx" text="同步异议中..." vertical />
     </view>
 
     <view wx:elif="{{!loading && filteredAppeals.length === 0}}" class="empty-wrap">

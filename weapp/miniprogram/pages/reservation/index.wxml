@@ -71,8 +71,7 @@
           description="当前区域暂无可服务商户"
         />
         <view class="empty-actions">
-          <t-button theme="primary" size="large" block bind:tap="onRetry" shape="round">重新加载</t-button>
-          <t-button size="large" block bind:tap="showFilterPopup" shape="round">调整筛选</t-button>
+          <t-button theme="primary" size="large" block bind:tap="showFilterPopup" shape="round">调整筛选</t-button>
         </view>
         <view class="provider-entry">
           <text bindtap="onMerchantRegister">我是商家</text>

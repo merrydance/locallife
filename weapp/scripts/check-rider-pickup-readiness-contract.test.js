@@ -21,7 +21,7 @@ function loadModule(relativePath, stubs = {}) {
       if (stubs[modulePath]) {
         return stubs[modulePath]
       }
-      if (modulePath === '../api/delivery') {
+      if (modulePath === '../_main_shared/api/delivery') {
         return {}
       }
       throw new Error(`unexpected require: ${modulePath}`)
@@ -38,7 +38,7 @@ function loadModule(relativePath, stubs = {}) {
   return sandbox.module.exports
 }
 
-const { getRiderDeliveryActionState, buildRiderDeliveryActionFailureFeedback } = loadModule('utils/rider-delivery-view.ts')
+const { getRiderDeliveryActionState, buildRiderDeliveryActionFailureFeedback } = loadModule('pages/rider/_utils/rider-delivery-view.ts')
 
 const waitingState = getRiderDeliveryActionState({
   status: 'picking',
@@ -89,7 +89,7 @@ const missingBackendReadinessState = getRiderDeliveryActionState({
 assert.strictEqual(missingBackendReadinessState.canUpdate, false)
 assert.strictEqual(missingBackendReadinessState.actionKey, '')
 assert.strictEqual(missingBackendReadinessState.expectedStatus, null)
-assert.strictEqual(missingBackendReadinessState.disabledReason, '当前任务状态暂不可用，请刷新后重试')
+assert.strictEqual(missingBackendReadinessState.disabledReason, '当前任务状态暂不可用，请稍后重试')
 
 const feedback = buildRiderDeliveryActionFailureFeedback({
   userMessage: '商户未出餐，暂不可确认取餐',
@@ -131,23 +131,23 @@ assert.strictEqual(wrappedFeedback.mode, 'modal')
 assert.strictEqual(wrappedFeedback.title, '等待商户出餐')
 assert.strictEqual(wrappedFeedback.content, '商户未出餐，暂不可确认取餐')
 
-const { buildRiderWorkbenchDashboardView } = loadModule('services/rider-workbench.ts', {
+const { buildRiderWorkbenchDashboardView } = loadModule('pages/rider/_services/rider-workbench.ts', {
   '../api/delivery': {
     getDeliveryStatusDisplay: (status) => ({ text: status })
   },
-  '../utils/rider-delivery-income-view': {
+  '../_utils/rider-delivery-income-view': {
     buildRiderDeliveryIncomeView: () => ({ amountText: '0.00' })
   },
-  '../utils/util': {
+  '../../../utils/util': {
     formatPriceNoSymbol: (value) => (Number(value || 0) / 100).toFixed(2)
   },
-  '../utils/status-tag': {
+  '../_main_shared/utils/status-tag': {
     resolveStatusTagTheme: (theme) => theme
   },
-  '../utils/rider-delivery-view': {
+  '../_utils/rider-delivery-view': {
     getRiderDeliveryActionState
   },
-  '../utils/rider-dashboard-delivery-view': {
+  '../_utils/rider-dashboard-delivery-view': {
     buildWorkbenchDashboardDeliveryView: (item) => {
       const pickupActionState = getRiderDeliveryActionState(item)
       return {
@@ -173,10 +173,10 @@ const { buildRiderWorkbenchDashboardView } = loadModule('services/rider-workbenc
       }
     }
   },
-  './rider-deposit-finance': {
+  '../_services/rider-deposit-finance': {
     buildRiderDepositWorkbenchSummaryView: () => ({})
   },
-  '../utils/rider-claims-view': {
+  '../_utils/rider-claims-view': {
     getRiderClaimActionHint: () => ''
   }
 })

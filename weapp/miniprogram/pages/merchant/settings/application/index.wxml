@@ -20,7 +20,7 @@
 
     <view wx:elif="{{initialError}}" class="state-block">
       <t-empty description="{{initialErrorMessage || '申请资料加载失败，请重试'}}" />
-      <t-button theme="primary" bindtap="onRetry">重新加载</t-button>
+      <t-button theme="primary" bindtap="onRetry">重试</t-button>
     </view>
 
     <block wx:else>
@@ -30,7 +30,6 @@
           theme="error"
           visible="{{true}}"
           content="{{refreshErrorMessage}}"
-          suffix-icon="refresh"
           bind:click="onRetryRefresh"
         />
 

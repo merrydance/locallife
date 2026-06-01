@@ -118,12 +118,7 @@ function buildPrimaryAction(
   }
 
   if (statusView.canRefreshStatus) {
-    return {
-      type: 'refresh_status',
-      text: statusView.isWaiting ? '刷新开户状态' : '刷新状态',
-      theme: 'primary',
-      variant: 'outline'
-    }
+    return emptyAction()
   }
 
   return emptyAction()

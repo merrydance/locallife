@@ -10,7 +10,7 @@ Page({
       supportPaymentRecovery: true,
       logTag: 'rider-settlement-account',
       loadErrorFallback: '结算账户加载失败，请稍后重试',
-      refreshErrorFallback: '开户状态刷新失败，请稍后重试'
+      refreshErrorFallback: '开户状态同步失败，请稍后重试'
     })
   ]
 })

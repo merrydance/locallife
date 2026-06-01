@@ -105,7 +105,7 @@ Page({
     }
     if (this.data.hasChanges) {
       wx.stopPullDownRefresh()
-      wx.showToast({ title: '当前有未保存修改，请先保存后再刷新', icon: 'none' })
+      wx.showToast({ title: '当前有未保存修改，请先保存后再同步', icon: 'none' })
       return
     }
     this.loadProfile(false, true)
@@ -500,7 +500,7 @@ Page({
     } catch (err: unknown) {
       if (hadProfileChanges && isVersionConflictError(err)) {
         await this.loadProfile(false, true)
-        wx.showToast({ title: '资料已被其他操作更新，已刷新到最新内容', icon: 'none' })
+        wx.showToast({ title: '资料已被其他操作更新，已同步最新内容', icon: 'none' })
         return
       }
 

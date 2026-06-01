@@ -306,7 +306,7 @@ export function baofuSettlementSubmitBehavior(config: BaofuSettlementSubmitConfi
           const result = await pollBaofuSettlementAccountStatus({
             role: config.role,
             context: this as unknown as WechatMiniprogram.Page.TrivialInstance,
-            loadingMessage: '正在刷新开户状态...',
+            loadingMessage: '开户状态同步中...',
             silentToast: true,
             shouldStop: () => this._shouldStopBaofuLongWait(sessionId),
             onProgress: (progress) => {
@@ -324,7 +324,7 @@ export function baofuSettlementSubmitBehavior(config: BaofuSettlementSubmitConfi
             waitVisible: true,
             ...buildBaofuOnboardingWaitViewFromText({
               state: 'error',
-              title: '状态刷新失败',
+              title: '状态同步失败',
               description: message,
               theme: 'error',
               primaryAction: 'retry',

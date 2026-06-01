@@ -25,7 +25,7 @@ function loadTsModule(relativePath) {
     exports: {},
     module: { exports: {} },
     require(id) {
-      if (id === '../api/platform-dashboard') return {}
+      if (id === '../_api/platform-dashboard') return {}
       throw new Error(`unexpected require: ${id}`)
     },
     Date,
@@ -39,7 +39,7 @@ function loadTsModule(relativePath) {
   return sandbox.module.exports
 }
 
-const service = loadTsModule('miniprogram/services/platform-dashboard-view.ts')
+const service = loadTsModule('miniprogram/pages/platform/_services/platform-dashboard-view.ts')
 
 const view = service.buildPlatformDashboardView({
   overviewData: {
@@ -92,7 +92,7 @@ assert.deepStrictEqual(
   ]
 )
 
-assert.strictEqual(view.operationsStatus.syncText, '自动刷新')
+assert.strictEqual(view.operationsStatus.syncText, '自动同步')
 assert.strictEqual(view.operationsStatus.summary, '近24h 37 单，履约中 18 单')
 assert.strictEqual(view.entryGroups[0].title, '经营实体')
 assert(view.entryGroups[0].items.some((item) => item.title === '骑手管理' && item.url === '/pages/platform/riders/index'), 'rider management entry must link to rider cards')
@@ -108,8 +108,8 @@ assert(!JSON.stringify(view).includes('客单'), 'dashboard view must not expose
 assert(!JSON.stringify(view).includes('活跃骑手'), 'dashboard view must not expose unsupported overview rider wording')
 assert(!JSON.stringify(view).includes('商户保证金'), 'dashboard view must not expose unsupported merchant deposit wording')
 
-const realtimeContractSource = read('miniprogram/api/platform-dashboard.ts')
-const dashboardViewSource = read('miniprogram/services/platform-dashboard-view.ts')
+const realtimeContractSource = read('miniprogram/pages/platform/_api/platform-dashboard.ts')
+const dashboardViewSource = read('miniprogram/pages/platform/_services/platform-dashboard-view.ts')
 for (const unsupported of [
   'order_distribution',
   'today_stats',

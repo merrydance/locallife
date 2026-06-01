@@ -29,7 +29,7 @@
 
       <view wx:elif="{{settingsInitialError}}" class="state-inline">
         <t-empty description="{{settingsInitialErrorMessage || '后厨协同配置加载失败，请重试'}}" />
-        <t-button theme="primary" bind:tap="onRetrySettings">重新加载</t-button>
+        <t-button theme="primary" bind:tap="onRetrySettings">重试</t-button>
       </view>
 
       <block wx:else>
