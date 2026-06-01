@@ -587,6 +587,13 @@ func (server *Server) setupRouter() {
 	// 餐厅优惠活动
 	authGroup.GET("/merchants/:id/promotions", server.getMerchantPromotions)
 
+	wantedMerchantGroup := authGroup.Group("/wanted-merchants")
+	{
+		wantedMerchantGroup.GET("", server.listWantedMerchants)
+		wantedMerchantGroup.POST("/votes", server.createWantedMerchantVote)
+		wantedMerchantGroup.POST("/:id/votes", server.voteExistingWantedMerchant)
+	}
+
 	// 扫码点餐路由
 	scanGroup := authGroup.Group("/scan")
 	if rateLimiter != nil {

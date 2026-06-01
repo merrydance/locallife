@@ -16,6 +16,17 @@ const (
 	MerchantStatusBindbankSubmitted = "bindbank_submitted"
 	MerchantStatusSuspended         = "suspended"
 
+	WantedMerchantSourceManual = "manual"
+	WantedMerchantSourceMap    = "map"
+
+	WantedMerchantStatusActive  = "active"
+	WantedMerchantStatusMatched = "matched"
+	WantedMerchantStatusRemoved = "removed"
+
+	WantedMerchantVoteResultCreated      = "created"
+	WantedMerchantVoteResultVoted        = "voted"
+	WantedMerchantVoteResultAlreadyVoted = "already_voted"
+
 	MerchantApplicationStatusDraft     = "draft"
 	MerchantApplicationStatusSubmitted = "submitted"
 	MerchantApplicationStatusApproved  = "approved"

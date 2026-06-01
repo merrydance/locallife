@@ -93,6 +93,17 @@ func (store *SQLStore) ApproveMerchantApplicationTx(ctx context.Context, arg App
 			return fmt.Errorf("create/update merchant: %w", err)
 		}
 
+		normalizedMerchantName := normalizeWantedMerchantNameForDB(result.Merchant.Name)
+		if normalizedMerchantName != "" {
+			if err := q.MarkActiveWantedMerchantMatchedByMerchant(ctx, MarkActiveWantedMerchantMatchedByMerchantParams{
+				RegionID:          arg.RegionID,
+				NormalizedName:    normalizedMerchantName,
+				MatchedMerchantID: pgtype.Int8{Int64: result.Merchant.ID, Valid: true},
+			}); err != nil {
+				return fmt.Errorf("mark wanted merchant matched: %w", err)
+			}
+		}
+
 		// Step 2.5: 入驻后默认设为打烊状态，商户需手动开店
 		result.Merchant, err = q.UpdateMerchantIsOpen(ctx, UpdateMerchantIsOpenParams{
 			ID:     result.Merchant.ID,

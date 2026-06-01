@@ -158,6 +158,12 @@
       ]
     },
     {
+      "root": "pages/takeout/wanted-merchants",
+      "pages": [
+        "index"
+      ]
+    },
+    {
       "root": "pages/takeout/merchant-info",
       "pages": [
         "index"

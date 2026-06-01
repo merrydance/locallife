@@ -1578,6 +1578,21 @@ func (mr *MockStoreMockRecorder) CountActivePackagingDishesByMerchant(ctx, merch
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountActivePackagingDishesByMerchant", reflect.TypeOf((*MockStore)(nil).CountActivePackagingDishesByMerchant), ctx, merchantID)
 }
 
+// CountActiveWantedMerchantsByRegion mocks base method.
+func (m *MockStore) CountActiveWantedMerchantsByRegion(ctx context.Context, regionID int64) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountActiveWantedMerchantsByRegion", ctx, regionID)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountActiveWantedMerchantsByRegion indicates an expected call of CountActiveWantedMerchantsByRegion.
+func (mr *MockStoreMockRecorder) CountActiveWantedMerchantsByRegion(ctx, regionID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountActiveWantedMerchantsByRegion", reflect.TypeOf((*MockStore)(nil).CountActiveWantedMerchantsByRegion), ctx, regionID)
+}
+
 // CountAllRegionApplicationsAdmin mocks base method.
 func (m *MockStore) CountAllRegionApplicationsAdmin(ctx context.Context, status pgtype.Text) (int64, error) {
 	m.ctrl.T.Helper()
@@ -4218,6 +4233,21 @@ func (mr *MockStoreMockRecorder) CreateOperatorRegionApplication(ctx, arg any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOperatorRegionApplication", reflect.TypeOf((*MockStore)(nil).CreateOperatorRegionApplication), ctx, arg)
 }
 
+// CreateOrGetActiveWantedMerchant mocks base method.
+func (m *MockStore) CreateOrGetActiveWantedMerchant(ctx context.Context, arg db.CreateOrGetActiveWantedMerchantParams) (db.WantedMerchant, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateOrGetActiveWantedMerchant", ctx, arg)
+	ret0, _ := ret[0].(db.WantedMerchant)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateOrGetActiveWantedMerchant indicates an expected call of CreateOrGetActiveWantedMerchant.
+func (mr *MockStoreMockRecorder) CreateOrGetActiveWantedMerchant(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOrGetActiveWantedMerchant", reflect.TypeOf((*MockStore)(nil).CreateOrGetActiveWantedMerchant), ctx, arg)
+}
+
 // CreateOrder mocks base method.
 func (m *MockStore) CreateOrder(ctx context.Context, arg db.CreateOrderParams) (db.Order, error) {
 	m.ctrl.T.Helper()
@@ -5206,6 +5236,21 @@ func (m *MockStore) CreateVoucher(ctx context.Context, arg db.CreateVoucherParam
 func (mr *MockStoreMockRecorder) CreateVoucher(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateVoucher", reflect.TypeOf((*MockStore)(nil).CreateVoucher), ctx, arg)
+}
+
+// CreateWantedMerchantVote mocks base method.
+func (m *MockStore) CreateWantedMerchantVote(ctx context.Context, arg db.CreateWantedMerchantVoteParams) (db.WantedMerchantVote, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateWantedMerchantVote", ctx, arg)
+	ret0, _ := ret[0].(db.WantedMerchantVote)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateWantedMerchantVote indicates an expected call of CreateWantedMerchantVote.
+func (mr *MockStoreMockRecorder) CreateWantedMerchantVote(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateWantedMerchantVote", reflect.TypeOf((*MockStore)(nil).CreateWantedMerchantVote), ctx, arg)
 }
 
 // CreateWeatherCoefficient mocks base method.
@@ -6252,6 +6297,36 @@ func (mr *MockStoreMockRecorder) FinalizeClaimCompensationAfterPayoutTx(ctx, arg
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FinalizeClaimCompensationAfterPayoutTx", reflect.TypeOf((*MockStore)(nil).FinalizeClaimCompensationAfterPayoutTx), ctx, arg)
 }
 
+// FindActiveTakeoutMerchantByNormalizedName mocks base method.
+func (m *MockStore) FindActiveTakeoutMerchantByNormalizedName(ctx context.Context, arg db.FindActiveTakeoutMerchantByNormalizedNameParams) (db.Merchant, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindActiveTakeoutMerchantByNormalizedName", ctx, arg)
+	ret0, _ := ret[0].(db.Merchant)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindActiveTakeoutMerchantByNormalizedName indicates an expected call of FindActiveTakeoutMerchantByNormalizedName.
+func (mr *MockStoreMockRecorder) FindActiveTakeoutMerchantByNormalizedName(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindActiveTakeoutMerchantByNormalizedName", reflect.TypeOf((*MockStore)(nil).FindActiveTakeoutMerchantByNormalizedName), ctx, arg)
+}
+
+// FindActiveWantedMerchantByNormalizedName mocks base method.
+func (m *MockStore) FindActiveWantedMerchantByNormalizedName(ctx context.Context, arg db.FindActiveWantedMerchantByNormalizedNameParams) (db.WantedMerchant, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindActiveWantedMerchantByNormalizedName", ctx, arg)
+	ret0, _ := ret[0].(db.WantedMerchant)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindActiveWantedMerchantByNormalizedName indicates an expected call of FindActiveWantedMerchantByNormalizedName.
+func (mr *MockStoreMockRecorder) FindActiveWantedMerchantByNormalizedName(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindActiveWantedMerchantByNormalizedName", reflect.TypeOf((*MockStore)(nil).FindActiveWantedMerchantByNormalizedName), ctx, arg)
+}
+
 // FreezeUserBalance mocks base method.
 func (m *MockStore) FreezeUserBalance(ctx context.Context, arg db.FreezeUserBalanceParams) (db.UserBalance, error) {
 	m.ctrl.T.Helper()
@@ -6520,6 +6595,36 @@ func (m *MockStore) GetActiveRiderCredentialLedgers(ctx context.Context, riderID
 func (mr *MockStoreMockRecorder) GetActiveRiderCredentialLedgers(ctx, riderID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActiveRiderCredentialLedgers", reflect.TypeOf((*MockStore)(nil).GetActiveRiderCredentialLedgers), ctx, riderID)
+}
+
+// GetActiveWantedMerchantByID mocks base method.
+func (m *MockStore) GetActiveWantedMerchantByID(ctx context.Context, arg db.GetActiveWantedMerchantByIDParams) (db.WantedMerchant, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetActiveWantedMerchantByID", ctx, arg)
+	ret0, _ := ret[0].(db.WantedMerchant)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetActiveWantedMerchantByID indicates an expected call of GetActiveWantedMerchantByID.
+func (mr *MockStoreMockRecorder) GetActiveWantedMerchantByID(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActiveWantedMerchantByID", reflect.TypeOf((*MockStore)(nil).GetActiveWantedMerchantByID), ctx, arg)
+}
+
+// GetActiveWantedMerchantByIDForUpdate mocks base method.
+func (m *MockStore) GetActiveWantedMerchantByIDForUpdate(ctx context.Context, arg db.GetActiveWantedMerchantByIDForUpdateParams) (db.WantedMerchant, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetActiveWantedMerchantByIDForUpdate", ctx, arg)
+	ret0, _ := ret[0].(db.WantedMerchant)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetActiveWantedMerchantByIDForUpdate indicates an expected call of GetActiveWantedMerchantByIDForUpdate.
+func (mr *MockStoreMockRecorder) GetActiveWantedMerchantByIDForUpdate(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActiveWantedMerchantByIDForUpdate", reflect.TypeOf((*MockStore)(nil).GetActiveWantedMerchantByIDForUpdate), ctx, arg)
 }
 
 // GetApplicableDiscountRules mocks base method.
@@ -12192,6 +12297,21 @@ func (mr *MockStoreMockRecorder) GetVoucherUsageStats(ctx, id any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVoucherUsageStats", reflect.TypeOf((*MockStore)(nil).GetVoucherUsageStats), ctx, id)
 }
 
+// GetWantedMerchantRank mocks base method.
+func (m *MockStore) GetWantedMerchantRank(ctx context.Context, arg db.GetWantedMerchantRankParams) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWantedMerchantRank", ctx, arg)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetWantedMerchantRank indicates an expected call of GetWantedMerchantRank.
+func (mr *MockStoreMockRecorder) GetWantedMerchantRank(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWantedMerchantRank", reflect.TypeOf((*MockStore)(nil).GetWantedMerchantRank), ctx, arg)
+}
+
 // GetWeatherCoefficient mocks base method.
 func (m *MockStore) GetWeatherCoefficient(ctx context.Context, id int64) (db.WeatherCoefficient, error) {
 	m.ctrl.T.Helper()
@@ -12500,6 +12620,21 @@ func (m *MockStore) IncrementVoucherUsedQuantity(ctx context.Context, id int64) 
 func (mr *MockStoreMockRecorder) IncrementVoucherUsedQuantity(ctx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncrementVoucherUsedQuantity", reflect.TypeOf((*MockStore)(nil).IncrementVoucherUsedQuantity), ctx, id)
+}
+
+// IncrementWantedMerchantWantCount mocks base method.
+func (m *MockStore) IncrementWantedMerchantWantCount(ctx context.Context, arg db.IncrementWantedMerchantWantCountParams) (db.WantedMerchant, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IncrementWantedMerchantWantCount", ctx, arg)
+	ret0, _ := ret[0].(db.WantedMerchant)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IncrementWantedMerchantWantCount indicates an expected call of IncrementWantedMerchantWantCount.
+func (mr *MockStoreMockRecorder) IncrementWantedMerchantWantCount(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncrementWantedMerchantWantCount", reflect.TypeOf((*MockStore)(nil).IncrementWantedMerchantWantCount), ctx, arg)
 }
 
 // InsertBackfillAbnormalStatsDaily mocks base method.
@@ -17046,6 +17181,21 @@ func (mr *MockStoreMockRecorder) ListUsers(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListUsers", reflect.TypeOf((*MockStore)(nil).ListUsers), ctx, arg)
 }
 
+// ListWantedMerchantLeaderboard mocks base method.
+func (m *MockStore) ListWantedMerchantLeaderboard(ctx context.Context, arg db.ListWantedMerchantLeaderboardParams) ([]db.ListWantedMerchantLeaderboardRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListWantedMerchantLeaderboard", ctx, arg)
+	ret0, _ := ret[0].([]db.ListWantedMerchantLeaderboardRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListWantedMerchantLeaderboard indicates an expected call of ListWantedMerchantLeaderboard.
+func (mr *MockStoreMockRecorder) ListWantedMerchantLeaderboard(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListWantedMerchantLeaderboard", reflect.TypeOf((*MockStore)(nil).ListWantedMerchantLeaderboard), ctx, arg)
+}
+
 // ListWeatherCoefficients mocks base method.
 func (m *MockStore) ListWeatherCoefficients(ctx context.Context, arg db.ListWeatherCoefficientsParams) ([]db.WeatherCoefficient, error) {
 	m.ctrl.T.Helper()
@@ -17089,6 +17239,20 @@ func (m *MockStore) ListWithdrawalRecords(ctx context.Context, arg db.ListWithdr
 func (mr *MockStoreMockRecorder) ListWithdrawalRecords(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListWithdrawalRecords", reflect.TypeOf((*MockStore)(nil).ListWithdrawalRecords), ctx, arg)
+}
+
+// MarkActiveWantedMerchantMatchedByMerchant mocks base method.
+func (m *MockStore) MarkActiveWantedMerchantMatchedByMerchant(ctx context.Context, arg db.MarkActiveWantedMerchantMatchedByMerchantParams) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkActiveWantedMerchantMatchedByMerchant", ctx, arg)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// MarkActiveWantedMerchantMatchedByMerchant indicates an expected call of MarkActiveWantedMerchantMatchedByMerchant.
+func (mr *MockStoreMockRecorder) MarkActiveWantedMerchantMatchedByMerchant(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkActiveWantedMerchantMatchedByMerchant", reflect.TypeOf((*MockStore)(nil).MarkActiveWantedMerchantMatchedByMerchant), ctx, arg)
 }
 
 // MarkAllNotificationsAsRead mocks base method.
@@ -22769,4 +22933,19 @@ func (m *MockStore) VoidBaofuAccountOpeningFlow(ctx context.Context, arg db.Void
 func (mr *MockStoreMockRecorder) VoidBaofuAccountOpeningFlow(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VoidBaofuAccountOpeningFlow", reflect.TypeOf((*MockStore)(nil).VoidBaofuAccountOpeningFlow), ctx, arg)
+}
+
+// VoteWantedMerchantTx mocks base method.
+func (m *MockStore) VoteWantedMerchantTx(ctx context.Context, arg db.WantedMerchantVoteTxParams) (db.WantedMerchantVoteTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "VoteWantedMerchantTx", ctx, arg)
+	ret0, _ := ret[0].(db.WantedMerchantVoteTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// VoteWantedMerchantTx indicates an expected call of VoteWantedMerchantTx.
+func (mr *MockStoreMockRecorder) VoteWantedMerchantTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VoteWantedMerchantTx", reflect.TypeOf((*MockStore)(nil).VoteWantedMerchantTx), ctx, arg)
 }

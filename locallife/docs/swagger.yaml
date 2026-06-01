@@ -2612,6 +2612,31 @@ definitions:
     - valid_from
     - valid_until
     type: object
+  api.createWantedMerchantVoteRequest:
+    properties:
+      address:
+        maxLength: 200
+        type: string
+      latitude:
+        type: number
+      longitude:
+        type: number
+      name:
+        maxLength: 80
+        minLength: 1
+        type: string
+      region_id:
+        minimum: 1
+        type: integer
+      source:
+        enum:
+        - manual
+        - map
+        type: string
+    required:
+    - name
+    - region_id
+    type: object
   api.currentRegionByLocationResponse:
     properties:
       parent_id:
@@ -9980,6 +10005,14 @@ definitions:
       user:
         $ref: '#/definitions/api.userResponse'
     type: object
+  api.voteExistingWantedMerchantRequest:
+    properties:
+      region_id:
+        minimum: 1
+        type: integer
+    required:
+    - region_id
+    type: object
   api.voucherResponse:
     properties:
       allowed_order_types:
@@ -10021,6 +10054,63 @@ definitions:
         type: string
       valid_until:
         type: string
+    type: object
+  api.wantedMerchantItemResponse:
+    properties:
+      address:
+        type: string
+      created_at:
+        type: string
+      has_voted:
+        type: boolean
+      id:
+        type: integer
+      last_voted_at:
+        type: string
+      latitude:
+        type: number
+      longitude:
+        type: number
+      name:
+        type: string
+      rank:
+        type: integer
+      region_id:
+        type: integer
+      source:
+        type: string
+      updated_at:
+        type: string
+      want_count:
+        type: integer
+    type: object
+  api.wantedMerchantListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/api.wantedMerchantItemResponse'
+        type: array
+      page_id:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
+  api.wantedMerchantVoteResponse:
+    properties:
+      merchant_id:
+        type: integer
+      rank:
+        type: integer
+      result:
+        type: string
+      want_count:
+        type: integer
+      wanted_merchant_id:
+        type: integer
     type: object
   api.webLoginConfirmRequest:
     properties:
@@ -30698,6 +30788,135 @@ paths:
       summary: 获取我的可用代金券列表
       tags:
       - 代金券管理
+  /v1/wanted-merchants:
+    get:
+      consumes:
+      - application/json
+      description: 获取当前区县的想吃商户榜单，按总想吃人数实时排序。
+      parameters:
+      - description: 区县ID
+        in: query
+        name: region_id
+        required: true
+        type: integer
+      - description: 页码
+        in: query
+        name: page_id
+        type: integer
+      - description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 榜单
+          schema:
+            $ref: '#/definitions/api.wantedMerchantListResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取想吃商户榜单
+      tags:
+      - 想吃商户榜单
+  /v1/wanted-merchants/{id}/votes:
+    post:
+      consumes:
+      - application/json
+      description: 给当前区县榜单中的商户 +1；同一用户对同一商户重复点击不会重复计数。
+      parameters:
+      - description: 榜单商户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 区县信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.voteExistingWantedMerchantRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 投票结果
+          schema:
+            $ref: '#/definitions/api.wantedMerchantVoteResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 榜单商户不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 给榜单商户 +1
+      tags:
+      - 想吃商户榜单
+  /v1/wanted-merchants/votes:
+    post:
+      consumes:
+      - application/json
+      description: 手动输入或地图选择想吃商户。手动输入会先经过微信文本内容审查；已入驻商户返回 merchant_available；已在榜单返回
+        found_in_rank。
+      parameters:
+      - description: 想吃商户
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.createWantedMerchantVoteRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 提交结果
+          schema:
+            $ref: '#/definitions/api.wantedMerchantVoteResponse'
+        "400":
+          description: 参数错误或内容审查未通过
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "502":
+          description: 内容审查服务不可用
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 提交想吃商户
+      tags:
+      - 想吃商户榜单
   /v1/ws:
     get:
       consumes:

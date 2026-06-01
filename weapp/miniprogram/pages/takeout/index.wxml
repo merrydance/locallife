@@ -35,6 +35,19 @@
     />
   </view>
 
+  <view class="wanted-hero-section" bindtap="onWantedMerchantTap">
+    <view class="wanted-hero">
+      <view class="wanted-hero-main">
+        <text class="wanted-hero-title">你想吃谁家外卖？</text>
+        <text class="wanted-hero-subtitle">告诉我们，优先邀请他入驻</text>
+      </view>
+      <view class="wanted-hero-action">
+        <text>去 +1</text>
+        <t-icon name="chevron-right" size="30rpx" />
+      </view>
+    </view>
+  </view>
+
   <!-- 菜系品类网格（动态，按区域） -->
   <view wx:if="{{cuisineCategories.length > 1}}" class="cuisine-grid-section">
     <view class="cuisine-card">

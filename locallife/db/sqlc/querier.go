@@ -144,6 +144,7 @@ type Querier interface {
 	ConsumeWebLoginSession(ctx context.Context, id int64) (WebLoginSession, error)
 	CountActiveDiscountRules(ctx context.Context, merchantID int64) (int64, error)
 	CountActivePackagingDishesByMerchant(ctx context.Context, merchantID int64) (int64, error)
+	CountActiveWantedMerchantsByRegion(ctx context.Context, regionID int64) (int64, error)
 	// 管理后台：统计区域扩展申请数量（支持状态过滤，NULL 表示不过滤）
 	CountAllRegionApplicationsAdmin(ctx context.Context, status pgtype.Text) (int64, error)
 	// 商户查看所有评价数量（包含不可见的）
@@ -433,6 +434,7 @@ type Querier interface {
 	CreateOperatorApplicationDraft(ctx context.Context, arg CreateOperatorApplicationDraftParams) (OperatorApplication, error)
 	// 运营商提交区域扩展申请
 	CreateOperatorRegionApplication(ctx context.Context, arg CreateOperatorRegionApplicationParams) (OperatorRegionApplication, error)
+	CreateOrGetActiveWantedMerchant(ctx context.Context, arg CreateOrGetActiveWantedMerchantParams) (WantedMerchant, error)
 	CreateOrder(ctx context.Context, arg CreateOrderParams) (Order, error)
 	CreateOrderDisplayConfig(ctx context.Context, arg CreateOrderDisplayConfigParams) (OrderDisplayConfig, error)
 	CreateOrderItem(ctx context.Context, arg CreateOrderItemParams) (OrderItem, error)
@@ -519,6 +521,7 @@ type Querier interface {
 	CreateUserVoucher(ctx context.Context, arg CreateUserVoucherParams) (UserVoucher, error)
 	// Vouchers (代金券模板)
 	CreateVoucher(ctx context.Context, arg CreateVoucherParams) (Voucher, error)
+	CreateWantedMerchantVote(ctx context.Context, arg CreateWantedMerchantVoteParams) (WantedMerchantVote, error)
 	CreateWeatherCoefficient(ctx context.Context, arg CreateWeatherCoefficientParams) (WeatherCoefficient, error)
 	CreateWebLoginSession(ctx context.Context, arg CreateWebLoginSessionParams) (WebLoginSession, error)
 	CreateWechatNotification(ctx context.Context, arg CreateWechatNotificationParams) (WechatNotification, error)
@@ -601,6 +604,8 @@ type Querier interface {
 	FailCloudPrinterReconciliationJobRetry(ctx context.Context, arg FailCloudPrinterReconciliationJobRetryParams) (CloudPrinterReconciliationJob, error)
 	FailOCRJob(ctx context.Context, arg FailOCRJobParams) (OcrJob, error)
 	FailPendingOCRJob(ctx context.Context, arg FailPendingOCRJobParams) (OcrJob, error)
+	FindActiveTakeoutMerchantByNormalizedName(ctx context.Context, arg FindActiveTakeoutMerchantByNormalizedNameParams) (Merchant, error)
+	FindActiveWantedMerchantByNormalizedName(ctx context.Context, arg FindActiveWantedMerchantByNormalizedNameParams) (WantedMerchant, error)
 	// 冻结用户余额（提现申请时）
 	FreezeUserBalance(ctx context.Context, arg FreezeUserBalanceParams) (UserBalance, error)
 	// Phase3: abnormal stats aggregation queries
@@ -624,6 +629,8 @@ type Querier interface {
 	GetActiveRecommendConfig(ctx context.Context) (RecommendConfig, error)
 	GetActiveReservationAdjustmentByReservation(ctx context.Context, reservationID int64) (ReservationAdjustment, error)
 	GetActiveRiderCredentialLedgers(ctx context.Context, riderID pgtype.Int8) ([]CredentialLedger, error)
+	GetActiveWantedMerchantByID(ctx context.Context, arg GetActiveWantedMerchantByIDParams) (WantedMerchant, error)
+	GetActiveWantedMerchantByIDForUpdate(ctx context.Context, arg GetActiveWantedMerchantByIDForUpdateParams) (WantedMerchant, error)
 	GetApplicableDiscountRules(ctx context.Context, arg GetApplicableDiscountRulesParams) ([]DiscountRule, error)
 	GetBaofuAccountBinding(ctx context.Context, id int64) (BaofuAccountBinding, error)
 	GetBaofuAccountBindingByContractNo(ctx context.Context, contractNo pgtype.Text) (BaofuAccountBinding, error)
@@ -1160,6 +1167,7 @@ type Querier interface {
 	GetVoucherByCode(ctx context.Context, code string) (Voucher, error)
 	GetVoucherForUpdate(ctx context.Context, id int64) (Voucher, error)
 	GetVoucherUsageStats(ctx context.Context, id int64) (GetVoucherUsageStatsRow, error)
+	GetWantedMerchantRank(ctx context.Context, arg GetWantedMerchantRankParams) (int64, error)
 	GetWeatherCoefficient(ctx context.Context, id int64) (WeatherCoefficient, error)
 	GetWebLoginSessionByCode(ctx context.Context, code string) (WebLoginSession, error)
 	GetWebLoginSessionByPollToken(ctx context.Context, pollToken pgtype.Text) (WebLoginSession, error)
@@ -1182,6 +1190,7 @@ type Querier interface {
 	IncrementUserPlatformPayCount(ctx context.Context, arg IncrementUserPlatformPayCountParams) error
 	IncrementVoucherClaimedQuantity(ctx context.Context, id int64) (Voucher, error)
 	IncrementVoucherUsedQuantity(ctx context.Context, id int64) (Voucher, error)
+	IncrementWantedMerchantWantCount(ctx context.Context, arg IncrementWantedMerchantWantCountParams) (WantedMerchant, error)
 	InsertBackfillAbnormalStatsDaily(ctx context.Context, arg InsertBackfillAbnormalStatsDailyParams) error
 	IsDishFavorited(ctx context.Context, arg IsDishFavoritedParams) (bool, error)
 	IsMerchantFavorited(ctx context.Context, arg IsMerchantFavoritedParams) (bool, error)
@@ -1566,9 +1575,11 @@ type Querier interface {
 	ListUserRoles(ctx context.Context, userID int64) ([]UserRole, error)
 	ListUserVouchers(ctx context.Context, arg ListUserVouchersParams) ([]ListUserVouchersRow, error)
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
+	ListWantedMerchantLeaderboard(ctx context.Context, arg ListWantedMerchantLeaderboardParams) ([]ListWantedMerchantLeaderboardRow, error)
 	ListWeatherCoefficients(ctx context.Context, arg ListWeatherCoefficientsParams) ([]WeatherCoefficient, error)
 	ListWechatNotificationsByOutTradeNo(ctx context.Context, outTradeNo pgtype.Text) ([]WechatNotification, error)
 	ListWithdrawalRecords(ctx context.Context, arg ListWithdrawalRecordsParams) ([]WithdrawalRecord, error)
+	MarkActiveWantedMerchantMatchedByMerchant(ctx context.Context, arg MarkActiveWantedMerchantMatchedByMerchantParams) error
 	MarkAllNotificationsAsRead(ctx context.Context, userID int64) error
 	MarkAllOperatorNotificationsAsRead(ctx context.Context, userID int64) error
 	MarkBaofuAccountBindingAbnormal(ctx context.Context, arg MarkBaofuAccountBindingAbnormalParams) (BaofuAccountBinding, error)

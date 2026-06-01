@@ -160,6 +160,7 @@ Page({
   onMerchantRegister() { wx.navigateTo({ url: '/pages/register/merchant/index' }) },
   onOperatorRegister() { wx.navigateTo({ url: '/pages/register/operator/index' }) },
   onSearchTap() { wx.navigateTo({ url: '/pages/takeout/search/index' }) },
+  onWantedMerchantTap() { wx.navigateTo({ url: '/pages/takeout/wanted-merchants/index' }) },
 
   // 品类网格点击：页内切换筛选，不再跳转独立页
   onCategoryTap(e: WechatMiniprogram.CustomEvent) {

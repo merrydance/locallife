@@ -16,6 +16,51 @@
   z-index: var(--z-index-sticky);
 }
 
+.wanted-hero-section {
+  padding: 0 var(--spacer-md) var(--spacer-sm);
+}
+
+.wanted-hero {
+  min-height: 136rpx;
+  box-sizing: border-box;
+  border-radius: var(--radius-md);
+  padding: 24rpx;
+  background: linear-gradient(135deg, #fff7ed 0%, #fff5f3 54%, #eef8f5 100%);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 4rpx 18rpx rgba(214, 91, 49, 0.12);
+}
+
+.wanted-hero-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.wanted-hero-title {
+  font-size: 34rpx;
+  line-height: 1.25;
+  color: #2f1f18;
+  font-weight: 700;
+}
+
+.wanted-hero-subtitle {
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  color: #7c5042;
+}
+
+.wanted-hero-action {
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+  flex-shrink: 0;
+  color: var(--td-brand-color);
+  font-size: 26rpx;
+  font-weight: 600;
+}
+
 /* ========== 内容区域 ==========*/
 .content-section {
   display: flex;

@@ -2668,6 +2668,33 @@ type Voucher struct {
 	DeletedAt         pgtype.Timestamptz `json:"deleted_at"`
 }
 
+type WantedMerchant struct {
+	ID                int64              `json:"id"`
+	RegionID          int64              `json:"region_id"`
+	NormalizedName    string             `json:"normalized_name"`
+	DisplayName       string             `json:"display_name"`
+	Address           pgtype.Text        `json:"address"`
+	Latitude          pgtype.Numeric     `json:"latitude"`
+	Longitude         pgtype.Numeric     `json:"longitude"`
+	Source            string             `json:"source"`
+	Status            string             `json:"status"`
+	WantCount         int32              `json:"want_count"`
+	CreatedByUserID   int64              `json:"created_by_user_id"`
+	MatchedMerchantID pgtype.Int8        `json:"matched_merchant_id"`
+	LastVotedAt       pgtype.Timestamptz `json:"last_voted_at"`
+	MatchedAt         pgtype.Timestamptz `json:"matched_at"`
+	CreatedAt         time.Time          `json:"created_at"`
+	UpdatedAt         time.Time          `json:"updated_at"`
+}
+
+type WantedMerchantVote struct {
+	ID               int64     `json:"id"`
+	WantedMerchantID int64     `json:"wanted_merchant_id"`
+	RegionID         int64     `json:"region_id"`
+	UserID           int64     `json:"user_id"`
+	CreatedAt        time.Time `json:"created_at"`
+}
+
 // 天气系数记录表，定时抓取和风天气数据
 type WeatherCoefficient struct {
 	ID          int64     `json:"id"`

@@ -27,6 +27,7 @@ type Store interface {
 	// Merchant application approval transaction
 	ApproveMerchantApplicationTx(ctx context.Context, arg ApproveMerchantApplicationTxParams) (ApproveMerchantApplicationTxResult, error)
 	ResetMerchantApplicationTx(ctx context.Context, arg ResetMerchantApplicationTxParams) (ResetMerchantApplicationTxResult, error)
+	VoteWantedMerchantTx(ctx context.Context, arg WantedMerchantVoteTxParams) (WantedMerchantVoteTxResult, error)
 	// Rider application approval transaction
 	ApproveRiderApplicationTx(ctx context.Context, arg ApproveRiderApplicationTxParams) (ApproveRiderApplicationTxResult, error)
 	// Combo transactions

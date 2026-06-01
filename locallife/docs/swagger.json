@@ -31242,6 +31242,206 @@
                 }
             }
         },
+        "/v1/wanted-merchants": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取当前区县的想吃商户榜单，按总想吃人数实时排序。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "想吃商户榜单"
+                ],
+                "summary": "获取想吃商户榜单",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "区县ID",
+                        "name": "region_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "页码",
+                        "name": "page_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量",
+                        "name": "page_size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "榜单",
+                        "schema": {
+                            "$ref": "#/definitions/api.wantedMerchantListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/wanted-merchants/votes": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "手动输入或地图选择想吃商户。手动输入会先经过微信文本内容审查；已入驻商户返回 merchant_available；已在榜单返回 found_in_rank。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "想吃商户榜单"
+                ],
+                "summary": "提交想吃商户",
+                "parameters": [
+                    {
+                        "description": "想吃商户",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.createWantedMerchantVoteRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "提交结果",
+                        "schema": {
+                            "$ref": "#/definitions/api.wantedMerchantVoteResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误或内容审查未通过",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "内容审查服务不可用",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/wanted-merchants/{id}/votes": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "给当前区县榜单中的商户 +1；同一用户对同一商户重复点击不会重复计数。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "想吃商户榜单"
+                ],
+                "summary": "给榜单商户 +1",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "榜单商户ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "区县信息",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.voteExistingWantedMerchantRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "投票结果",
+                        "schema": {
+                            "$ref": "#/definitions/api.wantedMerchantVoteResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "榜单商户不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/ws": {
             "get": {
                 "security": [
@@ -35013,6 +35213,41 @@
                 },
                 "valid_until": {
                     "type": "string"
+                }
+            }
+        },
+        "api.createWantedMerchantVoteRequest": {
+            "type": "object",
+            "required": [
+                "name",
+                "region_id"
+            ],
+            "properties": {
+                "address": {
+                    "type": "string",
+                    "maxLength": 200
+                },
+                "latitude": {
+                    "type": "number"
+                },
+                "longitude": {
+                    "type": "number"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 80,
+                    "minLength": 1
+                },
+                "region_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "source": {
+                    "type": "string",
+                    "enum": [
+                        "manual",
+                        "map"
+                    ]
                 }
             }
         },
@@ -45950,6 +46185,18 @@
                 }
             }
         },
+        "api.voteExistingWantedMerchantRequest": {
+            "type": "object",
+            "required": [
+                "region_id"
+            ],
+            "properties": {
+                "region_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            }
+        },
         "api.voucherResponse": {
             "type": "object",
             "properties": {
@@ -46010,6 +46257,93 @@
                 },
                 "valid_until": {
                     "type": "string"
+                }
+            }
+        },
+        "api.wantedMerchantItemResponse": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "has_voted": {
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "last_voted_at": {
+                    "type": "string"
+                },
+                "latitude": {
+                    "type": "number"
+                },
+                "longitude": {
+                    "type": "number"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "rank": {
+                    "type": "integer"
+                },
+                "region_id": {
+                    "type": "integer"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "want_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.wantedMerchantListResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.wantedMerchantItemResponse"
+                    }
+                },
+                "page_id": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "total_pages": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.wantedMerchantVoteResponse": {
+            "type": "object",
+            "properties": {
+                "merchant_id": {
+                    "type": "integer"
+                },
+                "rank": {
+                    "type": "integer"
+                },
+                "result": {
+                    "type": "string"
+                },
+                "want_count": {
+                    "type": "integer"
+                },
+                "wanted_merchant_id": {
+                    "type": "integer"
                 }
             }
         },
