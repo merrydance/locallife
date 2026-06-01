@@ -92,6 +92,69 @@ func TestOnboardingReviewServiceRecordMerchantReview(t *testing.T) {
 	require.Equal(t, int64(501), run.ID)
 }
 
+func TestOnboardingReviewServiceUsesEmptyAuditArraysWhenNoHits(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	service := NewOnboardingReviewService(store)
+	service.now = func() time.Time { return time.Date(2026, 6, 1, 13, 5, 0, 0, time.UTC) }
+
+	store.EXPECT().
+		CreateMerchantOnboardingReviewRun(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.CreateMerchantOnboardingReviewRunParams) (db.OnboardingReviewRun, error) {
+			require.NotNil(t, arg.RuleHits)
+			require.Empty(t, arg.RuleHits)
+			require.NotNil(t, arg.OcrJobRefs)
+			require.Empty(t, arg.OcrJobRefs)
+			return db.OnboardingReviewRun{
+				ID:              502,
+				ApplicationType: "merchant",
+				RunStatus:       "queued",
+				Stage:           "review",
+				RuleHits:        arg.RuleHits,
+				OcrJobRefs:      arg.OcrJobRefs,
+				CreatedAt:       service.now(),
+			}, nil
+		})
+
+	store.EXPECT().
+		MarkOnboardingReviewRunProcessing(gomock.Any(), int64(502)).
+		Return(db.OnboardingReviewRun{ID: 502, ApplicationType: "merchant", RunStatus: "processing", Stage: "review", CreatedAt: service.now()}, nil)
+
+	store.EXPECT().
+		CompleteOnboardingReviewRun(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.CompleteOnboardingReviewRunParams) (db.OnboardingReviewRun, error) {
+			require.NotNil(t, arg.RuleHits)
+			require.Empty(t, arg.RuleHits)
+			require.NotNil(t, arg.OcrJobRefs)
+			require.Empty(t, arg.OcrJobRefs)
+			return db.OnboardingReviewRun{
+				ID:         502,
+				Stage:      "review",
+				RunStatus:  "completed",
+				Outcome:    pgtype.Text{String: "approved", Valid: true},
+				ReasonCode: pgtype.Text{String: "auto_approved", Valid: true},
+				RuleHits:   arg.RuleHits,
+				OcrJobRefs: arg.OcrJobRefs,
+				CreatedAt:  service.now(),
+				UpdatedAt:  service.now(),
+			}, nil
+		})
+
+	store.EXPECT().
+		UpdateMerchantApplicationReviewSummary(gomock.Any(), gomock.Any()).
+		Times(2).
+		Return(db.MerchantApplication{ID: 42}, nil)
+
+	_, err := service.RecordMerchantReview(context.Background(), 42, OnboardingReviewDecision{
+		Outcome:    "approved",
+		ReasonCode: "auto_approved",
+		Snapshot:   map[string]any{"application_id": int64(42)},
+	})
+	require.NoError(t, err)
+}
+
 func TestOnboardingReviewServiceRecordRiderReview(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

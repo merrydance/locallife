@@ -337,7 +337,7 @@ func normalizeReviewStage(stage string) string {
 
 func dedupeStrings(values []string) []string {
 	if len(values) == 0 {
-		return nil
+		return []string{}
 	}
 	seen := make(map[string]struct{}, len(values))
 	result := make([]string, 0, len(values))
@@ -357,7 +357,7 @@ func dedupeStrings(values []string) []string {
 
 func dedupeInt64s(values []int64) []int64 {
 	if len(values) == 0 {
-		return nil
+		return []int64{}
 	}
 	seen := make(map[int64]struct{}, len(values))
 	result := make([]int64, 0, len(values))
