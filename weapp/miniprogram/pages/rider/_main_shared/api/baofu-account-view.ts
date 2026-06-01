@@ -40,6 +40,11 @@ export interface BaofuSettlementAccountView {
   paymentReady: boolean
   isFailed: boolean
   isProcessing: boolean
+  statusFeedbackTitle: string
+  statusReasonTitle: string
+  statusNextStepTitle: string
+  statusIcon: string
+  showVerifyFeePrompt: boolean
 }
 
 export function getBaofuAccountPayment(response?: BaofuSettlementAccountResponse | null): BaofuSettlementAccountPayment | null {
@@ -65,6 +70,27 @@ export function getBaofuAccountPayment(response?: BaofuSettlementAccountResponse
   }
 }
 
+function buildBaofuAccountStatusIcon(status: string): string {
+  switch (status) {
+    case 'ready':
+      return 'check-circle'
+    case 'failed':
+    case 'voided':
+      return 'error-circle'
+    case 'verify_fee_pending':
+      return 'wallet'
+    case 'profile_pending':
+      return 'assignment'
+    case 'verify_fee_processing':
+    case 'opening_processing':
+    case 'merchant_report_processing':
+    case 'applet_auth_pending':
+      return 'time'
+    default:
+      return 'info-circle'
+  }
+}
+
 export function buildBaofuSettlementAccountView(
   response?: BaofuSettlementAccountResponse | null
 ): BaofuSettlementAccountView {
@@ -73,6 +99,9 @@ export function buildBaofuSettlementAccountView(
   const nextActionText = getBaofuAccountNextActionText(normalizedStatus, verifyFeeAmount)
   const statusDesc = String(response?.status_desc || nextActionText).trim()
   const paymentReady = normalizedStatus === 'ready' || response?.payment_ready === true
+  const isFailedStatus = normalizedStatus === 'failed'
+  const isVoidedStatus = normalizedStatus === 'voided'
+  const isTerminalIssue = isFailedStatus || isVoidedStatus
 
   return {
     normalizedStatus,
@@ -93,6 +122,11 @@ export function buildBaofuSettlementAccountView(
     isReady: normalizedStatus === 'ready',
     paymentReady,
     isFailed: normalizedStatus === 'failed',
-    isProcessing: isBaofuSettlementOpeningProcessingStatus(normalizedStatus)
+    isProcessing: isBaofuSettlementOpeningProcessingStatus(normalizedStatus),
+    statusFeedbackTitle: isFailedStatus ? '错误信息反馈' : '开户状态',
+    statusReasonTitle: isFailedStatus ? '失败原因' : isVoidedStatus ? '作废原因' : '状态说明',
+    statusNextStepTitle: isTerminalIssue ? '处理建议' : '下一步',
+    statusIcon: buildBaofuAccountStatusIcon(normalizedStatus),
+    showVerifyFeePrompt: normalizedStatus === 'verify_fee_pending'
   }
 }

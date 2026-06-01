@@ -21,7 +21,6 @@ export interface BaofuRolePageView {
   role: BaofuAccountOwnerRole
   title: string
   verifyFeePrompt: string
-  profileHint: string
   statusView: BaofuSettlementAccountView
   statusText: string
   nextActionText: string
@@ -61,16 +60,6 @@ function buildVerifyFeePrompt(role: BaofuAccountOwnerRole, feeDisplay: string): 
     return '开户核验费由平台承担，提交后继续同步状态。'
   }
   return `${feeDisplay} 元核验费由本人支付，支付完成后继续开户。`
-}
-
-function buildProfileHint(role: BaofuAccountOwnerRole): string {
-  if (role === 'merchant') {
-    return '用于商户报备与小程序授权目录绑定。'
-  }
-  if (role === 'platform') {
-    return '用于平台机构二级户开户核验。'
-  }
-  return '用于宝付个人户开户与核验。'
 }
 
 function buildFieldConfigs(role: BaofuAccountOwnerRole): BaofuRolePageFieldConfig[] {
@@ -142,7 +131,6 @@ export function buildBaofuRolePageView(
     role,
     title,
     verifyFeePrompt: buildVerifyFeePrompt(role, feeDisplay),
-    profileHint: buildProfileHint(role),
     statusView,
     statusText: getBaofuAccountStatusText(statusView.normalizedStatus),
     nextActionText: getBaofuAccountNextActionText(statusView.normalizedStatus, statusView.verifyFeeAmount),

@@ -6,8 +6,7 @@
     "t-button": "tdesign-miniprogram/button/button",
     "t-empty": "tdesign-miniprogram/empty/empty",
     "t-icon": "tdesign-miniprogram/icon/icon",
-    "t-loading": "tdesign-miniprogram/loading/loading",
-    "t-result": "tdesign-miniprogram/result/result"
+    "t-loading": "tdesign-miniprogram/loading/loading"
   },
   "navigationStyle": "custom",
   "enablePullDownRefresh": true

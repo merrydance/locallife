@@ -37,19 +37,17 @@
         <t-button size="small" theme="primary" variant="text" bindtap="onRetry">重试</t-button>
       </view>
 
-      <t-result
-        theme="{{pageView.statusView.resultTheme}}"
-        title="{{pageView.statusView.statusText}}"
-        description="{{pageView.statusView.statusDesc || pageView.nextActionText}}"
-      />
-
       <baofu-account-status-summary
         statusText="{{pageView.statusView.statusText}}"
         statusDesc="{{pageView.statusView.statusDesc}}"
         nextActionText="{{pageView.nextActionText}}"
         tagTheme="{{pageView.statusView.tagTheme}}"
         verifyFeePrompt="{{pageView.verifyFeePrompt}}"
-        profileHint="{{pageView.profileHint}}"
+        showVerifyFeePrompt="{{pageView.statusView.showVerifyFeePrompt}}"
+        feedbackTitle="{{pageView.statusView.statusFeedbackTitle}}"
+        reasonTitle="{{pageView.statusView.statusReasonTitle}}"
+        nextStepTitle="{{pageView.statusView.statusNextStepTitle}}"
+        statusIcon="{{pageView.statusView.statusIcon}}"
         isReady="{{pageView.statusView.isReady}}"
       />
 

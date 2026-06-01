@@ -1,51 +1,40 @@
 <view class="account-status-summary">
-  <view class="summary-banner">
-    <view class="summary-banner__copy">
-      <text class="summary-banner__title">当前进度</text>
-      <text class="summary-banner__desc">{{statusDesc || nextActionText}}</text>
+  <view class="status-panel status-panel--{{tagTheme}}">
+    <view class="status-panel__icon">
+      <t-icon name="{{statusIcon}}" size="36rpx" />
     </view>
-    <t-tag theme="{{tagTheme}}" size="small">{{statusText}}</t-tag>
+    <view class="status-panel__body">
+      <view class="status-panel__heading">
+        <text class="status-panel__title">{{feedbackTitle}}</text>
+        <t-tag theme="{{tagTheme}}" size="small">{{statusText}}</t-tag>
+      </view>
+    </view>
   </view>
 
-  <view class="summary-facts">
-    <view class="summary-fact">
-      <view class="summary-fact__icon">
-        <t-icon name="assignment" size="34rpx" />
-      </view>
-      <view class="summary-fact__body">
-        <text class="summary-fact__title">开户资料</text>
-        <text class="summary-fact__desc">{{profileHint}}</text>
-      </view>
+  <view class="status-detail">
+    <view class="status-detail__row">
+      <text class="status-detail__label">{{reasonTitle}}</text>
+      <text class="status-detail__value">{{statusDesc || nextActionText}}</text>
     </view>
 
-    <view class="summary-fact">
-      <view class="summary-fact__icon">
-        <t-icon name="wallet" size="34rpx" />
-      </view>
-      <view class="summary-fact__body">
-        <text class="summary-fact__title">核验费</text>
-        <text class="summary-fact__desc">{{verifyFeePrompt}}</text>
-      </view>
+    <view wx:if="{{!isReady}}" class="status-detail__row">
+      <text class="status-detail__label">{{nextStepTitle}}</text>
+      <text class="status-detail__value">{{nextActionText}}</text>
     </view>
 
-    <view wx:if="{{showOpenReportHint}}" class="summary-fact">
-      <view class="summary-fact__icon">
-        <t-icon name="shop" size="34rpx" />
-      </view>
-      <view class="summary-fact__body">
-        <text class="summary-fact__title">微信展示</text>
-        <text class="summary-fact__desc">商户展示名称配置中，系统会自动同步。</text>
-      </view>
+    <view wx:elif="{{isReady}}" class="status-detail__row">
+      <text class="status-detail__label">结算账户</text>
+      <text class="status-detail__value">已开通，可用于后续结算。</text>
     </view>
 
-    <view wx:if="{{isReady}}" class="summary-fact">
-      <view class="summary-fact__icon summary-fact__icon--success">
-        <t-icon name="check-circle" size="34rpx" />
-      </view>
-      <view class="summary-fact__body">
-        <text class="summary-fact__title">银行账户</text>
-        <text class="summary-fact__desc">结算账户已开通，可用于后续结算。</text>
-      </view>
+    <view wx:if="{{showVerifyFeePrompt}}" class="status-detail__row status-detail__row--muted">
+      <text class="status-detail__label">核验费</text>
+      <text class="status-detail__value">{{verifyFeePrompt}}</text>
+    </view>
+
+    <view wx:if="{{showOpenReportHint}}" class="status-detail__row status-detail__row--muted">
+      <text class="status-detail__label">微信展示</text>
+      <text class="status-detail__value">商户展示名称配置中，系统会自动同步。</text>
     </view>
   </view>
 </view>
