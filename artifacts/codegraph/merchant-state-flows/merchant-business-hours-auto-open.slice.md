@@ -133,12 +133,13 @@ Observed tests:
 - `locallife/api/merchant_business_hours_test.go` checks PUT persists `auto_open_by_business_hours` into `SetBusinessHoursTx`.
 - `locallife/scheduler/merchant_open_status_test.go` checks scheduler calls sync and publishes status changes.
 - `locallife/api/security_authz_test.go` denies unauthorized business-hours PUT.
+- `locallife/db/sqlc/merchant_test.go` now checks `SyncMerchantOpenStatusByBusinessHours` with multiple same-day slots: the merchant opens inside a matching slot and closes outside all slots.
+- `locallife/db/sqlc/merchant_test.go` now checks special-date precedence: special-date rows override weekly rows in both close-over-weekly-open and open-over-weekly-closed cases.
 
 Missing high-value tests:
 
-- DB or integration test proving `SyncMerchantOpenStatusByBusinessHours` opens during one of multiple same-day slots and closes between slots.
-- Test for special-date precedence with multiple rows.
 - Test for automatic mode plus manual state interaction, likely in the neighboring manual open/close flow.
+- Product-contract test for mixed special-date rows if the intended behavior is not "any closed row closes the whole day".
 
 ## Gaps And Refactor Notes
 
@@ -157,4 +158,4 @@ Missing high-value tests:
 - Reader/consumer branches checked: settings page, dashboard status, kitchen status, public merchant status, order validation, reservation/table time slots, and Flutter App working status via shared `is_open`.
 - Authorization/tenant branches checked: merchant console access, backend current-merchant resolution, owner/manager profile-write middleware, and scheduler reading durable merchant rows without client input.
 - Zombie/unreachable branches checked: single-row business-hour helpers are unsafe for multi-slot reuse; stale handler comment references missing query even though sqlc query exists; no App editing entry was found.
-- Test-proof gaps checked: existing tests cover GET/PUT flag persistence and scheduler publish. Missing proof remains for multi-slot scheduler open/close, special-date precedence with multiple rows, mixed closed/open special-date semantics, and explicit manual-vs-automatic overwrite contract.
+- Test-proof gaps checked: existing tests cover GET/PUT flag persistence, scheduler publish, multi-slot scheduler open/close, and special-date precedence with multiple rows. Missing proof remains for mixed closed/open special-date semantics if product rejects the current whole-day-close behavior, and explicit manual-vs-automatic overwrite contract.

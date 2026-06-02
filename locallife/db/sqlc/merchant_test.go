@@ -856,6 +856,192 @@ func TestDeleteMerchantBusinessHours(t *testing.T) {
 	require.Empty(t, hours)
 }
 
+func TestSyncMerchantOpenStatusByBusinessHoursSupportsMultipleSameDaySlots(t *testing.T) {
+	ctx := context.Background()
+	merchant := createRandomMerchantForTest(t)
+	createRandomMerchantPaymentConfig(t, merchant)
+	enableAutoOpenByBusinessHours(t, merchant.ID)
+	setMerchantOpenForBusinessHourTest(t, merchant.ID, false)
+
+	current := currentBusinessHourTestClock(t)
+	closedWindows := businessHourWindowsOutsideNow(t, current, 2, 15*time.Minute, 30*time.Minute)
+	createBusinessHourForSyncTest(t, merchant.ID, current.dayOfWeek, startOfDayBusinessHour(), endOfDayBusinessHour(), pgtype.Date{}, false)
+	createBusinessHourForSyncTest(t, merchant.ID, current.dayOfWeek, closedWindows[0].start, closedWindows[0].end, pgtype.Date{}, false)
+
+	_, err := testStore.SyncMerchantOpenStatusByBusinessHours(ctx)
+	require.NoError(t, err)
+
+	status, err := testStore.GetMerchantIsOpen(ctx, merchant.ID)
+	require.NoError(t, err)
+	require.True(t, status.IsOpen)
+
+	closedMerchant := createRandomMerchantForTest(t)
+	createRandomMerchantPaymentConfig(t, closedMerchant)
+	enableAutoOpenByBusinessHours(t, closedMerchant.ID)
+	setMerchantOpenForBusinessHourTest(t, closedMerchant.ID, true)
+	createBusinessHourForSyncTest(t, closedMerchant.ID, current.dayOfWeek, closedWindows[0].start, closedWindows[0].end, pgtype.Date{}, false)
+	createBusinessHourForSyncTest(t, closedMerchant.ID, current.dayOfWeek, closedWindows[1].start, closedWindows[1].end, pgtype.Date{}, false)
+
+	_, err = testStore.SyncMerchantOpenStatusByBusinessHours(ctx)
+	require.NoError(t, err)
+
+	status, err = testStore.GetMerchantIsOpen(ctx, closedMerchant.ID)
+	require.NoError(t, err)
+	require.False(t, status.IsOpen)
+}
+
+func TestSyncMerchantOpenStatusByBusinessHoursSpecialDateRowsOverrideWeeklyRows(t *testing.T) {
+	ctx := context.Background()
+	merchant := createRandomMerchantForTest(t)
+	createRandomMerchantPaymentConfig(t, merchant)
+	enableAutoOpenByBusinessHours(t, merchant.ID)
+	setMerchantOpenForBusinessHourTest(t, merchant.ID, true)
+
+	current := currentBusinessHourTestClock(t)
+	createBusinessHourForSyncTest(t, merchant.ID, current.dayOfWeek, startOfDayBusinessHour(), endOfDayBusinessHour(), pgtype.Date{}, false)
+	createBusinessHourForSyncTest(t, merchant.ID, current.dayOfWeek, startOfDayBusinessHour(), endOfDayBusinessHour(), current.date, true)
+
+	_, err := testStore.SyncMerchantOpenStatusByBusinessHours(ctx)
+	require.NoError(t, err)
+
+	status, err := testStore.GetMerchantIsOpen(ctx, merchant.ID)
+	require.NoError(t, err)
+	require.False(t, status.IsOpen)
+
+	openSpecialMerchant := createRandomMerchantForTest(t)
+	createRandomMerchantPaymentConfig(t, openSpecialMerchant)
+	enableAutoOpenByBusinessHours(t, openSpecialMerchant.ID)
+	setMerchantOpenForBusinessHourTest(t, openSpecialMerchant.ID, false)
+	createBusinessHourForSyncTest(t, openSpecialMerchant.ID, current.dayOfWeek, startOfDayBusinessHour(), endOfDayBusinessHour(), pgtype.Date{}, true)
+	createBusinessHourForSyncTest(t, openSpecialMerchant.ID, current.dayOfWeek, startOfDayBusinessHour(), endOfDayBusinessHour(), current.date, false)
+
+	_, err = testStore.SyncMerchantOpenStatusByBusinessHours(ctx)
+	require.NoError(t, err)
+
+	status, err = testStore.GetMerchantIsOpen(ctx, openSpecialMerchant.ID)
+	require.NoError(t, err)
+	require.True(t, status.IsOpen)
+}
+
+type businessHourWindow struct {
+	start pgtype.Time
+	end   pgtype.Time
+}
+
+type businessHourTestClock struct {
+	dayOfWeek int32
+	date      pgtype.Date
+	nowMicros int64
+}
+
+func currentBusinessHourTestClock(t *testing.T) businessHourTestClock {
+	t.Helper()
+
+	var row struct {
+		DayOfWeek int32
+		Today     pgtype.Date
+		NowMicros int64
+	}
+	err := testStore.(*SQLStore).connPool.QueryRow(context.Background(), `
+		SELECT
+			EXTRACT(DOW FROM CURRENT_DATE)::int,
+			CURRENT_DATE,
+			(
+				EXTRACT(HOUR FROM LOCALTIME)::bigint * 3600 * 1000000 +
+				EXTRACT(MINUTE FROM LOCALTIME)::bigint * 60 * 1000000 +
+				FLOOR(EXTRACT(SECOND FROM LOCALTIME) * 1000000)::bigint
+			)
+	`).Scan(&row.DayOfWeek, &row.Today, &row.NowMicros)
+	require.NoError(t, err)
+
+	return businessHourTestClock{
+		dayOfWeek: row.DayOfWeek,
+		date:      row.Today,
+		nowMicros: row.NowMicros,
+	}
+}
+
+func businessHourWindowsOutsideNow(t *testing.T, current businessHourTestClock, count int, duration, gap time.Duration) []businessHourWindow {
+	t.Helper()
+	require.Positive(t, count)
+
+	durationMicros := int64(duration / time.Microsecond)
+	gapMicros := int64(gap / time.Microsecond)
+	require.Positive(t, durationMicros)
+	require.Positive(t, gapMicros)
+
+	totalMicros := int64(count)*durationMicros + int64(count-1)*gapMicros
+	if start := current.nowMicros + gapMicros; start+totalMicros < dayMicros {
+		return sequentialBusinessHourWindows(start, count, durationMicros, gapMicros)
+	}
+	if end := current.nowMicros - gapMicros; end-totalMicros > 0 {
+		return sequentialBusinessHourWindows(end-totalMicros, count, durationMicros, gapMicros)
+	}
+
+	t.Fatalf("cannot place %d business-hour windows outside current local time", count)
+	return nil
+}
+
+func sequentialBusinessHourWindows(start int64, count int, durationMicros, gapMicros int64) []businessHourWindow {
+	windows := make([]businessHourWindow, 0, count)
+	cursor := start
+	for range count {
+		windows = append(windows, businessHourWindow{
+			start: pgTimeFromMicros(cursor),
+			end:   pgTimeFromMicros(cursor + durationMicros),
+		})
+		cursor += durationMicros + gapMicros
+	}
+	return windows
+}
+
+const dayMicros int64 = 24 * 3600 * 1000000
+
+func startOfDayBusinessHour() pgtype.Time {
+	return pgTimeFromMicros(0)
+}
+
+func endOfDayBusinessHour() pgtype.Time {
+	return pgTimeFromMicros(dayMicros)
+}
+
+func pgTimeFromMicros(micros int64) pgtype.Time {
+	return pgtype.Time{Microseconds: micros, Valid: true}
+}
+
+func enableAutoOpenByBusinessHours(t *testing.T, merchantID int64) {
+	t.Helper()
+	err := testStore.UpdateMerchantAutoOpenByBusinessHours(context.Background(), UpdateMerchantAutoOpenByBusinessHoursParams{
+		ID:                      merchantID,
+		AutoOpenByBusinessHours: true,
+	})
+	require.NoError(t, err)
+}
+
+func setMerchantOpenForBusinessHourTest(t *testing.T, merchantID int64, isOpen bool) {
+	t.Helper()
+	_, err := testStore.UpdateMerchantIsOpen(context.Background(), UpdateMerchantIsOpenParams{
+		ID:          merchantID,
+		IsOpen:      isOpen,
+		AutoCloseAt: pgtype.Timestamptz{},
+	})
+	require.NoError(t, err)
+}
+
+func createBusinessHourForSyncTest(t *testing.T, merchantID int64, dayOfWeek int32, openTime, closeTime pgtype.Time, specialDate pgtype.Date, isClosed bool) MerchantBusinessHour {
+	t.Helper()
+	row, err := testStore.CreateBusinessHour(context.Background(), CreateBusinessHourParams{
+		MerchantID:  merchantID,
+		DayOfWeek:   dayOfWeek,
+		OpenTime:    openTime,
+		CloseTime:   closeTime,
+		IsClosed:    isClosed,
+		SpecialDate: specialDate,
+	})
+	require.NoError(t, err)
+	return row
+}
+
 // ==================== Merchant Tags Tests ====================
 
 func TestAddMerchantTag(t *testing.T) {
