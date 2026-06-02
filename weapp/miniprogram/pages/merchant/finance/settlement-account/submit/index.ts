@@ -85,6 +85,7 @@ Page({
         label: '个人开户'
       }
     ],
+    businessAllowedAccountTypes: [] as Array<'ACCOUNT_TYPE_BUSINESS' | 'ACCOUNT_TYPE_PRIVATE'>,
     form: emptyBaofuEnterpriseProfileForm(),
     personalForm: emptyBaofuPersonalProfileForm(),
     personalFormErrorMessage: '',

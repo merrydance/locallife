@@ -346,7 +346,8 @@ Component({
     contactDocCopyBackFeedbackTitle: '',
     contactDocCopyBackFeedbackDescription: '',
     canSubmit: false,
-    submitBlockMessage: ''
+    submitBlockMessage: '',
+    showPrivateAccountTypeOption: true
   },
 
   lifetimes: {
@@ -395,7 +396,8 @@ Component({
           properties.showContactFields,
           properties.requireContactEmail,
           properties.requireAccountName
-        )
+        ),
+        showPrivateAccountTypeOption: isAccountTypeAllowed('ACCOUNT_TYPE_PRIVATE' as ApplymentAccountType, properties.allowedAccountTypes)
       }, { emitDraft: false, syncSubmit: false })
 
     },

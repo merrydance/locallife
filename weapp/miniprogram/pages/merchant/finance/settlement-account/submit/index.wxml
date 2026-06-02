@@ -54,102 +54,104 @@
         </view>
       </view>
 
-      <t-cell-group wx:if="{{accountOpeningMode === 'business'}}">
-        <t-input
-          label="执照名称"
-          t-class-label="form-required-label"
-          value="{{form.legal_name}}"
-          data-field="legal_name"
-          disabled="{{submitting || syncing}}"
-          align="right"
-          bind:change="onInput"
-        />
-        <t-input
-          label="信用代码"
-          t-class-label="form-required-label"
-          value="{{form.business_license_number}}"
-          data-field="business_license_number"
-          disabled="{{submitting || syncing}}"
-          align="right"
-          maxlength="18"
-          bind:change="onInput"
-        />
-        <t-input
-          label="法人姓名"
-          t-class-label="form-required-label"
-          value="{{form.legal_person_name}}"
-          data-field="legal_person_name"
-          disabled="{{submitting || syncing}}"
-          align="right"
-          bind:change="onInput"
-        />
-        <t-input
-          label="法人证件"
-          t-class-label="form-required-label"
-          placeholder="18位身份证号"
-          value="{{form.legal_person_id_number}}"
-          data-field="legal_person_id_number"
-          disabled="{{submitting || syncing}}"
-          align="right"
-          maxlength="18"
-          bind:change="onInputId"
-        />
-        <t-input
-          wx:if="{{bankDraft.account_type === 'ACCOUNT_TYPE_PRIVATE'}}"
-          label="法人手机"
-          t-class-label="form-required-label"
-          placeholder="11位手机号"
-          type="number"
-          value="{{form.corporate_mobile}}"
-          data-field="corporate_mobile"
-          disabled="{{submitting || syncing}}"
-          align="right"
-          maxlength="11"
-          bind:change="onInput"
-        />
-        <t-input
-          label="联系邮箱"
-          t-class-label="form-required-label"
-          placeholder="name@example.com"
-          value="{{form.email}}"
-          data-field="email"
-          disabled="{{submitting || syncing}}"
-          align="right"
-          maxlength="100"
-          bind:change="onInput"
-        />
-      </t-cell-group>
+      <view hidden="{{accountOpeningMode !== 'business'}}">
+        <t-cell-group>
+          <t-input
+            label="执照名称"
+            t-class-label="form-required-label"
+            value="{{form.legal_name}}"
+            data-field="legal_name"
+            disabled="{{submitting || syncing}}"
+            align="right"
+            bind:change="onInput"
+          />
+          <t-input
+            label="信用代码"
+            t-class-label="form-required-label"
+            value="{{form.business_license_number}}"
+            data-field="business_license_number"
+            disabled="{{submitting || syncing}}"
+            align="right"
+            maxlength="18"
+            bind:change="onInput"
+          />
+          <t-input
+            label="法人姓名"
+            t-class-label="form-required-label"
+            value="{{form.legal_person_name}}"
+            data-field="legal_person_name"
+            disabled="{{submitting || syncing}}"
+            align="right"
+            bind:change="onInput"
+          />
+          <t-input
+            label="法人证件"
+            t-class-label="form-required-label"
+            placeholder="18位身份证号"
+            value="{{form.legal_person_id_number}}"
+            data-field="legal_person_id_number"
+            disabled="{{submitting || syncing}}"
+            align="right"
+            maxlength="18"
+            bind:change="onInputId"
+          />
+          <t-input
+            hidden="{{bankDraft.account_type !== 'ACCOUNT_TYPE_PRIVATE'}}"
+            label="法人手机"
+            t-class-label="form-required-label"
+            placeholder="11位手机号"
+            type="number"
+            value="{{form.corporate_mobile}}"
+            data-field="corporate_mobile"
+            disabled="{{submitting || syncing}}"
+            align="right"
+            maxlength="11"
+            bind:change="onInput"
+          />
+          <t-input
+            label="联系邮箱"
+            t-class-label="form-required-label"
+            placeholder="name@example.com"
+            value="{{form.email}}"
+            data-field="email"
+            disabled="{{submitting || syncing}}"
+            align="right"
+            maxlength="100"
+            bind:change="onInput"
+          />
+        </t-cell-group>
 
-      <applyment-bank-form
-        wx:if="{{accountOpeningMode === 'business'}}"
-        initialDraft="{{bankDraft}}"
-        defaultAccountType="ACCOUNT_TYPE_BUSINESS"
-        allowedAccountTypes="{{[]}}"
-        businessAccountName="{{form.legal_name}}"
-        privateAccountName="{{form.legal_person_name}}"
-        embedded="{{true}}"
-        submitBlock="{{true}}"
-        showAccountTypeSelector="{{true}}"
-        showContactFields="{{false}}"
-        requireContactEmail="{{false}}"
-        requireAccountName="{{true}}"
-        showCancelButton="{{false}}"
-        submitLabel="提交开户资料"
-        submitting="{{submitting}}"
-        bind:submit="onSubmitBank"
-        bind:draftchange="onBankDraftChange"
-      />
+        <applyment-bank-form
+          initialDraft="{{bankDraft}}"
+          defaultAccountType="ACCOUNT_TYPE_BUSINESS"
+          allowedAccountTypes="{{businessAllowedAccountTypes}}"
+          businessAccountName="{{form.legal_name}}"
+          privateAccountName="{{form.legal_person_name}}"
+          embedded="{{true}}"
+          submitBlock="{{true}}"
+          showAccountTypeSelector="{{true}}"
+          showContactFields="{{false}}"
+          requireContactEmail="{{false}}"
+          requireAccountName="{{true}}"
+          showCancelButton="{{false}}"
+          submitLabel="提交开户资料"
+          submitting="{{submitting}}"
+          bind:submit="onSubmitBank"
+          bind:draftchange="onBankDraftChange"
+        />
+      </view>
 
-      <baofu-personal-profile-form
-        wx:else
-        form="{{personalForm}}"
-        disabled="{{submitting || syncing}}"
-        submitting="{{submitting}}"
-        formErrorMessage="{{personalFormErrorMessage}}"
-        submitLabel="提交开户资料"
-        bind:change="onPersonalFormChange"
-        bind:submit="onSubmitPersonal"
-      />
+      <view hidden="{{accountOpeningMode !== 'personal'}}">
+        <baofu-personal-profile-form
+          form="{{personalForm}}"
+          disabled="{{submitting || syncing}}"
+          submitting="{{submitting}}"
+          formErrorMessage="{{personalFormErrorMessage}}"
+          submitLabel="提交开户资料"
+          bind:change="onPersonalFormChange"
+          bind:submit="onSubmitPersonal"
+        />
+      </view>
     </block>
   </view>
 </view>

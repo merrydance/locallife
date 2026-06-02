@@ -58,23 +58,22 @@
 }
 
 .opening-mode-choice {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 160rpx;
-  min-height: 56rpx;
-  padding: 0 var(--spacer-sm);
-  border: 1rpx solid var(--td-component-border);
-  border-radius: 28rpx;
+  box-sizing: border-box;
+  padding: var(--td-tag-medium-padding, 2rpx 14rpx);
+  border: 2rpx solid transparent;
+  border-radius: var(--td-tag-round-border-radius, 999px);
   color: var(--td-text-color-primary);
-  font-size: var(--font-size-sm);
-  background: var(--td-bg-color-container);
+  font: var(--td-tag-medium-font, var(--td-font-body-small, 24rpx / 40rpx var(--td-font-family, PingFang SC, Microsoft YaHei, Arial Regular)));
+  background: var(--td-bg-color-component);
 }
 
 .opening-mode-choice--active {
   border-color: var(--td-brand-color);
-  color: var(--td-brand-color);
-  background: var(--td-brand-color-light);
+  color: var(--td-text-color-anti);
+  background: var(--td-brand-color);
   font-weight: 600;
 }
 
