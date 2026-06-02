@@ -366,12 +366,14 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_ClaimRecoveryPaym
 		IsTerminal:         true,
 	}
 	paymentOrder := db.PaymentOrder{ID: application.BusinessObjectID, UserID: 88, BusinessType: db.ExternalPaymentBusinessOwnerClaimRecovery}
+	releaseAction := db.BehaviorAction{ID: 1903, ActionType: "release", TargetEntity: "merchant"}
 
 	store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), application.ID).Return(application, nil)
 	store.EXPECT().GetExternalPaymentFact(gomock.Any(), application.FactID).Return(fact, nil)
 	store.EXPECT().ProcessPaymentSuccessTx(gomock.Any(), db.ProcessPaymentSuccessTxParams{PaymentOrderID: application.BusinessObjectID}).Return(db.ProcessPaymentSuccessTxResult{
-		Processed:    true,
-		PaymentOrder: paymentOrder,
+		Processed:     true,
+		PaymentOrder:  paymentOrder,
+		ReleaseAction: &releaseAction,
 	}, nil)
 	expectFactTerminalized(t, store, fact.ID, now)
 	expectApplicationApplied(t, store, application, now)
@@ -386,6 +388,10 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_ClaimRecoveryPaym
 	require.NotNil(t, result.ClaimRecoveryPayment)
 	require.Equal(t, paymentOrder.ID, result.ClaimRecoveryPayment.PaymentOrder.ID)
 	require.True(t, result.ClaimRecoveryPayment.Processed)
+	require.NotNil(t, result.ClaimRecoveryPayment.ReleaseAction)
+	require.Equal(t, releaseAction.ID, result.ClaimRecoveryPayment.ReleaseAction.ID)
+	require.NotNil(t, result.ClaimRecoveryReleaseAction)
+	require.Equal(t, releaseAction.ID, result.ClaimRecoveryReleaseAction.ID)
 }
 
 func TestPaymentFactServiceApplyExternalPaymentFactApplication_BaofuVerifyFeeSuccessContinuesOpening(t *testing.T) {

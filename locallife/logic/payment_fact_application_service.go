@@ -26,28 +26,30 @@ const (
 )
 
 type ApplyExternalPaymentFactApplicationResult struct {
-	Application           db.ExternalPaymentFactApplication
-	Fact                  db.ExternalPaymentFact
-	Outbox                *db.PaymentDomainOutbox
-	OrderPayment          *ApplyOrderPaymentFactResult
-	ClaimRecoveryPayment  *claimRecoveryPaymentDomainResult
-	ReservationPayment    *ApplyReservationPaymentFactResult
-	BaofuVerifyFeePayment *baofuVerifyFeePaymentDomainResult
-	Applied               bool
-	Skipped               bool
+	Application                db.ExternalPaymentFactApplication
+	Fact                       db.ExternalPaymentFact
+	Outbox                     *db.PaymentDomainOutbox
+	OrderPayment               *ApplyOrderPaymentFactResult
+	ClaimRecoveryPayment       *claimRecoveryPaymentDomainResult
+	ClaimRecoveryReleaseAction *db.BehaviorAction
+	ReservationPayment         *ApplyReservationPaymentFactResult
+	BaofuVerifyFeePayment      *baofuVerifyFeePaymentDomainResult
+	Applied                    bool
+	Skipped                    bool
 }
 
 type appliedPaymentFactDomainResult struct {
-	ProfitSharingOrder    *db.ProfitSharingOrder
-	ProfitSharingReturn   *profitSharingReturnDomainResult
-	OrderPayment          *ApplyOrderPaymentFactResult
-	ClaimRecoveryPayment  *claimRecoveryPaymentDomainResult
-	ReservationPayment    *ApplyReservationPaymentFactResult
-	RiderDepositPayment   *riderDepositPaymentDomainResult
-	BaofuVerifyFeePayment *baofuVerifyFeePaymentDomainResult
-	RiderDepositRefund    *riderDepositRefundDomainResult
-	OrderRefund           *orderRefundDomainResult
-	ReservationRefund     *reservationRefundDomainResult
+	ProfitSharingOrder         *db.ProfitSharingOrder
+	ProfitSharingReturn        *profitSharingReturnDomainResult
+	OrderPayment               *ApplyOrderPaymentFactResult
+	ClaimRecoveryPayment       *claimRecoveryPaymentDomainResult
+	ClaimRecoveryReleaseAction *db.BehaviorAction
+	ReservationPayment         *ApplyReservationPaymentFactResult
+	RiderDepositPayment        *riderDepositPaymentDomainResult
+	BaofuVerifyFeePayment      *baofuVerifyFeePaymentDomainResult
+	RiderDepositRefund         *riderDepositRefundDomainResult
+	OrderRefund                *orderRefundDomainResult
+	ReservationRefund          *reservationRefundDomainResult
 }
 
 type riderDepositPaymentDomainResult struct {
@@ -61,8 +63,9 @@ type baofuVerifyFeePaymentDomainResult struct {
 }
 
 type claimRecoveryPaymentDomainResult struct {
-	PaymentOrder db.PaymentOrder
-	Processed    bool
+	PaymentOrder  db.PaymentOrder
+	Processed     bool
+	ReleaseAction *db.BehaviorAction
 }
 
 type ApplyOrderPaymentFactResult struct {
@@ -215,6 +218,7 @@ func (svc *PaymentFactService) ApplyExternalPaymentFactApplication(ctx context.C
 	}
 	result.OrderPayment = domainResult.OrderPayment
 	result.ClaimRecoveryPayment = domainResult.ClaimRecoveryPayment
+	result.ClaimRecoveryReleaseAction = domainResult.ClaimRecoveryReleaseAction
 	result.ReservationPayment = domainResult.ReservationPayment
 	result.BaofuVerifyFeePayment = domainResult.BaofuVerifyFeePayment
 
@@ -277,6 +281,7 @@ func (svc *PaymentFactService) applyExternalPaymentFactToDomain(ctx context.Cont
 			return result, err
 		}
 		result.ClaimRecoveryPayment = &claimRecoveryPayment
+		result.ClaimRecoveryReleaseAction = claimRecoveryPayment.ReleaseAction
 		return result, nil
 	case application.Consumer == paymentFactConsumerReservationDomain && application.BusinessObjectType == paymentFactBusinessObjectPaymentOrder:
 		reservationPayment, err := svc.applyReservationPaymentFact(ctx, application, fact)

@@ -46,8 +46,9 @@ func (svc *PaymentFactService) applyClaimRecoveryPaymentFact(ctx context.Context
 	}
 
 	result = claimRecoveryPaymentDomainResult{
-		PaymentOrder: paymentResult.PaymentOrder,
-		Processed:    paymentResult.Processed,
+		PaymentOrder:  paymentResult.PaymentOrder,
+		Processed:     paymentResult.Processed,
+		ReleaseAction: paymentResult.ReleaseAction,
 	}
 	return result, nil
 }

@@ -351,7 +351,7 @@ type claimRecoveryPaymentCreateResponse struct {
 	PayParams      *recoveryPayParamsResponse  `json:"pay_params"`
 }
 
-func markClaimRecoveryPaymentPaid(t *testing.T, store *db.SQLStore, paymentOrderID int64, transactionID string) {
+func applyClaimRecoveryPaymentFact(t *testing.T, store *db.SQLStore, paymentOrderID int64, transactionID string) {
 	t.Helper()
 
 	updatedPayment, err := store.UpdatePaymentOrderToPaid(context.Background(), db.UpdatePaymentOrderToPaidParams{
@@ -359,8 +359,50 @@ func markClaimRecoveryPaymentPaid(t *testing.T, store *db.SQLStore, paymentOrder
 		TransactionID: pgtype.Text{String: transactionID, Valid: true},
 	})
 	require.NoError(t, err)
-	require.NotEmpty(t, updatedPayment.BusinessType)
-	processPaymentSuccessTxForIntegration(t, store, paymentOrderID)
+	require.Equal(t, db.ExternalPaymentBusinessOwnerClaimRecovery, updatedPayment.BusinessType)
+
+	consumer := "claim_recovery_domain"
+	businessObjectType := "payment_order"
+	businessOwner := db.ExternalPaymentBusinessOwnerClaimRecovery
+	factResult, err := logic.NewPaymentFactService(store).RecordExternalPaymentFact(context.Background(), logic.RecordExternalPaymentFactInput{
+		Provider:             db.ExternalPaymentProviderWechat,
+		Channel:              db.PaymentChannelDirect,
+		Capability:           db.ExternalPaymentCapabilityDirectJSAPIPayment,
+		FactSource:           db.ExternalPaymentFactSourceManualReconciliation,
+		ExternalObjectType:   db.ExternalPaymentObjectPayment,
+		ExternalObjectKey:    updatedPayment.OutTradeNo,
+		ExternalSecondaryKey: &transactionID,
+		BusinessOwner:        &businessOwner,
+		BusinessObjectType:   &businessObjectType,
+		BusinessObjectID:     &paymentOrderID,
+		UpstreamState:        "SUCCESS",
+		TerminalStatus:       db.ExternalPaymentTerminalStatusSuccess,
+		Amount:               &updatedPayment.Amount,
+		Currency:             "CNY",
+		RawResource: []byte(fmt.Sprintf(
+			`{"payment_order_id":%d,"business_type":"claim_recovery","transaction_id":%q}`,
+			updatedPayment.ID,
+			transactionID,
+		)),
+		DedupeKey: fmt.Sprintf("integration:claim_recovery_payment:%d:%s", updatedPayment.ID, transactionID),
+		Application: &logic.ExternalPaymentFactApplicationTarget{
+			Consumer:           consumer,
+			BusinessObjectType: businessObjectType,
+			BusinessObjectID:   paymentOrderID,
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, factResult.Application)
+
+	distributor := &captureClaimBehaviorActionDistributor{}
+	processor := worker.NewTestTaskProcessor(store, distributor, nil, nil)
+	payloadBytes, err := json.Marshal(worker.PaymentFactApplicationPayload{ApplicationID: factResult.Application.ID})
+	require.NoError(t, err)
+	require.NoError(t, processor.ProcessTaskPaymentFactApplication(context.Background(), asynq.NewTask(worker.TaskProcessPaymentFactApplication, payloadBytes)))
+
+	payloads := distributor.Payloads()
+	require.Len(t, payloads, 1)
+	processClaimBehaviorAction(t, store, payloads[0].ActionID)
 }
 
 func claimRecoveryEventTypesForIntegration(t *testing.T, store *db.SQLStore, recoveryID int64) []string {
@@ -3514,7 +3556,7 @@ func TestClaimJourneyD10MerchantRecoveryPayIntegration(t *testing.T) {
 		require.NotNil(t, payResp.PayParams)
 	}
 
-	markClaimRecoveryPaymentPaid(t, store, payResp.PaymentOrderID, "integration_tx_d10_001")
+	applyClaimRecoveryPaymentFact(t, store, payResp.PaymentOrderID, "integration_tx_d10_001")
 
 	recovery, err = store.GetClaimRecoveryByClaimID(ctx, claimResp.ClaimID)
 	require.NoError(t, err)
@@ -3695,7 +3737,7 @@ func TestClaimJourneyD12RiderRecoveryPayIntegration(t *testing.T) {
 		require.NotNil(t, payResp.PayParams)
 	}
 
-	markClaimRecoveryPaymentPaid(t, store, payResp.PaymentOrderID, "integration_tx_d12_recovery_001")
+	applyClaimRecoveryPaymentFact(t, store, payResp.PaymentOrderID, "integration_tx_d12_recovery_001")
 
 	recovery, err = store.GetClaimRecoveryByClaimID(ctx, claimResp.ClaimID)
 	require.NoError(t, err)
@@ -4594,7 +4636,7 @@ func TestClaimJourneyD22MerchantRecoveryViewAfterPayIntegration(t *testing.T) {
 		require.Equal(t, http.StatusOK, rec.Code)
 		var payResp claimRecoveryPaymentCreateResponse
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &payResp)
-		markClaimRecoveryPaymentPaid(t, store, payResp.PaymentOrderID, "integration_tx_d22_001")
+		applyClaimRecoveryPaymentFact(t, store, payResp.PaymentOrderID, "integration_tx_d22_001")
 	}
 
 	// 5) 商户查看追偿单状态
@@ -4754,7 +4796,7 @@ func TestClaimJourneyD23RiderRecoveryViewAfterPayIntegration(t *testing.T) {
 		require.Equal(t, http.StatusOK, rec.Code)
 		var payResp claimRecoveryPaymentCreateResponse
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &payResp)
-		markClaimRecoveryPaymentPaid(t, store, payResp.PaymentOrderID, "integration_tx_d23_recovery_001")
+		applyClaimRecoveryPaymentFact(t, store, payResp.PaymentOrderID, "integration_tx_d23_recovery_001")
 	}
 
 	// 8) 骑手查看追偿单状态

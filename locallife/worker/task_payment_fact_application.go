@@ -80,6 +80,25 @@ func (processor *RedisTaskProcessor) ProcessTaskPaymentFactApplication(ctx conte
 		log.Info().Int64("payment_fact_application_id", payload.ApplicationID).Msg("payment fact application skipped")
 		return nil
 	}
+	if result.ClaimRecoveryReleaseAction != nil {
+		if processor.distributor == nil {
+			log.Error().
+				Int64("payment_fact_application_id", result.Application.ID).
+				Int64("behavior_action_id", result.ClaimRecoveryReleaseAction.ID).
+				Msg("claim recovery release action created but task distributor is not configured")
+		} else if err := processor.distributor.DistributeTaskClaimBehaviorAction(
+			ctx,
+			&ClaimBehaviorActionPayload{ActionID: result.ClaimRecoveryReleaseAction.ID},
+			asynq.Queue(QueueCritical),
+			asynq.MaxRetry(10),
+		); err != nil {
+			log.Error().
+				Err(err).
+				Int64("payment_fact_application_id", result.Application.ID).
+				Int64("behavior_action_id", result.ClaimRecoveryReleaseAction.ID).
+				Msg("enqueue claim recovery release action failed; recovery scheduler will retry")
+		}
+	}
 	log.Info().
 		Int64("payment_fact_application_id", result.Application.ID).
 		Int64("payment_fact_id", result.Application.FactID).
