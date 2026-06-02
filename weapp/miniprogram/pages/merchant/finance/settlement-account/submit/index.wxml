@@ -42,15 +42,15 @@
     <block wx:else>
       <view class="option-group">
         <view class="opening-mode-radio">
-          <t-check-tag
+          <view
             wx:for="{{accountOpeningModeOptions}}"
             wx:key="value"
-            checked="{{accountOpeningMode === item.value}}"
-            content="{{item.label}}"
-            shape="round"
+            class="opening-mode-choice {{accountOpeningMode === item.value ? 'opening-mode-choice--active' : ''}}"
             data-value="{{item.value}}"
-            bind:change="onOpeningModeChange"
-          />
+            bindtap="onOpeningModeChange"
+          >
+            <text>{{item.label}}</text>
+          </view>
         </view>
       </view>
 

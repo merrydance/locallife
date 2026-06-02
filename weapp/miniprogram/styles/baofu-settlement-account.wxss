@@ -53,8 +53,29 @@
 .opening-mode-radio {
   display: flex;
   align-items: center;
-  gap: var(--spacer-lg);
+  gap: var(--spacer-sm);
   min-height: 64rpx;
+}
+
+.opening-mode-choice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 160rpx;
+  min-height: 56rpx;
+  padding: 0 var(--spacer-sm);
+  border: 1rpx solid var(--td-component-border);
+  border-radius: 28rpx;
+  color: var(--td-text-color-primary);
+  font-size: var(--font-size-sm);
+  background: var(--td-bg-color-container);
+}
+
+.opening-mode-choice--active {
+  border-color: var(--td-brand-color);
+  color: var(--td-brand-color);
+  background: var(--td-brand-color-light);
+  font-weight: 600;
 }
 
 .identity-note {

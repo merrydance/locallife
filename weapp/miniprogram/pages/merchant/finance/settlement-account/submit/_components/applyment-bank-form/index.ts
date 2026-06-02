@@ -398,7 +398,6 @@ Component({
         )
       }, { emitDraft: false, syncSubmit: false })
 
-      this.emitDraftChange(initialDraft)
     },
 
     emitDraftChange(nextForm?: ApplymentBindBankDraft) {

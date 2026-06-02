@@ -111,7 +111,7 @@ Page({
     })
   },
 
-  onOpeningModeChange(e: WechatMiniprogram.CustomEvent<{ checked?: boolean }>) {
+  onOpeningModeChange(e: WechatMiniprogram.TouchEvent) {
     const value = (e.currentTarget.dataset as OpeningModeDataset).value
     if (value !== 'business' && value !== 'personal') {
       return
