@@ -107,15 +107,21 @@ type baofuSettlementAccountPaymentResponse struct {
 type baofuSettlementAccountProfileDefaults struct {
 	Source                    string `json:"source,omitempty"`
 	LegalName                 string `json:"legal_name,omitempty"`
+	CertificateNo             string `json:"certificate_no,omitempty"`
 	CertificateNoMask         string `json:"certificate_no_mask,omitempty"`
 	BusinessLicenseNumber     string `json:"business_license_number,omitempty"`
 	LegalPersonName           string `json:"legal_person_name,omitempty"`
 	CardUserName              string `json:"card_user_name,omitempty"`
 	SelfEmployed              bool   `json:"self_employed,omitempty"`
+	LegalPersonIDNumber       string `json:"legal_person_id_number,omitempty"`
 	LegalPersonIDNumberMask   string `json:"legal_person_id_number_mask,omitempty"`
+	CorporateMobile           string `json:"corporate_mobile,omitempty"`
 	CorporateMobileMask       string `json:"corporate_mobile_mask,omitempty"`
+	Email                     string `json:"email,omitempty"`
 	EmailMask                 string `json:"email_mask,omitempty"`
+	BankAccountNo             string `json:"bank_account_no,omitempty"`
 	BankAccountNoMask         string `json:"bank_account_no_mask,omitempty"`
+	BankMobile                string `json:"bank_mobile,omitempty"`
 	BankName                  string `json:"bank_name,omitempty"`
 	DepositBankProvince       string `json:"deposit_bank_province,omitempty"`
 	DepositBankCity           string `json:"deposit_bank_city,omitempty"`

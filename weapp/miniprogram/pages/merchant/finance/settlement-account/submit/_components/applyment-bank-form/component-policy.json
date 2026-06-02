@@ -1,13 +1,12 @@
 {
-  "purpose": "Merchant applyment bank selection form with search, picker, recommendation tags, and inline loading or empty states.",
+  "purpose": "Merchant settlement account form with manual bank details and optional contact documents.",
   "tdesignGroup": "form",
   "tdesignCandidates": [
     "input",
-    "picker",
-    "search",
-    "tag",
-    "cell"
+    "cell",
+    "check-tag",
+    "switch"
   ],
   "decision": "local-component",
-  "rationale": "Bank selection combines search, grouped field display, picker confirmation, and merchant-specific recovery states into one workflow surface. Keeping it as a domain component prevents every applyment page from reassembling the same TDesign composition."
+  "rationale": "Settlement account entry combines grouped bank fields, account type state, validation, and optional contact documents into one workflow surface. Keeping it as a domain component prevents applyment pages from reassembling the same TDesign composition."
 }

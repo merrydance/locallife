@@ -72,15 +72,21 @@ export interface BaofuSettlementAccountPayment {
 export interface BaofuSettlementAccountProfileDefaults {
   source?: 'wechat_applyment' | string
   legal_name?: string
+  certificate_no?: string
   certificate_no_mask?: string
   business_license_number?: string
   legal_person_name?: string
   card_user_name?: string
   self_employed?: boolean
+  legal_person_id_number?: string
   legal_person_id_number_mask?: string
+  corporate_mobile?: string
   corporate_mobile_mask?: string
+  email?: string
   email_mask?: string
+  bank_account_no?: string
   bank_account_no_mask?: string
+  bank_mobile?: string
   bank_name?: string
   deposit_bank_province?: string
   deposit_bank_city?: string

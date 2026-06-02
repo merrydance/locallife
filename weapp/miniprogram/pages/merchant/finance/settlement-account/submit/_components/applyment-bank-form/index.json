@@ -6,14 +6,7 @@
     "t-cell": "tdesign-miniprogram/cell/cell",
     "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",
     "t-check-tag": "tdesign-miniprogram/check-tag/check-tag",
-    "t-empty": "tdesign-miniprogram/empty/empty",
     "t-input": "tdesign-miniprogram/input/input",
-    "t-loading": "tdesign-miniprogram/loading/loading",
-    "t-picker": "tdesign-miniprogram/picker/picker",
-    "t-picker-item": "tdesign-miniprogram/picker-item/picker-item",
-    "t-popup": "tdesign-miniprogram/popup/popup",
-    "t-search": "tdesign-miniprogram/search/search",
-    "t-switch": "tdesign-miniprogram/switch/switch",
-    "t-tag": "tdesign-miniprogram/tag/tag"
+    "t-switch": "tdesign-miniprogram/switch/switch"
   }
 }

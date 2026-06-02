@@ -21,7 +21,6 @@ import {
   buildBaofuEnterpriseFormFromDefaults,
   buildBaofuEnterpriseProfilePayload,
   emptyBaofuEnterpriseProfileForm,
-  getBaofuEnterpriseStoredFlags,
   validateBaofuEnterpriseProfileForm,
   type BaofuEnterpriseProfileField,
   type BaofuEnterpriseProfileForm
@@ -83,18 +82,12 @@ Page({
   data: {
     form: emptyBaofuEnterpriseProfileForm(),
     bankDraft: { account_type: 'ACCOUNT_TYPE_BUSINESS' } as ApplymentBankFormDraftPayload,
-    profileDefaults: null as BaofuSettlementAccountProfileDefaults | null,
-    hasStoredLegalPersonID: false,
-    hasStoredCorporateMobile: false,
-    hasStoredEmail: false,
-    hasStoredBankAccount: false,
-    showIdNumber: false
+    profileDefaults: null as BaofuSettlementAccountProfileDefaults | null
   },
 
   applyAccount(response: BaofuSettlementAccountResponse) {
     const pageView = buildBaofuRolePageView('merchant', response)
     const profileDefaults = response.profile_defaults || null
-    const flags = getBaofuEnterpriseStoredFlags(profileDefaults)
 
     this.setData({
       pageView,
@@ -102,10 +95,6 @@ Page({
       form: buildBaofuEnterpriseFormFromDefaults(profileDefaults),
       bankDraft: buildBaofuEnterpriseBankDraftFromDefaults(profileDefaults),
       canSubmitProfile: pageView.statusView.canSubmitProfile,
-      hasStoredLegalPersonID: flags.hasStoredLegalPersonID,
-      hasStoredCorporateMobile: flags.hasStoredCorporateMobile,
-      hasStoredEmail: flags.hasStoredEmail,
-      hasStoredBankAccount: flags.hasStoredBankAccount,
       initialLoading: false,
       initialError: false,
       initialErrorMessage: ''
@@ -135,10 +124,6 @@ Page({
     this.setData({
       [`form.${field}`]: value
     })
-  },
-
-  onToggleIdVisibility() {
-    this.setData({ showIdNumber: !this.data.showIdNumber })
   },
 
   onBankDraftChange(e: WechatMiniprogram.CustomEvent<ApplymentBankFormDraftPayload>) {

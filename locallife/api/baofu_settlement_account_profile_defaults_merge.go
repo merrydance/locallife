@@ -44,6 +44,9 @@ func (defaults *baofuSettlementAccountProfileDefaultsWithSecrets) overrideMercha
 	if strings.TrimSpace(source.defaults.CardUserName) != "" {
 		defaults.defaults.CardUserName = source.defaults.CardUserName
 	}
+	if strings.TrimSpace(source.defaults.LegalPersonIDNumber) != "" {
+		defaults.defaults.LegalPersonIDNumber = source.defaults.LegalPersonIDNumber
+	}
 	if strings.TrimSpace(source.defaults.LegalPersonIDNumberMask) != "" {
 		defaults.defaults.LegalPersonIDNumberMask = source.defaults.LegalPersonIDNumberMask
 	}
@@ -77,6 +80,9 @@ func (defaults *baofuSettlementAccountProfileDefaultsWithSecrets) mergeResponseD
 	if strings.TrimSpace(defaults.defaults.LegalName) == "" {
 		defaults.defaults.LegalName = source.defaults.LegalName
 	}
+	if strings.TrimSpace(defaults.defaults.CertificateNo) == "" {
+		defaults.defaults.CertificateNo = source.defaults.CertificateNo
+	}
 	if strings.TrimSpace(defaults.defaults.CertificateNoMask) == "" {
 		defaults.defaults.CertificateNoMask = source.defaults.CertificateNoMask
 	}
@@ -92,17 +98,32 @@ func (defaults *baofuSettlementAccountProfileDefaultsWithSecrets) mergeResponseD
 	if source.defaults.SelfEmployed {
 		defaults.defaults.SelfEmployed = true
 	}
+	if strings.TrimSpace(defaults.defaults.LegalPersonIDNumber) == "" {
+		defaults.defaults.LegalPersonIDNumber = source.defaults.LegalPersonIDNumber
+	}
 	if strings.TrimSpace(defaults.defaults.LegalPersonIDNumberMask) == "" {
 		defaults.defaults.LegalPersonIDNumberMask = source.defaults.LegalPersonIDNumberMask
+	}
+	if strings.TrimSpace(defaults.defaults.CorporateMobile) == "" {
+		defaults.defaults.CorporateMobile = source.defaults.CorporateMobile
 	}
 	if strings.TrimSpace(defaults.defaults.CorporateMobileMask) == "" {
 		defaults.defaults.CorporateMobileMask = source.defaults.CorporateMobileMask
 	}
+	if strings.TrimSpace(defaults.defaults.Email) == "" {
+		defaults.defaults.Email = source.defaults.Email
+	}
 	if strings.TrimSpace(defaults.defaults.EmailMask) == "" {
 		defaults.defaults.EmailMask = source.defaults.EmailMask
 	}
+	if strings.TrimSpace(defaults.defaults.BankAccountNo) == "" {
+		defaults.defaults.BankAccountNo = source.defaults.BankAccountNo
+	}
 	if strings.TrimSpace(defaults.defaults.BankAccountNoMask) == "" {
 		defaults.defaults.BankAccountNoMask = source.defaults.BankAccountNoMask
+	}
+	if strings.TrimSpace(defaults.defaults.BankMobile) == "" {
+		defaults.defaults.BankMobile = source.defaults.BankMobile
 	}
 	if strings.TrimSpace(defaults.defaults.BankName) == "" {
 		defaults.defaults.BankName = source.defaults.BankName
@@ -169,6 +190,9 @@ func (defaults *baofuSettlementAccountProfileDefaultsWithSecrets) mergeSecretDef
 	}
 	if strings.TrimSpace(defaults.bankAccountNo) == "" {
 		defaults.bankAccountNo = source.bankAccountNo
+	}
+	if strings.TrimSpace(defaults.bankMobile) == "" {
+		defaults.bankMobile = source.bankMobile
 	}
 	if strings.TrimSpace(defaults.bankName) == "" {
 		defaults.bankName = source.bankName
@@ -295,12 +319,12 @@ func (defaults baofuSettlementAccountProfileDefaultsWithSecrets) overrideMerchan
 
 func (defaults baofuSettlementAccountProfileDefaultsWithSecrets) isZero() bool {
 	return defaults.defaults.isZero() &&
-		firstNonBlank(defaults.legalName, defaults.certificateNo, defaults.businessLicenseNumber, defaults.legalPersonName, defaults.legalPersonIDNumber, defaults.cardUserName, defaults.corporateMobile, defaults.email, defaults.bankAccountNo, defaults.bankName, defaults.depositBankProvince, defaults.depositBankCity, defaults.depositBankName, defaults.contactName, defaults.contactMobile) == "" &&
+		firstNonBlank(defaults.legalName, defaults.certificateNo, defaults.businessLicenseNumber, defaults.legalPersonName, defaults.legalPersonIDNumber, defaults.cardUserName, defaults.corporateMobile, defaults.email, defaults.bankAccountNo, defaults.bankMobile, defaults.bankName, defaults.depositBankProvince, defaults.depositBankCity, defaults.depositBankName, defaults.contactName, defaults.contactMobile) == "" &&
 		!defaults.selfEmployed
 }
 
 func (defaults baofuSettlementAccountProfileDefaults) isZero() bool {
-	return firstNonBlank(defaults.LegalName, defaults.CertificateNoMask, defaults.BusinessLicenseNumber, defaults.LegalPersonName, defaults.CardUserName, defaults.CorporateMobileMask, defaults.BankName, defaults.DepositBankProvince, defaults.DepositBankCity, defaults.DepositBankName, defaults.ContactName, defaults.BankAccountNoMask, defaults.EmailMask, defaults.ContactMobileMask) == "" &&
+	return firstNonBlank(defaults.LegalName, defaults.CertificateNo, defaults.CertificateNoMask, defaults.BusinessLicenseNumber, defaults.LegalPersonName, defaults.CardUserName, defaults.LegalPersonIDNumber, defaults.LegalPersonIDNumberMask, defaults.CorporateMobile, defaults.CorporateMobileMask, defaults.BankName, defaults.DepositBankProvince, defaults.DepositBankCity, defaults.DepositBankName, defaults.ContactName, defaults.BankAccountNo, defaults.BankAccountNoMask, defaults.BankMobile, defaults.Email, defaults.EmailMask, defaults.ContactMobileMask) == "" &&
 		!defaults.HasLegalPersonIDNumber &&
 		!defaults.HasCorporateMobile &&
 		!defaults.HasCertificateNo &&

@@ -9,12 +9,6 @@
   gap: var(--spacer-md);
 }
 
-.popup-panel {
-  background: var(--td-bg-color-container);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-}
-
 .tag-check-list {
   display: flex;
   flex-wrap: wrap;
@@ -63,37 +57,4 @@
 
 .form-actions--block {
   flex-direction: column;
-}
-
-.popup-panel {
-  padding: var(--spacer-md);
-  padding-bottom: var(--popup-bottom-padding-md);
-}
-
-.selector-popup {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacer-md);
-}
-
-.popup-state {
-  min-height: 260rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.selector-scroll {
-  max-height: 56vh;
-}
-
-.selector-scroll--branch {
-  max-height: 52vh;
-}
-
-.popup-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: var(--spacer-sm);
 }

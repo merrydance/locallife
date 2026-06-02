@@ -40,10 +40,7 @@ Page({
 
   data: {
     form: emptyBaofuPersonalProfileForm(),
-    profileDefaults: null as BaofuSettlementAccountProfileDefaults | null,
-    hasStoredCertificateNo: false,
-    showIdNumber: false,
-    showBankAccount: false
+    profileDefaults: null as BaofuSettlementAccountProfileDefaults | null
   },
 
   applyAccount(response: BaofuSettlementAccountResponse) {
@@ -55,7 +52,6 @@ Page({
       pageView,
       profileDefaults,
       form: buildBaofuPersonalFormFromDefaults(currentForm, profileDefaults),
-      hasStoredCertificateNo: Boolean(profileDefaults?.has_certificate_no),
       canSubmitProfile: pageView.statusView.canSubmitProfile,
       initialLoading: false,
       initialError: false,
@@ -88,14 +84,6 @@ Page({
       [`form.${field}`]: value,
       formErrorMessage: ''
     })
-  },
-
-  onToggleIdVisibility() {
-    this.setData({ showIdNumber: !this.data.showIdNumber })
-  },
-
-  onToggleBankAccountVisibility() {
-    this.setData({ showBankAccount: !this.data.showBankAccount })
   },
 
   async onSubmitProfile() {

@@ -2,20 +2,10 @@ import {
   type ApplymentAccountType,
   type ApplymentContactType,
   type ApplymentContactDocType,
-  type ApplymentBankOption,
-  type ApplymentBranchOption,
-  type ApplymentCityOption,
-  type ApplymentProvinceOption,
-  listApplymentBankBranches,
-  listApplymentBanks,
-  listApplymentCities,
-  listApplymentProvinces,
-  searchApplymentBanksByAccount,
   type ApplymentBindBankPayload
 } from '../../../../../_main_shared/api/applyment-bank'
 import { uploadMedia } from '../../../../../../../utils/media'
 import { getErrorUserMessage } from '../../../../../../../utils/user-facing'
-import { resolveRecognizedBankSelection } from './selection'
 
 const DEFAULT_CONTACT_DOC_TYPE: ApplymentContactDocType = 'IDENTIFICATION_TYPE_MAINLAND_IDCARD'
 const CONTACT_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -55,34 +45,18 @@ export type ApplymentBankFormDraftPayload = PartialApplymentBindBankDraft
 export type ApplymentBankFormPayload = ApplymentBindBankPayload
 
 interface ApplymentBankFormProperties {
-  apiBasePath: string
   initialDraft?: PartialApplymentBindBankDraft
   defaultAccountType: ApplymentAccountType
-  preloadCatalogs?: boolean
-  manualCatalog?: boolean
   showContactFields?: boolean
   requireContactEmail?: boolean
   requireAccountName?: boolean
   showAccountTypeSelector?: boolean
-  allowSavedAccountNumber?: boolean
-  requireBankBranch?: boolean
   embedded?: boolean
   submitBlock?: boolean
   showSubmitActions?: boolean
   uploadBusinessType?: string
 }
 
-type ApplymentBankViewOption = ApplymentBankOption & {
-  display_label: string
-}
-
-type ApplymentPickerOption = {
-  label: string
-  value: number
-}
-
-type ApplymentPickerVisibleChangeEvent = WechatMiniprogram.CustomEvent<{ visible?: boolean }>
-type ApplymentPickerChangeEvent = WechatMiniprogram.CustomEvent<{ value?: Array<string | number> }>
 type ApplymentBankFormInstance = WechatMiniprogram.Component.TrivialInstance & {
   draftForm?: ApplymentBindBankDraft
 }
@@ -197,115 +171,13 @@ function normalizeDraft(
   }
 }
 
-function inferProvinceCode(bankAddressCode: string): number {
-  const cityCode = Number(bankAddressCode)
-  if (!Number.isFinite(cityCode) || cityCode <= 0) {
-    return 0
-  }
-  return Math.floor(cityCode / 10000) * 10000
-}
-
-function normalizeKeyword(value: string): string {
-  return value.trim().toLowerCase()
-}
-
-function bankMatchesKeyword(bank: ApplymentBankOption, keyword: string): boolean {
-  if (!keyword) {
-    return true
-  }
-  const normalized = normalizeKeyword(keyword)
-  return [bank.bank_alias, bank.account_bank, String(bank.account_bank_code)]
-    .some((item) => item.toLowerCase().includes(normalized))
-}
-
-function branchMatchesKeyword(branch: ApplymentBranchOption, keyword: string): boolean {
-  if (!keyword) {
-    return true
-  }
-  const normalized = normalizeKeyword(keyword)
-  return [branch.bank_branch_name, branch.bank_branch_id]
-    .some((item) => item.toLowerCase().includes(normalized))
-}
-
-function buildBankDisplayLabel(bank: ApplymentBankOption): string {
-  return bank.bank_alias
-}
-
-function decorateBankOption(bank: ApplymentBankOption): ApplymentBankViewOption {
-  return {
-    ...bank,
-    display_label: buildBankDisplayLabel(bank)
-  }
-}
-
-function decorateBankOptions(banks: ApplymentBankOption[]): ApplymentBankViewOption[] {
-  return banks.map((bank) => decorateBankOption(bank))
-}
-
-function buildProvincePickerOptions(provinces: ApplymentProvinceOption[]): ApplymentPickerOption[] {
-  return provinces.map((province) => ({
-    label: province.province_name,
-    value: province.province_code
-  }))
-}
-
-function buildCityPickerOptions(cities: ApplymentCityOption[]): ApplymentPickerOption[] {
-  return cities.map((city) => ({
-    label: city.city_name,
-    value: city.city_code
-  }))
-}
-
-function buildPickerValue(value?: number): number[] {
-  return value && value > 0 ? [value] : []
-}
-
-function buildSelectedBankLabel(form: ApplymentBindBankDraft): string {
-  return form.bank_alias || form.account_bank
-}
-
-function hasSelectedBank(form: ApplymentBindBankDraft): boolean {
-  return Boolean(form.bank_alias || form.account_bank)
-}
-
-function isManualCatalog(properties: ApplymentBankFormProperties): boolean {
-  return Boolean(properties.manualCatalog || !String(properties.apiBasePath || '').trim())
-}
-
-function canLoadBankList(form: ApplymentBindBankDraft): boolean {
-  return Boolean(form.account_number.trim())
-}
-
-function findSelectedBankIndex(banks: ApplymentBankOption[], form: ApplymentBindBankDraft): number {
-  if (!banks.length || !form.bank_alias_code) {
-    return 0
-  }
-
-  const index = banks.findIndex(
-    (bank) => bank.bank_alias_code === form.bank_alias_code && bank.account_bank_code === form.account_bank_code
-  )
-  return index >= 0 ? index : 0
-}
-
-function findSelectedBranchIndex(branches: ApplymentBranchOption[], form: ApplymentBindBankDraft): number {
-  if (!branches.length || !form.bank_branch_id) {
-    return 0
-  }
-
-  const index = branches.findIndex((branch) => branch.bank_branch_id === form.bank_branch_id)
-  return index >= 0 ? index : 0
-}
-
 function getSubmitBlockMessage(
   form: ApplymentBindBankDraft,
   showContactFields?: boolean,
   requireContactEmail?: boolean,
-  requireAccountName: boolean = true,
-  allowSavedAccountNumber: boolean = false,
-  requireBankBranch: boolean = false,
-  useManualCatalog: boolean = false
+  requireAccountName: boolean = true
 ): string {
-  if (!form.account_number.trim() && !allowSavedAccountNumber) {
+  if (!form.account_number.trim()) {
     return '请先填写银行账号'
   }
 
@@ -347,24 +219,16 @@ function getSubmitBlockMessage(
     }
   }
 
-  if (!form.need_bank_branch && !requireBankBranch && !useManualCatalog) {
-    return ''
-  }
-
   if (!form.bank_address_code.trim()) {
-    return useManualCatalog ? '请先填写开户省份' : '请先选择开户城市'
+    return '请先填写开户省份'
   }
 
-  if (useManualCatalog && !form.manual_bank_city.trim()) {
+  if (!form.manual_bank_city.trim()) {
     return '请先填写开户城市'
   }
 
-  if (!form.bank_alias_code.trim() && !form.bank_name.trim()) {
-    return '请重新选择开户银行'
-  }
-
-  if (!form.bank_branch_id.trim() || !form.bank_name.trim()) {
-    return '请先选择开户支行'
+  if (!form.bank_name.trim()) {
+    return '请先填写开户支行'
   }
 
   return ''
@@ -374,20 +238,13 @@ function canSubmitForm(
   form: ApplymentBindBankDraft,
   showContactFields?: boolean,
   requireContactEmail?: boolean,
-  requireAccountName: boolean = true,
-  allowSavedAccountNumber: boolean = false,
-  requireBankBranch: boolean = false,
-  useManualCatalog: boolean = false
+  requireAccountName: boolean = true
 ): boolean {
-  return !getSubmitBlockMessage(form, showContactFields, requireContactEmail, requireAccountName, allowSavedAccountNumber, requireBankBranch, useManualCatalog)
+  return !getSubmitBlockMessage(form, showContactFields, requireContactEmail, requireAccountName)
 }
 
 Component({
   properties: {
-    apiBasePath: {
-      type: String,
-      value: ''
-    },
     initialDraft: {
       type: Object,
       value: {}
@@ -395,19 +252,6 @@ Component({
     defaultAccountType: {
       type: String,
       value: 'ACCOUNT_TYPE_BUSINESS'
-    },
-    preloadCatalogs: {
-      type: Boolean,
-      value: false,
-      observer(preloadCatalogs: boolean) {
-        if (preloadCatalogs) {
-          void this.preloadSelectableCatalogs()
-        }
-      }
-    },
-    manualCatalog: {
-      type: Boolean,
-      value: false
     },
     showContactFields: {
       type: Boolean,
@@ -425,14 +269,6 @@ Component({
       type: Boolean,
       value: true
     },
-    allowSavedAccountNumber: {
-      type: Boolean,
-      value: false
-    },
-    requireBankBranch: {
-      type: Boolean,
-      value: false
-    },
     embedded: {
       type: Boolean,
       value: false
@@ -444,10 +280,6 @@ Component({
     showSubmitActions: {
       type: Boolean,
       value: true
-    },
-    savedAccountNumberMask: {
-      type: String,
-      value: ''
     },
     showCancelButton: {
       type: Boolean,
@@ -469,36 +301,6 @@ Component({
 
   data: {
     form: createEmptyDraft('ACCOUNT_TYPE_BUSINESS' as ApplymentAccountType),
-    privateBanks: [] as ApplymentBankViewOption[],
-    businessBanks: [] as ApplymentBankViewOption[],
-    filteredBanks: [] as ApplymentBankViewOption[],
-    loadingBanks: false,
-    recognizingBank: false,
-    bankKeyword: '',
-    provinces: [] as ApplymentProvinceOption[],
-    cities: [] as ApplymentCityOption[],
-    branches: [] as ApplymentBranchOption[],
-    provincePickerOptions: [] as ApplymentPickerOption[],
-    cityPickerOptions: [] as ApplymentPickerOption[],
-    provincePickerValue: [] as number[],
-    cityPickerValue: [] as number[],
-    filteredBranches: [] as ApplymentBranchOption[],
-    loadingProvinces: false,
-    loadingCities: false,
-    loadingBranches: false,
-    showBankPicker: false,
-    showProvincePicker: false,
-    showCityPicker: false,
-    showBranchPicker: false,
-    selectedBankIndex: 0,
-    selectedProvinceIndex: 0,
-    selectedCityIndex: 0,
-    selectedBranchIndex: 0,
-    selectedProvinceCode: 0,
-    selectedCityCode: 0,
-    selectedProvinceLabel: '',
-    selectedCityLabel: '',
-    branchKeyword: '',
     contactDocCopyFeedbackState: 'idle',
     contactDocCopyFeedbackTitle: '',
     contactDocCopyFeedbackDescription: '',
@@ -506,11 +308,7 @@ Component({
     contactDocCopyBackFeedbackTitle: '',
     contactDocCopyBackFeedbackDescription: '',
     canSubmit: false,
-    submitBlockMessage: '',
-    selectedBankLabel: '',
-    hasSelectedBank: false,
-    showAccountNumber: false,
-    useManualCatalog: false
+    submitBlockMessage: ''
   },
 
   lifetimes: {
@@ -520,13 +318,6 @@ Component({
   },
 
   methods: {
-    onToggleAccountNumberVisibility() {
-      if (this.properties.allowSavedAccountNumber && this.properties.savedAccountNumberMask && !this.readForm().account_number.trim()) {
-        return
-      }
-      this.setData({ showAccountNumber: !this.data.showAccountNumber })
-    },
-
     readForm() {
       const instance = this as unknown as ApplymentBankFormInstance
       return instance.draftForm || (this.data.form as ApplymentBindBankDraft)
@@ -539,11 +330,7 @@ Component({
     ) {
       const instance = this as unknown as ApplymentBankFormInstance
       instance.draftForm = nextForm
-      this.setData(Object.assign({
-        form: nextForm,
-        selectedBankLabel: buildSelectedBankLabel(nextForm),
-        hasSelectedBank: hasSelectedBank(nextForm)
-      }, extraData))
+      this.setData(Object.assign({ form: nextForm }, extraData))
 
       if (options?.syncSubmit !== false) {
         this.syncCanSubmit(nextForm)
@@ -553,71 +340,36 @@ Component({
       }
     },
 
-    async initializeForm() {
+    initializeForm() {
       const properties = this.properties as unknown as ApplymentBankFormProperties
       const accountType = properties.defaultAccountType
       const initialDraft = normalizeDraft(accountType, properties.initialDraft)
-      const useManualCatalog = isManualCatalog(properties)
 
       this.setFormState(initialDraft, {
-        useManualCatalog,
         canSubmit: canSubmitForm(
           initialDraft,
           properties.showContactFields,
           properties.requireContactEmail,
-          properties.requireAccountName,
-          properties.allowSavedAccountNumber,
-          properties.requireBankBranch,
-          useManualCatalog
+          properties.requireAccountName
         ),
         submitBlockMessage: getSubmitBlockMessage(
           initialDraft,
           properties.showContactFields,
           properties.requireContactEmail,
-          properties.requireAccountName,
-          properties.allowSavedAccountNumber,
-          properties.requireBankBranch,
-          useManualCatalog
+          properties.requireAccountName
         )
       }, { emitDraft: false, syncSubmit: false })
 
-      if (!useManualCatalog) {
-        await this.restoreDraftSelection(initialDraft)
-      }
-      if (!useManualCatalog && properties.preloadCatalogs) {
-        void this.preloadSelectableCatalogs()
-      }
       this.emitDraftChange(initialDraft)
-    },
-
-    async preloadSelectableCatalogs() {
-      await this.ensureProvincesLoaded()
-    },
-
-    getBanksForType(accountType: ApplymentAccountType): ApplymentBankViewOption[] {
-      return accountType === 'ACCOUNT_TYPE_PRIVATE'
-        ? (this.data.privateBanks as ApplymentBankViewOption[])
-        : (this.data.businessBanks as ApplymentBankViewOption[])
     },
 
     emitDraftChange(nextForm?: ApplymentBindBankDraft) {
       const form = nextForm || (this.data.form as ApplymentBindBankDraft)
-      const manualCity = this.usesManualCatalog() ? form.manual_bank_city.trim() : ''
       this.triggerEvent('draftchange', {
         ...form,
-        deposit_bank_province: this.data.selectedProvinceLabel || form.bank_address_code.trim() || undefined,
-        deposit_bank_city: this.data.selectedCityLabel || manualCity || undefined
+        deposit_bank_province: form.bank_address_code.trim() || undefined,
+        deposit_bank_city: form.manual_bank_city.trim() || undefined
       })
-    },
-
-    getApiBasePath() {
-      const properties = this.properties as unknown as ApplymentBankFormProperties
-      return properties.apiBasePath
-    },
-
-    usesManualCatalog() {
-      const properties = this.properties as unknown as ApplymentBankFormProperties
-      return isManualCatalog(properties)
     },
 
     getUploadBusinessType() {
@@ -709,277 +461,21 @@ Component({
       }
     },
 
-    async ensureBanksLoaded(accountType: ApplymentAccountType) {
-      if (this.getBanksForType(accountType).length > 0) {
-        this.updateBankFilter('')
-        return
-      }
-
-      await this.loadBanks(accountType)
-    },
-
     syncCanSubmit(nextForm?: ApplymentBindBankDraft) {
       const form = nextForm || (this.data.form as ApplymentBindBankDraft)
       const canSubmit = canSubmitForm(
         form,
         this.properties.showContactFields,
         this.properties.requireContactEmail,
-        this.properties.requireAccountName,
-        this.properties.allowSavedAccountNumber,
-        this.properties.requireBankBranch,
-        this.usesManualCatalog()
+        this.properties.requireAccountName
       )
       const submitBlockMessage = getSubmitBlockMessage(
         form,
         this.properties.showContactFields,
         this.properties.requireContactEmail,
-        this.properties.requireAccountName,
-        this.properties.allowSavedAccountNumber,
-        this.properties.requireBankBranch,
-        this.usesManualCatalog()
+        this.properties.requireAccountName
       )
       this.setData({ canSubmit, submitBlockMessage })
-    },
-
-    async restoreDraftSelection(draft: ApplymentBindBankDraft) {
-      if (!draft.need_bank_branch || !draft.bank_alias_code || !draft.bank_address_code) {
-        return
-      }
-
-      await this.ensureProvincesLoaded()
-
-      const provinceCode = inferProvinceCode(draft.bank_address_code)
-      const cityCode = Number(draft.bank_address_code)
-      const provinces = this.data.provinces as ApplymentProvinceOption[]
-      const selectedProvinceIndex = provinces.findIndex((province) => province.province_code === provinceCode)
-
-      if (provinceCode > 0 && selectedProvinceIndex >= 0) {
-        this.setData({
-          selectedProvinceCode: provinceCode,
-          selectedProvinceIndex,
-          selectedProvinceLabel: provinces[selectedProvinceIndex]?.province_name || '',
-          provincePickerValue: buildPickerValue(provinceCode)
-        })
-        await this.loadCities(provinceCode)
-      }
-
-      const cities = this.data.cities as ApplymentCityOption[]
-      const selectedCityIndex = cities.findIndex((city) => city.city_code === cityCode)
-
-      if (cityCode > 0 && selectedCityIndex >= 0) {
-        this.setData({
-          selectedCityCode: cityCode,
-          selectedCityIndex,
-          selectedCityLabel: cities[selectedCityIndex]?.city_name || '',
-          cityPickerValue: buildPickerValue(cityCode)
-        })
-        await this.loadBranches(draft.bank_alias_code, cityCode)
-      }
-
-      if (!draft.bank_branch_id) {
-        return
-      }
-
-      const branches = this.data.branches as ApplymentBranchOption[]
-      const selectedBranchIndex = branches.findIndex((branch) => branch.bank_branch_id === draft.bank_branch_id)
-
-      if (selectedBranchIndex < 0) {
-        return
-      }
-
-      const nextForm: ApplymentBindBankDraft = {
-        ...this.readForm(),
-        bank_address_code: draft.bank_address_code,
-        bank_branch_id: draft.bank_branch_id,
-        bank_name: draft.bank_name
-      }
-
-      this.setFormState(nextForm, { selectedBranchIndex }, { emitDraft: false })
-    },
-
-    updateBankFilter(keyword?: string) {
-      const nextKeyword = keyword ?? this.data.bankKeyword
-      const filteredBanks = this.getBanksForType(this.data.form.account_type)
-        .filter((bank: ApplymentBankViewOption) => bankMatchesKeyword(bank, nextKeyword))
-        .slice(0, 100)
-      const selectedBankIndex = findSelectedBankIndex(filteredBanks, this.data.form as ApplymentBindBankDraft)
-
-      this.setData({
-        bankKeyword: nextKeyword,
-        filteredBanks,
-        selectedBankIndex
-      })
-    },
-
-    updateBranchFilter(keyword?: string) {
-      const nextKeyword = keyword ?? this.data.branchKeyword
-      const filteredBranches = (this.data.branches as ApplymentBranchOption[])
-        .filter((branch) => branchMatchesKeyword(branch, nextKeyword))
-        .slice(0, 100)
-      const selectedBranchIndex = findSelectedBranchIndex(filteredBranches, this.data.form as ApplymentBindBankDraft)
-
-      this.setData({
-        branchKeyword: nextKeyword,
-        filteredBranches,
-        selectedBranchIndex
-      })
-    },
-
-    clearResolvedBankSelection() {
-      const currentForm = this.readForm()
-      const nextForm: ApplymentBindBankDraft = {
-        ...currentForm,
-        account_bank: '',
-        account_bank_code: 0,
-        bank_alias: '',
-        bank_alias_code: '',
-        need_bank_branch: false,
-        bank_address_code: '',
-        bank_branch_id: '',
-        bank_name: ''
-      }
-
-      this.setFormState(nextForm, {
-        showBankPicker: false,
-        showProvincePicker: false,
-        showCityPicker: false,
-        showBranchPicker: false,
-        selectedBankIndex: 0,
-        selectedProvinceIndex: 0,
-        selectedCityIndex: 0,
-        selectedBranchIndex: 0,
-        selectedProvinceCode: 0,
-        selectedCityCode: 0,
-        selectedProvinceLabel: '',
-        selectedCityLabel: '',
-        provincePickerValue: [],
-        cityPickerValue: [],
-        cityPickerOptions: [],
-        cities: [],
-        branches: [],
-        filteredBranches: [],
-        branchKeyword: ''
-      })
-    },
-
-    async loadBanks(accountType: ApplymentAccountType) {
-      const existing = this.getBanksForType(accountType)
-      if (existing.length > 0) {
-        this.updateBankFilter('')
-        return
-      }
-      if (this.usesManualCatalog()) {
-        return
-      }
-
-      this.setData({ loadingBanks: true })
-      try {
-        const response = await listApplymentBanks(this.getApiBasePath(), accountType)
-        const banks = decorateBankOptions(response.banks)
-        if (accountType === 'ACCOUNT_TYPE_PRIVATE') {
-          this.setData({ privateBanks: banks })
-        } else {
-          this.setData({ businessBanks: banks })
-        }
-        this.updateBankFilter('')
-      } catch (error: unknown) {
-        wx.showToast({
-          title: getErrorUserMessage(error, '加载银行列表失败，请稍后重试'),
-          icon: 'none'
-        })
-      } finally {
-        this.setData({ loadingBanks: false })
-      }
-    },
-
-    async ensureProvincesLoaded() {
-      if ((this.data.provinces as ApplymentProvinceOption[]).length > 0) {
-        return
-      }
-      if (this.usesManualCatalog()) {
-        return
-      }
-
-      this.setData({ loadingProvinces: true })
-      try {
-        const response = await listApplymentProvinces(this.getApiBasePath())
-        this.setData({
-          provinces: response.provinces,
-          provincePickerOptions: buildProvincePickerOptions(response.provinces)
-        })
-      } catch (error: unknown) {
-        wx.showToast({
-          title: getErrorUserMessage(error, '加载省份失败，请稍后重试'),
-          icon: 'none'
-        })
-      } finally {
-        this.setData({ loadingProvinces: false })
-      }
-    },
-
-    async loadCities(provinceCode: number) {
-      if (this.usesManualCatalog()) {
-        return
-      }
-      this.setData({ loadingCities: true })
-      try {
-        const response = await listApplymentCities(this.getApiBasePath(), provinceCode)
-        this.setData({
-          cities: response.cities,
-          cityPickerOptions: buildCityPickerOptions(response.cities),
-          cityPickerValue: [],
-          selectedCityIndex: 0,
-          selectedCityCode: 0,
-          selectedCityLabel: '',
-          branches: [],
-          filteredBranches: [],
-          selectedBranchIndex: 0,
-          branchKeyword: ''
-        })
-      } catch (error: unknown) {
-        wx.showToast({
-          title: getErrorUserMessage(error, '加载城市失败，请稍后重试'),
-          icon: 'none'
-        })
-      } finally {
-        this.setData({ loadingCities: false })
-      }
-    },
-
-    async loadBranches(bankAliasCode: string, cityCode: number) {
-      if (this.usesManualCatalog()) {
-        return
-      }
-      this.setData({ loadingBranches: true })
-      try {
-        const response = await listApplymentBankBranches(this.getApiBasePath(), bankAliasCode, cityCode)
-        const currentForm = this.readForm()
-        const nextForm: ApplymentBindBankDraft = {
-          ...currentForm,
-          account_bank: response.account_bank || currentForm.account_bank,
-          account_bank_code: response.account_bank_code || currentForm.account_bank_code,
-          bank_alias: response.bank_alias || currentForm.bank_alias,
-          bank_alias_code: response.bank_alias_code || currentForm.bank_alias_code,
-          need_bank_branch: true,
-          bank_address_code: String(cityCode),
-          bank_branch_id: '',
-          bank_name: ''
-        }
-
-        this.setFormState(nextForm, {
-          branches: response.branches,
-          filteredBranches: response.branches,
-          selectedBranchIndex: 0,
-          branchKeyword: ''
-        })
-      } catch (error: unknown) {
-        wx.showToast({
-          title: getErrorUserMessage(error, '加载支行失败，请稍后重试'),
-          icon: 'none'
-        })
-      } finally {
-        this.setData({ loadingBranches: false })
-      }
     },
 
     resetBankSelection(accountType: ApplymentAccountType) {
@@ -993,90 +489,12 @@ Component({
         bank_alias_code: '',
         need_bank_branch: false,
         bank_address_code: '',
+        manual_bank_city: '',
         bank_branch_id: '',
         bank_name: ''
       }
 
-      this.setFormState(nextForm, {
-        bankKeyword: '',
-        filteredBanks: this.getBanksForType(accountType).slice(0, 100),
-        showBankPicker: false,
-        showProvincePicker: false,
-        showCityPicker: false,
-        showBranchPicker: false,
-        selectedBankIndex: 0,
-        provinces: [],
-        cities: [],
-        branches: [],
-        filteredBranches: [],
-        selectedBranchIndex: 0,
-        selectedProvinceIndex: 0,
-        selectedCityIndex: 0,
-        selectedProvinceCode: 0,
-        selectedCityCode: 0,
-        selectedProvinceLabel: '',
-        selectedCityLabel: '',
-        provincePickerOptions: [],
-        cityPickerOptions: [],
-        provincePickerValue: [],
-        cityPickerValue: [],
-        branchKeyword: ''
-      })
-    },
-
-    async applySelectedBank(bank: ApplymentBankViewOption) {
-      const currentForm = this.readForm()
-      const selectedCityCode = Number(currentForm.bank_address_code || this.data.selectedCityCode || 0)
-      const nextForm: ApplymentBindBankDraft = {
-        ...currentForm,
-        account_bank: bank.account_bank,
-        account_bank_code: bank.account_bank_code,
-        bank_alias: bank.bank_alias,
-        bank_alias_code: bank.bank_alias_code,
-        need_bank_branch: bank.need_bank_branch,
-        bank_address_code: bank.need_bank_branch ? currentForm.bank_address_code : '',
-        bank_branch_id: '',
-        bank_name: ''
-      }
-      const nextBankKeyword = bankMatchesKeyword(bank, this.data.bankKeyword) ? this.data.bankKeyword : ''
-      let filteredBanks = this.getBanksForType(nextForm.account_type)
-        .filter((item: ApplymentBankViewOption) => bankMatchesKeyword(item, nextBankKeyword))
-        .slice(0, 100)
-      if (!filteredBanks.length) {
-        filteredBanks = [bank]
-      }
-      const selectedBankIndex = findSelectedBankIndex(filteredBanks, nextForm)
-
-      this.setFormState(nextForm, {
-        bankKeyword: nextBankKeyword,
-        filteredBanks,
-        selectedBankIndex
-      })
-
-      if (bank.need_bank_branch) {
-        await this.ensureProvincesLoaded()
-        if (selectedCityCode > 0) {
-          await this.loadBranches(bank.bank_alias_code, selectedCityCode)
-        }
-      } else {
-        this.setData({
-          selectedBankIndex: 0,
-          selectedProvinceIndex: 0,
-          selectedCityIndex: 0,
-          selectedBranchIndex: 0,
-          selectedProvinceCode: 0,
-          selectedCityCode: 0,
-          selectedProvinceLabel: '',
-          selectedCityLabel: '',
-          provincePickerValue: [],
-          cityPickerValue: [],
-          cityPickerOptions: [],
-          cities: [],
-          branches: [],
-          filteredBranches: [],
-          branchKeyword: ''
-        })
-      }
+      this.setFormState(nextForm)
     },
 
     onTextFieldChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
@@ -1086,49 +504,11 @@ Component({
       }
 
       const value = e.detail.value || ''
-      let nextForm: ApplymentBindBankDraft = {
+      const nextForm: ApplymentBindBankDraft = {
         ...this.readForm(),
         [field]: field === 'contact_id_doc_period_end' && value.trim() === '长期'
           ? '长期'
           : value
-      }
-
-      if (field === 'account_number' && nextForm.account_type === 'ACCOUNT_TYPE_PRIVATE') {
-        nextForm = {
-          ...nextForm,
-          account_bank: '',
-          account_bank_code: 0,
-          bank_alias: '',
-          bank_alias_code: '',
-          need_bank_branch: false,
-          bank_address_code: '',
-          bank_branch_id: '',
-          bank_name: ''
-        }
-
-        this.setFormState(nextForm, {
-          showBankPicker: false,
-          showProvincePicker: false,
-          showCityPicker: false,
-          showBranchPicker: false,
-          selectedBankIndex: 0,
-          selectedProvinceIndex: 0,
-          selectedCityIndex: 0,
-          selectedBranchIndex: 0,
-          selectedProvinceCode: 0,
-          selectedCityCode: 0,
-          selectedProvinceLabel: '',
-          selectedCityLabel: '',
-          provincePickerValue: [],
-          cityPickerValue: [],
-          cityPickerOptions: [],
-          cities: [],
-          branches: [],
-          filteredBranches: [],
-          branchKeyword: ''
-        })
-        this.updateBankFilter('')
-        return
       }
 
       this.setFormState(nextForm)
@@ -1215,7 +595,7 @@ Component({
       this.setContactDocumentFeedback('back', createIdleFeedback())
     },
 
-    async onAccountTypeSelect(e: WechatMiniprogram.TouchEvent) {
+    onAccountTypeSelect(e: WechatMiniprogram.TouchEvent) {
       const { value } = e.currentTarget.dataset as { value?: ApplymentAccountType }
       const accountType = value
       if (!accountType || accountType === this.readForm().account_type) {
@@ -1223,296 +603,6 @@ Component({
       }
 
       this.resetBankSelection(accountType)
-      const properties = this.properties as unknown as ApplymentBankFormProperties
-      if (!this.usesManualCatalog() && properties.preloadCatalogs) {
-        await this.preloadSelectableCatalogs()
-      }
-    },
-
-    onAccountNumberBlur() {
-      if (this.usesManualCatalog()) {
-        return
-      }
-      const form = this.readForm()
-      if (form.account_type !== 'ACCOUNT_TYPE_PRIVATE') {
-        return
-      }
-      if (this.data.recognizingBank || form.account_number.trim().length < 8 || form.bank_alias) {
-        return
-      }
-      void this.onRecognizeBank()
-    },
-
-    onBankKeywordChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
-      this.updateBankFilter(e.detail.value || '')
-    },
-
-    onBranchKeywordChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
-      this.updateBranchFilter(e.detail.value || '')
-    },
-
-    async onRecognizeBank() {
-      const form = this.readForm()
-      const accountNumber = form.account_number.trim()
-      if (this.usesManualCatalog() || form.account_type !== 'ACCOUNT_TYPE_PRIVATE' || accountNumber.length < 8) {
-        return
-      }
-
-      this.clearResolvedBankSelection()
-      this.setData({
-        recognizingBank: true,
-        selectedBankIndex: 0
-      })
-
-      try {
-        const response = await searchApplymentBanksByAccount(this.getApiBasePath(), form.account_type, accountNumber)
-        const matches = decorateBankOptions(response.matches)
-        const selection = resolveRecognizedBankSelection(matches)
-
-        if (selection.bank) {
-          await this.applySelectedBank(selection.bank)
-        }
-
-        if (selection.shouldOpenPicker) {
-          const selectedBankIndex = findSelectedBankIndex(selection.filteredBanks, this.readForm())
-          this.setData({
-            filteredBanks: selection.filteredBanks,
-            showBankPicker: true,
-            selectedBankIndex
-          })
-          return
-        }
-
-        if (selection.bank) {
-          return
-        }
-
-        await this.ensureBanksLoaded(form.account_type)
-        this.updateBankFilter('')
-      } catch (error: unknown) {
-        wx.showToast({
-          title: getErrorUserMessage(error, '识别开户银行失败，请稍后重试'),
-          icon: 'none'
-        })
-      } finally {
-        this.setData({ recognizingBank: false })
-      }
-    },
-
-    async onOpenBankPicker() {
-      if (this.usesManualCatalog()) {
-        return
-      }
-      const form = this.readForm()
-      if (!canLoadBankList(form)) {
-        return
-      }
-
-      await this.ensureBanksLoaded(form.account_type)
-      if (this.data.loadingBanks || !(this.data.filteredBanks as ApplymentBankViewOption[]).length) {
-        return
-      }
-      this.setData({ showBankPicker: true })
-    },
-
-    onCloseBankPicker() {
-      this.setData({ showBankPicker: false })
-    },
-
-    onBankPickerVisibleChange(e: ApplymentPickerVisibleChangeEvent) {
-      if (e.detail?.visible === false) {
-        this.onCloseBankPicker()
-      }
-    },
-
-    async onSelectBankOption(e: WechatMiniprogram.BaseEvent) {
-      const index = Number(e.currentTarget.dataset.index)
-      const bank = (this.data.filteredBanks as ApplymentBankViewOption[])[index]
-      if (!bank) {
-        this.onCloseBankPicker()
-        return
-      }
-      await this.applySelectedBank(bank)
-      this.onCloseBankPicker()
-    },
-
-    async onOpenProvincePicker() {
-      if (this.usesManualCatalog()) {
-        return
-      }
-      await this.ensureProvincesLoaded()
-      const provinces = this.data.provinces as ApplymentProvinceOption[]
-      if (!provinces.length) {
-        return
-      }
-      this.setData({
-        showProvincePicker: true,
-        provincePickerValue: buildPickerValue(this.data.selectedProvinceCode || provinces[0]?.province_code)
-      })
-    },
-
-    onCloseProvincePicker() {
-      this.setData({ showProvincePicker: false })
-    },
-
-    async applySelectedProvince(provinceCode: number) {
-      if (provinceCode === this.data.selectedProvinceCode && this.data.selectedCityCode) {
-        return
-      }
-
-      const provinces = this.data.provinces as ApplymentProvinceOption[]
-      const selectedIndex = provinces.findIndex((province) => province.province_code === provinceCode)
-      const province = provinces[selectedIndex]
-      if (!province) {
-        return
-      }
-
-      const nextForm: ApplymentBindBankDraft = {
-        ...this.readForm(),
-        bank_address_code: '',
-        bank_branch_id: '',
-        bank_name: ''
-      }
-
-      this.setFormState(nextForm, {
-        selectedProvinceIndex: selectedIndex,
-        selectedProvinceCode: province.province_code,
-        selectedProvinceLabel: province.province_name,
-        provincePickerValue: buildPickerValue(province.province_code),
-        selectedCityIndex: 0,
-        selectedCityCode: 0,
-        selectedCityLabel: '',
-        cityPickerValue: [],
-        cityPickerOptions: [],
-        selectedBranchIndex: 0,
-        cities: [],
-        branches: [],
-        filteredBranches: [],
-        branchKeyword: ''
-      })
-      await this.loadCities(province.province_code)
-    },
-
-    onProvincePickerPick(e: ApplymentPickerChangeEvent) {
-      this.setData({
-        provincePickerValue: Array.isArray(e.detail?.value) ? e.detail.value.map((value) => Number(value)) : []
-      })
-    },
-
-    async onProvincePickerConfirm(e: ApplymentPickerChangeEvent) {
-      const provinceCode = Number(e.detail?.value?.[0] || 0)
-      if (provinceCode > 0) {
-        await this.applySelectedProvince(provinceCode)
-      }
-      this.onCloseProvincePicker()
-    },
-
-    onOpenCityPicker() {
-      if (this.usesManualCatalog()) {
-        return
-      }
-      if (!this.data.selectedProvinceCode || !(this.data.cities as ApplymentCityOption[]).length) {
-        return
-      }
-      const cities = this.data.cities as ApplymentCityOption[]
-      this.setData({
-        showCityPicker: true,
-        cityPickerValue: buildPickerValue(this.data.selectedCityCode || cities[0]?.city_code)
-      })
-    },
-
-    onCloseCityPicker() {
-      this.setData({ showCityPicker: false })
-    },
-
-    async applySelectedCity(cityCode: number) {
-      if (cityCode === this.data.selectedCityCode && this.readForm().bank_name) {
-        return
-      }
-
-      const cities = this.data.cities as ApplymentCityOption[]
-      const selectedIndex = cities.findIndex((city) => city.city_code === cityCode)
-      const city = cities[selectedIndex]
-      if (!city) {
-        return
-      }
-
-      const nextForm: ApplymentBindBankDraft = {
-        ...this.readForm(),
-        bank_address_code: String(city.city_code),
-        bank_branch_id: '',
-        bank_name: ''
-      }
-
-      this.setFormState(nextForm, {
-        selectedCityIndex: selectedIndex,
-        selectedCityCode: city.city_code,
-        selectedCityLabel: city.city_name,
-        cityPickerValue: buildPickerValue(city.city_code),
-        branches: [],
-        filteredBranches: [],
-        selectedBranchIndex: 0,
-        branchKeyword: ''
-      })
-
-      if (nextForm.bank_alias_code) {
-        await this.loadBranches(nextForm.bank_alias_code, city.city_code)
-      }
-    },
-
-    onCityPickerPick(e: ApplymentPickerChangeEvent) {
-      this.setData({
-        cityPickerValue: Array.isArray(e.detail?.value) ? e.detail.value.map((value) => Number(value)) : []
-      })
-    },
-
-    async onCityPickerConfirm(e: ApplymentPickerChangeEvent) {
-      const cityCode = Number(e.detail?.value?.[0] || 0)
-      if (cityCode > 0) {
-        await this.applySelectedCity(cityCode)
-      }
-      this.onCloseCityPicker()
-    },
-
-    onOpenBranchPicker() {
-      if (this.usesManualCatalog()) {
-        return
-      }
-      if (!this.data.selectedCityCode || !(this.data.filteredBranches as ApplymentBranchOption[]).length) {
-        return
-      }
-      this.setData({ showBranchPicker: true })
-    },
-
-    onCloseBranchPicker() {
-      this.setData({ showBranchPicker: false })
-    },
-
-    onSelectBranchOption(e: WechatMiniprogram.BaseEvent) {
-      const index = Number(e.currentTarget.dataset.index)
-      const branch = (this.data.filteredBranches as ApplymentBranchOption[])[index]
-      if (!branch) {
-        this.onCloseBranchPicker()
-        return
-      }
-
-      const nextForm: ApplymentBindBankDraft = {
-        ...this.readForm(),
-        bank_address_code: String(this.data.selectedCityCode || ''),
-        bank_branch_id: branch.bank_branch_id,
-        bank_name: branch.bank_branch_name
-      }
-
-      this.setFormState(nextForm, {
-        selectedBranchIndex: index
-      })
-      this.onCloseBranchPicker()
-    },
-
-    onBranchPickerVisibleChange(e: ApplymentPickerVisibleChangeEvent) {
-      if (e.detail?.visible === false) {
-        this.onCloseBranchPicker()
-      }
     },
 
     onCancel() {
@@ -1552,10 +642,7 @@ Component({
         form,
         properties.showContactFields,
         properties.requireContactEmail,
-        properties.requireAccountName,
-        properties.allowSavedAccountNumber,
-        properties.requireBankBranch,
-        this.usesManualCatalog()
+        properties.requireAccountName
       )
       if (submitBlockMessage) {
         wx.showToast({ title: submitBlockMessage, icon: 'none' })
@@ -1568,11 +655,11 @@ Component({
         account_bank_code: form.account_bank_code > 0 ? form.account_bank_code : undefined,
         bank_alias: form.bank_alias.trim() || undefined,
         bank_alias_code: form.bank_alias_code.trim() || undefined,
-        need_bank_branch: (form.need_bank_branch || properties.requireBankBranch) || undefined,
+        need_bank_branch: form.need_bank_branch || undefined,
         bank_address_code: form.bank_address_code.trim() || undefined,
-        deposit_bank_province: this.data.selectedProvinceLabel || form.bank_address_code.trim() || undefined,
-        deposit_bank_city: this.data.selectedCityLabel || (this.usesManualCatalog() ? form.manual_bank_city.trim() : '') || undefined,
-        manual_bank_city: this.usesManualCatalog() ? form.manual_bank_city.trim() || undefined : undefined,
+        deposit_bank_province: form.bank_address_code.trim() || undefined,
+        deposit_bank_city: form.manual_bank_city.trim() || undefined,
+        manual_bank_city: form.manual_bank_city.trim() || undefined,
         bank_branch_id: form.bank_branch_id.trim() || undefined,
         bank_name: form.bank_name.trim() || undefined,
         account_number: form.account_number.trim(),
@@ -1592,10 +679,6 @@ Component({
       }
 
       this.triggerEvent('submit', payload)
-    },
-
-    buildBankDisplayLabel,
-
-    buildSelectedBankLabel
+    }
   }
 })

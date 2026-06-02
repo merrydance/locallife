@@ -4,7 +4,19 @@ const vm = require('vm')
 const ts = require('typescript')
 
 const repoRoot = path.resolve(__dirname, '..')
-const sourcePath = path.join(repoRoot, 'miniprogram/services/baofu-account-profile-form.ts')
+const sourcePath = path.join(repoRoot, 'miniprogram/pages/merchant/_main_shared/services/baofu-account-profile-form.ts')
+const bankFormWxmlPath = path.join(repoRoot, 'miniprogram/pages/merchant/finance/settlement-account/submit/_components/applyment-bank-form/index.wxml')
+const bankFormTsPath = path.join(repoRoot, 'miniprogram/pages/merchant/finance/settlement-account/submit/_components/applyment-bank-form/index.ts')
+const submitFormPaths = [
+  path.join(repoRoot, 'miniprogram/pages/merchant/finance/settlement-account/submit/index.wxml'),
+  path.join(repoRoot, 'miniprogram/pages/merchant/finance/settlement-account/submit/index.ts'),
+  path.join(repoRoot, 'miniprogram/pages/operator/finance/settlement-account/submit/index.wxml'),
+  path.join(repoRoot, 'miniprogram/pages/operator/finance/settlement-account/submit/index.ts'),
+  path.join(repoRoot, 'miniprogram/pages/rider/settlement-account/submit/index.wxml'),
+  path.join(repoRoot, 'miniprogram/pages/rider/settlement-account/submit/index.ts'),
+  bankFormWxmlPath,
+  bankFormTsPath
+]
 
 function loadModule() {
   const source = fs.readFileSync(sourcePath, 'utf8')
@@ -125,6 +137,84 @@ function main() {
     account_name: '周松涛'
   })
   assert(missingManualCityPayload.deposit_bank_city === '', 'missing manual city should stay empty for validation instead of defaulting to Beijing')
+
+  const bankFormWxml = fs.readFileSync(bankFormWxmlPath, 'utf8')
+  const bankFormTs = fs.readFileSync(bankFormTsPath, 'utf8')
+  for (const selectorToken of [
+    '<t-picker',
+    'showProvincePicker',
+    'showCityPicker',
+    'showBranchPicker',
+    'onOpenProvincePicker',
+    'onOpenCityPicker',
+    'onOpenBranchPicker',
+    'onSelectBranchOption',
+    'onBranchPickerVisibleChange',
+    'listApplymentProvinces',
+    'listApplymentCities',
+    'listApplymentBankBranches'
+  ]) {
+    assert(
+      !bankFormWxml.includes(selectorToken) && !bankFormTs.includes(selectorToken),
+      `Baofoo bank form must not keep obsolete province/city/branch selector token: ${selectorToken}`
+    )
+  }
+
+  for (const searchToken of [
+    'showBankPicker',
+    'bankKeyword',
+    'filteredBanks',
+    'loadingBanks',
+    'recognizingBank',
+    'onOpenBankPicker',
+    'onSelectBankOption',
+    'onRecognizeBank',
+    'onBankKeywordChange',
+    'onBankPickerVisibleChange',
+    'listApplymentBanks',
+    'searchApplymentBanksByAccount',
+    'resolveRecognizedBankSelection',
+    '<t-search',
+    '搜索银行名称',
+    '银行列表加载中'
+  ]) {
+    assert(
+      !bankFormWxml.includes(searchToken) && !bankFormTs.includes(searchToken),
+      `Baofoo bank form must not keep obsolete bank search token: ${searchToken}`
+    )
+  }
+
+  const submitFormSource = submitFormPaths
+    .map((filePath) => `${path.relative(repoRoot, filePath)}\n${fs.readFileSync(filePath, 'utf8')}`)
+    .join('\n')
+  for (const sensitiveUiToken of [
+    'type="{{showIdNumber ? \'text\' : \'password\'}}"',
+    'type="{{showAccountNumber ? \'text\' : \'password\'}}"',
+    'browse-off',
+    'suffixIcon="{{showIdNumber',
+    'suffixIcon="{{allowSavedAccountNumber',
+    'showIdNumber',
+    'showAccountNumber',
+    'onToggleIdVisibility',
+    'onToggleAccountNumberVisibility',
+    'allowSavedAccountNumber',
+    'savedAccountNumberMask',
+    'hasStoredCertificateNo',
+    'hasStoredLegalPersonID',
+    'hasStoredCorporateMobile',
+    'hasStoredEmail',
+    'hasStoredBankAccount',
+    'certificate_no_mask',
+    'legal_person_id_number_mask',
+    'corporate_mobile_mask',
+    'email_mask',
+    'bank_account_no_mask'
+  ]) {
+    assert(
+      !submitFormSource.includes(sensitiveUiToken),
+      `Baofoo submit forms must render full ordinary inputs without masking/privacy toggles: ${sensitiveUiToken}`
+    )
+  }
 
   console.log('check-baofu-personal-profile-form: validated personal profile payload shape')
 }

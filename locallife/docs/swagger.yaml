@@ -785,6 +785,8 @@ definitions:
         type: string
       account_bank_code:
         type: integer
+      bank_account_no:
+        type: string
       bank_account_no_mask:
         type: string
       bank_address_code:
@@ -795,17 +797,23 @@ definitions:
         type: string
       bank_branch_id:
         type: string
+      bank_mobile:
+        type: string
       bank_name:
         type: string
       business_license_number:
         type: string
       card_user_name:
         type: string
+      certificate_no:
+        type: string
       certificate_no_mask:
         type: string
       contact_mobile_mask:
         type: string
       contact_name:
+        type: string
+      corporate_mobile:
         type: string
       corporate_mobile_mask:
         type: string
@@ -814,6 +822,8 @@ definitions:
       deposit_bank_name:
         type: string
       deposit_bank_province:
+        type: string
+      email:
         type: string
       email_mask:
         type: string
@@ -832,6 +842,8 @@ definitions:
       has_saved_sensitive_defaults:
         type: boolean
       legal_name:
+        type: string
+      legal_person_id_number:
         type: string
       legal_person_id_number_mask:
         type: string

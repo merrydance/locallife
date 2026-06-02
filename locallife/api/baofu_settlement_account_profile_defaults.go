@@ -16,6 +16,7 @@ type baofuSettlementAccountProfileDefaultsWithSecrets struct {
 	certificateNo         string
 	email                 string
 	bankAccountNo         string
+	bankMobile            string
 	corporateMobile       string
 	contactMobile         string
 	businessLicenseNumber string
@@ -174,15 +175,21 @@ func (server *Server) baofuSettlementAccountProfileDefaultsFromProfile(_ context
 		defaults: baofuSettlementAccountProfileDefaults{
 			Source:                    "baofu_profile",
 			LegalName:                 strings.TrimSpace(profile.LegalName.String),
+			CertificateNo:             personalCertificateNoFromBaofuProfile(accountType, certificateNo),
 			BusinessLicenseNumber:     businessLicenseNumberFromBaofuProfile(accountType, certificateNo),
 			LegalPersonName:           strings.TrimSpace(profile.CorporateName.String),
 			CardUserName:              strings.TrimSpace(profile.CardUserName.String),
 			SelfEmployed:              selfEmployed,
+			LegalPersonIDNumber:       strings.TrimSpace(legalPersonIDNumber),
 			LegalPersonIDNumberMask:   firstNonBlank(pgTextString(profile.CorporateCertIDMask), maskSensitiveTail(legalPersonIDNumber, 4)),
+			CorporateMobile:           strings.TrimSpace(corporateMobile),
 			CorporateMobileMask:       firstNonBlank(pgTextString(profile.CorporateMobileMask), maskMobileForBaofuResponse(corporateMobile)),
 			CertificateNoMask:         firstNonBlank(pgTextString(profile.CertificateNoMask), maskSensitiveTail(personalCertificateNoFromBaofuProfile(accountType, certificateNo), 4)),
+			Email:                     strings.TrimSpace(email),
 			EmailMask:                 firstNonBlank(pgTextString(profile.EmailMask), maskEmailForBaofuResponse(email)),
+			BankAccountNo:             strings.TrimSpace(bankAccountNo),
 			BankAccountNoMask:         firstNonBlank(pgTextString(profile.BankAccountNoMask), maskSensitiveTail(bankAccountNo, 4)),
+			BankMobile:                strings.TrimSpace(bankMobile),
 			BankName:                  strings.TrimSpace(profile.BankName.String),
 			DepositBankProvince:       strings.TrimSpace(profile.DepositBankProvince.String),
 			DepositBankCity:           strings.TrimSpace(profile.DepositBankCity.String),
@@ -206,6 +213,7 @@ func (server *Server) baofuSettlementAccountProfileDefaultsFromProfile(_ context
 		corporateMobile:       strings.TrimSpace(corporateMobile),
 		email:                 strings.TrimSpace(email),
 		bankAccountNo:         strings.TrimSpace(bankAccountNo),
+		bankMobile:            strings.TrimSpace(bankMobile),
 		bankName:              strings.TrimSpace(profile.BankName.String),
 		depositBankProvince:   strings.TrimSpace(profile.DepositBankProvince.String),
 		depositBankCity:       strings.TrimSpace(profile.DepositBankCity.String),
@@ -265,17 +273,27 @@ func baofuProfileDefaultsFromScope(scope baofuSettlementAccountScope) (baofuSett
 		defaults.legalName = strings.TrimSpace(scope.DefaultProfile.LegalName)
 		defaults.certificateNo = strings.TrimSpace(scope.DefaultProfile.CertificateNo)
 		defaults.bankAccountNo = strings.TrimSpace(scope.DefaultProfile.BankAccountNo)
+		defaults.bankMobile = strings.TrimSpace(scope.DefaultProfile.BankMobile)
 		defaults.bankName = strings.TrimSpace(scope.DefaultProfile.BankName)
 		defaults.contactName = strings.TrimSpace(scope.DefaultProfile.ContactName)
 		defaults.contactMobile = strings.TrimSpace(scope.DefaultProfile.ContactMobile)
 		if strings.TrimSpace(defaults.defaults.LegalName) == "" {
 			defaults.defaults.LegalName = defaults.legalName
 		}
+		if strings.TrimSpace(defaults.defaults.CertificateNo) == "" {
+			defaults.defaults.CertificateNo = defaults.certificateNo
+		}
 		if strings.TrimSpace(defaults.defaults.CertificateNoMask) == "" {
 			defaults.defaults.CertificateNoMask = maskSensitiveTail(defaults.certificateNo, 4)
 		}
+		if strings.TrimSpace(defaults.defaults.BankAccountNo) == "" {
+			defaults.defaults.BankAccountNo = defaults.bankAccountNo
+		}
 		if strings.TrimSpace(defaults.defaults.BankAccountNoMask) == "" {
 			defaults.defaults.BankAccountNoMask = maskSensitiveTail(defaults.bankAccountNo, 4)
+		}
+		if strings.TrimSpace(defaults.defaults.BankMobile) == "" {
+			defaults.defaults.BankMobile = defaults.bankMobile
 		}
 		if strings.TrimSpace(defaults.defaults.BankName) == "" {
 			defaults.defaults.BankName = defaults.bankName
@@ -298,7 +316,7 @@ func baofuProfileDefaultsFromScope(scope baofuSettlementAccountScope) (baofuSett
 		if strings.TrimSpace(defaults.contactMobile) != "" {
 			defaults.defaults.HasContactMobile = true
 		}
-		if strings.TrimSpace(defaults.certificateNo) != "" || strings.TrimSpace(defaults.bankAccountNo) != "" || strings.TrimSpace(defaults.corporateMobile) != "" || strings.TrimSpace(defaults.contactMobile) != "" {
+		if strings.TrimSpace(defaults.certificateNo) != "" || strings.TrimSpace(defaults.bankAccountNo) != "" || strings.TrimSpace(defaults.bankMobile) != "" || strings.TrimSpace(defaults.corporateMobile) != "" || strings.TrimSpace(defaults.contactMobile) != "" {
 			defaults.defaults.HasSavedSensitiveDefaults = true
 		}
 	}
@@ -332,6 +350,7 @@ func baofuProfileDefaultsFromOperatorApplication(app db.OperatorApplication) bao
 		defaults: baofuSettlementAccountProfileDefaults{
 			Source:                    "operator_application",
 			LegalName:                 legalName,
+			CertificateNo:             certificateNo,
 			CertificateNoMask:         maskSensitiveTail(certificateNo, 4),
 			HasCertificateNo:          certificateNo != "",
 			HasSavedSensitiveDefaults: certificateNo != "",
@@ -410,6 +429,7 @@ func baofuProfileDefaultsFromMerchantApplication(app db.MerchantApplication) bao
 			BusinessLicenseNumber:     businessLicenseNumber,
 			LegalPersonName:           legalPersonName,
 			CardUserName:              legalPersonName,
+			LegalPersonIDNumber:       legalPersonIDNumber,
 			LegalPersonIDNumberMask:   maskSensitiveTail(legalPersonIDNumber, 4),
 			HasLegalPersonIDNumber:    legalPersonIDNumber != "",
 			HasSavedSensitiveDefaults: legalPersonIDNumber != "",
@@ -445,6 +465,7 @@ func baofuProfileDefaultsFromMerchantApplicationSnapshot(merchant db.Merchant) (
 			BusinessLicenseNumber:     businessLicenseNumber,
 			LegalPersonName:           legalPersonName,
 			CardUserName:              legalPersonName,
+			LegalPersonIDNumber:       legalPersonIDNumber,
 			LegalPersonIDNumberMask:   maskSensitiveTail(legalPersonIDNumber, 4),
 			HasLegalPersonIDNumber:    legalPersonIDNumber != "",
 			HasSavedSensitiveDefaults: legalPersonIDNumber != "",

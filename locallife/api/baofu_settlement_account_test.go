@@ -283,7 +283,7 @@ func TestBaofuSettlementAccountRiderProfileInputMergesApprovedIdentityDefaults(t
 	require.Equal(t, "招商银行", merged.BankName)
 }
 
-func TestBaofuSettlementAccountRoleDefaultsExposeOnlyMasks(t *testing.T) {
+func TestBaofuSettlementAccountRoleDefaultsExposeFullInputDefaults(t *testing.T) {
 	server := newTestServer(t, mockdb.NewMockStore(gomock.NewController(t)))
 	resp := baofuSettlementAccountResponse{}
 
@@ -305,9 +305,9 @@ func TestBaofuSettlementAccountRoleDefaultsExposeOnlyMasks(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, resp.ProfileDefaults)
 	require.Equal(t, "周松涛", resp.ProfileDefaults.LegalName)
+	require.Equal(t, "132229197706017792", resp.ProfileDefaults.CertificateNo)
 	require.Equal(t, "***7792", resp.ProfileDefaults.CertificateNoMask)
 	require.True(t, resp.ProfileDefaults.HasCertificateNo)
-	require.NotContains(t, mustJSON(t, resp), "132229197706017792")
 }
 
 func mustJSON(t *testing.T, value any) string {
@@ -416,10 +416,10 @@ func TestBaofuSettlementAccountMerchantProfileDefaultsUseApprovedApplication(t *
 	require.Equal(t, "91330100MAEXAMPLE1", response.ProfileDefaults.BusinessLicenseNumber)
 	require.Equal(t, "张三", response.ProfileDefaults.LegalPersonName)
 	require.Equal(t, "张三", response.ProfileDefaults.CardUserName)
+	require.Equal(t, app.LegalPersonIDNumber, response.ProfileDefaults.LegalPersonIDNumber)
 	require.Equal(t, "***0011", response.ProfileDefaults.LegalPersonIDNumberMask)
 	require.True(t, response.ProfileDefaults.HasLegalPersonIDNumber)
 	require.True(t, response.ProfileDefaults.HasSavedSensitiveDefaults)
-	require.NotContains(t, recorder.Body.String(), app.LegalPersonIDNumber)
 }
 
 func TestBaofuSettlementAccountMerchantFailedFlowReturnsProfileDefaultsForRetry(t *testing.T) {
@@ -482,8 +482,8 @@ func TestBaofuSettlementAccountMerchantFailedFlowReturnsProfileDefaultsForRetry(
 	require.Equal(t, app.MerchantName, response.ProfileDefaults.LegalName)
 	require.Equal(t, app.BusinessLicenseNumber, response.ProfileDefaults.BusinessLicenseNumber)
 	require.Equal(t, app.LegalPersonName, response.ProfileDefaults.LegalPersonName)
+	require.Equal(t, app.LegalPersonIDNumber, response.ProfileDefaults.LegalPersonIDNumber)
 	require.NotContains(t, recorder.Body.String(), flow.FailureMessage.String)
-	require.NotContains(t, recorder.Body.String(), app.LegalPersonIDNumber)
 }
 
 func TestBaofuSettlementAccountMerchantApplicationDefaultsOverrideMistypedBaofuProfileIdentity(t *testing.T) {
@@ -516,12 +516,26 @@ func TestBaofuSettlementAccountMerchantApplicationDefaultsOverrideMistypedBaofuP
 			OwnerType: db.BaofuAccountOwnerTypeMerchant,
 			OwnerID:   merchant.ID,
 		})).
-		Return(existingProfile, nil)
+		Return(existingProfile, nil).
+		Times(2)
 	store.EXPECT().
 		GetUserMerchantApplication(gomock.Any(), owner.ID).
-		Return(app, nil)
+		Return(app, nil).
+		Times(2)
 
 	server := newTestServer(t, store)
+	defaults, found, err := server.loadBaofuSettlementAccountProfileDefaults(context.Background(), baofuSettlementAccountScope{
+		OwnerType:   db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:     merchant.ID,
+		OwnerUserID: owner.ID,
+		AccountType: db.BaofuAccountTypeBusiness,
+		Audience:    "merchant",
+	})
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, app.LegalPersonIDNumber, defaults.defaults.LegalPersonIDNumber)
+	require.Equal(t, "***0011", defaults.defaults.LegalPersonIDNumberMask)
+
 	merged, err := server.baofuSettlementAccountProfileInputWithDefaults(context.Background(), baofuSettlementAccountScope{
 		OwnerType:   db.BaofuAccountOwnerTypeMerchant,
 		OwnerID:     merchant.ID,
@@ -789,6 +803,9 @@ func TestBaofuSettlementAccountProfileInputMergesExistingBaofuProfileDefaults(t 
 	defaults, found, err := server.baofuSettlementAccountProfileDefaultsFromProfile(context.Background(), existingProfile)
 	require.NoError(t, err)
 	require.True(t, found)
+	require.Equal(t, "110101199901010077", defaults.defaults.LegalPersonIDNumber)
+	require.Equal(t, "platform-secret@example.com", defaults.defaults.Email)
+	require.Equal(t, "6222020202020207", defaults.defaults.BankAccountNo)
 	require.Equal(t, "***0077", defaults.defaults.LegalPersonIDNumberMask)
 	require.Equal(t, "p***@example.com", defaults.defaults.EmailMask)
 	require.True(t, defaults.defaults.HasSavedSensitiveDefaults)
@@ -859,6 +876,8 @@ func TestBaofuSettlementAccountProfileInputMergesExistingPrivateBusinessCardDefa
 	defaults, found, err := server.baofuSettlementAccountProfileDefaultsFromProfile(context.Background(), existingProfile)
 	require.NoError(t, err)
 	require.True(t, found)
+	require.Equal(t, "13800138000", defaults.defaults.CorporateMobile)
+	require.Equal(t, "6222020202020202", defaults.defaults.BankAccountNo)
 	require.Equal(t, "138****8000", defaults.defaults.CorporateMobileMask)
 	require.True(t, defaults.defaults.HasCorporateMobile)
 

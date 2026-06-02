@@ -32614,6 +32614,9 @@ const docTemplate = `{
                 "account_bank_code": {
                     "type": "integer"
                 },
+                "bank_account_no": {
+                    "type": "string"
+                },
                 "bank_account_no_mask": {
                     "type": "string"
                 },
@@ -32629,6 +32632,9 @@ const docTemplate = `{
                 "bank_branch_id": {
                     "type": "string"
                 },
+                "bank_mobile": {
+                    "type": "string"
+                },
                 "bank_name": {
                     "type": "string"
                 },
@@ -32638,6 +32644,9 @@ const docTemplate = `{
                 "card_user_name": {
                     "type": "string"
                 },
+                "certificate_no": {
+                    "type": "string"
+                },
                 "certificate_no_mask": {
                     "type": "string"
                 },
@@ -32645,6 +32654,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "contact_name": {
+                    "type": "string"
+                },
+                "corporate_mobile": {
                     "type": "string"
                 },
                 "corporate_mobile_mask": {
@@ -32657,6 +32669,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "deposit_bank_province": {
+                    "type": "string"
+                },
+                "email": {
                     "type": "string"
                 },
                 "email_mask": {
@@ -32684,6 +32699,9 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "legal_name": {
+                    "type": "string"
+                },
+                "legal_person_id_number": {
                     "type": "string"
                 },
                 "legal_person_id_number_mask": {

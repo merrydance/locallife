@@ -24,13 +24,6 @@ export interface BaofuEnterpriseProfileForm {
   email: string
 }
 
-export interface BaofuEnterpriseStoredFlags {
-  hasStoredLegalPersonID: boolean
-  hasStoredCorporateMobile: boolean
-  hasStoredEmail: boolean
-  hasStoredBankAccount: boolean
-}
-
 export type BaofuPersonalProfileField =
   | 'name'
   | 'certificate_no'
@@ -68,17 +61,6 @@ export function emptyBaofuPersonalProfileForm(): BaofuPersonalProfileForm {
   }
 }
 
-export function getBaofuEnterpriseStoredFlags(
-  defaults?: BaofuSettlementAccountProfileDefaults | null
-): BaofuEnterpriseStoredFlags {
-  return {
-    hasStoredLegalPersonID: Boolean(defaults?.has_legal_person_id_number),
-    hasStoredCorporateMobile: Boolean(defaults?.has_corporate_mobile),
-    hasStoredEmail: Boolean(defaults?.has_email),
-    hasStoredBankAccount: Boolean(defaults?.has_bank_account_no)
-  }
-}
-
 export function buildBaofuEnterpriseFormFromDefaults(
   defaults?: BaofuSettlementAccountProfileDefaults | null
 ): BaofuEnterpriseProfileForm {
@@ -86,9 +68,9 @@ export function buildBaofuEnterpriseFormFromDefaults(
     legal_name: normalizeText(defaults?.legal_name),
     business_license_number: normalizeText(defaults?.business_license_number),
     legal_person_name: normalizeText(defaults?.legal_person_name),
-    legal_person_id_number: '',
-    corporate_mobile: '',
-    email: ''
+    legal_person_id_number: normalizeText(defaults?.legal_person_id_number),
+    corporate_mobile: normalizeText(defaults?.corporate_mobile),
+    email: normalizeText(defaults?.email)
   }
 }
 
@@ -116,9 +98,9 @@ export function buildBaofuEnterpriseBankDraftFromDefaults(
     manual_bank_city: depositBankCity,
     bank_branch_id: hasBranch ? normalizeText(defaults.bank_branch_id) : depositBankName,
     bank_name: depositBankName,
-    account_number: '',
+    account_number: normalizeText(defaults.bank_account_no),
     account_name: normalizeText(selfEmployed ? (defaults.card_user_name || defaults.legal_person_name) : defaults.legal_name),
-    contact_email: ''
+    contact_email: normalizeText(defaults.email)
   }
 }
 
@@ -127,7 +109,6 @@ export function buildBaofuEnterpriseProfilePayload(
   bank: ApplymentBindBankPayload,
   defaults?: BaofuSettlementAccountProfileDefaults | null
 ): BaofuAccountProfile {
-  const flags = getBaofuEnterpriseStoredFlags(defaults)
   const payload: BaofuAccountProfile = {
     legal_name: form.legal_name.trim(),
     business_license_number: form.business_license_number.trim(),
@@ -149,18 +130,6 @@ export function buildBaofuEnterpriseProfilePayload(
     payload.self_employed = false
   }
 
-  if (!payload.legal_person_id_number && flags.hasStoredLegalPersonID) {
-    delete payload.legal_person_id_number
-  }
-  if (!payload.corporate_mobile && flags.hasStoredCorporateMobile) {
-    delete payload.corporate_mobile
-  }
-  if (!payload.email && flags.hasStoredEmail) {
-    delete payload.email
-  }
-  if (!payload.bank_account_no && flags.hasStoredBankAccount) {
-    delete payload.bank_account_no
-  }
   return payload
 }
 
@@ -170,7 +139,7 @@ export function validateBaofuEnterpriseProfileForm(
   bankDraft: Partial<ApplymentBindBankPayload> | null,
   defaults?: BaofuSettlementAccountProfileDefaults | null
 ): string {
-  const flags = getBaofuEnterpriseStoredFlags(defaults)
+  void defaults
   if (!form.legal_name.trim()) {
     return role === 'platform' ? '请输入平台主体名称' : '请输入商户主体名称'
   }
@@ -180,13 +149,13 @@ export function validateBaofuEnterpriseProfileForm(
   if (!form.legal_person_name.trim()) {
     return '请输入法人姓名'
   }
-  if (!flags.hasStoredLegalPersonID && !/(^\d{15}$)|(^\d{17}[\dXx]$)/.test(form.legal_person_id_number.trim())) {
+  if (!/(^\d{15}$)|(^\d{17}[\dXx]$)/.test(form.legal_person_id_number.trim())) {
     return '请输入正确法人身份证号'
   }
-  if (bankDraft?.account_type === 'ACCOUNT_TYPE_PRIVATE' && !flags.hasStoredCorporateMobile && !/^1\d{10}$/.test(form.corporate_mobile.trim())) {
+  if (bankDraft?.account_type === 'ACCOUNT_TYPE_PRIVATE' && !/^1\d{10}$/.test(form.corporate_mobile.trim())) {
     return '请输入正确法人手机号'
   }
-  if (!flags.hasStoredEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
     return '请输入正确联系邮箱'
   }
   return ''
@@ -198,7 +167,10 @@ export function buildBaofuPersonalFormFromDefaults(
 ): BaofuPersonalProfileForm {
   return {
     ...current,
-    name: normalizeText(defaults?.legal_name || defaults?.legal_person_name || current.name)
+    name: normalizeText(defaults?.legal_name || defaults?.legal_person_name || current.name),
+    certificate_no: normalizeText(defaults?.certificate_no || current.certificate_no),
+    bank_account_no: normalizeText(defaults?.bank_account_no || current.bank_account_no),
+    bank_mobile: normalizeText(defaults?.bank_mobile || current.bank_mobile)
   }
 }
 
@@ -235,10 +207,11 @@ export function validateBaofuPersonalProfileForm(
   form: BaofuPersonalProfileForm,
   defaults?: BaofuSettlementAccountProfileDefaults | null
 ): string {
+  void defaults
   if (!form.name.trim()) {
     return '请输入姓名'
   }
-  if (!defaults?.has_certificate_no && !/(^\d{15}$)|(^\d{17}[\dXx]$)/.test(form.certificate_no.trim())) {
+  if (!/(^\d{15}$)|(^\d{17}[\dXx]$)/.test(form.certificate_no.trim())) {
     return '请输入正确身份证号'
   }
   if (!/^\d{8,30}$/.test(form.bank_account_no.trim())) {

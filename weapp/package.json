@@ -8,7 +8,6 @@
     "lint": "eslint miniprogram --ext .ts",
     "lint:fix": "eslint miniprogram --ext .ts --fix",
     "lint:all": "eslint miniprogram --ext .ts -f stylish",
-    "check:applyment-bank-selection": "node scripts/check-applyment-bank-selection.js",
     "check:baofu-personal-profile-form": "node scripts/check-baofu-personal-profile-form.js",
     "check:baofu-onboarding-long-wait": "node scripts/check-baofu-onboarding-long-wait.js",
     "check:baofu-account-status-page": "node scripts/check-baofu-account-status-page.js",
