@@ -297,6 +297,45 @@ func TestCreateRecoveryDisputeWithRecoveryTx_WritesDisputedRecoveryEvent(t *test
 	require.Equal(t, ClaimRecoveryEventTypeDisputed, recoveryEvents[0].EventType)
 }
 
+func TestCreateRecoveryDisputeWithRecoveryTx_DuplicateDoesNotWriteSecondEvent(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	user := createRandomUser(t)
+
+	order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
+	claim := createRandomClaim(t, user.ID, order.ID)
+	recovery := createRandomClaimRecovery(t, claim.ID, order.ID, "pending")
+
+	arg := CreateRecoveryDisputeWithRecoveryTxParams{
+		ClaimID:        claim.ID,
+		RecoveryTarget: "merchant",
+		AppellantType:  "merchant",
+		AppellantID:    merchant.ID,
+		Reason:         "商户发起追偿争议",
+		RegionID:       merchant.RegionID,
+	}
+
+	result, err := testStore.CreateRecoveryDisputeWithRecoveryTx(context.Background(), arg)
+	require.NoError(t, err)
+	require.NotZero(t, result.RecoveryDispute.ID)
+
+	_, err = testStore.CreateRecoveryDisputeWithRecoveryTx(context.Background(), arg)
+	require.Error(t, err)
+	require.Equal(t, UniqueViolation, ErrorCode(err))
+
+	exists, err := testStore.CheckRecoveryDisputeExists(context.Background(), CheckRecoveryDisputeExistsParams{
+		ClaimID:       claim.ID,
+		AppellantType: "merchant",
+	})
+	require.NoError(t, err)
+	require.True(t, exists)
+
+	recoveryEvents, err := testStore.ListClaimRecoveryEventsByRecovery(context.Background(), recovery.ID)
+	require.NoError(t, err)
+	require.Len(t, recoveryEvents, 1)
+	require.Equal(t, ClaimRecoveryEventTypeDisputed, recoveryEvents[0].EventType)
+}
+
 func TestReviewRecoveryDisputeWithCompensationTx_ApprovedWaivesClaimRecovery(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)

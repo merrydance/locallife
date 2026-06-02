@@ -139,6 +139,41 @@ func TestCreateMerchantRecoveryDisputeAlreadyExists(t *testing.T) {
 	require.Equal(t, "recovery dispute already exists for this claim", reqErr.Err.Error())
 }
 
+func TestCreateMerchantRecoveryDisputeConcurrentDuplicateMapsToConflict(t *testing.T) {
+	claimID := int64(10)
+	merchantID := int64(20)
+	regionID := int64(30)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetClaimRecoveryContextByClaimIDAndTarget(gomock.Any(), recoveryDisputeContextQuery(claimID, "merchant")).
+		Times(1).
+		Return(recoveryDisputeContextForTest(claimID, 99, merchantID, regionID, nil, time.Now()), nil)
+	store.EXPECT().
+		CheckRecoveryDisputeExists(gomock.Any(), db.CheckRecoveryDisputeExistsParams{ClaimID: claimID, AppellantType: "merchant"}).
+		Times(1).
+		Return(false, nil)
+	store.EXPECT().
+		CreateRecoveryDisputeWithRecoveryTx(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.CreateRecoveryDisputeWithRecoveryTxResult{}, db.ErrUniqueViolation)
+
+	_, err := CreateMerchantRecoveryDispute(context.Background(), store, CreateMerchantRecoveryDisputeInput{
+		MerchantID:        merchantID,
+		ClaimID:           claimID,
+		Reason:            "test reason",
+		DisputeWindowDays: 7,
+		Now:               time.Now(),
+	})
+
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 409, reqErr.Status)
+	require.Equal(t, "recovery dispute already exists for this claim", reqErr.Err.Error())
+}
+
 func TestCreateMerchantRecoveryDisputeSuccess(t *testing.T) {
 	claimID := int64(10)
 	merchantID := int64(20)
@@ -283,6 +318,45 @@ func TestCreateRiderRecoveryDisputeAlreadyExistsSameRider(t *testing.T) {
 		CheckRecoveryDisputeExists(gomock.Any(), db.CheckRecoveryDisputeExistsParams{ClaimID: claimID, AppellantType: "rider"}).
 		Times(1).
 		Return(true, nil)
+	store.EXPECT().
+		GetRecoveryDisputeByClaim(gomock.Any(), db.GetRecoveryDisputeByClaimParams{ClaimID: claimID, AppellantType: "rider"}).
+		Times(1).
+		Return(db.RecoveryDispute{ID: 66, ClaimID: claimID, AppellantType: "rider", AppellantID: riderID}, nil)
+
+	result, err := CreateRiderRecoveryDispute(context.Background(), store, CreateRiderRecoveryDisputeInput{
+		RiderID:           riderID,
+		ClaimID:           claimID,
+		Reason:            "test reason",
+		DisputeWindowDays: 7,
+		Now:               time.Now(),
+	})
+
+	require.NoError(t, err)
+	require.True(t, result.AlreadyExists)
+	require.Equal(t, int64(66), result.RecoveryDispute.ID)
+}
+
+func TestCreateRiderRecoveryDisputeConcurrentDuplicateReturnsExistingSameRider(t *testing.T) {
+	claimID := int64(10)
+	riderID := int64(20)
+	regionID := int64(30)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetClaimRecoveryContextByClaimIDAndTarget(gomock.Any(), recoveryDisputeContextQuery(claimID, "rider")).
+		Times(1).
+		Return(recoveryDisputeContextForTest(claimID, 99, 0, regionID, &riderID, time.Now()), nil)
+	store.EXPECT().
+		CheckRecoveryDisputeExists(gomock.Any(), db.CheckRecoveryDisputeExistsParams{ClaimID: claimID, AppellantType: "rider"}).
+		Times(1).
+		Return(false, nil)
+	store.EXPECT().
+		CreateRecoveryDisputeWithRecoveryTx(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.CreateRecoveryDisputeWithRecoveryTxResult{}, db.ErrUniqueViolation)
 	store.EXPECT().
 		GetRecoveryDisputeByClaim(gomock.Any(), db.GetRecoveryDisputeByClaimParams{ClaimID: claimID, AppellantType: "rider"}).
 		Times(1).

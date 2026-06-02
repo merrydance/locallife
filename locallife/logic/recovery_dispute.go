@@ -80,6 +80,9 @@ func CreateMerchantRecoveryDispute(ctx context.Context, store db.Store, input Cr
 		RegionID:       disputeCtx.RegionID,
 	})
 	if err != nil {
+		if db.ErrorCode(err) == db.UniqueViolation {
+			return db.RecoveryDispute{}, NewRequestError(http.StatusConflict, errors.New("recovery dispute already exists for this claim"))
+		}
 		return db.RecoveryDispute{}, err
 	}
 
@@ -140,6 +143,21 @@ func CreateRiderRecoveryDispute(ctx context.Context, store db.Store, input Creat
 		RegionID:       disputeCtx.RegionID,
 	})
 	if err != nil {
+		if db.ErrorCode(err) == db.UniqueViolation {
+			recoveryDispute, getErr := store.GetRecoveryDisputeByClaim(ctx, db.GetRecoveryDisputeByClaimParams{
+				ClaimID:       input.ClaimID,
+				AppellantType: "rider",
+			})
+			if getErr != nil {
+				return result, getErr
+			}
+			if recoveryDispute.AppellantType != "rider" || recoveryDispute.AppellantID != input.RiderID {
+				return result, NewRequestError(http.StatusConflict, errors.New("recovery dispute already exists for this claim"))
+			}
+			result.RecoveryDispute = recoveryDispute
+			result.AlreadyExists = true
+			return result, nil
+		}
 		return result, err
 	}
 

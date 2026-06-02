@@ -169,7 +169,7 @@ Merchant claim recovery must converge from claim payout to exactly one merchant-
 - Recovery payment creation reuses an existing active payment order by `business_type + attach` for the same payer; expired pending orders are closed before a new one is created.
 - `ProcessPaymentSuccessTx` is idempotent for already-paid recovery rows and refuses status regression for non-payable states.
 - Recovery overdue marking is conditional from `pending` to `overdue`; duplicate scheduler runs skip rows that are no longer pending.
-- Recovery dispute create checks existing dispute before insert, but without a visible unique constraint in the traced SQL snippet, concurrent duplicate submissions should be verified at DB level.
+- Recovery dispute create checks existing dispute before insert, the DB has a unique `(claim_id, appellant_type)` index, and 2026-06-02 logic coverage maps concurrent unique-conflict writes back to stable duplicate semantics.
 - Recovery dispute result execution is partially idempotent through action status and conditional recovery status updates.
 
 ## Recovery And Async Convergence Paths
@@ -196,7 +196,9 @@ Observed tests:
 
 - `locallife/api/recovery_dispute_test.go` covers merchant/rider recovery dispute create/list/detail/summary, auto-resolution, removed operator review routes, and notifications.
 - `locallife/logic/recovery_dispute_logic_test.go` covers claim/recovery ownership, duplicate disputes, window checks, and recovery mark-disputed failure propagation.
+- `locallife/logic/recovery_dispute_logic_test.go` now covers concurrent duplicate create windows: merchant duplicate insert maps to conflict, while same-rider duplicate insert reloads the existing dispute and returns `AlreadyExists`.
 - `locallife/db/sqlc/recovery_dispute_tx_test.go` covers review transaction effects including waive/release and resume paths.
+- `locallife/db/sqlc/recovery_dispute_tx_test.go` now proves duplicate `CreateRecoveryDisputeWithRecoveryTx` calls hit the recovery-dispute unique constraint and do not write a second claim-recovery disputed event.
 - `locallife/logic/claim_recovery_test.go` covers claim recovery read/pay owner checks, payable status gates, payment order reuse, expired rotation, and external command audit.
 - `locallife/db/sqlc/tx_claim_behavior_test.go` covers recovery creation after payout and behavior effects.
 - `locallife/db/sqlc/tx_payment_success_test.go` covers claim recovery payment success marking paid and release-action creation.
@@ -209,7 +211,7 @@ Missing high-value tests:
 - Fixed 2026-05-31: Mini Program contract test covers `disputed` bucket/status and recovery-dispute field usage in merchant pages.
 - Fixed 2026-05-31: API tests prove merchant and rider claim list/detail expose recovery id/status.
 - Remaining: backend compatibility or contract test deciding whether `/v1/merchant/claims/:id/recovery` should exist for external clients.
-- Concurrent recovery-dispute duplicate submit test at SQL/transaction level.
+- Fixed 2026-06-02: concurrent recovery-dispute duplicate submit behavior is covered at logic and DB transaction levels.
 - End-to-end claim recovery payment test from pay request -> WeChat fact -> paid recovery -> release action execution -> merchant takeout suspension cleared.
 
 ## Gaps And Refactor Notes
@@ -220,7 +222,7 @@ Missing high-value tests:
 - Fixed 2026-05-31: frontend tabs, summary DTOs, and recovery status display now use `disputed`.
 - Fixed 2026-05-31: `recovery_status` and dispute fields are consumed consistently in claim detail response paths.
 - Confirm whether managers may submit recovery disputes. If owner-only is required, split dispute creation from read group middleware.
-- Add recovery-dispute DB uniqueness or a transaction-level duplicate guard if concurrent duplicate submission is possible.
+- Fixed 2026-06-02: DB uniqueness already protects duplicate recovery disputes, and logic now maps concurrent unique-conflict errors to stable duplicate-submit semantics.
 - Make paid/waived release action retry status visible to merchant if suspension release is delayed.
 
 ## Branch Exhaustion
@@ -233,4 +235,4 @@ Missing high-value tests:
 - Reader/consumer branches checked: claim list tabs/summary, claim detail fan-out, recovery card/action state, appeal/dispute list/detail, merchant takeout suspension readers, payment order readers, and notification consumers.
 - Authorization/tenant branches checked: owner/manager claim reads and dispute reads/creates, owner-only recovery payment, merchant ownership rechecks by order/recovery target, dispute window and duplicate checks, callback fact validation by business object, and release-action expected recovery id checks.
 - Zombie/unreachable branches checked: frontend `appealed` bucket, Mini Program `/v1/merchant/appeals/**` API paths, and claim-id recovery read/pay wrappers were repaired on 2026-05-31; backend helper for claim-id context still exists but is not exposed as merchant compatibility API.
-- Test-proof gaps checked: backend coverage exists for recovery dispute logic, claim recovery payment, payout/release workers, and payment facts. 2026-05-31 added Mini Program route/field contract coverage and backend list/detail recovery-id/status coverage. Missing proof remains for backend contract choice for claim-id compatibility, SQL-level concurrent duplicate disputes, and full pay -> fact -> release -> suspension-clear e2e.
+- Test-proof gaps checked: backend coverage exists for recovery dispute logic, claim recovery payment, payout/release workers, and payment facts. 2026-05-31 added Mini Program route/field contract coverage and backend list/detail recovery-id/status coverage. 2026-06-02 added logic and DB transaction proof for concurrent duplicate recovery-dispute submissions. Missing proof remains for backend contract choice for claim-id compatibility and full pay -> fact -> release -> suspension-clear e2e.
