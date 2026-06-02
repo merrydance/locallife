@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -1993,11 +1994,14 @@ func TestBaofuSettlementAccountMerchantPostPersonalOpeningModeUsesPersonalAccoun
 	processingFlow := createdFlow
 	processingFlow.State = db.BaofuAccountOpeningStateOpeningProcessing
 	processingFlow.OpenTransSerialNo = pgtype.Text{String: "BFO202606020011", Valid: true}
-	processingFlow.LoginNo = pgtype.Text{String: "LLBFOM0000000010", Valid: true}
+	expectedLoginNo := fmt.Sprintf("LLBFOMP%010dR411", merchant.ID)
+	processingFlow.LoginNo = pgtype.Text{String: expectedLoginNo, Valid: true}
 	store.EXPECT().
 		MarkBaofuAccountOpeningFlowOpeningProcessing(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, arg db.MarkBaofuAccountOpeningFlowOpeningProcessingParams) (db.BaofuAccountOpeningFlow, error) {
+			require.Equal(t, processingFlow.LoginNo, arg.LoginNo)
 			require.Contains(t, string(arg.ProviderRequestSnapshot), `"account_type":"personal"`)
+			require.Contains(t, string(arg.ProviderRequestSnapshot), `"login_no":"`+expectedLoginNo+`"`)
 			return processingFlow, nil
 		})
 	store.EXPECT().
@@ -2047,6 +2051,7 @@ func TestBaofuSettlementAccountMerchantPostPersonalOpeningModeUsesPersonalAccoun
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 	require.Equal(t, db.BaofuAccountTypePersonal, response.AccountType)
 	require.Equal(t, db.BaofuAccountTypePersonal, accountClient.lastOpen.AccountType)
+	require.Equal(t, expectedLoginNo, accountClient.lastOpen.LoginNo)
 	require.Equal(t, "李四", accountClient.lastOpen.LegalName)
 	require.Equal(t, "110101199001010011", accountClient.lastOpen.CertificateNo)
 	require.Equal(t, "6222020202020202", accountClient.lastOpen.BankAccountNo)

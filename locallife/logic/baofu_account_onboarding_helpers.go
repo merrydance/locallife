@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -57,9 +58,21 @@ func baofuVerifyFeeAttach(ownerType string, ownerID int64) string {
 	return fmt.Sprintf("business:%s;owner_type:%s;owner_id:%d;purpose:initial_open", db.PaymentBusinessTypeBaofuAccountVerifyFee, strings.TrimSpace(ownerType), ownerID)
 }
 
-func baofuOpeningLoginNo(ownerType string, ownerID int64) string {
+func baofuOpeningLoginNo(ownerType string, ownerID int64, accountType string, flowID int64) string {
 	switch strings.TrimSpace(ownerType) {
 	case db.BaofuAccountOwnerTypeMerchant:
+		if strings.TrimSpace(accountType) == db.BaofuAccountTypePersonal {
+			base := fmt.Sprintf("LLBFOMP%010d", ownerID)
+			if flowID <= 0 {
+				return base
+			}
+			suffix := strconv.FormatInt(flowID, 10)
+			loginNo := base + "R" + suffix
+			if len(loginNo) <= 32 {
+				return loginNo
+			}
+			return base + "R" + strings.ToUpper(strconv.FormatInt(flowID, 36))
+		}
 		return fmt.Sprintf("LLBFOM%010d", ownerID)
 	case db.BaofuAccountOwnerTypePlatform:
 		return "LLBFOP0000000000"

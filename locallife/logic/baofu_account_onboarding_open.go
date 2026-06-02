@@ -25,7 +25,7 @@ func (s *BaofuAccountOnboardingService) openFromProfile(ctx context.Context, flo
 	}
 	loginNo := strings.TrimSpace(flow.LoginNo.String)
 	if loginNo == "" {
-		loginNo = baofuOpeningLoginNo(flow.OwnerType, flow.OwnerID)
+		loginNo = baofuOpeningLoginNo(flow.OwnerType, flow.OwnerID, flow.AccountType, flow.ID)
 	}
 	req, err := s.buildOpenRequest(profile, openTrans, loginNo, cfg)
 	if err != nil {
