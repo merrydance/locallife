@@ -111,8 +111,8 @@ Page({
     })
   },
 
-  onOpeningModeChange(e: WechatMiniprogram.CustomEvent<{ value: BaofuAccountOpeningMode }>) {
-    const value = e.detail.value || (e.currentTarget.dataset as OpeningModeDataset).value
+  onOpeningModeChange(e: WechatMiniprogram.CustomEvent<{ checked?: boolean }>) {
+    const value = (e.currentTarget.dataset as OpeningModeDataset).value
     if (value !== 'business' && value !== 'personal') {
       return
     }

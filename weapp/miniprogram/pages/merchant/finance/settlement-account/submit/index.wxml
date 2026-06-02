@@ -41,9 +41,17 @@
 
     <block wx:else>
       <view class="option-group">
-        <t-radio-group class="opening-mode-radio" value="{{accountOpeningMode}}" bind:change="onOpeningModeChange">
-          <t-radio wx:for="{{accountOpeningModeOptions}}" wx:key="value" value="{{item.value}}" label="{{item.label}}" />
-        </t-radio-group>
+        <view class="opening-mode-radio">
+          <t-check-tag
+            wx:for="{{accountOpeningModeOptions}}"
+            wx:key="value"
+            checked="{{accountOpeningMode === item.value}}"
+            content="{{item.label}}"
+            shape="round"
+            data-value="{{item.value}}"
+            bind:change="onOpeningModeChange"
+          />
+        </view>
       </view>
 
       <t-cell-group wx:if="{{accountOpeningMode === 'business'}}">

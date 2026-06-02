@@ -384,6 +384,8 @@ function main() {
   assert(submitFormSource.includes('useBusinessName: false'), 'merchant personal opening form must not backfill business license name')
   assert(submitFormSource.includes('allowedAccountTypes="{{[]}}"'), 'business-license opening must keep both public and private settlement account choices available')
   assert(!submitFormSource.includes('option-card__desc'), 'opening mode selector must stay compact without long explanatory cards')
+  assert(submitFormSource.includes('<t-check-tag') && submitFormSource.includes('data-value="{{item.value}}"'), 'opening mode selector should use stable check-tag choices')
+  assert(!submitFormSource.includes('<t-radio-group class="opening-mode-radio"'), 'opening mode selector must not use radio-group because it crashes in current Mini Program runtime')
   assert(submitFormSource.includes('buildBaofuPersonalProfilePayload') && /['"]merchant['"]/.test(submitFormSource), 'merchant submit page should use personal merchant payload builder')
   assert(submitFormSource.includes('onSubmitPersonal'), 'merchant submit page should provide a personal submit action')
 
