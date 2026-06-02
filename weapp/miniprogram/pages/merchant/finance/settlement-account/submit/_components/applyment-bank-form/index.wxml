@@ -10,6 +10,7 @@
           bind:change="onAccountTypeSelect"
         />
         <t-check-tag
+          wx:if="{{!allowedAccountTypes.length || allowedAccountTypes.indexOf('ACCOUNT_TYPE_PRIVATE') >= 0}}"
           checked="{{form.account_type === 'ACCOUNT_TYPE_PRIVATE'}}"
           content="对私账户"
           shape="round"

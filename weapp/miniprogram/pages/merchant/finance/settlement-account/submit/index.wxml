@@ -109,6 +109,7 @@
       <applyment-bank-form
         initialDraft="{{bankDraft}}"
         defaultAccountType="ACCOUNT_TYPE_BUSINESS"
+        allowedAccountTypes="{{profileDefaults && profileDefaults.settlement_account_allowed_types ? profileDefaults.settlement_account_allowed_types : []}}"
         embedded="{{true}}"
         submitBlock="{{true}}"
         showAccountTypeSelector="{{true}}"

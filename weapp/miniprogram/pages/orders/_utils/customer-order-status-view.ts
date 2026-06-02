@@ -10,6 +10,7 @@ export type CustomerOrderStatusGroup =
   | 'cancelled'
 
 export type CustomerOrderStatusIcon = 'time' | 'timer' | 'cart' | 'check-circle' | 'close-circle'
+export type CustomerDeliveryRemainingRouteStage = 'pickup' | 'delivery' | 'none'
 
 export interface CustomerOrderStatusView {
   rawStatus: string
@@ -23,6 +24,7 @@ export interface CustomerOrderStatusView {
   canConfirmReceipt: boolean
   shouldPoll: boolean
   isLocationTracked: boolean
+  remainingRouteStage: CustomerDeliveryRemainingRouteStage
 }
 
 type OrderStatusSource = Pick<
@@ -154,6 +156,7 @@ function buildView(input: {
   const canConfirmReceipt = input.status === 'rider_delivered' || input.deliveryStatus === 'delivered'
   const shouldPoll = input.orderType === 'takeout' && shouldPollStatus(input.status, input.deliveryStatus)
   const isLocationTracked = isLocationTrackedStatus(input.status, input.deliveryStatus)
+  const remainingRouteStage = getRemainingRouteStage(input.deliveryStatus)
 
   return {
     rawStatus: input.status,
@@ -166,8 +169,19 @@ function buildView(input: {
     canTrack,
     canConfirmReceipt,
     shouldPoll,
-    isLocationTracked
+    isLocationTracked,
+    remainingRouteStage
   }
+}
+
+function getRemainingRouteStage(status?: DeliveryStatus): CustomerDeliveryRemainingRouteStage {
+  if (status === 'assigned' || status === 'picking') {
+    return 'pickup'
+  }
+  if (status === 'picked' || status === 'delivering') {
+    return 'delivery'
+  }
+  return 'none'
 }
 
 function getStatusGroup(status: OrderStatus, orderType: OrderType, fulfillmentStatus?: string): CustomerOrderStatusGroup {

@@ -283,7 +283,7 @@ func TestBaofuSettlementAccountRiderProfileInputMergesApprovedIdentityDefaults(t
 	require.Equal(t, "招商银行", merged.BankName)
 }
 
-func TestBaofuSettlementAccountRoleDefaultsExposeFullInputDefaults(t *testing.T) {
+func TestBaofuSettlementAccountRoleDefaultsDoNotExposeSecretInputDefaults(t *testing.T) {
 	server := newTestServer(t, mockdb.NewMockStore(gomock.NewController(t)))
 	resp := baofuSettlementAccountResponse{}
 
@@ -305,7 +305,7 @@ func TestBaofuSettlementAccountRoleDefaultsExposeFullInputDefaults(t *testing.T)
 	require.NoError(t, err)
 	require.NotNil(t, resp.ProfileDefaults)
 	require.Equal(t, "周松涛", resp.ProfileDefaults.LegalName)
-	require.Equal(t, "132229197706017792", resp.ProfileDefaults.CertificateNo)
+	require.Empty(t, resp.ProfileDefaults.CertificateNo)
 	require.Equal(t, "***7792", resp.ProfileDefaults.CertificateNoMask)
 	require.True(t, resp.ProfileDefaults.HasCertificateNo)
 }
@@ -560,11 +560,69 @@ func TestBaofuSettlementAccountMerchantApplicationDefaultsOverrideMistypedBaofuP
 	require.Equal(t, "邢台市", merged.DepositBankCity)
 }
 
+func TestBaofuSettlementAccountMerchantCompanyDefaultsDisallowPrivateBusinessCard(t *testing.T) {
+	owner, _ := randomUser(t)
+	merchant := randomMerchant(owner.ID)
+	app := approvedMerchantApplicationForBaofuDefaults(owner.ID)
+	app.MerchantName = "宁晋县康味餐饮有限公司"
+	app.BusinessLicenseOcr = []byte(`{"status":"done","type_of_enterprise":"有限责任公司"}`)
+	existingProfile := db.BaofuAccountOpeningProfile{
+		OwnerType:                 db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:                   merchant.ID,
+		AccountType:               db.BaofuAccountTypeBusiness,
+		ProfileStatus:             db.BaofuAccountOpeningProfileStatusComplete,
+		LegalName:                 pgtype.Text{String: app.MerchantName, Valid: true},
+		CertificateNoCiphertext:   pgtype.Text{String: app.BusinessLicenseNumber, Valid: true},
+		CorporateName:             pgtype.Text{String: app.LegalPersonName, Valid: true},
+		CorporateCertIDCiphertext: pgtype.Text{String: app.LegalPersonIDNumber, Valid: true},
+		CardUserName:              pgtype.Text{String: app.LegalPersonName, Valid: true},
+		SourceSnapshot:            []byte(`{"source":"baofu_settlement_profile_api","self_employed":true}`),
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetBaofuAccountOpeningProfileByOwner(gomock.Any(), gomock.Eq(db.GetBaofuAccountOpeningProfileByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:   merchant.ID,
+		})).
+		Return(existingProfile, nil).
+		Times(2)
+	store.EXPECT().
+		GetUserMerchantApplication(gomock.Any(), owner.ID).
+		Return(app, nil).
+		Times(2)
+
+	server := newTestServer(t, store)
+	scope := baofuSettlementAccountScope{
+		OwnerType:   db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:     merchant.ID,
+		OwnerUserID: owner.ID,
+		AccountType: db.BaofuAccountTypeBusiness,
+		Audience:    "merchant",
+	}
+	defaults, found, err := server.loadBaofuSettlementAccountProfileDefaults(context.Background(), scope)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, []string{"ACCOUNT_TYPE_BUSINESS"}, defaults.defaults.SettlementAccountAllowedTypes)
+	require.False(t, defaults.defaults.SelfEmployed)
+	require.False(t, defaults.selfEmployed)
+
+	merged, err := server.baofuSettlementAccountProfileInputWithDefaults(context.Background(), scope, &logic.BaofuAccountOpeningProfileInput{})
+	require.NoError(t, err)
+	require.NotNil(t, merged)
+	require.False(t, merged.SelfEmployed)
+	require.False(t, merged.SelfEmployedSet)
+	require.Equal(t, app.LegalPersonName, merged.CardUserName)
+}
+
 func TestBaofuSettlementAccountMerchantDefaultsFallbackToApprovedMerchantSnapshot(t *testing.T) {
 	owner, _ := randomUser(t)
 	merchant := randomMerchant(owner.ID)
 	merchant.Name = "杭州市示例猪脚快餐店(个体工商户)"
-	merchant.ApplicationData = []byte(`{"business_license_number":"91330100MAEXAMPLE1","legal_person_name":"张三","legal_person_id_number":"110101199001010011"}`)
+	merchant.ApplicationData = []byte(`{"business_license_number":"91330100MAEXAMPLE1","legal_person_name":"张三","legal_person_id_number":"110101199001010011","business_license_ocr":{"status":"done","type_of_enterprise":"个体工商户"}}`)
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -599,12 +657,13 @@ func TestBaofuSettlementAccountMerchantDefaultsFallbackToApprovedMerchantSnapsho
 	require.Equal(t, "91330100MAEXAMPLE1", defaults.defaults.BusinessLicenseNumber)
 	require.Equal(t, "张三", defaults.defaults.LegalPersonName)
 	require.Equal(t, "***0011", defaults.defaults.LegalPersonIDNumberMask)
+	require.Equal(t, []string{"ACCOUNT_TYPE_BUSINESS", "ACCOUNT_TYPE_PRIVATE"}, defaults.defaults.SettlementAccountAllowedTypes)
 }
 
 func TestBaofuSettlementAccountMerchantDefaultsFallbackToSnapshotWhenLatestApplicationIsDraft(t *testing.T) {
 	owner, _ := randomUser(t)
 	merchant := randomMerchant(owner.ID)
-	merchant.Name = "杭州市示例猪脚快餐店(个体工商户)"
+	merchant.Name = "杭州市示例餐饮有限公司"
 	merchant.ApplicationData = []byte(`{"business_license_number":"91330100MAEXAMPLE1","legal_person_name":"张三","legal_person_id_number":"110101199001010011"}`)
 
 	ctrl := gomock.NewController(t)
@@ -640,6 +699,8 @@ func TestBaofuSettlementAccountMerchantDefaultsFallbackToSnapshotWhenLatestAppli
 	require.Equal(t, "91330100MAEXAMPLE1", defaults.defaults.BusinessLicenseNumber)
 	require.Equal(t, "张三", defaults.defaults.LegalPersonName)
 	require.Equal(t, "***0011", defaults.defaults.LegalPersonIDNumberMask)
+	require.Equal(t, []string{"ACCOUNT_TYPE_BUSINESS"}, defaults.defaults.SettlementAccountAllowedTypes)
+	require.True(t, defaults.accountTypesAuthoritative)
 }
 
 func TestBaofuSettlementAccountMerchantPostOverridesMistypedIdentityBeforeOpening(t *testing.T) {
@@ -2220,6 +2281,50 @@ func TestBaofuSettlementAccountRiderPostCreatesVerifyFeeBeforeBaofuOpening(t *te
 	require.Equal(t, updatedPayment.ID, response.PaymentOrderID)
 	require.NotNil(t, response.PayParams)
 	require.Equal(t, "prepay_id=prepay-baofu-verify", response.PayParams.Package)
+}
+
+func TestBaofuSettlementAccountMerchantCompanyRejectsPrivateBusinessCardBeforeOpening(t *testing.T) {
+	owner, _ := randomUser(t)
+	merchant := randomMerchant(owner.ID)
+	app := approvedMerchantApplicationForBaofuDefaults(owner.ID)
+	app.MerchantName = "宁晋县康味餐饮有限公司"
+	app.BusinessLicenseOcr = []byte(`{"status":"done","type_of_enterprise":"有限责任公司"}`)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+	store.EXPECT().
+		GetBaofuAccountOpeningProfileByOwner(gomock.Any(), gomock.Eq(db.GetBaofuAccountOpeningProfileByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:   merchant.ID,
+		})).
+		Return(db.BaofuAccountOpeningProfile{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetUserMerchantApplication(gomock.Any(), owner.ID).
+		Return(app, nil)
+
+	server := newTestServer(t, store)
+	accountClient := &fakeBaofuSettlementAccountClient{}
+	server.baofuAccountClient = accountClient
+	body := completeMerchantBaofuSettlementProfileBody()
+	profile := body["profile"].(map[string]any)
+	profile["self_employed"] = true
+	profile["card_user_name"] = "李四"
+	rawBody, err := json.Marshal(body)
+	require.NoError(t, err)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodPost, "/v1/merchant/settlement-account", bytes.NewReader(rawBody))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "当前主体仅支持对公结算账户")
+	require.Equal(t, 0, accountClient.openCalls)
 }
 
 func TestBaofuSettlementAccountMerchantPostPrivateBusinessCardFieldsReachOnboarding(t *testing.T) {

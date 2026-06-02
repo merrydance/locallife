@@ -253,6 +253,9 @@ func (server *Server) createBaofuSettlementAccount(ctx *gin.Context, scope baofu
 	if shouldMergeBaofuSettlementAccountProfileDefaults(scope, profile) {
 		profile, err = server.baofuSettlementAccountProfileInputWithDefaults(ctx, scope, profile)
 		if err != nil {
+			if writeBaofuSettlementAccountLogicRequestError(ctx, err, scope) {
+				return
+			}
 			ctx.JSON(http.StatusServiceUnavailable, loggedBaofuSettlementAccountServerError(ctx, err, scope, "宝付开户资料暂不可用，请稍后重试；如持续失败请联系平台处理", "baofu settlement account profile defaults load failed"))
 			return
 		}

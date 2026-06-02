@@ -47,6 +47,7 @@ export type ApplymentBankFormPayload = ApplymentBindBankPayload
 interface ApplymentBankFormProperties {
   initialDraft?: PartialApplymentBindBankDraft
   defaultAccountType: ApplymentAccountType
+  allowedAccountTypes?: ApplymentAccountType[]
   showContactFields?: boolean
   requireContactEmail?: boolean
   requireAccountName?: boolean
@@ -121,6 +122,18 @@ function normalizeOptionalText(value?: string | null): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+function normalizeAllowedAccountTypes(values?: ApplymentAccountType[] | null): ApplymentAccountType[] {
+  if (!Array.isArray(values) || values.length === 0) {
+    return ['ACCOUNT_TYPE_BUSINESS', 'ACCOUNT_TYPE_PRIVATE']
+  }
+  const normalized = values.filter((value) => value === 'ACCOUNT_TYPE_BUSINESS' || value === 'ACCOUNT_TYPE_PRIVATE')
+  return normalized.length > 0 ? normalized : ['ACCOUNT_TYPE_BUSINESS']
+}
+
+function isAccountTypeAllowed(accountType: ApplymentAccountType, values?: ApplymentAccountType[] | null): boolean {
+  return normalizeAllowedAccountTypes(values).includes(accountType)
+}
+
 function isLongTermContactDocument(form: ApplymentBindBankDraft): boolean {
   return form.contact_id_doc_period_end.trim() === '长期'
 }
@@ -131,16 +144,20 @@ function requiresSuperContactFields(form: ApplymentBindBankDraft, showContactFie
 
 function normalizeDraft(
   accountType: ApplymentAccountType,
-  draft?: PartialApplymentBindBankDraft | null
+  draft?: PartialApplymentBindBankDraft | null,
+  allowedAccountTypes?: ApplymentAccountType[] | null
 ): ApplymentBindBankDraft {
-  const base = createEmptyDraft(accountType)
+  const normalizedAllowedTypes = normalizeAllowedAccountTypes(allowedAccountTypes)
+  const normalizedDefaultAccountType = normalizedAllowedTypes.includes(accountType) ? accountType : normalizedAllowedTypes[0]
+  const base = createEmptyDraft(normalizedDefaultAccountType)
   if (!draft) {
     return base
   }
 
-  const nextAccountType = draft.account_type === 'ACCOUNT_TYPE_PRIVATE' || draft.account_type === 'ACCOUNT_TYPE_BUSINESS'
+  const draftAccountType = draft.account_type === 'ACCOUNT_TYPE_PRIVATE' || draft.account_type === 'ACCOUNT_TYPE_BUSINESS'
     ? draft.account_type
-    : accountType
+    : normalizedDefaultAccountType
+  const nextAccountType = normalizedAllowedTypes.includes(draftAccountType) ? draftAccountType : normalizedDefaultAccountType
 
   return {
     account_type: nextAccountType,
@@ -253,6 +270,10 @@ Component({
       type: String,
       value: 'ACCOUNT_TYPE_BUSINESS'
     },
+    allowedAccountTypes: {
+      type: Array,
+      value: []
+    },
     showContactFields: {
       type: Boolean,
       value: false
@@ -343,7 +364,7 @@ Component({
     initializeForm() {
       const properties = this.properties as unknown as ApplymentBankFormProperties
       const accountType = properties.defaultAccountType
-      const initialDraft = normalizeDraft(accountType, properties.initialDraft)
+      const initialDraft = normalizeDraft(accountType, properties.initialDraft, properties.allowedAccountTypes)
 
       this.setFormState(initialDraft, {
         canSubmit: canSubmitForm(
@@ -599,6 +620,9 @@ Component({
       const { value } = e.currentTarget.dataset as { value?: ApplymentAccountType }
       const accountType = value
       if (!accountType || accountType === this.readForm().account_type) {
+        return
+      }
+      if (!isAccountTypeAllowed(accountType, (this.properties as unknown as ApplymentBankFormProperties).allowedAccountTypes)) {
         return
       }
 

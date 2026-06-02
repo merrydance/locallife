@@ -3,6 +3,8 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"net/http"
 	"strings"
 
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -11,24 +13,25 @@ import (
 )
 
 type baofuSettlementAccountProfileDefaultsWithSecrets struct {
-	defaults              baofuSettlementAccountProfileDefaults
-	legalPersonIDNumber   string
-	certificateNo         string
-	email                 string
-	bankAccountNo         string
-	bankMobile            string
-	corporateMobile       string
-	contactMobile         string
-	businessLicenseNumber string
-	legalName             string
-	legalPersonName       string
-	cardUserName          string
-	bankName              string
-	depositBankProvince   string
-	depositBankCity       string
-	depositBankName       string
-	contactName           string
-	selfEmployed          bool
+	defaults                  baofuSettlementAccountProfileDefaults
+	legalPersonIDNumber       string
+	certificateNo             string
+	email                     string
+	bankAccountNo             string
+	bankMobile                string
+	corporateMobile           string
+	contactMobile             string
+	businessLicenseNumber     string
+	legalName                 string
+	legalPersonName           string
+	cardUserName              string
+	bankName                  string
+	depositBankProvince       string
+	depositBankCity           string
+	depositBankName           string
+	contactName               string
+	selfEmployed              bool
+	accountTypesAuthoritative bool
 }
 
 func (server *Server) applyBaofuSettlementAccountProfileDefaults(ctx context.Context, scope baofuSettlementAccountScope, resp *baofuSettlementAccountResponse, profile db.BaofuAccountOpeningProfile, profileFound bool) error {
@@ -78,6 +81,9 @@ func (server *Server) baofuSettlementAccountProfileInputWithDefaults(ctx context
 	}
 	if !found {
 		return input, nil
+	}
+	if input.SelfEmployed && defaults.accountTypesAuthoritative && !baofuSettlementAccountAllowsPrivate(defaults.defaults.SettlementAccountAllowedTypes) {
+		return nil, logic.NewRequestError(http.StatusBadRequest, errors.New("当前主体仅支持对公结算账户，请选择对公账户后重新提交"))
 	}
 	merged := *input
 	defaults.mergeIntoOpeningProfileInput(&merged)
@@ -175,7 +181,6 @@ func (server *Server) baofuSettlementAccountProfileDefaultsFromProfile(_ context
 		defaults: baofuSettlementAccountProfileDefaults{
 			Source:                    "baofu_profile",
 			LegalName:                 strings.TrimSpace(profile.LegalName.String),
-			CertificateNo:             personalCertificateNoFromBaofuProfile(accountType, certificateNo),
 			BusinessLicenseNumber:     businessLicenseNumberFromBaofuProfile(accountType, certificateNo),
 			LegalPersonName:           strings.TrimSpace(profile.CorporateName.String),
 			CardUserName:              strings.TrimSpace(profile.CardUserName.String),
@@ -279,9 +284,6 @@ func baofuProfileDefaultsFromScope(scope baofuSettlementAccountScope) (baofuSett
 		defaults.contactMobile = strings.TrimSpace(scope.DefaultProfile.ContactMobile)
 		if strings.TrimSpace(defaults.defaults.LegalName) == "" {
 			defaults.defaults.LegalName = defaults.legalName
-		}
-		if strings.TrimSpace(defaults.defaults.CertificateNo) == "" {
-			defaults.defaults.CertificateNo = defaults.certificateNo
 		}
 		if strings.TrimSpace(defaults.defaults.CertificateNoMask) == "" {
 			defaults.defaults.CertificateNoMask = maskSensitiveTail(defaults.certificateNo, 4)
@@ -422,24 +424,66 @@ func baofuProfileDefaultsFromMerchantApplication(app db.MerchantApplication) bao
 	businessLicenseNumber := strings.TrimSpace(app.BusinessLicenseNumber)
 	legalPersonName := strings.TrimSpace(app.LegalPersonName)
 	legalPersonIDNumber := strings.TrimSpace(app.LegalPersonIDNumber)
+	allowedTypes, accountTypesAuthoritative := baofuSettlementAccountAllowedTypesFromMerchantBusinessLicenseOCR(app.BusinessLicenseOcr)
 	return baofuSettlementAccountProfileDefaultsWithSecrets{
 		defaults: baofuSettlementAccountProfileDefaults{
-			Source:                    "merchant_application",
-			LegalName:                 legalName,
-			BusinessLicenseNumber:     businessLicenseNumber,
-			LegalPersonName:           legalPersonName,
-			CardUserName:              legalPersonName,
-			LegalPersonIDNumber:       legalPersonIDNumber,
-			LegalPersonIDNumberMask:   maskSensitiveTail(legalPersonIDNumber, 4),
-			HasLegalPersonIDNumber:    legalPersonIDNumber != "",
-			HasSavedSensitiveDefaults: legalPersonIDNumber != "",
+			Source:                        "merchant_application",
+			LegalName:                     legalName,
+			BusinessLicenseNumber:         businessLicenseNumber,
+			LegalPersonName:               legalPersonName,
+			CardUserName:                  legalPersonName,
+			LegalPersonIDNumber:           legalPersonIDNumber,
+			LegalPersonIDNumberMask:       maskSensitiveTail(legalPersonIDNumber, 4),
+			SettlementAccountAllowedTypes: allowedTypes,
+			HasLegalPersonIDNumber:        legalPersonIDNumber != "",
+			HasSavedSensitiveDefaults:     legalPersonIDNumber != "",
 		},
-		legalName:             legalName,
-		businessLicenseNumber: businessLicenseNumber,
-		legalPersonName:       legalPersonName,
-		legalPersonIDNumber:   legalPersonIDNumber,
-		cardUserName:          legalPersonName,
+		legalName:                 legalName,
+		businessLicenseNumber:     businessLicenseNumber,
+		legalPersonName:           legalPersonName,
+		legalPersonIDNumber:       legalPersonIDNumber,
+		cardUserName:              legalPersonName,
+		accountTypesAuthoritative: accountTypesAuthoritative,
 	}
+}
+
+func baofuSettlementAccountAllowedTypesFromMerchantBusinessLicenseOCR(raw []byte) ([]string, bool) {
+	if len(raw) == 0 {
+		return []string{baofuSettlementAccountTypeBusiness}, true
+	}
+	var payload struct {
+		TypeOfEnterprise string `json:"type_of_enterprise"`
+	}
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return []string{baofuSettlementAccountTypeBusiness}, true
+	}
+	subjectType := baofuMerchantBusinessSubjectTypeFromEnterpriseType(payload.TypeOfEnterprise)
+	switch subjectType {
+	case "individual_business":
+		return []string{baofuSettlementAccountTypeBusiness, baofuSettlementAccountTypePrivate}, true
+	default:
+		return []string{baofuSettlementAccountTypeBusiness}, true
+	}
+}
+
+func baofuSettlementAccountAllowsPrivate(values []string) bool {
+	for _, value := range values {
+		if strings.TrimSpace(value) == baofuSettlementAccountTypePrivate {
+			return true
+		}
+	}
+	return false
+}
+
+func baofuMerchantBusinessSubjectTypeFromEnterpriseType(value string) string {
+	normalized := strings.TrimSpace(value)
+	if normalized == "" {
+		return "unknown"
+	}
+	if strings.Contains(normalized, "个体工商户") {
+		return "individual_business"
+	}
+	return "company"
 }
 
 func baofuProfileDefaultsFromMerchantApplicationSnapshot(merchant db.Merchant) (baofuSettlementAccountProfileDefaultsWithSecrets, error) {
@@ -447,9 +491,10 @@ func baofuProfileDefaultsFromMerchantApplicationSnapshot(merchant db.Merchant) (
 		return baofuSettlementAccountProfileDefaultsWithSecrets{}, nil
 	}
 	var snapshot struct {
-		BusinessLicenseNumber string `json:"business_license_number"`
-		LegalPersonName       string `json:"legal_person_name"`
-		LegalPersonIDNumber   string `json:"legal_person_id_number"`
+		BusinessLicenseNumber string          `json:"business_license_number"`
+		LegalPersonName       string          `json:"legal_person_name"`
+		LegalPersonIDNumber   string          `json:"legal_person_id_number"`
+		BusinessLicenseOCR    json.RawMessage `json:"business_license_ocr"`
 	}
 	if err := json.Unmarshal(merchant.ApplicationData, &snapshot); err != nil {
 		return baofuSettlementAccountProfileDefaultsWithSecrets{}, err
@@ -458,22 +503,25 @@ func baofuProfileDefaultsFromMerchantApplicationSnapshot(merchant db.Merchant) (
 	businessLicenseNumber := strings.TrimSpace(snapshot.BusinessLicenseNumber)
 	legalPersonName := strings.TrimSpace(snapshot.LegalPersonName)
 	legalPersonIDNumber := strings.TrimSpace(snapshot.LegalPersonIDNumber)
+	allowedTypes, accountTypesAuthoritative := baofuSettlementAccountAllowedTypesFromMerchantBusinessLicenseOCR(snapshot.BusinessLicenseOCR)
 	return baofuSettlementAccountProfileDefaultsWithSecrets{
 		defaults: baofuSettlementAccountProfileDefaults{
-			Source:                    "merchant_application_snapshot",
-			LegalName:                 legalName,
-			BusinessLicenseNumber:     businessLicenseNumber,
-			LegalPersonName:           legalPersonName,
-			CardUserName:              legalPersonName,
-			LegalPersonIDNumber:       legalPersonIDNumber,
-			LegalPersonIDNumberMask:   maskSensitiveTail(legalPersonIDNumber, 4),
-			HasLegalPersonIDNumber:    legalPersonIDNumber != "",
-			HasSavedSensitiveDefaults: legalPersonIDNumber != "",
+			Source:                        "merchant_application_snapshot",
+			LegalName:                     legalName,
+			BusinessLicenseNumber:         businessLicenseNumber,
+			LegalPersonName:               legalPersonName,
+			CardUserName:                  legalPersonName,
+			LegalPersonIDNumber:           legalPersonIDNumber,
+			LegalPersonIDNumberMask:       maskSensitiveTail(legalPersonIDNumber, 4),
+			SettlementAccountAllowedTypes: allowedTypes,
+			HasLegalPersonIDNumber:        legalPersonIDNumber != "",
+			HasSavedSensitiveDefaults:     legalPersonIDNumber != "",
 		},
-		legalName:             legalName,
-		businessLicenseNumber: businessLicenseNumber,
-		legalPersonName:       legalPersonName,
-		legalPersonIDNumber:   legalPersonIDNumber,
-		cardUserName:          legalPersonName,
+		legalName:                 legalName,
+		businessLicenseNumber:     businessLicenseNumber,
+		legalPersonName:           legalPersonName,
+		legalPersonIDNumber:       legalPersonIDNumber,
+		cardUserName:              legalPersonName,
+		accountTypesAuthoritative: accountTypesAuthoritative,
 	}, nil
 }

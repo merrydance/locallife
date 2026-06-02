@@ -851,6 +851,10 @@ definitions:
         type: string
       self_employed:
         type: boolean
+      settlement_account_allowed_types:
+        items:
+          type: string
+        type: array
       source:
         type: string
     type: object

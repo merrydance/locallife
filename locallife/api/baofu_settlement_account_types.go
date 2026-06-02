@@ -11,6 +11,8 @@ import (
 const (
 	baofuSettlementProfileStatusDraft     = "draft"
 	baofuSettlementAccountServiceNotReady = "baofu settlement account service is not configured"
+	baofuSettlementAccountTypeBusiness    = "ACCOUNT_TYPE_BUSINESS"
+	baofuSettlementAccountTypePrivate     = "ACCOUNT_TYPE_PRIVATE"
 )
 
 type baofuSettlementAccountScope struct {
@@ -105,42 +107,43 @@ type baofuSettlementAccountPaymentResponse struct {
 }
 
 type baofuSettlementAccountProfileDefaults struct {
-	Source                    string `json:"source,omitempty"`
-	LegalName                 string `json:"legal_name,omitempty"`
-	CertificateNo             string `json:"certificate_no,omitempty"`
-	CertificateNoMask         string `json:"certificate_no_mask,omitempty"`
-	BusinessLicenseNumber     string `json:"business_license_number,omitempty"`
-	LegalPersonName           string `json:"legal_person_name,omitempty"`
-	CardUserName              string `json:"card_user_name,omitempty"`
-	SelfEmployed              bool   `json:"self_employed,omitempty"`
-	LegalPersonIDNumber       string `json:"legal_person_id_number,omitempty"`
-	LegalPersonIDNumberMask   string `json:"legal_person_id_number_mask,omitempty"`
-	CorporateMobile           string `json:"corporate_mobile,omitempty"`
-	CorporateMobileMask       string `json:"corporate_mobile_mask,omitempty"`
-	Email                     string `json:"email,omitempty"`
-	EmailMask                 string `json:"email_mask,omitempty"`
-	BankAccountNo             string `json:"bank_account_no,omitempty"`
-	BankAccountNoMask         string `json:"bank_account_no_mask,omitempty"`
-	BankMobile                string `json:"bank_mobile,omitempty"`
-	BankName                  string `json:"bank_name,omitempty"`
-	DepositBankProvince       string `json:"deposit_bank_province,omitempty"`
-	DepositBankCity           string `json:"deposit_bank_city,omitempty"`
-	DepositBankName           string `json:"deposit_bank_name,omitempty"`
-	BankAddressCode           string `json:"bank_address_code,omitempty"`
-	BankBranchID              string `json:"bank_branch_id,omitempty"`
-	AccountBank               string `json:"account_bank,omitempty"`
-	AccountBankCode           int64  `json:"account_bank_code,omitempty"`
-	BankAlias                 string `json:"bank_alias,omitempty"`
-	BankAliasCode             string `json:"bank_alias_code,omitempty"`
-	ContactName               string `json:"contact_name,omitempty"`
-	ContactMobileMask         string `json:"contact_mobile_mask,omitempty"`
-	HasLegalPersonIDNumber    bool   `json:"has_legal_person_id_number,omitempty"`
-	HasCorporateMobile        bool   `json:"has_corporate_mobile,omitempty"`
-	HasCertificateNo          bool   `json:"has_certificate_no,omitempty"`
-	HasEmail                  bool   `json:"has_email,omitempty"`
-	HasBankAccountNo          bool   `json:"has_bank_account_no,omitempty"`
-	HasContactMobile          bool   `json:"has_contact_mobile,omitempty"`
-	HasSavedSensitiveDefaults bool   `json:"has_saved_sensitive_defaults,omitempty"`
+	Source                        string   `json:"source,omitempty"`
+	LegalName                     string   `json:"legal_name,omitempty"`
+	CertificateNo                 string   `json:"certificate_no,omitempty"`
+	CertificateNoMask             string   `json:"certificate_no_mask,omitempty"`
+	BusinessLicenseNumber         string   `json:"business_license_number,omitempty"`
+	LegalPersonName               string   `json:"legal_person_name,omitempty"`
+	CardUserName                  string   `json:"card_user_name,omitempty"`
+	SelfEmployed                  bool     `json:"self_employed,omitempty"`
+	LegalPersonIDNumber           string   `json:"legal_person_id_number,omitempty"`
+	LegalPersonIDNumberMask       string   `json:"legal_person_id_number_mask,omitempty"`
+	CorporateMobile               string   `json:"corporate_mobile,omitempty"`
+	CorporateMobileMask           string   `json:"corporate_mobile_mask,omitempty"`
+	Email                         string   `json:"email,omitempty"`
+	EmailMask                     string   `json:"email_mask,omitempty"`
+	BankAccountNo                 string   `json:"bank_account_no,omitempty"`
+	BankAccountNoMask             string   `json:"bank_account_no_mask,omitempty"`
+	BankMobile                    string   `json:"bank_mobile,omitempty"`
+	BankName                      string   `json:"bank_name,omitempty"`
+	DepositBankProvince           string   `json:"deposit_bank_province,omitempty"`
+	DepositBankCity               string   `json:"deposit_bank_city,omitempty"`
+	DepositBankName               string   `json:"deposit_bank_name,omitempty"`
+	BankAddressCode               string   `json:"bank_address_code,omitempty"`
+	BankBranchID                  string   `json:"bank_branch_id,omitempty"`
+	AccountBank                   string   `json:"account_bank,omitempty"`
+	AccountBankCode               int64    `json:"account_bank_code,omitempty"`
+	BankAlias                     string   `json:"bank_alias,omitempty"`
+	BankAliasCode                 string   `json:"bank_alias_code,omitempty"`
+	ContactName                   string   `json:"contact_name,omitempty"`
+	ContactMobileMask             string   `json:"contact_mobile_mask,omitempty"`
+	SettlementAccountAllowedTypes []string `json:"settlement_account_allowed_types,omitempty"`
+	HasLegalPersonIDNumber        bool     `json:"has_legal_person_id_number,omitempty"`
+	HasCorporateMobile            bool     `json:"has_corporate_mobile,omitempty"`
+	HasCertificateNo              bool     `json:"has_certificate_no,omitempty"`
+	HasEmail                      bool     `json:"has_email,omitempty"`
+	HasBankAccountNo              bool     `json:"has_bank_account_no,omitempty"`
+	HasContactMobile              bool     `json:"has_contact_mobile,omitempty"`
+	HasSavedSensitiveDefaults     bool     `json:"has_saved_sensitive_defaults,omitempty"`
 }
 
 type baofuSettlementAccountResponse struct {

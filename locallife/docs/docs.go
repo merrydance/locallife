@@ -32713,6 +32713,12 @@ const docTemplate = `{
                 "self_employed": {
                     "type": "boolean"
                 },
+                "settlement_account_allowed_types": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "source": {
                     "type": "string"
                 }

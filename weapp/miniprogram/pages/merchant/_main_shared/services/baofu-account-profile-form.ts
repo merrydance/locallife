@@ -41,6 +41,14 @@ function normalizeText(value?: string | null): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+function canUsePrivateSettlementAccount(defaults?: BaofuSettlementAccountProfileDefaults | null): boolean {
+  const allowedTypes = defaults?.settlement_account_allowed_types
+  if (!Array.isArray(allowedTypes) || allowedTypes.length === 0) {
+    return true
+  }
+  return allowedTypes.includes('ACCOUNT_TYPE_PRIVATE')
+}
+
 export function emptyBaofuEnterpriseProfileForm(): BaofuEnterpriseProfileForm {
   return {
     legal_name: '',
@@ -82,7 +90,7 @@ export function buildBaofuEnterpriseBankDraftFromDefaults(
     return { account_type: fallbackAccountType }
   }
 
-  const selfEmployed = Boolean(defaults.self_employed)
+  const selfEmployed = Boolean(defaults.self_employed && canUsePrivateSettlementAccount(defaults))
   const hasBranch = Boolean(defaults.bank_branch_id)
   const depositBankProvince = normalizeText(defaults.deposit_bank_province)
   const depositBankCity = normalizeText(defaults.deposit_bank_city)
@@ -123,7 +131,8 @@ export function buildBaofuEnterpriseProfilePayload(
     deposit_bank_name: normalizeText(bank.bank_name || bank.account_bank || bank.bank_alias || defaults?.deposit_bank_name)
   }
 
-  if (bank.account_type === 'ACCOUNT_TYPE_PRIVATE') {
+  const privateAllowed = canUsePrivateSettlementAccount(defaults)
+  if (privateAllowed && bank.account_type === 'ACCOUNT_TYPE_PRIVATE') {
     payload.self_employed = true
     payload.card_user_name = normalizeText(bank.account_name || form.legal_person_name || defaults?.legal_person_name)
   } else {

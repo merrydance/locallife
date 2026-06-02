@@ -95,6 +95,40 @@ function main() {
   assert(enterpriseDraft.bank_name === '邢台银行宁晋支行', 'enterprise draft should restore manual branch from defaults')
   assert(enterpriseDraft.need_bank_branch === true, 'enterprise draft should keep manual bank location required')
 
+  const companyDraft = buildBaofuEnterpriseBankDraftFromDefaults({
+    settlement_account_allowed_types: ['ACCOUNT_TYPE_BUSINESS'],
+    legal_name: '宁晋县康味餐饮有限公司',
+    legal_person_name: '周松涛',
+    self_employed: true,
+    card_user_name: '周松涛'
+  })
+  assert(companyDraft.account_type === 'ACCOUNT_TYPE_BUSINESS', 'company enterprise draft must ignore stale private-card defaults')
+  assert(companyDraft.account_name === '宁晋县康味餐饮有限公司', 'company enterprise draft should use legal name for public account')
+
+  const companyPayload = buildBaofuEnterpriseProfilePayload({
+    legal_name: '宁晋县康味餐饮有限公司',
+    business_license_number: '91130528MA00000001',
+    legal_person_name: '周松涛',
+    legal_person_id_number: '130528199001010011',
+    corporate_mobile: '13800138000',
+    email: 'merchant@example.com'
+  }, {
+    account_type: 'ACCOUNT_TYPE_PRIVATE',
+    account_bank: '邢台银行',
+    bank_alias: '邢台银行',
+    need_bank_branch: true,
+    bank_address_code: '河北省',
+    deposit_bank_province: '河北省',
+    deposit_bank_city: '邢台市',
+    bank_name: '邢台银行宁晋支行',
+    account_number: '6222020202020202',
+    account_name: '周松涛'
+  }, {
+    settlement_account_allowed_types: ['ACCOUNT_TYPE_BUSINESS']
+  })
+  assert(companyPayload.self_employed === false, 'company enterprise payload must submit self_employed=false')
+  assert(!Object.prototype.hasOwnProperty.call(companyPayload, 'card_user_name'), 'company enterprise payload must not submit private card holder')
+
   const enterprisePayload = buildBaofuEnterpriseProfilePayload({
     legal_name: '宁晋县周鹏饭店',
     business_license_number: '92130528MA00000001',

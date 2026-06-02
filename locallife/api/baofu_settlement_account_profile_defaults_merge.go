@@ -44,6 +44,16 @@ func (defaults *baofuSettlementAccountProfileDefaultsWithSecrets) overrideMercha
 	if strings.TrimSpace(source.defaults.CardUserName) != "" {
 		defaults.defaults.CardUserName = source.defaults.CardUserName
 	}
+	if len(source.defaults.SettlementAccountAllowedTypes) > 0 {
+		defaults.defaults.SettlementAccountAllowedTypes = append([]string(nil), source.defaults.SettlementAccountAllowedTypes...)
+	}
+	if source.accountTypesAuthoritative {
+		defaults.accountTypesAuthoritative = true
+		if !baofuSettlementAccountAllowsPrivate(source.defaults.SettlementAccountAllowedTypes) {
+			defaults.defaults.SelfEmployed = false
+			defaults.selfEmployed = false
+		}
+	}
 	if strings.TrimSpace(source.defaults.LegalPersonIDNumber) != "" {
 		defaults.defaults.LegalPersonIDNumber = source.defaults.LegalPersonIDNumber
 	}
@@ -161,6 +171,9 @@ func (defaults *baofuSettlementAccountProfileDefaultsWithSecrets) mergeResponseD
 	if strings.TrimSpace(defaults.defaults.ContactMobileMask) == "" {
 		defaults.defaults.ContactMobileMask = source.defaults.ContactMobileMask
 	}
+	if len(defaults.defaults.SettlementAccountAllowedTypes) == 0 && len(source.defaults.SettlementAccountAllowedTypes) > 0 {
+		defaults.defaults.SettlementAccountAllowedTypes = append([]string(nil), source.defaults.SettlementAccountAllowedTypes...)
+	}
 }
 
 func (defaults *baofuSettlementAccountProfileDefaultsWithSecrets) mergeSecretDefaults(source baofuSettlementAccountProfileDefaultsWithSecrets) {
@@ -215,6 +228,9 @@ func (defaults *baofuSettlementAccountProfileDefaultsWithSecrets) mergeSecretDef
 	if source.selfEmployed {
 		defaults.selfEmployed = true
 	}
+	if source.accountTypesAuthoritative {
+		defaults.accountTypesAuthoritative = true
+	}
 }
 
 func (defaults *baofuSettlementAccountProfileDefaultsWithSecrets) mergeDefaultFlags(source baofuSettlementAccountProfileDefaultsWithSecrets) {
@@ -266,6 +282,10 @@ func (defaults baofuSettlementAccountProfileDefaultsWithSecrets) mergeIntoOpenin
 	if !input.SelfEmployedSet && defaults.selfEmployed {
 		input.SelfEmployed = true
 		input.SelfEmployedSet = true
+	}
+	if defaults.accountTypesAuthoritative && !baofuSettlementAccountAllowsPrivate(defaults.defaults.SettlementAccountAllowedTypes) {
+		input.SelfEmployed = false
+		input.SelfEmployedSet = false
 	}
 	if strings.TrimSpace(input.CorporateMobile) == "" {
 		input.CorporateMobile = defaults.corporateMobile
@@ -325,6 +345,7 @@ func (defaults baofuSettlementAccountProfileDefaultsWithSecrets) isZero() bool {
 
 func (defaults baofuSettlementAccountProfileDefaults) isZero() bool {
 	return firstNonBlank(defaults.LegalName, defaults.CertificateNo, defaults.CertificateNoMask, defaults.BusinessLicenseNumber, defaults.LegalPersonName, defaults.CardUserName, defaults.LegalPersonIDNumber, defaults.LegalPersonIDNumberMask, defaults.CorporateMobile, defaults.CorporateMobileMask, defaults.BankName, defaults.DepositBankProvince, defaults.DepositBankCity, defaults.DepositBankName, defaults.ContactName, defaults.BankAccountNo, defaults.BankAccountNoMask, defaults.BankMobile, defaults.Email, defaults.EmailMask, defaults.ContactMobileMask) == "" &&
+		len(defaults.SettlementAccountAllowedTypes) == 0 &&
 		!defaults.HasLegalPersonIDNumber &&
 		!defaults.HasCorporateMobile &&
 		!defaults.HasCertificateNo &&

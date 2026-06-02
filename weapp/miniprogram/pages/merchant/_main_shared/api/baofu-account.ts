@@ -12,6 +12,8 @@ import type { MiniProgramPayParams } from './payment'
 
 export type BaofuAccountOwnerRole = 'rider' | 'merchant' | 'operator' | 'platform'
 
+export type BaofuSettlementAccountAllowedType = 'ACCOUNT_TYPE_BUSINESS' | 'ACCOUNT_TYPE_PRIVATE'
+
 export type BaofuSettlementAccountStatus =
   | 'ready'
   | 'failed'
@@ -99,6 +101,7 @@ export interface BaofuSettlementAccountProfileDefaults {
   bank_alias_code?: string
   contact_name?: string
   contact_mobile_mask?: string
+  settlement_account_allowed_types?: BaofuSettlementAccountAllowedType[]
   has_legal_person_id_number?: boolean
   has_corporate_mobile?: boolean
   has_certificate_no?: boolean

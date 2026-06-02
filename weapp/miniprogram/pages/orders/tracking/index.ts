@@ -474,19 +474,21 @@ Page({
   },
 
   getRemainingRouteTarget(): MapPoint | null {
-    const status = this.data.delivery?.status
-    if (status === 'assigned' || status === 'picking') {
+    const delivery = this.data.delivery
+    const stage = delivery ? buildCustomerDeliveryTrackingStatusView(delivery).remainingRouteStage : 'none'
+    if (stage === 'pickup') {
       return this.data.merchantPoint
     }
-    if (status === 'picked' || status === 'delivering') {
+    if (stage === 'delivery') {
       return this.data.customerPoint
     }
     return null
   },
 
   getRemainingStageText(): string {
-    const status = this.data.delivery?.status
-    return status === 'assigned' || status === 'picking' ? '距取餐点' : '距送达点'
+    const delivery = this.data.delivery
+    const stage = delivery ? buildCustomerDeliveryTrackingStatusView(delivery).remainingRouteStage : 'none'
+    return stage === 'pickup' ? '距取餐点' : '距送达点'
   },
 
   renderRoutePolyline(
