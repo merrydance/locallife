@@ -308,11 +308,12 @@ type availableRegionsListResponse struct {
 }
 
 type regionAvailabilityResponse struct {
-	RegionID    int64  `json:"region_id"`
-	Code        string `json:"code"`
-	Name        string `json:"name"`
-	IsAvailable bool   `json:"is_available"`
-	Reason      string `json:"reason,omitempty"` // 不可用原因
+	RegionID             int64  `json:"region_id"`
+	Code                 string `json:"code"`
+	Name                 string `json:"name"`
+	IsAvailable          bool   `json:"is_available"`
+	Reason               string `json:"reason,omitempty"` // 不可用原因
+	OperatorContactPhone string `json:"operator_contact_phone,omitempty"`
 }
 
 // listAvailableRegions godoc
@@ -462,6 +463,7 @@ func (server *Server) checkRegionAvailability(ctx *gin.Context) {
 		// 已有运营商绑定
 		response.IsAvailable = false
 		response.Reason = fmt.Sprintf("该区域已有运营商（%s）运营，不可申请", operator.Name)
+		response.OperatorContactPhone = operator.ContactPhone
 	}
 
 	ctx.JSON(http.StatusOK, response)

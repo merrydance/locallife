@@ -30,6 +30,16 @@
     </view>
   </view>
 
+  <view wx:if="{{localOperatorPhone}}" class="operator-assist animate-slide-up" bindtap="onCallOperator" hover-class="operator-assist--hover">
+    <text class="operator-assist__text">联系运营商上门协助入驻</text>
+    <t-icon name="call" size="56rpx" color="var(--td-brand-color)" />
+  </view>
+
+  <view wx:else class="operator-assist operator-assist--disabled animate-slide-up">
+    <text class="operator-assist__text">本地暂无运营商</text>
+    <t-icon name="call" size="56rpx" color="var(--td-text-color-placeholder)" />
+  </view>
+
   <view class="footer-action animate-slide-up">
     <view class="join-entry" bindtap="onJoinGroup">
       <text class="tip">已有店铺？</text>
@@ -38,5 +48,3 @@
     </view>
   </view>
 </view>
-
-

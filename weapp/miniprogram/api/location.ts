@@ -27,6 +27,15 @@ export interface RegionSearchResult {
     latitude?: string
 }
 
+export interface RegionAvailabilityResponse {
+    region_id: number
+    code: string
+    name: string
+    is_available: boolean
+    reason?: string
+    operator_contact_phone?: string
+}
+
 function assertValidCoordinate(latitude: number, longitude: number): void {
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
         throw new Error('invalid coordinates')
@@ -51,6 +60,17 @@ export function searchRegions(query: string): Promise<RegionSearchResult[]> {
         url: '/v1/regions/search',
         method: 'GET',
         data: { q: query.trim() }
+    })
+}
+
+export function checkRegionAvailability(regionId: number): Promise<RegionAvailabilityResponse> {
+    if (!Number.isFinite(regionId) || regionId <= 0) {
+        throw new Error('invalid region id')
+    }
+
+    return request<RegionAvailabilityResponse>({
+        url: `/v1/regions/${regionId}/check`,
+        method: 'GET'
     })
 }
 

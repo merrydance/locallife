@@ -658,9 +658,10 @@ func TestCheckRegionAvailabilityAPI(t *testing.T) {
 	region.Level = 3 // 区县级
 
 	operator := db.Operator{
-		ID:       util.RandomInt(1, 1000),
-		Name:     "测试运营商",
-		RegionID: region.ID,
+		ID:           util.RandomInt(1, 1000),
+		Name:         "测试运营商",
+		ContactPhone: "13900139000",
+		RegionID:     region.ID,
 	}
 
 	testCases := []struct {
@@ -711,6 +712,7 @@ func TestCheckRegionAvailabilityAPI(t *testing.T) {
 				require.Equal(t, region.ID, response.RegionID)
 				require.False(t, response.IsAvailable)
 				require.Contains(t, response.Reason, operator.Name)
+				require.Equal(t, operator.ContactPhone, response.OperatorContactPhone)
 			},
 		},
 		{

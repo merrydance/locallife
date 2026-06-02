@@ -42464,6 +42464,9 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
+                "operator_contact_phone": {
+                    "type": "string"
+                },
                 "reason": {
                     "description": "不可用原因",
                     "type": "string"
