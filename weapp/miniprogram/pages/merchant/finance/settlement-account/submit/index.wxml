@@ -140,65 +140,16 @@
         bind:draftchange="onBankDraftChange"
       />
 
-      <block wx:else>
-        <t-cell-group>
-          <t-input
-            label="姓名"
-            t-class-label="form-required-label"
-            value="{{personalForm.name}}"
-            data-field="name"
-            disabled="{{submitting || syncing}}"
-            align="right"
-            bind:change="onPersonalInput"
-          />
-          <t-input
-            label="身份证号"
-            t-class-label="form-required-label"
-            placeholder="18位身份证号"
-            value="{{personalForm.certificate_no}}"
-            data-field="certificate_no"
-            disabled="{{submitting || syncing}}"
-            align="right"
-            maxlength="18"
-            bind:change="onPersonalInputId"
-          />
-          <t-input
-            label="银行卡号"
-            t-class-label="form-required-label"
-            placeholder="本人借记卡号"
-            value="{{personalForm.bank_account_no}}"
-            data-field="bank_account_no"
-            disabled="{{submitting || syncing}}"
-            align="right"
-            maxlength="30"
-            bind:change="onPersonalInput"
-          />
-          <t-input
-            label="预留手机"
-            t-class-label="form-required-label"
-            placeholder="11位手机号"
-            type="number"
-            value="{{personalForm.bank_mobile}}"
-            data-field="bank_mobile"
-            disabled="{{submitting || syncing}}"
-            align="right"
-            maxlength="11"
-            bind:change="onPersonalInput"
-          />
-        </t-cell-group>
-
-        <view class="form-actions">
-          <t-button
-            theme="primary"
-            block
-            loading="{{submitting}}"
-            disabled="{{submitting || syncing}}"
-            bindtap="onSubmitPersonal"
-          >
-            提交开户资料
-          </t-button>
-        </view>
-      </block>
+      <baofu-personal-profile-form
+        wx:else
+        form="{{personalForm}}"
+        disabled="{{submitting || syncing}}"
+        submitting="{{submitting}}"
+        formErrorMessage="{{personalFormErrorMessage}}"
+        submitLabel="提交开户资料"
+        bind:change="onPersonalFormChange"
+        bind:submit="onSubmitPersonal"
+      />
     </block>
   </view>
 </view>

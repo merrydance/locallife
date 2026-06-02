@@ -1,6 +1,7 @@
 {
   "usingComponents": {
     "applyment-bank-form": "./_components/applyment-bank-form/index",
+    "baofu-personal-profile-form": "../../../_components/baofu-personal-profile-form/index",
     "baofu-onboarding-wait": "../../../_components/baofu-onboarding-wait/index",
     "custom-navbar": "/components/custom-navbar/index",
     "t-button": "tdesign-miniprogram/button/button",

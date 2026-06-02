@@ -32,10 +32,9 @@ interface OpeningModeDataset {
   value?: BaofuAccountOpeningMode
 }
 
-function showProfileValidationMessage(context: WechatMiniprogram.Page.TrivialInstance, offsetTop: number, content: string) {
-  void context
-  void offsetTop
-  wx.showToast({ title: content, icon: 'none', duration: 2200 })
+interface PersonalFormChangeDetail {
+  field?: BaofuPersonalProfileField
+  value?: string
 }
 
 async function merchantAccessGuard(): Promise<AccessCheckResult> {
@@ -88,6 +87,7 @@ Page({
     ],
     form: emptyBaofuEnterpriseProfileForm(),
     personalForm: emptyBaofuPersonalProfileForm(),
+    personalFormErrorMessage: '',
     bankDraft: {
       account_type: 'ACCOUNT_TYPE_BUSINESS'
     } as ApplymentBankFormDraftPayload,
@@ -136,14 +136,15 @@ Page({
     })
   },
 
-  onPersonalInput(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
-    const { field } = e.currentTarget.dataset as FieldDataset
+  onPersonalFormChange(e: WechatMiniprogram.CustomEvent<PersonalFormChangeDetail>) {
+    const { field, value } = e.detail
     if (!field) {
       return
     }
 
     this.setData({
-      [`personalForm.${field}`]: e.detail.value
+      [`personalForm.${field}`]: value || '',
+      personalFormErrorMessage: ''
     })
   },
 
@@ -158,20 +159,6 @@ Page({
 
     this.setData({
       [`form.${field}`]: value
-    })
-  },
-
-  onPersonalInputId(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
-    const { field } = e.currentTarget.dataset as FieldDataset
-    if (!field) {
-      return
-    }
-
-    // T11: Auto uppercase X for IDs
-    const value = String(e.detail.value || '').toUpperCase()
-
-    this.setData({
-      [`personalForm.${field}`]: value
     })
   },
 
@@ -205,13 +192,17 @@ Page({
             this.data.profileDefaults as BaofuSettlementAccountProfileDefaults | null
           )
     if (formErrorMessage) {
-      const navBarHeight = Number((this.data as { navBarHeight?: number }).navBarHeight || 88)
-      showProfileValidationMessage(this, navBarHeight, formErrorMessage)
+      if (accountOpeningMode === 'personal') {
+        this.setData({ personalFormErrorMessage: formErrorMessage })
+      } else {
+        wx.showToast({ title: formErrorMessage, icon: 'none', duration: 2200 })
+      }
       return
     }
 
     this.setData({
       submitting: true,
+      personalFormErrorMessage: '',
       waitVisible: true,
       waitElapsedSeconds: 0,
       waitRemainingSeconds: 0,

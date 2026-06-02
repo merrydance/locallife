@@ -22,8 +22,9 @@ import {
 import { logger } from '../../../../utils/logger'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 
-interface FieldDataset {
+interface PersonalFormChangeDetail {
   field?: BaofuPersonalProfileField
+  value?: string
 }
 
 Page({
@@ -59,29 +60,14 @@ Page({
     })
   },
 
-  onInput(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
-    const { field } = e.currentTarget.dataset as FieldDataset
+  onPersonalFormChange(e: WechatMiniprogram.CustomEvent<PersonalFormChangeDetail>) {
+    const { field, value } = e.detail
     if (!field) {
       return
     }
 
     this.setData({
-      [`form.${field}`]: e.detail.value,
-      formErrorMessage: ''
-    })
-  },
-
-  onInputId(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
-    const { field } = e.currentTarget.dataset as FieldDataset
-    if (!field) {
-      return
-    }
-
-    // T11: Auto uppercase X for IDs
-    const value = String(e.detail.value || '').toUpperCase()
-
-    this.setData({
-      [`form.${field}`]: value,
+      [`form.${field}`]: value || '',
       formErrorMessage: ''
     })
   },

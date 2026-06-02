@@ -1,0 +1,12 @@
+{
+  "purpose": "Shared BaoFu personal account-opening four-factor form for rider, operator, and merchant personal opening flows.",
+  "tdesignGroup": "form",
+  "tdesignCandidates": [
+    "cell-group",
+    "input",
+    "button",
+    "cell"
+  ],
+  "decision": "local-component",
+  "rationale": "BaoFu personal opening has the same backend-required fields across role pages, while role-specific payload mapping and workflow orchestration must stay page-owned. A small presentational component removes duplicated form rows without absorbing API calls, routing, validation rules, or long-running status handling."
+}

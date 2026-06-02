@@ -31,64 +31,15 @@
     />
 
     <block wx:else>
-      <t-cell-group>
-        <t-input
-          label="姓名"
-          t-class-label="form-required-label"
-          value="{{form.name}}"
-          data-field="name"
-          disabled="{{submitting || syncing}}"
-          align="right"
-          bind:change="onInput"
-        />
-        <t-input
-          label="身份证号"
-          t-class-label="form-required-label"
-          placeholder="18位身份证号"
-          value="{{form.certificate_no}}"
-          data-field="certificate_no"
-          disabled="{{submitting || syncing}}"
-          align="right"
-          maxlength="18"
-          bind:change="onInputId"
-        />
-        <t-input
-          label="银行卡号"
-          t-class-label="form-required-label"
-          placeholder="本人借记卡号"
-          value="{{form.bank_account_no}}"
-          data-field="bank_account_no"
-          disabled="{{submitting || syncing}}"
-          align="right"
-          maxlength="30"
-          bind:change="onInput"
-        />
-        <t-input
-          label="预留手机"
-          t-class-label="form-required-label"
-          placeholder="11位手机号"
-          type="number"
-          value="{{form.bank_mobile}}"
-          data-field="bank_mobile"
-          disabled="{{submitting || syncing}}"
-          align="right"
-          maxlength="11"
-          bind:change="onInput"
-        />
-        <t-cell wx:if="{{formErrorMessage}}" title="资料校验" note="{{formErrorMessage}}" />
-      </t-cell-group>
-
-      <view class="form-actions">
-        <t-button
-          theme="primary"
-          block
-          loading="{{submitting}}"
-          disabled="{{submitting || syncing}}"
-          bindtap="onSubmitProfile"
-        >
-          提交资料并支付核验费
-        </t-button>
-      </view>
+      <baofu-personal-profile-form
+        form="{{form}}"
+        disabled="{{submitting || syncing}}"
+        submitting="{{submitting}}"
+        formErrorMessage="{{formErrorMessage}}"
+        submitLabel="提交资料并支付核验费"
+        bind:change="onPersonalFormChange"
+        bind:submit="onSubmitProfile"
+      />
     </block>
   </view>
 </view>

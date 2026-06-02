@@ -1,12 +1,10 @@
 {
   "usingComponents": {
+    "baofu-personal-profile-form": "../../../../merchant/_components/baofu-personal-profile-form/index",
     "baofu-onboarding-wait": "../../../_components/baofu-onboarding-wait/index",
     "custom-navbar": "/components/custom-navbar/index",
     "t-button": "tdesign-miniprogram/button/button",
-    "t-cell": "tdesign-miniprogram/cell/cell",
-    "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",
     "t-empty": "tdesign-miniprogram/empty/empty",
-    "t-input": "tdesign-miniprogram/input/input",
     "t-loading": "tdesign-miniprogram/loading/loading"
   },
   "navigationStyle": "custom"

@@ -6,6 +6,17 @@ const ts = require('typescript')
 const repoRoot = path.resolve(__dirname, '..')
 const sourcePath = path.join(repoRoot, 'miniprogram/pages/merchant/_main_shared/services/baofu-account-profile-form.ts')
 const baofuAccountApiPath = path.join(repoRoot, 'miniprogram/pages/merchant/_main_shared/api/baofu-account.ts')
+const personalProfileFormComponentPaths = [
+  path.join(repoRoot, 'miniprogram/pages/merchant/_components/baofu-personal-profile-form/index.wxml'),
+  path.join(repoRoot, 'miniprogram/pages/merchant/_components/baofu-personal-profile-form/index.ts'),
+  path.join(repoRoot, 'miniprogram/pages/merchant/_components/baofu-personal-profile-form/index.json'),
+  path.join(repoRoot, 'miniprogram/pages/merchant/_components/baofu-personal-profile-form/component-policy.json')
+]
+const personalProfileFormPageWxmlPaths = [
+  path.join(repoRoot, 'miniprogram/pages/merchant/finance/settlement-account/submit/index.wxml'),
+  path.join(repoRoot, 'miniprogram/pages/operator/finance/settlement-account/submit/index.wxml'),
+  path.join(repoRoot, 'miniprogram/pages/rider/settlement-account/submit/index.wxml')
+]
 const bankFormWxmlPath = path.join(repoRoot, 'miniprogram/pages/merchant/finance/settlement-account/submit/_components/applyment-bank-form/index.wxml')
 const bankFormTsPath = path.join(repoRoot, 'miniprogram/pages/merchant/finance/settlement-account/submit/_components/applyment-bank-form/index.ts')
 const applymentBankApiPaths = [
@@ -314,6 +325,28 @@ function main() {
 
   const bankFormWxml = fs.readFileSync(bankFormWxmlPath, 'utf8')
   const bankFormTs = fs.readFileSync(bankFormTsPath, 'utf8')
+  const personalProfileComponentSource = personalProfileFormComponentPaths.map((filePath) => `${path.relative(repoRoot, filePath)}\n${fs.readFileSync(filePath, 'utf8')}`).join('\n')
+  assert(personalProfileComponentSource.includes('BaoFu personal account-opening four-factor form'), 'shared personal profile component must document the BaoFu four-factor task boundary')
+  for (const personalFieldToken of [
+    'data-field="name"',
+    'data-field="certificate_no"',
+    'data-field="bank_account_no"',
+    'data-field="bank_mobile"'
+  ]) {
+    assert(personalProfileComponentSource.includes(personalFieldToken), `shared personal profile component must render personal field: ${personalFieldToken}`)
+  }
+  for (const businessBankToken of [
+    'data-field="bank_name"',
+    'data-field="deposit_bank_province"',
+    'data-field="deposit_bank_city"',
+    'data-field="deposit_bank_name"',
+    '开户银行',
+    '开户省',
+    '开户市',
+    '开户行'
+  ]) {
+    assert(!personalProfileComponentSource.includes(businessBankToken), `personal profile component must not ask for business-license bank branch field: ${businessBankToken}`)
+  }
   assert(bankFormTs.includes('privateAccountName'), 'bank form must accept legal-person fallback for private account name')
   assert(bankFormTs.includes("accountType === 'ACCOUNT_TYPE_PRIVATE'") && bankFormTs.includes('properties.privateAccountName'), 'bank form must resolve private account name from legal person')
   assert(bankFormTs.includes('account_name: accountName'), 'bank form must reset account_name when switching account types')
@@ -377,7 +410,18 @@ function main() {
   }
 
   const submitFormSource = submitFormPaths.map((filePath) => `${path.relative(repoRoot, filePath)}\n${fs.readFileSync(filePath, 'utf8')}`).join('\n')
+  const personalPageWxmlSource = personalProfileFormPageWxmlPaths.map((filePath) => `${path.relative(repoRoot, filePath)}\n${fs.readFileSync(filePath, 'utf8')}`).join('\n')
   const baofuAccountApiSource = fs.readFileSync(baofuAccountApiPath, 'utf8')
+  const sharedComponentUsageCount = (personalPageWxmlSource.match(/<baofu-personal-profile-form/g) || []).length
+  assert(sharedComponentUsageCount === 3, 'merchant, operator, and rider submit pages must reuse the shared personal profile form')
+  for (const duplicatedPersonalFieldToken of [
+    'data-field="name"',
+    'data-field="certificate_no"',
+    'data-field="bank_account_no"',
+    'data-field="bank_mobile"'
+  ]) {
+    assert(!personalPageWxmlSource.includes(duplicatedPersonalFieldToken), `submit pages must not duplicate personal form field rows: ${duplicatedPersonalFieldToken}`)
+  }
   assert(submitFormSource.includes('accountOpeningMode'), 'merchant submit page should keep account opening mode state')
   assert(baofuAccountApiSource.includes('account_opening_mode'), 'Baofoo account API should submit account_opening_mode when needed')
   assert(/accountOpeningMode:\s*['"]business['"]/.test(submitFormSource), 'merchant submit page should default to business opening')
