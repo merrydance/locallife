@@ -167,10 +167,16 @@ func (s *BaofuAccountOnboardingService) StartOrRecoverOpening(ctx context.Contex
 	if ownerType == db.BaofuAccountOwnerTypePlatform {
 		ownerID = platformBaofuOpeningOwnerID
 	}
+	implicitMode := strings.TrimSpace(input.AccountOpeningMode) == "" && input.Profile == nil
 
 	if binding, err := s.store.GetBaofuAccountBindingByOwner(ctx, db.GetBaofuAccountBindingByOwnerParams{OwnerType: ownerType, OwnerID: ownerID}); err == nil && strings.TrimSpace(binding.OpenState) == db.BaofuAccountOpenStateActive {
-		if bindingType := strings.TrimSpace(binding.AccountType); bindingType != "" && bindingType != accountType {
-			return BaofuAccountOpeningResult{}, baofuAccountOpeningModeConflictError()
+		if bindingType := strings.TrimSpace(binding.AccountType); bindingType != "" {
+			if implicitMode {
+				accountType = bindingType
+			}
+			if bindingType != accountType {
+				return BaofuAccountOpeningResult{}, baofuAccountOpeningModeConflictError()
+			}
 		}
 		return s.activeBindingOpeningResult(ctx, ownerType, ownerID, binding)
 	} else if err != nil && !errors.Is(err, db.ErrRecordNotFound) {
@@ -180,6 +186,11 @@ func (s *BaofuAccountOnboardingService) StartOrRecoverOpening(ctx context.Contex
 	profile, err := s.resolveProfile(ctx, ownerType, ownerID, accountType, input.Profile)
 	if err != nil {
 		return BaofuAccountOpeningResult{}, err
+	}
+	if implicitMode {
+		if profileType := strings.TrimSpace(profile.AccountType); profileType != "" {
+			accountType = profileType
+		}
 	}
 	flow, err := s.getOrCreateFlow(ctx, ownerType, ownerID, accountType, profile)
 	if err != nil {

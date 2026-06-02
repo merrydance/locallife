@@ -338,6 +338,42 @@ func TestBaofuAccountOnboardingServiceStart_MerchantPersonalModeUsesPersonalFour
 	require.Empty(t, client.lastOpen.BankName)
 }
 
+func TestBaofuAccountOnboardingServiceStart_MerchantEmptyModeContinuesPersonalDraft(t *testing.T) {
+	store := newFakeBaofuAccountOnboardingStore()
+	profile := store.mustUpsertProfile(t, db.BaofuAccountOwnerTypeMerchant, 188, db.BaofuAccountTypePersonal)
+	flow := store.mustCreateFlow(t, db.BaofuAccountOwnerTypeMerchant, 188, db.BaofuAccountTypePersonal, profile.ID)
+	flow.LoginNo = pgtype.Text{String: "LLBFOMP0000000188R1", Valid: true}
+	store.flows[0] = flow
+	client := &fakeBaofuOnboardingAccountClient{
+		openResult: &baofucontracts.AccountResult{
+			ContractNo:    "CP202606020188",
+			OpenState:     db.BaofuAccountOpenStateProcessing,
+			UpstreamState: "2",
+		},
+	}
+	service := NewBaofuAccountOnboardingService(store, client, nil, nil, BaofuAccountOnboardingConfig{VerifyFeeFen: 200, IndustryID: "9931", CollectMerchantID: "100000"})
+
+	result, err := service.StartOrRecoverOpening(context.Background(), BaofuAccountOpeningInput{
+		OwnerType: db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:   188,
+		UserID:    99,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, db.BaofuAccountOpeningStateOpeningProcessing, result.State)
+	require.Len(t, store.flows, 1)
+	require.Equal(t, flow.ID, result.Flow.ID)
+	require.Equal(t, db.BaofuAccountTypePersonal, result.Flow.AccountType)
+	require.Equal(t, db.BaofuAccountTypePersonal, store.activeBinding.AccountType)
+	require.Equal(t, db.BaofuAccountTypePersonal, client.lastOpen.AccountType)
+	require.Equal(t, "LLBFOMP0000000188R1", client.lastOpen.LoginNo)
+	require.Equal(t, "张三", client.lastOpen.LegalName)
+	require.Equal(t, "110101199001011234", client.lastOpen.CertificateNo)
+	require.Equal(t, "6222020202020202", client.lastOpen.BankAccountNo)
+	require.Equal(t, "13800138000", client.lastOpen.BankMobile)
+	require.Empty(t, client.lastOpen.CorporateName)
+}
+
 func TestBaofuAccountOnboardingServiceStart_MerchantOpeningModeChangeVoidsDraftFlow(t *testing.T) {
 	store := newFakeBaofuAccountOnboardingStore()
 	oldProfile := store.mustUpsertProfile(t, db.BaofuAccountOwnerTypeMerchant, 188, db.BaofuAccountTypeBusiness)
