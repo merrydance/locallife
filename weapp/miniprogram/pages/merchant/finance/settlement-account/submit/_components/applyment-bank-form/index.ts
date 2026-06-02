@@ -48,6 +48,8 @@ interface ApplymentBankFormProperties {
   initialDraft?: PartialApplymentBindBankDraft
   defaultAccountType: ApplymentAccountType
   allowedAccountTypes?: ApplymentAccountType[]
+  businessAccountName?: string
+  privateAccountName?: string
   showContactFields?: boolean
   requireContactEmail?: boolean
   requireAccountName?: boolean
@@ -132,6 +134,13 @@ function normalizeAllowedAccountTypes(values?: ApplymentAccountType[] | null): A
 
 function isAccountTypeAllowed(accountType: ApplymentAccountType, values?: ApplymentAccountType[] | null): boolean {
   return normalizeAllowedAccountTypes(values).includes(accountType)
+}
+
+function defaultAccountNameForType(accountType: ApplymentAccountType, properties: ApplymentBankFormProperties): string {
+  if (accountType === 'ACCOUNT_TYPE_PRIVATE') {
+    return normalizeOptionalText(properties.privateAccountName)
+  }
+  return normalizeOptionalText(properties.businessAccountName)
 }
 
 function isLongTermContactDocument(form: ApplymentBindBankDraft): boolean {
@@ -273,6 +282,14 @@ Component({
     allowedAccountTypes: {
       type: Array,
       value: []
+    },
+    businessAccountName: {
+      type: String,
+      value: ''
+    },
+    privateAccountName: {
+      type: String,
+      value: ''
     },
     showContactFields: {
       type: Boolean,
@@ -501,9 +518,12 @@ Component({
 
     resetBankSelection(accountType: ApplymentAccountType) {
       const currentForm = this.readForm()
+      const properties = this.properties as unknown as ApplymentBankFormProperties
+      const accountName = defaultAccountNameForType(accountType, properties)
       const nextForm: ApplymentBindBankDraft = {
         ...currentForm,
         account_type: accountType,
+        account_name: accountName,
         account_bank: '',
         account_bank_code: 0,
         bank_alias: '',

@@ -87,7 +87,7 @@ func (server *Server) baofuSettlementAccountProfileInputWithDefaults(ctx context
 	}
 	merged := *input
 	defaults.mergeIntoOpeningProfileInput(&merged)
-	if strings.TrimSpace(scope.OwnerType) == db.BaofuAccountOwnerTypeMerchant {
+	if strings.TrimSpace(scope.OwnerType) == db.BaofuAccountOwnerTypeMerchant && strings.TrimSpace(scope.AccountType) != db.BaofuAccountTypePersonal {
 		defaults.overrideMerchantIdentityIntoOpeningProfileInput(&merged)
 	}
 	return &merged, nil

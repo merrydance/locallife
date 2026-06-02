@@ -25,6 +25,9 @@ func (server *Server) loadBaofuSettlementAccount(ctx *gin.Context, scope baofuSe
 		return baofuSettlementAccountResponse{}, err
 	}
 	if bindingFound {
+		if accountType := strings.TrimSpace(binding.AccountType); accountType != "" {
+			resp.AccountType = accountType
+		}
 		resp.OpenState = strings.TrimSpace(binding.OpenState)
 		resp.BankCardLast4 = pgTextString(binding.BankCardLast4)
 		resp.WechatSubMchIDMask = maskSensitiveTail(pgTextString(binding.WechatSubMchID), 4)
@@ -36,6 +39,9 @@ func (server *Server) loadBaofuSettlementAccount(ctx *gin.Context, scope baofuSe
 		return baofuSettlementAccountResponse{}, err
 	}
 	if profileFound {
+		if accountType := strings.TrimSpace(profile.AccountType); accountType != "" {
+			resp.AccountType = accountType
+		}
 		resp.ProfileStatus = strings.TrimSpace(profile.ProfileStatus)
 		resp.addProfileMasks(profile)
 		if resp.UpdatedAt == nil || profile.UpdatedAt.After(*resp.UpdatedAt) {
@@ -68,6 +74,9 @@ func (server *Server) loadBaofuSettlementAccount(ctx *gin.Context, scope baofuSe
 			}
 		}
 		failedOpeningFlowFound = strings.TrimSpace(flow.State) == db.BaofuAccountOpeningStateFailed
+		if accountType := strings.TrimSpace(flow.AccountType); accountType != "" {
+			resp.AccountType = accountType
+		}
 		resp.FlowID = flow.ID
 		resp.FlowState = strings.TrimSpace(flow.State)
 		resp.SubmittedAt = &flow.CreatedAt
@@ -77,6 +86,31 @@ func (server *Server) loadBaofuSettlementAccount(ctx *gin.Context, scope baofuSe
 		}
 		if resp.UpdatedAt == nil || flow.UpdatedAt.After(*resp.UpdatedAt) {
 			resp.UpdatedAt = &flow.UpdatedAt
+		}
+	}
+	if flowFound {
+		if recoveredFlow, ok := server.tryRecoverBaofuSettlementAccountMerchantReportFlow(ctx, scope, flow); ok {
+			flow = recoveredFlow
+			resp.FlowID = flow.ID
+			resp.FlowState = strings.TrimSpace(flow.State)
+			if accountType := strings.TrimSpace(flow.AccountType); accountType != "" {
+				resp.AccountType = accountType
+			}
+			if resp.UpdatedAt == nil || flow.UpdatedAt.After(*resp.UpdatedAt) {
+				resp.UpdatedAt = &flow.UpdatedAt
+			}
+			if bindingRef, found, err := server.loadBaofuAccountBinding(ctx, scope); err == nil && found {
+				binding = bindingRef
+				bindingFound = true
+				resp.OpenState = strings.TrimSpace(binding.OpenState)
+				resp.BankCardLast4 = pgTextString(binding.BankCardLast4)
+				resp.WechatSubMchIDMask = maskSensitiveTail(pgTextString(binding.WechatSubMchID), 4)
+				if resp.UpdatedAt == nil || binding.UpdatedAt.After(*resp.UpdatedAt) {
+					resp.UpdatedAt = &binding.UpdatedAt
+				}
+			} else if err != nil {
+				return baofuSettlementAccountResponse{}, err
+			}
 		}
 	}
 
@@ -144,6 +178,49 @@ func baofuSettlementAccountFlowShouldRecover(flow db.BaofuAccountOpeningFlow) bo
 		return true
 	case db.BaofuAccountOpeningStateFailed:
 		return baofuSettlementAccountRecoverableFailureCode(flow.FailureCode.String)
+	default:
+		return false
+	}
+}
+
+func (server *Server) tryRecoverBaofuSettlementAccountMerchantReportFlow(ctx *gin.Context, scope baofuSettlementAccountScope, flow db.BaofuAccountOpeningFlow) (db.BaofuAccountOpeningFlow, bool) {
+	if !baofuSettlementAccountMerchantReportFlowShouldRecover(scope, flow) || server.baofuMerchantReportClient == nil {
+		return flow, false
+	}
+	service := logic.NewBaofuAccountMerchantReportService(server.store, server.baofuMerchantReportClient, server.dataEncryptor, logic.BaofuAccountMerchantReportConfig{
+		CollectMerchantID: server.config.BaofuCollectMerchantID,
+		CollectTerminalID: server.config.BaofuCollectTerminalID,
+		MiniProgramAppID:  server.config.WechatMiniAppID,
+		ChannelID:         server.config.BaofuMerchantReportChannelID,
+		ChannelName:       server.config.BaofuMerchantReportChannelName,
+		Business:          server.config.BaofuMerchantReportBusiness,
+	})
+	recoveredFlow, err := service.RecoverMerchantReportFlow(ctx, flow)
+	if err != nil {
+		log.Warn().
+			Err(logic.LoggableError(err)).
+			Str("request_id", GetRequestID(ctx)).
+			Str("owner_type", scope.OwnerType).
+			Int64("owner_id", scope.OwnerID).
+			Int64("flow_id", flow.ID).
+			Str("current_state", strings.TrimSpace(flow.State)).
+			Str("provider_operation", "baofu_settlement_account_read_merchant_report_recover").
+			Msg("baofu settlement account merchant report read recovery skipped")
+		return flow, false
+	}
+	if recoveredFlow.ID == 0 {
+		return flow, false
+	}
+	return recoveredFlow, true
+}
+
+func baofuSettlementAccountMerchantReportFlowShouldRecover(scope baofuSettlementAccountScope, flow db.BaofuAccountOpeningFlow) bool {
+	if strings.TrimSpace(scope.OwnerType) != db.BaofuAccountOwnerTypeMerchant || strings.TrimSpace(flow.OwnerType) != db.BaofuAccountOwnerTypeMerchant {
+		return false
+	}
+	switch strings.TrimSpace(flow.State) {
+	case db.BaofuAccountOpeningStateMerchantReportProcessing, db.BaofuAccountOpeningStateAppletAuthPending:
+		return true
 	default:
 		return false
 	}

@@ -8,7 +8,9 @@
     "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",
     "t-empty": "tdesign-miniprogram/empty/empty",
     "t-input": "tdesign-miniprogram/input/input",
-    "t-loading": "tdesign-miniprogram/loading/loading"
+    "t-loading": "tdesign-miniprogram/loading/loading",
+    "t-radio": "tdesign-miniprogram/radio/radio",
+    "t-radio-group": "tdesign-miniprogram/radio-group/radio-group"
   },
   "navigationStyle": "custom"
 }

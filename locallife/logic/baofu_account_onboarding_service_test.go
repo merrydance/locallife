@@ -296,6 +296,127 @@ func TestBaofuAccountOnboardingServiceStart_BusinessPrivateCardPassesOfficialFie
 	require.Equal(t, "13800138000", client.lastOpen.CorporateMobile)
 }
 
+func TestBaofuAccountOnboardingServiceStart_MerchantPersonalModeUsesPersonalFourFactorAndContinuesReport(t *testing.T) {
+	store := newFakeBaofuAccountOnboardingStore()
+	client := &fakeBaofuOnboardingAccountClient{
+		openResult: &baofucontracts.AccountResult{
+			ContractNo:    "CP202606020001",
+			SharingMerID:  "CP202606020001",
+			OpenState:     db.BaofuAccountOpenStateActive,
+			UpstreamState: "1",
+		},
+	}
+	service := NewBaofuAccountOnboardingService(store, client, nil, nil, BaofuAccountOnboardingConfig{VerifyFeeFen: 200, IndustryID: "9931", CollectMerchantID: "100000"})
+
+	result, err := service.StartOrRecoverOpening(context.Background(), BaofuAccountOpeningInput{
+		OwnerType:          db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:            188,
+		UserID:             99,
+		AccountOpeningMode: db.BaofuAccountTypePersonal,
+		Profile: &BaofuAccountOpeningProfileInput{
+			LegalName:     "李四",
+			CertificateNo: "110101199001010011",
+			BankAccountNo: "6222020202020202",
+			BankMobile:    "13800138000",
+			CardUserName:  "李四",
+			ContactName:   "李四",
+			ContactMobile: "13800138000",
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, db.BaofuAccountOpeningStateMerchantReportProcessing, result.State)
+	require.Equal(t, db.BaofuAccountTypePersonal, result.Flow.AccountType)
+	require.Equal(t, db.BaofuAccountTypePersonal, store.activeBinding.AccountType)
+	require.Equal(t, db.BaofuAccountTypePersonal, client.lastOpen.AccountType)
+	require.Equal(t, "李四", client.lastOpen.LegalName)
+	require.Equal(t, "110101199001010011", client.lastOpen.CertificateNo)
+	require.Equal(t, "6222020202020202", client.lastOpen.BankAccountNo)
+	require.Equal(t, "13800138000", client.lastOpen.BankMobile)
+	require.Empty(t, client.lastOpen.CorporateName)
+	require.Empty(t, client.lastOpen.CorporateCertID)
+	require.Empty(t, client.lastOpen.BankName)
+}
+
+func TestBaofuAccountOnboardingServiceStart_MerchantOpeningModeChangeVoidsDraftFlow(t *testing.T) {
+	store := newFakeBaofuAccountOnboardingStore()
+	oldProfile := store.mustUpsertProfile(t, db.BaofuAccountOwnerTypeMerchant, 188, db.BaofuAccountTypeBusiness)
+	oldFlow := store.mustCreateFlow(t, db.BaofuAccountOwnerTypeMerchant, 188, db.BaofuAccountTypeBusiness, oldProfile.ID)
+	store.flows[0].State = db.BaofuAccountOpeningStateProfilePending
+	service := NewBaofuAccountOnboardingService(store, &fakeBaofuOnboardingAccountClient{}, nil, nil, BaofuAccountOnboardingConfig{VerifyFeeFen: 200, IndustryID: "9931"})
+
+	result, err := service.StartOrRecoverOpening(context.Background(), BaofuAccountOpeningInput{
+		OwnerType:          db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:            188,
+		UserID:             99,
+		AccountOpeningMode: db.BaofuAccountTypePersonal,
+		Profile: &BaofuAccountOpeningProfileInput{
+			LegalName:     "李四",
+			CertificateNo: "110101199001010011",
+			BankAccountNo: "6222020202020202",
+			BankMobile:    "13800138000",
+			CardUserName:  "李四",
+			ContactName:   "李四",
+			ContactMobile: "13800138000",
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, db.BaofuAccountOpeningStateOpeningProcessing, result.State)
+	require.Len(t, store.flows, 2)
+	require.Equal(t, db.BaofuAccountOpeningStateVoided, store.flows[0].State)
+	require.Equal(t, oldFlow.ID, store.flows[0].ID)
+	require.Equal(t, db.BaofuAccountTypePersonal, store.flows[1].AccountType)
+	require.Equal(t, db.BaofuAccountTypePersonal, result.Flow.AccountType)
+}
+
+func TestBaofuAccountOnboardingServiceStart_MerchantOpeningModeChangeRejectsProcessingFlow(t *testing.T) {
+	store := newFakeBaofuAccountOnboardingStore()
+	oldProfile := store.mustUpsertProfile(t, db.BaofuAccountOwnerTypeMerchant, 188, db.BaofuAccountTypeBusiness)
+	oldFlow := store.mustCreateFlow(t, db.BaofuAccountOwnerTypeMerchant, 188, db.BaofuAccountTypeBusiness, oldProfile.ID)
+	store.flows[0].State = db.BaofuAccountOpeningStateOpeningProcessing
+	service := NewBaofuAccountOnboardingService(store, &fakeBaofuOnboardingAccountClient{}, nil, nil, BaofuAccountOnboardingConfig{VerifyFeeFen: 200, IndustryID: "9931"})
+
+	_, err := service.StartOrRecoverOpening(context.Background(), BaofuAccountOpeningInput{
+		OwnerType:          db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:            188,
+		UserID:             99,
+		AccountOpeningMode: db.BaofuAccountTypePersonal,
+		Profile: &BaofuAccountOpeningProfileInput{
+			LegalName:     "李四",
+			CertificateNo: "110101199001010011",
+			BankAccountNo: "6222020202020202",
+			BankMobile:    "13800138000",
+			CardUserName:  "李四",
+			ContactName:   "李四",
+			ContactMobile: "13800138000",
+		},
+	})
+
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, http.StatusConflict, reqErr.Status)
+	require.Equal(t, oldFlow.ID, store.flows[0].ID)
+	require.Equal(t, db.BaofuAccountOpeningStateOpeningProcessing, store.flows[0].State)
+	require.Len(t, store.flows, 1)
+}
+
+func TestBaofuAccountOnboardingServiceStart_MerchantOpeningModeChangeRejectsActiveBinding(t *testing.T) {
+	store := newFakeBaofuAccountOnboardingStore()
+	store.activeBinding = db.BaofuAccountBinding{ID: 21, OwnerType: db.BaofuAccountOwnerTypeMerchant, OwnerID: 188, AccountType: db.BaofuAccountTypeBusiness, OpenState: db.BaofuAccountOpenStateActive}
+	service := NewBaofuAccountOnboardingService(store, &fakeBaofuOnboardingAccountClient{}, nil, nil, BaofuAccountOnboardingConfig{VerifyFeeFen: 200, IndustryID: "9931"})
+
+	_, err := service.StartOrRecoverOpening(context.Background(), BaofuAccountOpeningInput{
+		OwnerType:          db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:            188,
+		UserID:             99,
+		AccountOpeningMode: db.BaofuAccountTypePersonal,
+	})
+
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, http.StatusConflict, reqErr.Status)
+	require.Empty(t, store.flows)
+}
+
 func TestBaofuAccountOnboardingServiceStart_RiderRequiresVerifyFeeBeforeOpening(t *testing.T) {
 	store := newFakeBaofuAccountOnboardingStore()
 	store.users[7] = db.User{ID: 7, WechatOpenid: "openid-rider"}
@@ -757,6 +878,86 @@ func TestBaofuAccountOnboardingServiceApplyAccountOpenResult_MerchantRecoveredFa
 	require.Equal(t, "100000", reportClient.reportRequest.MerchantID)
 	require.Equal(t, "1900000088", store.merchantPaymentConfigs[0].SubMchID)
 	require.Equal(t, db.MerchantStatusActive, store.merchants[88].Status)
+}
+
+func TestBaofuAccountOnboardingServiceApplyAccountOpenResult_MerchantPersonalReportUsesIdentityCardAndBindsApplet(t *testing.T) {
+	store := newFakeBaofuAccountOnboardingStore()
+	reportClient := &fakeMerchantReportClient{
+		reportResult: &merchantcontracts.MerchantReportResult{
+			ReportNo:      "MR202606020188",
+			ReportState:   "SUCCESS",
+			SubMchID:      "1900000188",
+			PlatformBizNo: "PB202606020188",
+		},
+		bindResult: &merchantcontracts.BindSubConfigResult{
+			SubMchID:   "1900000188",
+			AuthType:   merchantcontracts.AuthTypeApplet,
+			ResultCode: "SUCCESS",
+		},
+	}
+	service := NewBaofuAccountOnboardingService(store, nil, nil, nil, BaofuAccountOnboardingConfig{VerifyFeeFen: 200, IndustryID: "9931"}).
+		WithMerchantReportContinuation(reportClient, BaofuAccountMerchantReportConfig{
+			CollectMerchantID: "100000",
+			CollectTerminalID: "200000",
+			MiniProgramAppID:  "wx1234567890abcdef",
+			ChannelID:         "CH001",
+			ChannelName:       "LocalLife",
+			Business:          "758-2",
+		})
+	profile := store.mustUpsertProfile(t, db.BaofuAccountOwnerTypeMerchant, 188, db.BaofuAccountTypePersonal)
+	profile.LegalName = pgtype.Text{String: "李四", Valid: true}
+	profile.CertificateType = pgtype.Text{String: baofucontracts.OfficialCertificateTypeID, Valid: true}
+	profile.CertificateNoCiphertext = pgtype.Text{String: "110101199001010011", Valid: true}
+	profile.BankAccountNoCiphertext = pgtype.Text{String: "6222020202020202", Valid: true}
+	profile.BankMobileCiphertext = pgtype.Text{String: "13800138000", Valid: true}
+	profile.CardUserName = pgtype.Text{String: "李四", Valid: true}
+	profile.ContactName = pgtype.Text{String: "李四", Valid: true}
+	profile.ContactMobileCiphertext = pgtype.Text{String: "13800138000", Valid: true}
+	store.profiles[0] = profile
+	store.merchants[188] = db.Merchant{ID: 188, Status: db.MerchantStatusApproved, Name: "李四小吃店", Phone: "057112345678", Address: "测试路 1 号", RegionID: 330106}
+	store.regions[330106] = db.Region{ID: 330106, Code: "330106", Level: 3, ParentID: pgtype.Int8{Int64: 330100, Valid: true}}
+	store.regions[330100] = db.Region{ID: 330100, Code: "330100", Level: 2, ParentID: pgtype.Int8{Int64: 330000, Valid: true}}
+	store.regions[330000] = db.Region{ID: 330000, Code: "330000", Level: 1}
+	flow := db.BaofuAccountOpeningFlow{
+		ID:                7202,
+		OwnerType:         db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:           188,
+		AccountType:       db.BaofuAccountTypePersonal,
+		ProfileID:         pgtype.Int8{Int64: profile.ID, Valid: true},
+		State:             db.BaofuAccountOpeningStateOpeningProcessing,
+		OpenTransSerialNo: pgtype.Text{String: "BFO202606020188", Valid: true},
+		LoginNo:           pgtype.Text{String: "LLBFOM0000000188", Valid: true},
+	}
+	store.flows = append(store.flows, flow)
+	store.activeBinding = db.BaofuAccountBinding{
+		ID:                    6202,
+		OwnerType:             flow.OwnerType,
+		OwnerID:               flow.OwnerID,
+		AccountType:           flow.AccountType,
+		LoginNo:               flow.LoginNo,
+		OpenState:             db.BaofuAccountOpenStateProcessing,
+		LastOpenTransSerialNo: flow.OpenTransSerialNo,
+	}
+
+	applied, err := service.ApplyAccountOpenResult(context.Background(), flow, baofucontracts.AccountResult{
+		OutRequestNo:  "BFO202606020188",
+		ContractNo:    "CP660000000223785188",
+		SharingMerID:  "CP660000000223785188",
+		OpenState:     db.BaofuAccountOpenStateActive,
+		UpstreamState: "1",
+		Raw:           []byte(`{"transSerialNo":"BFO202606020188","state":"1","contractNo":"CP660000000223785188"}`),
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, db.BaofuAccountOpeningStateReady, applied.Flow.State)
+	require.Len(t, store.merchantReports, 1)
+	require.Equal(t, db.BaofuAccountTypePersonal, store.activeBinding.AccountType)
+	require.Equal(t, merchantcontracts.WechatCertificateTypeIdentityCard, reportClient.reportRequest.ReportInfo.BusinessLicenseType)
+	require.Equal(t, "110101199001010011", reportClient.reportRequest.ReportInfo.BusinessLicense)
+	require.Equal(t, "CP660000000223785188", reportClient.reportRequest.BCTMerchantID)
+	require.Equal(t, "1900000188", reportClient.bindRequest.SubMchID)
+	require.Equal(t, merchantcontracts.AuthTypeApplet, reportClient.bindRequest.AuthType)
+	require.Equal(t, "wx1234567890abcdef", reportClient.bindRequest.AuthContent)
 }
 
 func TestBaofuAccountOnboardingServiceApplyAccountOpenResult_FailedResultReturnsSafeGuidanceAndLogsCode(t *testing.T) {
@@ -1667,6 +1868,15 @@ func (s *fakeBaofuAccountOnboardingStore) CreateBaofuAccountOpeningFlow(_ contex
 	}
 	s.flows = append(s.flows, flow)
 	return flow, nil
+}
+
+func (s *fakeBaofuAccountOnboardingStore) VoidBaofuAccountOpeningFlow(_ context.Context, arg db.VoidBaofuAccountOpeningFlowParams) (db.BaofuAccountOpeningFlow, error) {
+	return s.updateFlow(arg.ID, func(flow *db.BaofuAccountOpeningFlow) {
+		flow.State = db.BaofuAccountOpeningStateVoided
+		flow.FailureCode = arg.FailureCode
+		flow.FailureMessage = arg.FailureMessage
+		flow.RawSnapshot = arg.RawSnapshot
+	})
 }
 
 func (s *fakeBaofuAccountOnboardingStore) MarkBaofuAccountOpeningFlowVerifyFeePending(_ context.Context, arg db.MarkBaofuAccountOpeningFlowVerifyFeePendingParams) (db.BaofuAccountOpeningFlow, error) {

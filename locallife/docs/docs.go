@@ -32804,6 +32804,9 @@ const docTemplate = `{
         "api.baofuSettlementAccountRequest": {
             "type": "object",
             "properties": {
+                "account_opening_mode": {
+                    "type": "string"
+                },
                 "profile": {
                     "$ref": "#/definitions/api.baofuSettlementAccountProfileRequest"
                 }

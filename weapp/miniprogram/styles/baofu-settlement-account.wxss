@@ -44,6 +44,37 @@
   padding-bottom: var(--spacer-md);
 }
 
+.option-group {
+  padding: var(--spacer-sm) 0;
+}
+
+.option-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-xxs);
+  padding: var(--spacer-sm) var(--spacer-md);
+  border-bottom: 1rpx solid var(--td-component-border);
+  background: var(--td-bg-color-container);
+}
+
+.option-card:first-child {
+  border-top-left-radius: var(--radius-md);
+  border-top-right-radius: var(--radius-md);
+}
+
+.option-card:last-child {
+  border-bottom: 0;
+  border-bottom-right-radius: var(--radius-md);
+  border-bottom-left-radius: var(--radius-md);
+}
+
+.option-card__desc {
+  padding-left: 52rpx;
+  color: var(--td-text-color-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
 .identity-note {
   padding: 0 var(--spacer-xs);
   color: var(--td-text-color-secondary);
@@ -52,6 +83,6 @@
 }
 
 .form-required-label::after {
-  content: ' *';
+  content: " *";
   color: var(--td-error-color-6);
 }

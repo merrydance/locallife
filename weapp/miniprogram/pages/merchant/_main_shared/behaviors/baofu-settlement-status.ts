@@ -22,6 +22,7 @@ import type {
 } from '../api/baofu-account'
 import {
   buildBaofuOnboardingWaitView,
+  buildBaofuOnboardingWaitViewFromAccount,
   buildBaofuOnboardingWaitViewFromText,
   clearPendingBaofuAccountOnboardingContext,
   continueBaofuAccountPayment,
@@ -245,7 +246,16 @@ export function baofuSettlementStatusBehavior(config: BaofuSettlementStatusConfi
         if (sessionId !== undefined && this._shouldStopBaofuLongWait(sessionId)) {
           return
         }
+        const waitView = progress.account ? buildBaofuOnboardingWaitViewFromAccount(progress.account) : null
         this.setData({
+          ...(waitView ? {
+            waitState: waitView.state,
+            waitTheme: waitView.theme,
+            waitTitle: waitView.title,
+            waitDescription: waitView.description,
+            waitPrimaryAction: waitView.primaryAction,
+            waitPrimaryActionText: waitView.primaryActionText
+          } : {}),
           waitProgressText: formatBaofuOnboardingPollProgress(progress),
           waitElapsedSeconds: Math.max(0, Math.round(progress.elapsedSeconds)),
           waitRemainingSeconds: Math.max(0, Math.ceil(progress.remainingSeconds)),

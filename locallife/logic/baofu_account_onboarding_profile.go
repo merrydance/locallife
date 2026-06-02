@@ -25,6 +25,7 @@ func (s *BaofuAccountOnboardingService) resolveProfile(ctx context.Context, owne
 }
 
 func (s *BaofuAccountOnboardingService) upsertProfile(ctx context.Context, ownerType string, ownerID int64, accountType string, input BaofuAccountOpeningProfileInput) (db.BaofuAccountOpeningProfile, error) {
+	input.AccountType = accountType
 	completed := baofuProfileComplete(ownerType, input)
 	status := db.BaofuAccountOpeningProfileStatusIncomplete
 	if completed {
@@ -123,11 +124,29 @@ func (input BaofuAccountOpeningProfileInput) IdentityCertificateNo() string {
 func (s *BaofuAccountOnboardingService) getOrCreateFlow(ctx context.Context, ownerType string, ownerID int64, accountType string, profile db.BaofuAccountOpeningProfile) (db.BaofuAccountOpeningFlow, error) {
 	flow, err := s.store.GetActiveBaofuAccountOpeningFlowByOwner(ctx, db.GetActiveBaofuAccountOpeningFlowByOwnerParams{OwnerType: ownerType, OwnerID: ownerID})
 	if err == nil {
+		if strings.TrimSpace(flow.AccountType) != strings.TrimSpace(accountType) {
+			if strings.TrimSpace(flow.State) != db.BaofuAccountOpeningStateProfilePending {
+				return db.BaofuAccountOpeningFlow{}, baofuAccountOpeningModeConflictError()
+			}
+			if _, err := s.store.VoidBaofuAccountOpeningFlow(ctx, db.VoidBaofuAccountOpeningFlowParams{
+				ID:             flow.ID,
+				FailureCode:    pgText("ACCOUNT_OPENING_MODE_CHANGED"),
+				FailureMessage: pgText("商户切换宝付开户方式，旧草稿已作废"),
+				RawSnapshot:    baofuOpeningSnapshot(map[string]any{"state": db.BaofuAccountOpeningStateVoided, "reason": "account_opening_mode_changed", "previous_account_type": flow.AccountType, "next_account_type": accountType}),
+			}); err != nil {
+				return db.BaofuAccountOpeningFlow{}, err
+			}
+			return s.createBaofuAccountOpeningFlow(ctx, ownerType, ownerID, accountType, profile)
+		}
 		return flow, nil
 	}
 	if !errors.Is(err, db.ErrRecordNotFound) {
 		return db.BaofuAccountOpeningFlow{}, err
 	}
+	return s.createBaofuAccountOpeningFlow(ctx, ownerType, ownerID, accountType, profile)
+}
+
+func (s *BaofuAccountOnboardingService) createBaofuAccountOpeningFlow(ctx context.Context, ownerType string, ownerID int64, accountType string, profile db.BaofuAccountOpeningProfile) (db.BaofuAccountOpeningFlow, error) {
 	return s.store.CreateBaofuAccountOpeningFlow(ctx, db.CreateBaofuAccountOpeningFlowParams{
 		OwnerType:               ownerType,
 		OwnerID:                 ownerID,

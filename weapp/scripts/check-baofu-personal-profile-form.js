@@ -5,6 +5,7 @@ const ts = require('typescript')
 
 const repoRoot = path.resolve(__dirname, '..')
 const sourcePath = path.join(repoRoot, 'miniprogram/pages/merchant/_main_shared/services/baofu-account-profile-form.ts')
+const baofuAccountApiPath = path.join(repoRoot, 'miniprogram/pages/merchant/_main_shared/api/baofu-account.ts')
 const bankFormWxmlPath = path.join(repoRoot, 'miniprogram/pages/merchant/finance/settlement-account/submit/_components/applyment-bank-form/index.wxml')
 const bankFormTsPath = path.join(repoRoot, 'miniprogram/pages/merchant/finance/settlement-account/submit/_components/applyment-bank-form/index.ts')
 const applymentBankApiPaths = [
@@ -80,6 +81,21 @@ function main() {
   assert(!Object.prototype.hasOwnProperty.call(operatorPayload, 'bank_name'), 'operator payload should not include bank_name')
   assert(operatorPayload.bank_mobile === '13800138001', 'operator payload should still carry bank_mobile')
 
+  const merchantPersonalPayload = buildBaofuPersonalProfilePayload('merchant', {
+    name: '王五',
+    certificate_no: '110101199001010033',
+    bank_account_no: '6222020202020204',
+    bank_mobile: '13800138002'
+  })
+  assert(merchantPersonalPayload.legal_name === '王五', 'merchant personal payload should carry personal legal_name')
+  assert(merchantPersonalPayload.id_card_number === '110101199001010033', 'merchant personal payload should carry id_card_number')
+  assert(merchantPersonalPayload.bank_account_no === '6222020202020204', 'merchant personal payload should carry personal bank card')
+  assert(merchantPersonalPayload.bank_mobile === '13800138002', 'merchant personal payload should carry bank_mobile')
+  assert(merchantPersonalPayload.card_user_name === '王五', 'merchant personal payload should carry card holder name')
+  assert(merchantPersonalPayload.contact_name === '王五', 'merchant personal payload should keep report contact name available')
+  assert(merchantPersonalPayload.contact_mobile === '13800138002', 'merchant personal payload should keep report contact mobile available')
+  assert(!Object.prototype.hasOwnProperty.call(merchantPersonalPayload, 'business_license_number'), 'merchant personal payload should not include business license number')
+
   const validationMessage = validateBaofuPersonalProfileForm({
     name: '张三',
     certificate_no: '110101199001010011',
@@ -141,27 +157,31 @@ function main() {
   assert(companyDraft.account_type === 'ACCOUNT_TYPE_BUSINESS', 'company enterprise draft must ignore stale private-card defaults')
   assert(companyDraft.account_name === '宁晋县康味餐饮有限公司', 'company enterprise draft should use legal name for public account')
 
-  const companyPayload = buildBaofuEnterpriseProfilePayload({
-    legal_name: '宁晋县康味餐饮有限公司',
-    business_license_number: '91130528MA00000001',
-    legal_person_name: '周松涛',
-    legal_person_id_number: '130528199001010011',
-    corporate_mobile: '13800138000',
-    email: 'merchant@example.com'
-  }, {
-    account_type: 'ACCOUNT_TYPE_PRIVATE',
-    account_bank: '邢台银行',
-    bank_alias: '邢台银行',
-    need_bank_branch: true,
-    bank_address_code: '河北省',
-    deposit_bank_province: '河北省',
-    deposit_bank_city: '邢台市',
-    bank_name: '邢台银行宁晋支行',
-    account_number: '6222020202020202',
-    account_name: '周松涛'
-  }, {
-    settlement_account_allowed_types: ['ACCOUNT_TYPE_BUSINESS']
-  })
+  const companyPayload = buildBaofuEnterpriseProfilePayload(
+    {
+      legal_name: '宁晋县康味餐饮有限公司',
+      business_license_number: '91130528MA00000001',
+      legal_person_name: '周松涛',
+      legal_person_id_number: '130528199001010011',
+      corporate_mobile: '13800138000',
+      email: 'merchant@example.com'
+    },
+    {
+      account_type: 'ACCOUNT_TYPE_PRIVATE',
+      account_bank: '邢台银行',
+      bank_alias: '邢台银行',
+      need_bank_branch: true,
+      bank_address_code: '河北省',
+      deposit_bank_province: '河北省',
+      deposit_bank_city: '邢台市',
+      bank_name: '邢台银行宁晋支行',
+      account_number: '6222020202020202',
+      account_name: '周松涛'
+    },
+    {
+      settlement_account_allowed_types: ['ACCOUNT_TYPE_BUSINESS']
+    }
+  )
   assert(companyPayload.self_employed === false, 'company enterprise payload must submit self_employed=false')
   assert(!Object.prototype.hasOwnProperty.call(companyPayload, 'card_user_name'), 'company enterprise payload must not submit private card holder')
 
@@ -208,68 +228,77 @@ function main() {
   assert(enterpriseDraftFromClearDefaults.account_number === '6222020202020202', 'enterprise draft should restore clear-text bank account')
   assert(enterpriseDraftFromClearDefaults.account_bank === '邢台银行', 'enterprise draft should trim clear-text bank name')
 
-  const enterprisePayload = buildBaofuEnterpriseProfilePayload({
-    legal_name: '宁晋县周鹏饭店',
-    business_license_number: '92130528MA00000001',
-    legal_person_name: '周松涛',
-    legal_person_id_number: '130528199001010011',
-    corporate_mobile: '13800138000',
-    email: 'merchant@example.com'
-  }, {
-    account_type: 'ACCOUNT_TYPE_PRIVATE',
-    account_bank: '邢台银行',
-    bank_alias: '邢台银行',
-    need_bank_branch: true,
-    bank_address_code: '河北省',
-    deposit_bank_province: '河北省',
-    deposit_bank_city: '邢台市',
-    bank_name: '邢台银行宁晋支行',
-    account_number: '6222020202020202',
-    account_name: '周松涛'
-  })
+  const enterprisePayload = buildBaofuEnterpriseProfilePayload(
+    {
+      legal_name: '宁晋县周鹏饭店',
+      business_license_number: '92130528MA00000001',
+      legal_person_name: '周松涛',
+      legal_person_id_number: '130528199001010011',
+      corporate_mobile: '13800138000',
+      email: 'merchant@example.com'
+    },
+    {
+      account_type: 'ACCOUNT_TYPE_PRIVATE',
+      account_bank: '邢台银行',
+      bank_alias: '邢台银行',
+      need_bank_branch: true,
+      bank_address_code: '河北省',
+      deposit_bank_province: '河北省',
+      deposit_bank_city: '邢台市',
+      bank_name: '邢台银行宁晋支行',
+      account_number: '6222020202020202',
+      account_name: '周松涛'
+    }
+  )
   assert(enterprisePayload.deposit_bank_province === '河北省', 'enterprise manual bank payload should keep submitted province')
   assert(enterprisePayload.deposit_bank_city === '邢台市', 'enterprise manual bank payload should keep submitted city')
   assert(enterprisePayload.deposit_bank_city !== '北京市', 'enterprise manual bank payload must not hardcode Beijing city')
 
-  const missingManualCityPayload = buildBaofuEnterpriseProfilePayload({
-    legal_name: '宁晋县周鹏饭店',
-    business_license_number: '92130528MA00000001',
-    legal_person_name: '周松涛',
-    legal_person_id_number: '130528199001010011',
-    corporate_mobile: '13800138000',
-    email: 'merchant@example.com'
-  }, {
-    account_type: 'ACCOUNT_TYPE_PRIVATE',
-    account_bank: '邢台银行',
-    bank_alias: '邢台银行',
-    need_bank_branch: true,
-    bank_address_code: '河北省',
-    deposit_bank_province: '河北省',
-    bank_name: '邢台银行宁晋支行',
-    account_number: '6222020202020202',
-    account_name: '周松涛'
-  })
+  const missingManualCityPayload = buildBaofuEnterpriseProfilePayload(
+    {
+      legal_name: '宁晋县周鹏饭店',
+      business_license_number: '92130528MA00000001',
+      legal_person_name: '周松涛',
+      legal_person_id_number: '130528199001010011',
+      corporate_mobile: '13800138000',
+      email: 'merchant@example.com'
+    },
+    {
+      account_type: 'ACCOUNT_TYPE_PRIVATE',
+      account_bank: '邢台银行',
+      bank_alias: '邢台银行',
+      need_bank_branch: true,
+      bank_address_code: '河北省',
+      deposit_bank_province: '河北省',
+      bank_name: '邢台银行宁晋支行',
+      account_number: '6222020202020202',
+      account_name: '周松涛'
+    }
+  )
   assert(missingManualCityPayload.deposit_bank_city === '', 'missing manual city should stay empty for validation instead of defaulting to Beijing')
 
-  const trimmedEnterprisePayload = buildBaofuEnterpriseProfilePayload({
-    legal_name: ' 宁晋县周鹏饭店 ',
-    business_license_number: ' 92130528MA00000001 ',
-    legal_person_name: ' 周松涛 ',
-    legal_person_id_number: ' 130528199001010011 ',
-    corporate_mobile: ' 13800138000 ',
-    email: ' merchant@example.com '
-  }, {
-    account_type: 'ACCOUNT_TYPE_PRIVATE',
-    account_bank: ' 邢台银行 ',
-    bank_alias: ' 邢台银行 ',
-    need_bank_branch: true,
-    bank_address_code: ' 河北省 ',
-    deposit_bank_province: ' 河北省 ',
-    deposit_bank_city: ' 邢台市 ',
-    bank_name: ' 邢台银行宁晋支行 ',
-    account_number: ' 6222020202020202 ',
-    account_name: ' 周松涛 '
-  })
+  const trimmedEnterprisePayload = buildBaofuEnterpriseProfilePayload(
+    {
+      legal_name: ' 宁晋县周鹏饭店 ',
+      business_license_number: ' 92130528MA00000001 ',
+      legal_person_name: ' 周松涛 ',
+      legal_person_id_number: ' 130528199001010011 ',
+      corporate_mobile: ' 13800138000 ',
+      email: ' merchant@example.com '
+    },
+    {
+      account_type: 'ACCOUNT_TYPE_PRIVATE',
+      account_bank: ' 邢台银行 ',
+      bank_alias: ' 邢台银行 ',
+      need_bank_branch: true,
+      bank_address_code: ' 河北省 ',
+      deposit_bank_province: ' 河北省 ',
+      deposit_bank_city: ' 邢台市 ',
+      bank_name: ' 邢台银行宁晋支行 ',
+      account_number: ' 6222020202020202 ',
+      account_name: ' 周松涛 '
+    }
+  )
   assert(trimmedEnterprisePayload.legal_name === '宁晋县周鹏饭店', 'enterprise payload should trim legal name')
   assert(trimmedEnterprisePayload.legal_person_id_number === '130528199001010011', 'enterprise payload should trim legal id')
   assert(trimmedEnterprisePayload.bank_account_no === '6222020202020202', 'enterprise payload should trim bank account')
@@ -279,6 +308,9 @@ function main() {
 
   const bankFormWxml = fs.readFileSync(bankFormWxmlPath, 'utf8')
   const bankFormTs = fs.readFileSync(bankFormTsPath, 'utf8')
+  assert(bankFormTs.includes('privateAccountName'), 'bank form must accept legal-person fallback for private account name')
+  assert(bankFormTs.includes("accountType === 'ACCOUNT_TYPE_PRIVATE'") && bankFormTs.includes('properties.privateAccountName'), 'bank form must resolve private account name from legal person')
+  assert(bankFormTs.includes('account_name: accountName'), 'bank form must reset account_name when switching account types')
   for (const selectorToken of [
     '<t-picker',
     'showProvincePicker',
@@ -293,10 +325,7 @@ function main() {
     'listApplymentCities',
     'listApplymentBankBranches'
   ]) {
-    assert(
-      !bankFormWxml.includes(selectorToken) && !bankFormTs.includes(selectorToken),
-      `Baofoo bank form must not keep obsolete province/city/branch selector token: ${selectorToken}`
-    )
+    assert(!bankFormWxml.includes(selectorToken) && !bankFormTs.includes(selectorToken), `Baofoo bank form must not keep obsolete province/city/branch selector token: ${selectorToken}`)
   }
 
   for (const searchToken of [
@@ -317,15 +346,10 @@ function main() {
     '搜索银行名称',
     '银行列表加载中'
   ]) {
-    assert(
-      !bankFormWxml.includes(searchToken) && !bankFormTs.includes(searchToken),
-      `Baofoo bank form must not keep obsolete bank search token: ${searchToken}`
-    )
+    assert(!bankFormWxml.includes(searchToken) && !bankFormTs.includes(searchToken), `Baofoo bank form must not keep obsolete bank search token: ${searchToken}`)
   }
 
-  const applymentBankApiSource = applymentBankApiPaths
-    .map((filePath) => `${path.relative(repoRoot, filePath)}\n${fs.readFileSync(filePath, 'utf8')}`)
-    .join('\n')
+  const applymentBankApiSource = applymentBankApiPaths.map((filePath) => `${path.relative(repoRoot, filePath)}\n${fs.readFileSync(filePath, 'utf8')}`).join('\n')
   for (const oldApiToken of [
     'ApplymentBankOption',
     'ApplymentProvinceOption',
@@ -345,12 +369,18 @@ function main() {
     assert(!applymentBankApiSource.includes(oldApiToken), `Baofoo shared applyment bank API must not keep obsolete picker/search API: ${oldApiToken}`)
   }
 
-  const submitFormSource = submitFormPaths
-    .map((filePath) => `${path.relative(repoRoot, filePath)}\n${fs.readFileSync(filePath, 'utf8')}`)
-    .join('\n')
+  const submitFormSource = submitFormPaths.map((filePath) => `${path.relative(repoRoot, filePath)}\n${fs.readFileSync(filePath, 'utf8')}`).join('\n')
+  const baofuAccountApiSource = fs.readFileSync(baofuAccountApiPath, 'utf8')
+  assert(submitFormSource.includes('accountOpeningMode'), 'merchant submit page should keep account opening mode state')
+  assert(baofuAccountApiSource.includes('account_opening_mode'), 'Baofoo account API should submit account_opening_mode when needed')
+  assert(/accountOpeningMode:\s*['"]business['"]/.test(submitFormSource), 'merchant submit page should default to business opening')
+  assert(/accountOpeningMode\s*===\s*['"]personal['"]/.test(submitFormSource), 'merchant submit page should branch personal opening form')
+  assert(submitFormSource.includes('buildBaofuPersonalProfilePayload') && /['"]merchant['"]/.test(submitFormSource), 'merchant submit page should use personal merchant payload builder')
+  assert(submitFormSource.includes('onSubmitPersonal'), 'merchant submit page should provide a personal submit action')
+
   for (const sensitiveToggleToken of [
-    'type="{{showIdNumber ? \'text\' : \'password\'}}"',
-    'type="{{showAccountNumber ? \'text\' : \'password\'}}"',
+    "type=\"{{showIdNumber ? 'text' : 'password'}}\"",
+    "type=\"{{showAccountNumber ? 'text' : 'password'}}\"",
     'browse-off',
     'suffixIcon="{{showIdNumber',
     'suffixIcon="{{allowSavedAccountNumber',
@@ -359,24 +389,11 @@ function main() {
     'onToggleIdVisibility',
     'onToggleAccountNumberVisibility'
   ]) {
-    assert(
-      !submitFormSource.includes(sensitiveToggleToken),
-      `Baofoo submit forms must not keep old privacy toggle UI: ${sensitiveToggleToken}`
-    )
+    assert(!submitFormSource.includes(sensitiveToggleToken), `Baofoo submit forms must not keep old privacy toggle UI: ${sensitiveToggleToken}`)
   }
 
-  for (const maskToken of [
-    'certificate_no_mask',
-    'legal_person_id_number_mask',
-    'corporate_mobile_mask',
-    'email_mask',
-    'bank_account_no_mask',
-    'contact_mobile_mask'
-  ]) {
-    assert(
-      !submitFormSource.includes(maskToken),
-      `Baofoo submit forms must not render or consume masked profile defaults: ${maskToken}`
-    )
+  for (const maskToken of ['certificate_no_mask', 'legal_person_id_number_mask', 'corporate_mobile_mask', 'email_mask', 'bank_account_no_mask', 'contact_mobile_mask']) {
+    assert(!submitFormSource.includes(maskToken), `Baofoo submit forms must not render or consume masked profile defaults: ${maskToken}`)
   }
 
   console.log('check-baofu-personal-profile-form: validated personal profile payload shape')

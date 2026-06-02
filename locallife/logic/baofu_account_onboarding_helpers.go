@@ -2,7 +2,9 @@ package logic
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -12,15 +14,28 @@ import (
 	"github.com/merrydance/locallife/util"
 )
 
-func baofuOpeningAccountType(ownerType string) (string, error) {
+func baofuOpeningAccountType(ownerType string, accountOpeningMode string) (string, error) {
 	switch strings.TrimSpace(ownerType) {
-	case db.BaofuAccountOwnerTypeMerchant, db.BaofuAccountOwnerTypePlatform:
+	case db.BaofuAccountOwnerTypeMerchant:
+		switch strings.ToLower(strings.TrimSpace(accountOpeningMode)) {
+		case "", db.BaofuAccountTypeBusiness:
+			return db.BaofuAccountTypeBusiness, nil
+		case db.BaofuAccountTypePersonal:
+			return db.BaofuAccountTypePersonal, nil
+		default:
+			return "", ErrBaofuAccountInvalidOwnerAccount
+		}
+	case db.BaofuAccountOwnerTypePlatform:
 		return db.BaofuAccountTypeBusiness, nil
 	case db.BaofuAccountOwnerTypeRider, db.BaofuAccountOwnerTypeOperator:
 		return db.BaofuAccountTypePersonal, nil
 	default:
 		return "", ErrBaofuAccountInvalidOwnerAccount
 	}
+}
+
+func baofuAccountOpeningModeConflictError() error {
+	return NewRequestError(http.StatusConflict, errors.New("该商户已有不同开户方式的宝付账户或开户流程，请在当前流程完成后再切换开户方式"))
 }
 
 func baofuOpeningRequiresUserFee(ownerType string) bool {
@@ -67,7 +82,31 @@ func BaofuAccountOpeningInputMissingFields(ownerType string, input BaofuAccountO
 		{code: "bank_account_no", value: input.BankAccountNo},
 	}
 	switch strings.TrimSpace(ownerType) {
-	case db.BaofuAccountOwnerTypeMerchant, db.BaofuAccountOwnerTypePlatform:
+	case db.BaofuAccountOwnerTypeMerchant:
+		if strings.TrimSpace(input.AccountType) == db.BaofuAccountTypePersonal {
+			fields = append(fields,
+				baofuAccountOpeningProfileField{code: "id_card_number", value: firstTrimmed(input.CertificateNo, input.LegalPersonIDNumber)},
+				baofuAccountOpeningProfileField{code: "bank_mobile", value: input.BankMobile},
+			)
+			return missingBaofuProfileFieldCodes(fields)
+		}
+		fields = append(fields,
+			baofuAccountOpeningProfileField{code: "business_license_number", value: input.BusinessLicenseNo},
+			baofuAccountOpeningProfileField{code: "legal_person_name", value: input.LegalPersonName},
+			baofuAccountOpeningProfileField{code: "legal_person_id_number", value: input.LegalPersonIDNumber},
+			baofuAccountOpeningProfileField{code: "email", value: input.Email},
+			baofuAccountOpeningProfileField{code: "bank_name", value: input.BankName},
+			baofuAccountOpeningProfileField{code: "deposit_bank_province", value: input.DepositBankProvince},
+			baofuAccountOpeningProfileField{code: "deposit_bank_city", value: input.DepositBankCity},
+			baofuAccountOpeningProfileField{code: "deposit_bank_name", value: input.DepositBankName},
+		)
+		if !baofuDepositBankLocationLooksConsistent(input.DepositBankProvince, input.DepositBankCity, input.DepositBankName) {
+			fields = append(fields, baofuAccountOpeningProfileField{code: "deposit_bank_city", value: ""})
+		}
+		if input.SelfEmployed && strings.TrimSpace(input.CardUserName) != "" {
+			fields = append(fields, baofuAccountOpeningProfileField{code: "corporate_mobile", value: input.CorporateMobile})
+		}
+	case db.BaofuAccountOwnerTypePlatform:
 		fields = append(fields,
 			baofuAccountOpeningProfileField{code: "business_license_number", value: input.BusinessLicenseNo},
 			baofuAccountOpeningProfileField{code: "legal_person_name", value: input.LegalPersonName},
@@ -101,7 +140,31 @@ func BaofuAccountOpeningProfileMissingFields(profile db.BaofuAccountOpeningProfi
 		{code: "bank_account_no", value: profile.BankAccountNoCiphertext.String},
 	}
 	switch strings.TrimSpace(profile.OwnerType) {
-	case db.BaofuAccountOwnerTypeMerchant, db.BaofuAccountOwnerTypePlatform:
+	case db.BaofuAccountOwnerTypeMerchant:
+		if strings.TrimSpace(profile.AccountType) == db.BaofuAccountTypePersonal {
+			fields = append(fields,
+				baofuAccountOpeningProfileField{code: "id_card_number", value: profile.CertificateNoCiphertext.String},
+				baofuAccountOpeningProfileField{code: "bank_mobile", value: profile.BankMobileCiphertext.String},
+			)
+			return missingBaofuProfileFieldCodes(fields)
+		}
+		fields = append(fields,
+			baofuAccountOpeningProfileField{code: "business_license_number", value: profile.CertificateNoCiphertext.String},
+			baofuAccountOpeningProfileField{code: "legal_person_name", value: profile.CorporateName.String},
+			baofuAccountOpeningProfileField{code: "legal_person_id_number", value: profile.CorporateCertIDCiphertext.String},
+			baofuAccountOpeningProfileField{code: "email", value: profile.EmailCiphertext.String},
+			baofuAccountOpeningProfileField{code: "bank_name", value: profile.BankName.String},
+			baofuAccountOpeningProfileField{code: "deposit_bank_province", value: profile.DepositBankProvince.String},
+			baofuAccountOpeningProfileField{code: "deposit_bank_city", value: profile.DepositBankCity.String},
+			baofuAccountOpeningProfileField{code: "deposit_bank_name", value: profile.DepositBankName.String},
+		)
+		if !baofuDepositBankLocationLooksConsistent(profile.DepositBankProvince.String, profile.DepositBankCity.String, profile.DepositBankName.String) {
+			fields = append(fields, baofuAccountOpeningProfileField{code: "deposit_bank_city", value: ""})
+		}
+		if baofuProfileUsesPrivateBusinessCard(profile) {
+			fields = append(fields, baofuAccountOpeningProfileField{code: "corporate_mobile", value: profile.CorporateMobileCiphertext.String})
+		}
+	case db.BaofuAccountOwnerTypePlatform:
 		fields = append(fields,
 			baofuAccountOpeningProfileField{code: "business_license_number", value: profile.CertificateNoCiphertext.String},
 			baofuAccountOpeningProfileField{code: "legal_person_name", value: profile.CorporateName.String},

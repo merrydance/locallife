@@ -63,6 +63,7 @@ func rejectClientControlledBaofuSettlementAccountFields(payload map[string]any) 
 		"owner_type",
 		"owner_id",
 		"account_type",
+		"opening_mode",
 		"certificate_type",
 		"industry",
 		"industry_id",
@@ -91,7 +92,8 @@ func rejectRoleInvalidBaofuSettlementAccountProfileFields(payload map[string]any
 	if !ok {
 		return nil
 	}
-	allowed := baofuSettlementAccountAllowedProfileFields(scope.OwnerType)
+	mode := baofuSettlementAccountOpeningModeFromPayload(payload)
+	allowed := baofuSettlementAccountAllowedProfileFields(scope.OwnerType, mode)
 	for field := range profile {
 		if _, ok := allowed[field]; !ok {
 			return baofuSettlementAccountRoleFieldError{
@@ -115,26 +117,42 @@ func baofuSettlementAccountProfilePayload(payload map[string]any) (map[string]an
 	return payload, true
 }
 
-func baofuSettlementAccountAllowedProfileFields(ownerType string) map[string]struct{} {
+func baofuSettlementAccountAllowedProfileFields(ownerType string, accountOpeningMode string) map[string]struct{} {
 	fields := []string{"bank_account_no", "bank_account_number", "account_number"}
 	switch strings.TrimSpace(ownerType) {
 	case db.BaofuAccountOwnerTypeMerchant:
-		fields = append(fields,
-			"legal_name",
-			"business_license_number",
-			"legal_person_name",
-			"legal_person_id_number",
-			"corporate_mobile",
-			"self_employed",
-			"email",
-			"bank_name",
-			"deposit_bank_province",
-			"deposit_bank_city",
-			"deposit_bank_name",
-			"contact_name",
-			"contact_mobile",
-			"card_user_name",
-		)
+		if strings.TrimSpace(accountOpeningMode) == db.BaofuAccountTypePersonal {
+			fields = append(fields,
+				"real_name",
+				"account_name",
+				"legal_name",
+				"id_card_number",
+				"certificate_no",
+				"bank_mobile",
+				"mobile",
+				"phone",
+				"card_user_name",
+				"contact_name",
+				"contact_mobile",
+			)
+		} else {
+			fields = append(fields,
+				"legal_name",
+				"business_license_number",
+				"legal_person_name",
+				"legal_person_id_number",
+				"corporate_mobile",
+				"self_employed",
+				"email",
+				"bank_name",
+				"deposit_bank_province",
+				"deposit_bank_city",
+				"deposit_bank_name",
+				"contact_name",
+				"contact_mobile",
+				"card_user_name",
+			)
+		}
 	case db.BaofuAccountOwnerTypePlatform:
 		fields = append(fields,
 			"legal_name",
@@ -171,6 +189,31 @@ func baofuSettlementAccountAllowedProfileFields(ownerType string) map[string]str
 		allowed[field] = struct{}{}
 	}
 	return allowed
+}
+
+func baofuSettlementAccountOpeningModeFromPayload(payload map[string]any) string {
+	if value, ok := payload["account_opening_mode"]; ok {
+		return normalizeBaofuSettlementAccountOpeningModeValue(value)
+	}
+	return ""
+}
+
+func normalizeBaofuSettlementAccountOpeningModeValue(value any) string {
+	switch v := value.(type) {
+	case string:
+		switch strings.ToLower(strings.TrimSpace(v)) {
+		case "":
+			return ""
+		case db.BaofuAccountTypeBusiness:
+			return db.BaofuAccountTypeBusiness
+		case db.BaofuAccountTypePersonal:
+			return db.BaofuAccountTypePersonal
+		default:
+			return strings.ToLower(strings.TrimSpace(v))
+		}
+	default:
+		return ""
+	}
 }
 
 func hasBaofuSettlementAccountField(payload map[string]any, field string) bool {

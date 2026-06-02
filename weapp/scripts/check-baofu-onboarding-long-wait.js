@@ -9,6 +9,7 @@ function read(relativePath) {
 }
 
 const onboardingService = read('miniprogram/pages/merchant/_main_shared/services/baofu-account-onboarding.ts')
+const statusHelpers = read('miniprogram/pages/merchant/_main_shared/api/baofu-account-status.ts')
 const statusBehavior = read('miniprogram/pages/merchant/_main_shared/behaviors/baofu-settlement-status.ts')
 const submitBehavior = read('miniprogram/pages/merchant/_main_shared/behaviors/baofu-settlement-submit.ts')
 const waitComponentTs = read('miniprogram/pages/merchant/_components/baofu-onboarding-wait/index.ts')
@@ -26,6 +27,21 @@ assert(
   onboardingService.includes('BAOFU_STATUS_POLL_UNTIL_TERMINAL') &&
     onboardingService.includes('maxAttempts === BAOFU_STATUS_POLL_UNTIL_TERMINAL || attempt < maxAttempts'),
   'Baofoo onboarding must keep polling while the page is active until backend terminal state is returned'
+)
+assert(
+  statusHelpers.includes('return isBaofuSettlementTerminalStatus(status)'),
+  'Baofoo submit/payment polling must keep waiting for the final backend terminal state'
+)
+assert(
+  onboardingService.includes('account?: BaofuSettlementAccountResponse') &&
+    onboardingService.includes('buildBaofuOnboardingWaitViewFromAccount') &&
+    onboardingService.includes('emitPollProgress(options, attempt, maxAttempts, interval, attempt * interval, account)'),
+  'Baofoo onboarding polling must publish each backend status snapshot to the wait UI'
+)
+assert(
+  submitBehavior.includes('buildBaofuOnboardingWaitViewFromAccount') &&
+    statusBehavior.includes('buildBaofuOnboardingWaitViewFromAccount'),
+  'Baofoo wait UI consumers must update title and description when polling observes a new backend status'
 )
 assert(
   onboardingService.includes('已等待'),

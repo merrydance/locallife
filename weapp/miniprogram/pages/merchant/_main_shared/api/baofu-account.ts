@@ -13,27 +13,13 @@ import type { MiniProgramPayParams } from './payment'
 export type BaofuAccountOwnerRole = 'rider' | 'merchant' | 'operator' | 'platform'
 
 export type BaofuSettlementAccountAllowedType = 'ACCOUNT_TYPE_BUSINESS' | 'ACCOUNT_TYPE_PRIVATE'
+export type BaofuAccountOpeningMode = 'business' | 'personal'
 
-export type BaofuSettlementAccountStatus =
-  | 'ready'
-  | 'failed'
-  | 'profile_pending'
-  | 'verify_fee_pending'
-  | 'verify_fee_processing'
-  | 'opening_processing'
-  | 'merchant_report_processing'
-  | 'applet_auth_pending'
-  | 'voided'
+export type BaofuSettlementAccountStatus = 'ready' | 'failed' | 'profile_pending' | 'verify_fee_pending' | 'verify_fee_processing' | 'opening_processing' | 'merchant_report_processing' | 'applet_auth_pending' | 'voided'
 
-export type BaofuSettlementAccountProfileStatus =
-  | 'complete'
-  | 'incomplete'
+export type BaofuSettlementAccountProfileStatus = 'complete' | 'incomplete'
 
-export type BaofuSettlementAccountOpenState =
-  | 'active'
-  | 'processing'
-  | 'failed'
-  | 'abnormal'
+export type BaofuSettlementAccountOpenState = 'active' | 'processing' | 'failed' | 'abnormal'
 
 export interface BaofuAccountProfile {
   legal_name?: string
@@ -144,11 +130,7 @@ export interface BaofuSettlementAccountResponse {
   updated_at?: string
 }
 
-export type BaofuSettlementAccountPageActionType =
-  | 'submit_profile'
-  | 'continue_payment'
-  | 'refresh_status'
-  | 'none'
+export type BaofuSettlementAccountPageActionType = 'submit_profile' | 'continue_payment' | 'refresh_status' | 'none'
 
 export interface BaofuSettlementAccountPageAction {
   type: BaofuSettlementAccountPageActionType
@@ -158,6 +140,7 @@ export interface BaofuSettlementAccountPageAction {
 }
 
 export interface SubmitBaofuSettlementAccountRequest {
+  account_opening_mode?: BaofuAccountOpeningMode
   profile: BaofuAccountProfile
 }
 
@@ -183,10 +166,7 @@ export function getBaofuSettlementAccount(role: BaofuAccountOwnerRole): Promise<
   })
 }
 
-export function submitBaofuSettlementAccountProfile(
-  role: BaofuAccountOwnerRole,
-  payload: SubmitBaofuSettlementAccountRequest
-): Promise<BaofuSettlementAccountResponse> {
+export function submitBaofuSettlementAccountProfile(role: BaofuAccountOwnerRole, payload: SubmitBaofuSettlementAccountRequest): Promise<BaofuSettlementAccountResponse> {
   return request({
     url: baofuAccountEndpoint(role),
     method: 'POST',
@@ -196,23 +176,23 @@ export function submitBaofuSettlementAccountProfile(
 
 export const getRiderBaofuSettlementAccount = () => getBaofuSettlementAccount('rider')
 
-export const submitRiderBaofuSettlementAccountProfile = (profile: BaofuAccountProfile) =>
-  submitBaofuSettlementAccountProfile('rider', { profile })
+export const submitRiderBaofuSettlementAccountProfile = (profile: BaofuAccountProfile) => submitBaofuSettlementAccountProfile('rider', { profile })
 
 export const getMerchantBaofuSettlementAccount = () => getBaofuSettlementAccount('merchant')
 
-export const submitMerchantBaofuSettlementAccountProfile = (profile: BaofuAccountProfile) =>
-  submitBaofuSettlementAccountProfile('merchant', { profile })
+export const submitMerchantBaofuSettlementAccountProfile = (profile: BaofuAccountProfile, accountOpeningMode?: BaofuAccountOpeningMode) =>
+  submitBaofuSettlementAccountProfile('merchant', {
+    ...(accountOpeningMode ? { account_opening_mode: accountOpeningMode } : {}),
+    profile
+  })
 
 export const getOperatorBaofuSettlementAccount = () => getBaofuSettlementAccount('operator')
 
-export const submitOperatorBaofuSettlementAccountProfile = (profile: BaofuAccountProfile) =>
-  submitBaofuSettlementAccountProfile('operator', { profile })
+export const submitOperatorBaofuSettlementAccountProfile = (profile: BaofuAccountProfile) => submitBaofuSettlementAccountProfile('operator', { profile })
 
 export const getPlatformBaofuSettlementAccount = () => getBaofuSettlementAccount('platform')
 
-export const submitPlatformBaofuSettlementAccountProfile = (profile: BaofuAccountProfile) =>
-  submitBaofuSettlementAccountProfile('platform', { profile })
+export const submitPlatformBaofuSettlementAccountProfile = (profile: BaofuAccountProfile) => submitBaofuSettlementAccountProfile('platform', { profile })
 
 // --- Re-exports for backward compatibility ---
 // Consumers may continue importing from this file.

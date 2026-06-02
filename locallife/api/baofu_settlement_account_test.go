@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"testing"
 	"time"
@@ -15,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/baofu"
 	baofucontracts "github.com/merrydance/locallife/baofu/account/contracts"
+	merchantreport "github.com/merrydance/locallife/baofu/merchantreport"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
@@ -1207,6 +1210,221 @@ func TestBaofuSettlementAccountMerchantActiveBindingWaitsForAppletAuth(t *testin
 	require.Equal(t, "***0118", response.WechatSubMchIDMask)
 }
 
+func TestBaofuSettlementAccountMerchantGetRecoversAppletAuthPendingFromBaofoo(t *testing.T) {
+	owner, _ := randomUser(t)
+	merchant := randomMerchant(owner.ID)
+	now := time.Now()
+	binding := db.BaofuAccountBinding{
+		ID:           96,
+		OwnerType:    db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:      merchant.ID,
+		AccountType:  db.BaofuAccountTypeBusiness,
+		ContractNo:   pgtype.Text{String: "CM202605090096", Valid: true},
+		SharingMerID: pgtype.Text{String: "CM202605090096", Valid: true},
+		OpenState:    db.BaofuAccountOpenStateActive,
+		UpdatedAt:    now,
+	}
+	profile := db.BaofuAccountOpeningProfile{
+		ID:            9601,
+		OwnerType:     db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:       merchant.ID,
+		AccountType:   db.BaofuAccountTypeBusiness,
+		ProfileStatus: db.BaofuAccountOpeningProfileStatusComplete,
+		UpdatedAt:     now,
+	}
+	flow := db.BaofuAccountOpeningFlow{
+		ID:               9602,
+		OwnerType:        db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:          merchant.ID,
+		AccountType:      db.BaofuAccountTypeBusiness,
+		ProfileID:        pgtype.Int8{Int64: profile.ID, Valid: true},
+		State:            db.BaofuAccountOpeningStateAppletAuthPending,
+		AccountBindingID: pgtype.Int8{Int64: binding.ID, Valid: true},
+		MerchantReportID: pgtype.Int8{Int64: 9603, Valid: true},
+		CreatedAt:        now.Add(-10 * time.Minute),
+		UpdatedAt:        now.Add(-10 * time.Minute),
+	}
+	report := db.BaofuMerchantReport{
+		ID:              9603,
+		OwnerType:       db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:         merchant.ID,
+		ReportType:      db.BaofuMerchantReportTypeWechat,
+		ReportNo:        "MR202606020096",
+		ReportState:     db.BaofuMerchantReportStateSucceeded,
+		AppletAuthState: db.BaofuMerchantReportAppletAuthStatePending,
+		SubMchID:        pgtype.Text{String: "1900000196", Valid: true},
+		BctMerID:        "CM202605090096",
+	}
+	readyFlow := flow
+	readyFlow.State = db.BaofuAccountOpeningStateReady
+	readyFlow.UpdatedAt = now
+	readyReport := report
+	readyReport.AppletAuthState = db.BaofuMerchantReportAppletAuthStateSucceeded
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+	store.EXPECT().
+		GetBaofuAccountBindingByOwner(gomock.Any(), gomock.Eq(db.GetBaofuAccountBindingByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:   merchant.ID,
+		})).
+		Return(binding, nil)
+	store.EXPECT().
+		GetBaofuAccountOpeningProfileByOwner(gomock.Any(), gomock.Eq(db.GetBaofuAccountOpeningProfileByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:   merchant.ID,
+		})).
+		Return(profile, nil)
+	store.EXPECT().
+		GetLatestBaofuAccountOpeningFlowByOwner(gomock.Any(), gomock.Eq(db.GetLatestBaofuAccountOpeningFlowByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:   merchant.ID,
+		})).
+		Return(flow, nil)
+	store.EXPECT().
+		GetBaofuMerchantReportByOwner(gomock.Any(), gomock.Eq(db.GetBaofuMerchantReportByOwnerParams{
+			OwnerType:  db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:    merchant.ID,
+			ReportType: db.BaofuMerchantReportTypeWechat,
+		})).
+		Return(report, nil)
+	store.EXPECT().
+		GetExternalPaymentCommandByExternalObject(gomock.Any(), gomock.Eq(db.GetExternalPaymentCommandByExternalObjectParams{
+			Provider:           db.ExternalPaymentProviderBaofu,
+			Channel:            db.PaymentChannelBaofuAggregate,
+			Capability:         db.ExternalPaymentCapabilityBaofuMerchantReport,
+			CommandType:        db.ExternalPaymentCommandTypeBaofuBindSubConfig,
+			ExternalObjectType: "baofu_bind_sub_config",
+			ExternalObjectKey:  "1900000196",
+		})).
+		Return(db.ExternalPaymentCommand{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
+			require.Equal(t, db.ExternalPaymentCommandTypeBaofuBindSubConfig, arg.CommandType)
+			require.Equal(t, "1900000196", arg.ExternalObjectKey)
+			return db.ExternalPaymentCommand{ID: 9604, CommandType: arg.CommandType}, nil
+		})
+	store.EXPECT().
+		MarkBaofuMerchantReportAppletAuthSucceeded(gomock.Any(), report.ID).
+		Return(readyReport, nil)
+	store.EXPECT().
+		MarkMerchantBaofuAccountOpeningReadyTx(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.MarkMerchantBaofuAccountOpeningReadyTxParams) (db.MarkMerchantBaofuAccountOpeningReadyTxResult, error) {
+			require.Equal(t, merchant.ID, arg.PaymentConfig.MerchantID)
+			require.Equal(t, "1900000196", arg.PaymentConfig.SubMchID)
+			require.Equal(t, flow.ID, arg.Flow.ID)
+			return db.MarkMerchantBaofuAccountOpeningReadyTxResult{Flow: readyFlow}, nil
+		})
+	store.EXPECT().
+		GetBaofuAccountBindingByOwner(gomock.Any(), gomock.Eq(db.GetBaofuAccountBindingByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:   merchant.ID,
+		})).
+		Return(binding, nil)
+	store.EXPECT().
+		GetBaofuMerchantReportByOwner(gomock.Any(), gomock.Eq(db.GetBaofuMerchantReportByOwnerParams{
+			OwnerType:  db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:    merchant.ID,
+			ReportType: db.BaofuMerchantReportTypeWechat,
+		})).
+		Return(readyReport, nil)
+
+	server := newTestServer(t, store)
+	server.config.BaofuCollectMerchantID = "102004465"
+	server.config.BaofuCollectTerminalID = "200005200"
+	server.config.WechatMiniAppID = "wx1234567890abcdef"
+	server.config.BaofuMerchantReportChannelID = "CH001"
+	server.config.BaofuMerchantReportChannelName = "LocalLife"
+	server.baofuMerchantReportClient = merchantreport.NewClient(testAPIBaofuRootClient(t, &baofuMerchantReportAPIDoer{
+		responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","merId":"102004465","terId":"200005200","subMchId":"1900000196","authType":"APPLET","authContent":"wx1234567890abcdef"}`),
+	}))
+
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodGet, "/v1/merchant/settlement-account", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response baofuSettlementAccountResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.Equal(t, db.BaofuAccountOpeningStateReady, response.Status)
+	require.True(t, response.PaymentReady)
+	require.Equal(t, "***0196", response.WechatSubMchIDMask)
+}
+
+func TestBaofuSettlementAccountMerchantGetKeepsProcessingWhenReadRecoveryFails(t *testing.T) {
+	owner, _ := randomUser(t)
+	merchant := randomMerchant(owner.ID)
+	binding := db.BaofuAccountBinding{
+		ID:           97,
+		OwnerType:    db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:      merchant.ID,
+		AccountType:  db.BaofuAccountTypeBusiness,
+		ContractNo:   pgtype.Text{String: "CM202605090097", Valid: true},
+		SharingMerID: pgtype.Text{String: "CM202605090097", Valid: true},
+		OpenState:    db.BaofuAccountOpenStateActive,
+		UpdatedAt:    time.Now(),
+	}
+	flow := db.BaofuAccountOpeningFlow{
+		ID:          9702,
+		OwnerType:   db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:     merchant.ID,
+		AccountType: db.BaofuAccountTypeBusiness,
+		State:       db.BaofuAccountOpeningStateAppletAuthPending,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	report := db.BaofuMerchantReport{
+		ID:              9703,
+		OwnerType:       db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:         merchant.ID,
+		ReportType:      db.BaofuMerchantReportTypeWechat,
+		ReportNo:        "MR202606020097",
+		ReportState:     db.BaofuMerchantReportStateSucceeded,
+		AppletAuthState: db.BaofuMerchantReportAppletAuthStatePending,
+		SubMchID:        pgtype.Text{String: "1900000197", Valid: true},
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+	store.EXPECT().
+		GetBaofuAccountBindingByOwner(gomock.Any(), gomock.Any()).
+		Return(binding, nil)
+	store.EXPECT().
+		GetBaofuAccountOpeningProfileByOwner(gomock.Any(), gomock.Any()).
+		Return(db.BaofuAccountOpeningProfile{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetLatestBaofuAccountOpeningFlowByOwner(gomock.Any(), gomock.Any()).
+		Return(flow, nil)
+	store.EXPECT().
+		GetBaofuMerchantReportByOwner(gomock.Any(), gomock.Any()).
+		Return(report, nil)
+
+	server := newTestServer(t, store)
+	server.baofuMerchantReportClient = merchantreport.NewClient(testAPIBaofuRootClient(t, baofuFailingDoer{}))
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodGet, "/v1/merchant/settlement-account", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response baofuSettlementAccountResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.Equal(t, db.BaofuAccountOpeningStateAppletAuthPending, response.Status)
+	require.False(t, response.PaymentReady)
+}
+
 func TestBaofuSettlementAccountMerchantReportFailedReturnsSafeGuidance(t *testing.T) {
 	owner, _ := randomUser(t)
 	merchant := randomMerchant(owner.ID)
@@ -1473,6 +1691,64 @@ func TestBaofuSettlementAccountRequestErrorLogIncludesMerchantReportContext(t *t
 	require.NotContains(t, logs.String(), providerErr.UpstreamMessage)
 }
 
+type baofuMerchantReportAPIDoer struct {
+	request             *http.Request
+	requestBody         []byte
+	responseDataContent json.RawMessage
+	baofuPrivatePEM     string
+}
+
+func (d *baofuMerchantReportAPIDoer) Do(req *http.Request) (*http.Response, error) {
+	d.request = req
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		return nil, err
+	}
+	d.requestBody = body
+	reqEnv := baofuPublicEnvelopeFromFormForAPITest(body)
+	signature, err := baofu.SignSHA256WithRSA(d.baofuPrivatePEM, []byte(d.responseDataContent))
+	if err != nil {
+		return nil, err
+	}
+	responseBody, err := json.Marshal(baofu.PublicResponseEnvelope{
+		ReturnCode:         baofu.PublicEnvelopeReturnCodeSuccess,
+		ReturnMessage:      "OK",
+		MerchantID:         reqEnv.MerchantID,
+		TerminalID:         reqEnv.TerminalID,
+		Charset:            baofu.PublicEnvelopeCharsetUTF8,
+		Version:            baofu.PublicEnvelopeVersion10,
+		Format:             baofu.PublicEnvelopeFormatJSON,
+		SignType:           baofu.SignTypeRSA,
+		SignSerialNo:       "1",
+		EncryptionSerialNo: "1",
+		SignString:         signature,
+		DataContent:        baofu.JSONString(d.responseDataContent),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(responseBody)), Header: make(http.Header)}, nil
+}
+
+func baofuPublicEnvelopeFromFormForAPITest(raw []byte) baofu.PublicRequestEnvelope {
+	values, _ := url.ParseQuery(string(raw))
+	return baofu.PublicRequestEnvelope{
+		MerchantID:         values.Get("merId"),
+		TerminalID:         values.Get("terId"),
+		Method:             values.Get("method"),
+		Charset:            values.Get("charset"),
+		Version:            values.Get("version"),
+		Format:             values.Get("format"),
+		Timestamp:          values.Get("timestamp"),
+		SignType:           values.Get("signType"),
+		SignSerialNo:       values.Get("signSn"),
+		EncryptionSerialNo: values.Get("ncrptnSn"),
+		DigitalEnvelope:    values.Get("dgtlEnvlp"),
+		SignString:         values.Get("signStr"),
+		BizContent:         baofu.JSONString(values.Get("bizContent")),
+	}
+}
+
 func TestBaofuSettlementAccountMerchantManagerCannotPost(t *testing.T) {
 	owner, _ := randomUser(t)
 	manager, _ := randomUser(t)
@@ -1594,6 +1870,147 @@ func TestBaofuSettlementAccountMerchantRejectsPersonalProfileAliasFieldsBeforeSe
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
 	require.Contains(t, recorder.Body.String(), "开户资料字段不适用于当前角色")
 	require.NotContains(t, recorder.Body.String(), "id_card_number is not allowed")
+}
+
+func TestBaofuSettlementAccountMerchantPostPersonalOpeningModeUsesPersonalAccount(t *testing.T) {
+	owner, _ := randomUser(t)
+	merchant := randomMerchant(owner.ID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+	store.EXPECT().
+		GetBaofuAccountBindingByOwner(gomock.Any(), gomock.Eq(db.GetBaofuAccountBindingByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:   merchant.ID,
+		})).
+		Return(db.BaofuAccountBinding{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetBaofuAccountOpeningProfileByOwner(gomock.Any(), gomock.Eq(db.GetBaofuAccountOpeningProfileByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:   merchant.ID,
+		})).
+		Return(db.BaofuAccountOpeningProfile{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetUserMerchantApplication(gomock.Any(), owner.ID).
+		Return(db.MerchantApplication{UserID: owner.ID, Status: db.MerchantApplicationStatusDraft}, nil)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchant.ID).
+		Return(merchant, nil)
+	store.EXPECT().
+		UpsertBaofuAccountOpeningProfile(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.UpsertBaofuAccountOpeningProfileParams) (db.BaofuAccountOpeningProfile, error) {
+			require.Equal(t, db.BaofuAccountOwnerTypeMerchant, arg.OwnerType)
+			require.Equal(t, merchant.ID, arg.OwnerID)
+			require.Equal(t, db.BaofuAccountTypePersonal, arg.AccountType)
+			require.Equal(t, db.BaofuAccountOpeningProfileStatusComplete, arg.ProfileStatus)
+			require.Equal(t, baofucontracts.OfficialCertificateTypeID, arg.CertificateType.String)
+			require.Equal(t, "李四", arg.LegalName.String)
+			require.Equal(t, "110101199001010011", arg.CertificateNoCiphertext.String)
+			require.Equal(t, "6222020202020202", arg.BankAccountNoCiphertext.String)
+			require.Equal(t, "13800138000", arg.BankMobileCiphertext.String)
+			require.False(t, arg.CorporateCertIDCiphertext.Valid)
+			return db.BaofuAccountOpeningProfile{
+				ID:                      311,
+				OwnerType:               arg.OwnerType,
+				OwnerID:                 arg.OwnerID,
+				AccountType:             arg.AccountType,
+				ProfileStatus:           arg.ProfileStatus,
+				LegalName:               arg.LegalName,
+				CertificateType:         arg.CertificateType,
+				CertificateNoCiphertext: arg.CertificateNoCiphertext,
+				BankAccountNoCiphertext: arg.BankAccountNoCiphertext,
+				BankMobileCiphertext:    arg.BankMobileCiphertext,
+				CardUserName:            arg.CardUserName,
+				ContactName:             arg.ContactName,
+				ContactMobileCiphertext: arg.ContactMobileCiphertext,
+				CreatedAt:               time.Now(),
+				UpdatedAt:               time.Now(),
+			}, nil
+		})
+	store.EXPECT().
+		GetActiveBaofuAccountOpeningFlowByOwner(gomock.Any(), gomock.Eq(db.GetActiveBaofuAccountOpeningFlowByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:   merchant.ID,
+		})).
+		Return(db.BaofuAccountOpeningFlow{}, db.ErrRecordNotFound)
+	createdFlow := db.BaofuAccountOpeningFlow{
+		ID:          411,
+		OwnerType:   db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:     merchant.ID,
+		AccountType: db.BaofuAccountTypePersonal,
+		ProfileID:   pgtype.Int8{Int64: 311, Valid: true},
+		State:       db.BaofuAccountOpeningStateProfilePending,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	store.EXPECT().
+		CreateBaofuAccountOpeningFlow(gomock.Any(), gomock.Any()).
+		Return(createdFlow, nil)
+	processingFlow := createdFlow
+	processingFlow.State = db.BaofuAccountOpeningStateOpeningProcessing
+	processingFlow.OpenTransSerialNo = pgtype.Text{String: "BFO202606020011", Valid: true}
+	processingFlow.LoginNo = pgtype.Text{String: "LLBFOM0000000010", Valid: true}
+	store.EXPECT().
+		MarkBaofuAccountOpeningFlowOpeningProcessing(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.MarkBaofuAccountOpeningFlowOpeningProcessingParams) (db.BaofuAccountOpeningFlow, error) {
+			require.Contains(t, string(arg.ProviderRequestSnapshot), `"account_type":"personal"`)
+			return processingFlow, nil
+		})
+	store.EXPECT().
+		UpsertBaofuAccountBinding(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.UpsertBaofuAccountBindingParams) (db.BaofuAccountBinding, error) {
+			require.Equal(t, db.BaofuAccountTypePersonal, arg.AccountType)
+			return db.BaofuAccountBinding{
+				ID:          511,
+				OwnerType:   db.BaofuAccountOwnerTypeMerchant,
+				OwnerID:     merchant.ID,
+				AccountType: db.BaofuAccountTypePersonal,
+				OpenState:   db.BaofuAccountOpenStateProcessing,
+			}, nil
+		})
+
+	server := newTestServer(t, store)
+	accountClient := &fakeBaofuSettlementAccountClient{
+		openResult: &baofucontracts.AccountResult{
+			ContractNo:    "CP202606020011",
+			OpenState:     db.BaofuAccountOpenStateProcessing,
+			UpstreamState: "2",
+		},
+	}
+	server.baofuAccountClient = accountClient
+	rawBody := []byte(`{
+		"account_opening_mode":"personal",
+		"profile":{
+			"legal_name":"李四",
+			"id_card_number":"110101199001010011",
+			"bank_account_no":"6222020202020202",
+			"bank_mobile":"13800138000",
+			"card_user_name":"李四",
+			"contact_name":"李四",
+			"contact_mobile":"13800138000"
+		}
+	}`)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodPost, "/v1/merchant/settlement-account", bytes.NewReader(rawBody))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusAccepted, recorder.Code)
+	var response baofuSettlementAccountResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.Equal(t, db.BaofuAccountTypePersonal, response.AccountType)
+	require.Equal(t, db.BaofuAccountTypePersonal, accountClient.lastOpen.AccountType)
+	require.Equal(t, "李四", accountClient.lastOpen.LegalName)
+	require.Equal(t, "110101199001010011", accountClient.lastOpen.CertificateNo)
+	require.Equal(t, "6222020202020202", accountClient.lastOpen.BankAccountNo)
+	require.Equal(t, "13800138000", accountClient.lastOpen.BankMobile)
+	require.Empty(t, accountClient.lastOpen.CorporateName)
 }
 
 func TestBaofuSettlementAccountOperatorCanReadActiveBinding(t *testing.T) {

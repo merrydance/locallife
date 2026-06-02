@@ -247,6 +247,11 @@ func (server *Server) createBaofuSettlementAccount(ctx *gin.Context, scope baofu
 		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New(baofuSettlementAccountDecodeErrorPublicMessage(err))))
 		return
 	}
+	scope, err = baofuSettlementAccountScopeForRequest(scope, req)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New(baofuSettlementAccountDecodeErrorPublicMessage(err))))
+		return
+	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 	profile := req.toOpeningProfileInput()
@@ -262,11 +267,12 @@ func (server *Server) createBaofuSettlementAccount(ctx *gin.Context, scope baofu
 	}
 	service := server.newBaofuAccountOnboardingService()
 	result, err := service.StartOrRecoverOpening(ctx, logic.BaofuAccountOpeningInput{
-		OwnerType: scope.OwnerType,
-		OwnerID:   scope.OwnerID,
-		UserID:    authPayload.UserID,
-		ClientIP:  ctx.ClientIP(),
-		Profile:   profile,
+		OwnerType:          scope.OwnerType,
+		OwnerID:            scope.OwnerID,
+		UserID:             authPayload.UserID,
+		ClientIP:           ctx.ClientIP(),
+		AccountOpeningMode: scope.AccountType,
+		Profile:            profile,
 	})
 	if err != nil {
 		if writeBaofuSettlementAccountLogicRequestError(ctx, err, scope) {
@@ -280,6 +286,31 @@ func (server *Server) createBaofuSettlementAccount(ctx *gin.Context, scope baofu
 		return
 	}
 	ctx.JSON(http.StatusAccepted, server.baofuSettlementAccountResponseFromResult(scope, result))
+}
+
+func baofuSettlementAccountScopeForRequest(scope baofuSettlementAccountScope, req baofuSettlementAccountRequest) (baofuSettlementAccountScope, error) {
+	mode := normalizeBaofuSettlementAccountOpeningModeValue(req.AccountOpeningMode)
+	if strings.TrimSpace(mode) == "" {
+		return scope, nil
+	}
+	if strings.TrimSpace(scope.OwnerType) != db.BaofuAccountOwnerTypeMerchant {
+		return baofuSettlementAccountScope{}, baofuSettlementAccountRoleFieldError{
+			Field:     "account_opening_mode",
+			Role:      scope.Audience,
+			OwnerType: scope.OwnerType,
+		}
+	}
+	switch mode {
+	case db.BaofuAccountTypeBusiness, db.BaofuAccountTypePersonal:
+		scope.AccountType = mode
+		return scope, nil
+	default:
+		return baofuSettlementAccountScope{}, baofuSettlementAccountRoleFieldError{
+			Field:     "account_opening_mode",
+			Role:      scope.Audience,
+			OwnerType: scope.OwnerType,
+		}
+	}
 }
 
 func writeBaofuSettlementAccountLogicRequestError(ctx *gin.Context, err error, scope baofuSettlementAccountScope) bool {

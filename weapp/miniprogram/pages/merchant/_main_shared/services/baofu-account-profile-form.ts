@@ -1,19 +1,7 @@
-import type {
-  BaofuAccountOwnerRole,
-  BaofuAccountProfile,
-  BaofuSettlementAccountProfileDefaults
-} from '../api/baofu-account'
-import type {
-  ApplymentBindBankPayload
-} from '../api/applyment-bank'
+import type { BaofuAccountOwnerRole, BaofuAccountProfile, BaofuSettlementAccountProfileDefaults } from '../api/baofu-account'
+import type { ApplymentBindBankPayload } from '../api/applyment-bank'
 
-export type BaofuEnterpriseProfileField =
-  | 'legal_name'
-  | 'business_license_number'
-  | 'legal_person_name'
-  | 'legal_person_id_number'
-  | 'corporate_mobile'
-  | 'email'
+export type BaofuEnterpriseProfileField = 'legal_name' | 'business_license_number' | 'legal_person_name' | 'legal_person_id_number' | 'corporate_mobile' | 'email'
 
 export interface BaofuEnterpriseProfileForm {
   legal_name: string
@@ -24,11 +12,7 @@ export interface BaofuEnterpriseProfileForm {
   email: string
 }
 
-export type BaofuPersonalProfileField =
-  | 'name'
-  | 'certificate_no'
-  | 'bank_account_no'
-  | 'bank_mobile'
+export type BaofuPersonalProfileField = 'name' | 'certificate_no' | 'bank_account_no' | 'bank_mobile'
 
 export interface BaofuPersonalProfileForm {
   name: string
@@ -69,9 +53,7 @@ export function emptyBaofuPersonalProfileForm(): BaofuPersonalProfileForm {
   }
 }
 
-export function buildBaofuEnterpriseFormFromDefaults(
-  defaults?: BaofuSettlementAccountProfileDefaults | null
-): BaofuEnterpriseProfileForm {
+export function buildBaofuEnterpriseFormFromDefaults(defaults?: BaofuSettlementAccountProfileDefaults | null): BaofuEnterpriseProfileForm {
   return {
     legal_name: normalizeText(defaults?.legal_name),
     business_license_number: normalizeText(defaults?.business_license_number),
@@ -82,9 +64,7 @@ export function buildBaofuEnterpriseFormFromDefaults(
   }
 }
 
-export function buildBaofuEnterpriseBankDraftFromDefaults(
-  defaults?: BaofuSettlementAccountProfileDefaults | null
-): Partial<ApplymentBindBankPayload> {
+export function buildBaofuEnterpriseBankDraftFromDefaults(defaults?: BaofuSettlementAccountProfileDefaults | null): Partial<ApplymentBindBankPayload> {
   const fallbackAccountType = 'ACCOUNT_TYPE_BUSINESS' as const
   if (!defaults) {
     return { account_type: fallbackAccountType }
@@ -107,16 +87,12 @@ export function buildBaofuEnterpriseBankDraftFromDefaults(
     bank_branch_id: hasBranch ? normalizeText(defaults.bank_branch_id) : depositBankName,
     bank_name: depositBankName,
     account_number: normalizeText(defaults.bank_account_no),
-    account_name: normalizeText(selfEmployed ? (defaults.card_user_name || defaults.legal_person_name) : defaults.legal_name),
+    account_name: normalizeText(selfEmployed ? defaults.card_user_name || defaults.legal_person_name : defaults.legal_name),
     contact_email: normalizeText(defaults.email)
   }
 }
 
-export function buildBaofuEnterpriseProfilePayload(
-  form: BaofuEnterpriseProfileForm,
-  bank: ApplymentBindBankPayload,
-  defaults?: BaofuSettlementAccountProfileDefaults | null
-): BaofuAccountProfile {
+export function buildBaofuEnterpriseProfilePayload(form: BaofuEnterpriseProfileForm, bank: ApplymentBindBankPayload, defaults?: BaofuSettlementAccountProfileDefaults | null): BaofuAccountProfile {
   const payload: BaofuAccountProfile = {
     legal_name: form.legal_name.trim(),
     business_license_number: form.business_license_number.trim(),
@@ -170,10 +146,7 @@ export function validateBaofuEnterpriseProfileForm(
   return ''
 }
 
-export function buildBaofuPersonalFormFromDefaults(
-  current: BaofuPersonalProfileForm,
-  defaults?: BaofuSettlementAccountProfileDefaults | null
-): BaofuPersonalProfileForm {
+export function buildBaofuPersonalFormFromDefaults(current: BaofuPersonalProfileForm, defaults?: BaofuSettlementAccountProfileDefaults | null): BaofuPersonalProfileForm {
   return {
     ...current,
     name: normalizeText(defaults?.legal_name || defaults?.legal_person_name || current.name),
@@ -183,16 +156,29 @@ export function buildBaofuPersonalFormFromDefaults(
   }
 }
 
-export function buildBaofuPersonalProfilePayload(
-  role: Extract<BaofuAccountOwnerRole, 'operator' | 'rider'>,
-  form: BaofuPersonalProfileForm
-): BaofuAccountProfile {
+export function buildBaofuPersonalProfilePayload(role: Extract<BaofuAccountOwnerRole, 'merchant' | 'operator' | 'rider'>, form: BaofuPersonalProfileForm): BaofuAccountProfile {
   if (role === 'rider') {
     const payload: BaofuAccountProfile = {
       real_name: form.name.trim(),
       mobile: form.bank_mobile.trim(),
       id_card_number: form.certificate_no.trim(),
       bank_account_number: form.bank_account_no.trim()
+    }
+    if (!payload.id_card_number) {
+      delete payload.id_card_number
+    }
+    return payload
+  }
+
+  if (role === 'merchant') {
+    const payload: BaofuAccountProfile = {
+      legal_name: form.name.trim(),
+      id_card_number: form.certificate_no.trim(),
+      bank_account_no: form.bank_account_no.trim(),
+      bank_mobile: form.bank_mobile.trim(),
+      card_user_name: form.name.trim(),
+      contact_name: form.name.trim(),
+      contact_mobile: form.bank_mobile.trim()
     }
     if (!payload.id_card_number) {
       delete payload.id_card_number
@@ -212,10 +198,7 @@ export function buildBaofuPersonalProfilePayload(
   return payload
 }
 
-export function validateBaofuPersonalProfileForm(
-  form: BaofuPersonalProfileForm,
-  defaults?: BaofuSettlementAccountProfileDefaults | null
-): string {
+export function validateBaofuPersonalProfileForm(form: BaofuPersonalProfileForm, defaults?: BaofuSettlementAccountProfileDefaults | null): string {
   void defaults
   if (!form.name.trim()) {
     return '请输入姓名'

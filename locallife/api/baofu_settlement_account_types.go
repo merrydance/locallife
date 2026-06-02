@@ -66,7 +66,8 @@ func isBaofuSettlementAccountServiceNotReady(err error) bool {
 }
 
 type baofuSettlementAccountRequest struct {
-	Profile baofuSettlementAccountProfileRequest `json:"profile"`
+	AccountOpeningMode string                               `json:"account_opening_mode"`
+	Profile            baofuSettlementAccountProfileRequest `json:"profile"`
 }
 
 type baofuSettlementAccountProfileRequest struct {

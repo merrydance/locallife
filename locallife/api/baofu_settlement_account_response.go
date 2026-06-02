@@ -16,7 +16,7 @@ func (server *Server) baofuSettlementAccountResponseFromResult(scope baofuSettle
 	resp := baofuSettlementAccountResponse{
 		OwnerType:       scope.OwnerType,
 		OwnerID:         scope.OwnerID,
-		AccountType:     scope.AccountType,
+		AccountType:     firstNonBlank(result.Flow.AccountType, result.Profile.AccountType, scope.AccountType),
 		ProfileStatus:   strings.TrimSpace(result.Profile.ProfileStatus),
 		FlowID:          result.Flow.ID,
 		FlowState:       strings.TrimSpace(result.Flow.State),
@@ -37,6 +37,9 @@ func (server *Server) baofuSettlementAccountResponseFromResult(scope baofuSettle
 	}
 	resp.addProfileMasks(result.Profile)
 	if result.Binding != nil {
+		if accountType := strings.TrimSpace(result.Binding.AccountType); accountType != "" {
+			resp.AccountType = accountType
+		}
 		resp.OpenState = strings.TrimSpace(result.Binding.OpenState)
 		resp.BankCardLast4 = pgTextString(result.Binding.BankCardLast4)
 		resp.WechatSubMchIDMask = maskSensitiveTail(pgTextString(result.Binding.WechatSubMchID), 4)

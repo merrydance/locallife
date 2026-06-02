@@ -27,6 +27,7 @@ type baofuAccountOnboardingStore interface {
 	GetActiveBaofuAccountOpeningFlowByOwner(ctx context.Context, arg db.GetActiveBaofuAccountOpeningFlowByOwnerParams) (db.BaofuAccountOpeningFlow, error)
 	GetBaofuAccountOpeningFlowByPaymentOrder(ctx context.Context, verifyFeePaymentOrderID pgtype.Int8) (db.BaofuAccountOpeningFlow, error)
 	CreateBaofuAccountOpeningFlow(ctx context.Context, arg db.CreateBaofuAccountOpeningFlowParams) (db.BaofuAccountOpeningFlow, error)
+	VoidBaofuAccountOpeningFlow(ctx context.Context, arg db.VoidBaofuAccountOpeningFlowParams) (db.BaofuAccountOpeningFlow, error)
 	SetBaofuAccountOpeningFlowProfilePending(ctx context.Context, arg db.SetBaofuAccountOpeningFlowProfilePendingParams) (db.BaofuAccountOpeningFlow, error)
 	MarkBaofuAccountOpeningFlowVerifyFeePending(ctx context.Context, arg db.MarkBaofuAccountOpeningFlowVerifyFeePendingParams) (db.BaofuAccountOpeningFlow, error)
 	MarkBaofuAccountOpeningFlowVerifyFeeProcessing(ctx context.Context, arg db.MarkBaofuAccountOpeningFlowVerifyFeeProcessingParams) (db.BaofuAccountOpeningFlow, error)
@@ -57,14 +58,16 @@ type BaofuAccountOnboardingConfig struct {
 }
 
 type BaofuAccountOpeningInput struct {
-	OwnerType string
-	OwnerID   int64
-	UserID    int64
-	ClientIP  string
-	Profile   *BaofuAccountOpeningProfileInput
+	OwnerType          string
+	OwnerID            int64
+	UserID             int64
+	ClientIP           string
+	AccountOpeningMode string
+	Profile            *BaofuAccountOpeningProfileInput
 }
 
 type BaofuAccountOpeningProfileInput struct {
+	AccountType         string `json:"-"`
 	LegalName           string `json:"legal_name,omitempty"`
 	CertificateNo       string `json:"certificate_no,omitempty"`
 	BusinessLicenseNo   string `json:"business_license_number,omitempty"`
@@ -156,7 +159,7 @@ func (s *BaofuAccountOnboardingService) StartOrRecoverOpening(ctx context.Contex
 	}
 	cfg := s.config.normalized()
 	ownerType := strings.TrimSpace(input.OwnerType)
-	accountType, err := baofuOpeningAccountType(ownerType)
+	accountType, err := baofuOpeningAccountType(ownerType, input.AccountOpeningMode)
 	if err != nil {
 		return BaofuAccountOpeningResult{}, err
 	}
@@ -166,6 +169,9 @@ func (s *BaofuAccountOnboardingService) StartOrRecoverOpening(ctx context.Contex
 	}
 
 	if binding, err := s.store.GetBaofuAccountBindingByOwner(ctx, db.GetBaofuAccountBindingByOwnerParams{OwnerType: ownerType, OwnerID: ownerID}); err == nil && strings.TrimSpace(binding.OpenState) == db.BaofuAccountOpenStateActive {
+		if bindingType := strings.TrimSpace(binding.AccountType); bindingType != "" && bindingType != accountType {
+			return BaofuAccountOpeningResult{}, baofuAccountOpeningModeConflictError()
+		}
 		return s.activeBindingOpeningResult(ctx, ownerType, ownerID, binding)
 	} else if err != nil && !errors.Is(err, db.ErrRecordNotFound) {
 		return BaofuAccountOpeningResult{}, err

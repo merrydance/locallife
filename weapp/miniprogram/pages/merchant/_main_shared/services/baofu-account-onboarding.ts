@@ -2,6 +2,7 @@ import { logger } from '../../../../utils/logger'
 import {
   BaofuAccountOwnerRole,
   BaofuAccountProfile,
+  BaofuAccountOpeningMode,
   BaofuSettlementAccountPayment,
   BaofuSettlementAccountResponse,
   getBaofuAccountPayment,
@@ -21,17 +22,7 @@ const PENDING_STORAGE_PREFIX = 'baofuSettlementAccountPendingWorkflow:'
 const GENERIC_RETRY_MESSAGE = '开户进度暂时无法同步，请稍后重试'
 const BAOFU_STATUS_POLL_UNTIL_TERMINAL = 0
 
-export type BaofuOnboardingWorkflowStatus =
-  | 'ready'
-  | 'failed'
-  | 'voided'
-  | 'profile_pending'
-  | 'verify_fee_pending'
-  | 'closed'
-  | 'processing'
-  | 'cancelled'
-  | 'pending_confirmation'
-  | 'pay_params_missing'
+export type BaofuOnboardingWorkflowStatus = 'ready' | 'failed' | 'voided' | 'profile_pending' | 'verify_fee_pending' | 'closed' | 'processing' | 'cancelled' | 'pending_confirmation' | 'pay_params_missing'
 
 export interface BaofuOnboardingWorkflowResult {
   status: BaofuOnboardingWorkflowStatus
@@ -39,14 +30,7 @@ export interface BaofuOnboardingWorkflowResult {
   shouldRefreshWorkbench: boolean
 }
 
-export type BaofuOnboardingWaitState =
-  | 'submitting'
-  | 'payment_confirming'
-  | 'opening_processing'
-  | 'pending_confirmation'
-  | 'ready'
-  | 'failed'
-  | 'error'
+export type BaofuOnboardingWaitState = 'submitting' | 'payment_confirming' | 'opening_processing' | 'pending_confirmation' | 'ready' | 'failed' | 'error'
 
 export type BaofuOnboardingWaitAction = 'refresh_status' | 'back_to_status' | 'dismiss' | 'retry'
 
@@ -61,6 +45,7 @@ export interface BaofuOnboardingWaitView {
 
 interface WorkflowOptions {
   role?: BaofuAccountOwnerRole
+  accountOpeningMode?: BaofuAccountOpeningMode
   context?: WechatMiniprogram.Page.TrivialInstance
   loadingMessage?: string
   silentToast?: boolean
@@ -76,6 +61,9 @@ export interface BaofuOnboardingPollProgress {
   elapsedSeconds: number
   remainingSeconds: number
   finalAttempt: boolean
+  account?: BaofuSettlementAccountResponse
+  status?: string
+  statusText?: string
 }
 
 export interface PendingWorkflowContext {
@@ -95,7 +83,8 @@ function emitPollProgress(
   attemptIndex: number,
   maxAttempts: number,
   interval: number,
-  elapsedMs = attemptIndex * interval
+  elapsedMs = attemptIndex * interval,
+  account?: BaofuSettlementAccountResponse
 ) {
   if (!options.onProgress) {
     return
@@ -110,16 +99,16 @@ function emitPollProgress(
     maxAttempts,
     elapsedSeconds,
     remainingSeconds,
-    finalAttempt: !waitingUntilTerminal && (attemptIndex >= maxAttempts - 1 || elapsedMs >= totalWaitMs)
+    finalAttempt: !waitingUntilTerminal && (attemptIndex >= maxAttempts - 1 || elapsedMs >= totalWaitMs),
+    ...(account ? {
+      account,
+      status: account.status,
+      statusText: getBaofuAccountStatusText(account.status)
+    } : {})
   })
 }
 
-async function delayWithPollProgress(
-  options: WorkflowOptions,
-  attemptIndex: number,
-  maxAttempts: number,
-  interval: number
-): Promise<boolean> {
+async function delayWithPollProgress(options: WorkflowOptions, attemptIndex: number, maxAttempts: number, interval: number): Promise<boolean> {
   const startElapsedMs = attemptIndex * interval
   let waitedMs = 0
 
@@ -175,12 +164,7 @@ function withUserMessage(error: unknown, fallback: string): unknown {
   return wrapped
 }
 
-function logAndThrowWorkflowError(
-  action: string,
-  role: BaofuAccountOwnerRole,
-  error: unknown,
-  fallback = GENERIC_RETRY_MESSAGE
-): never {
+function logAndThrowWorkflowError(action: string, role: BaofuAccountOwnerRole, error: unknown, fallback = GENERIC_RETRY_MESSAGE): never {
   logger.error(`宝付开户流程异常 action=${action} role=${role}`, error, 'baofu-account-onboarding')
   throw withUserMessage(error, fallback)
 }
@@ -192,11 +176,11 @@ function isPendingWorkflowContext(value: unknown): value is PendingWorkflowConte
 
   const candidate = value as Partial<PendingWorkflowContext>
   return (
-    candidate.role === 'merchant' ||
-    candidate.role === 'rider' ||
-    candidate.role === 'operator' ||
-    candidate.role === 'platform'
-  ) && Number.isFinite(candidate.paymentOrderId) && Number.isFinite(candidate.amount) && typeof candidate.updatedAt === 'string'
+    (candidate.role === 'merchant' || candidate.role === 'rider' || candidate.role === 'operator' || candidate.role === 'platform') &&
+    Number.isFinite(candidate.paymentOrderId) &&
+    Number.isFinite(candidate.amount) &&
+    typeof candidate.updatedAt === 'string'
+  )
 }
 
 function savePendingWorkflowContext(context: PendingWorkflowContext) {
@@ -250,11 +234,7 @@ export function clearPendingBaofuAccountOnboardingContext(role: BaofuAccountOwne
   clearPendingWorkflowContext(role)
 }
 
-function buildPendingWorkflowContext(
-  role: BaofuAccountOwnerRole,
-  payment: BaofuSettlementAccountPayment | null | undefined,
-  fallbackAmount: number
-): PendingWorkflowContext | null {
+function buildPendingWorkflowContext(role: BaofuAccountOwnerRole, payment: BaofuSettlementAccountPayment | null | undefined, fallbackAmount: number): PendingWorkflowContext | null {
   const paymentOrderId = Number(payment?.payment_order_id || 0)
   if (!paymentOrderId) {
     return null
@@ -270,7 +250,9 @@ function buildPendingWorkflowContext(
 }
 
 function mapAccountStatus(status?: string): BaofuOnboardingWorkflowStatus {
-  const normalized = String(status || '').trim().toLowerCase()
+  const normalized = String(status || '')
+    .trim()
+    .toLowerCase()
   switch (normalized) {
     case 'ready':
       return 'ready'
@@ -364,25 +346,23 @@ export function buildBaofuOnboardingWaitView(result: BaofuOnboardingWorkflowResu
     title,
     description,
     theme,
-    primaryActionText: primaryAction === 'back_to_status'
-      ? '返回状态页'
-      : primaryAction === 'retry'
-        ? '重试'
-        : '',
+    primaryActionText: primaryAction === 'back_to_status' ? '返回状态页' : primaryAction === 'retry' ? '重试' : '',
     primaryAction
   }
 }
 
-export function buildBaofuOnboardingWaitViewFromText(
-  options: {
-    state: BaofuOnboardingWaitState
-    title: string
-    description: string
-    theme?: 'success' | 'warning' | 'error'
-    primaryAction?: BaofuOnboardingWaitAction
-    primaryActionText?: string
-  }
-): BaofuOnboardingWaitView {
+export function buildBaofuOnboardingWaitViewFromAccount(account: BaofuSettlementAccountResponse): BaofuOnboardingWaitView {
+  return buildBaofuOnboardingWaitView(buildResult(account))
+}
+
+export function buildBaofuOnboardingWaitViewFromText(options: {
+  state: BaofuOnboardingWaitState
+  title: string
+  description: string
+  theme?: 'success' | 'warning' | 'error'
+  primaryAction?: BaofuOnboardingWaitAction
+  primaryActionText?: string
+}): BaofuOnboardingWaitView {
   return {
     state: options.state,
     title: options.title,
@@ -397,33 +377,23 @@ async function startOrResumeBaofuSettlementAccount(role: BaofuAccountOwnerRole):
   return submitBaofuSettlementAccountProfile(role, { profile: {} })
 }
 
-export function startOrResumeMerchantSettlementAccount(
-  options: WorkflowOptions = {}
-): Promise<BaofuOnboardingWorkflowResult> {
+export function startOrResumeMerchantSettlementAccount(options: WorkflowOptions = {}): Promise<BaofuOnboardingWorkflowResult> {
   return startOrResumeBaofuAccountOnboarding('merchant', options)
 }
 
-export function startOrResumeRiderSettlementAccount(
-  options: WorkflowOptions = {}
-): Promise<BaofuOnboardingWorkflowResult> {
+export function startOrResumeRiderSettlementAccount(options: WorkflowOptions = {}): Promise<BaofuOnboardingWorkflowResult> {
   return startOrResumeBaofuAccountOnboarding('rider', options)
 }
 
-export function startOrResumeOperatorSettlementAccount(
-  options: WorkflowOptions = {}
-): Promise<BaofuOnboardingWorkflowResult> {
+export function startOrResumeOperatorSettlementAccount(options: WorkflowOptions = {}): Promise<BaofuOnboardingWorkflowResult> {
   return startOrResumeBaofuAccountOnboarding('operator', options)
 }
 
-export function startOrResumePlatformSettlementAccount(
-  options: WorkflowOptions = {}
-): Promise<BaofuOnboardingWorkflowResult> {
+export function startOrResumePlatformSettlementAccount(options: WorkflowOptions = {}): Promise<BaofuOnboardingWorkflowResult> {
   return startOrResumeBaofuAccountOnboarding('platform', options)
 }
 
-export async function pollBaofuSettlementAccountStatus(
-  options: WorkflowOptions = {}
-): Promise<BaofuOnboardingWorkflowResult> {
+export async function pollBaofuSettlementAccountStatus(options: WorkflowOptions = {}): Promise<BaofuOnboardingWorkflowResult> {
   const role = options.role || 'rider'
   const maxAttempts = options.maxAttempts ?? BAOFU_STATUS_POLL_UNTIL_TERMINAL
   const interval = options.interval ?? PAYMENT_STATUS_POLL_INTERVAL_MS
@@ -442,6 +412,7 @@ export async function pollBaofuSettlementAccountStatus(
 
       emitPollProgress(options, attempt, maxAttempts, interval)
       const account = await getBaofuSettlementAccount(role)
+      emitPollProgress(options, attempt, maxAttempts, interval, attempt * interval, account)
       if (isBaofuSettlementAfterPaymentTerminalStatus(account.status)) {
         return buildResult(account)
       }
@@ -455,9 +426,7 @@ export async function pollBaofuSettlementAccountStatus(
     }
 
     const account = await getBaofuSettlementAccount(role)
-    const terminalStatus = isBaofuSettlementAfterPaymentTerminalStatus(account.status)
-      ? mapAccountStatus(account.status)
-      : 'pending_confirmation'
+    const terminalStatus = isBaofuSettlementAfterPaymentTerminalStatus(account.status) ? mapAccountStatus(account.status) : 'pending_confirmation'
     return buildResult(account, terminalStatus)
   } catch (error: unknown) {
     return logAndThrowWorkflowError('poll_status', role, error)
@@ -468,14 +437,13 @@ export async function pollBaofuSettlementAccountStatus(
   }
 }
 
-async function completePaymentThenPoll(
-  account: BaofuSettlementAccountResponse,
-  options: WorkflowOptions
-): Promise<BaofuOnboardingWorkflowResult> {
+async function completePaymentThenPoll(account: BaofuSettlementAccountResponse, options: WorkflowOptions): Promise<BaofuOnboardingWorkflowResult> {
   const context = options.context
   const toastContext = options.silentToast ? undefined : context
   const payment = getBaofuAccountPayment(account)
-  const normalizedAccountStatus = String(account.status || '').trim().toLowerCase()
+  const normalizedAccountStatus = String(account.status || '')
+    .trim()
+    .toLowerCase()
   const role = options.role || 'rider'
   const pendingWorkflowContext = buildPendingWorkflowContext(role, payment, payment?.amount || account.verify_fee_amount || 200)
 
@@ -503,24 +471,27 @@ async function completePaymentThenPoll(
     savePendingWorkflowContext(pendingWorkflowContext)
   }
 
-  const paymentResult = await completePaymentWorkflow({
-    id: payment.payment_order_id,
-    user_id: 0,
-    order_id: 0,
-    out_trade_no: payment.out_trade_no || '',
-    amount: payment.amount || 200,
-    status: 'pending',
-    payment_type: 'miniprogram',
-    business_type: 'baofu_account_verify_fee',
-    pay_params: payment.pay_params,
-    created_at: ''
-  } as PaymentOrderResponse, {
-    maxAttempts: options.maxAttempts,
-    interval: options.interval,
-    context: toastContext,
-    paymentMessage: '正在调起微信支付...',
-    confirmingMessage: '支付结果确认中...'
-  })
+  const paymentResult = await completePaymentWorkflow(
+    {
+      id: payment.payment_order_id,
+      user_id: 0,
+      order_id: 0,
+      out_trade_no: payment.out_trade_no || '',
+      amount: payment.amount || 200,
+      status: 'pending',
+      payment_type: 'miniprogram',
+      business_type: 'baofu_account_verify_fee',
+      pay_params: payment.pay_params,
+      created_at: ''
+    } as PaymentOrderResponse,
+    {
+      maxAttempts: options.maxAttempts,
+      interval: options.interval,
+      context: toastContext,
+      paymentMessage: '正在调起微信支付...',
+      confirmingMessage: '支付结果确认中...'
+    }
+  )
 
   if (paymentResult.status === 'cancelled') {
     const refreshed = await getBaofuSettlementAccount(role)
@@ -568,10 +539,7 @@ async function completePaymentThenPoll(
   })
 }
 
-async function startOrResumeBaofuAccountOnboarding(
-  role: BaofuAccountOwnerRole,
-  options: WorkflowOptions = {}
-): Promise<BaofuOnboardingWorkflowResult> {
+async function startOrResumeBaofuAccountOnboarding(role: BaofuAccountOwnerRole, options: WorkflowOptions = {}): Promise<BaofuOnboardingWorkflowResult> {
   const context = options.context
   const pendingWorkflowContext = loadPendingWorkflowContext(role)
 
@@ -617,10 +585,7 @@ async function startOrResumeBaofuAccountOnboarding(
   }
 }
 
-export async function startBaofuAccountOnboarding(
-  profile: BaofuAccountProfile,
-  options: WorkflowOptions = {}
-): Promise<BaofuOnboardingWorkflowResult> {
+export async function startBaofuAccountOnboarding(profile: BaofuAccountProfile, options: WorkflowOptions = {}): Promise<BaofuOnboardingWorkflowResult> {
   const role = options.role || 'rider'
   const context = options.context
 
@@ -628,7 +593,10 @@ export async function startBaofuAccountOnboarding(
     if (!options.silentToast) {
       showProgressToast(context, options.loadingMessage || '正在提交开户资料...')
     }
-    const account = await submitBaofuSettlementAccountProfile(role, { profile })
+    const account = await submitBaofuSettlementAccountProfile(role, {
+      ...(role === 'merchant' && options.accountOpeningMode ? { account_opening_mode: options.accountOpeningMode } : {}),
+      profile
+    })
     return completePaymentThenPoll(account, { ...options, role })
   } catch (error: unknown) {
     return logAndThrowWorkflowError('submit_profile', role, error, '开户资料提交失败，请稍后重试')
@@ -639,16 +607,11 @@ export async function startBaofuAccountOnboarding(
   }
 }
 
-export async function submitBaofuAccountProfile(
-  profile: BaofuAccountProfile,
-  options: WorkflowOptions = {}
-): Promise<BaofuOnboardingWorkflowResult> {
+export async function submitBaofuAccountProfile(profile: BaofuAccountProfile, options: WorkflowOptions = {}): Promise<BaofuOnboardingWorkflowResult> {
   return startBaofuAccountOnboarding(profile, options)
 }
 
-export async function continueBaofuAccountPayment(
-  options: WorkflowOptions = {}
-): Promise<BaofuOnboardingWorkflowResult> {
+export async function continueBaofuAccountPayment(options: WorkflowOptions = {}): Promise<BaofuOnboardingWorkflowResult> {
   const role = options.role || 'rider'
   const context = options.context
 
@@ -691,12 +654,9 @@ export function getBaofuOnboardingFeedbackMessage(result: BaofuOnboardingWorkflo
     case 'ready':
       return '结算账户已开通'
     case 'failed':
-      return result.account.status_desc ||
-        getBaofuAccountNextActionText(result.account.status, result.account.verify_fee_amount) ||
-        '开户未通过，请核对资料后重试；如持续失败请联系平台处理'
+      return result.account.status_desc || getBaofuAccountNextActionText(result.account.status, result.account.verify_fee_amount) || '开户未通过，请核对资料后重试；如持续失败请联系平台处理'
     case 'voided':
-      return result.account.status_desc ||
-        '开户流程已作废，请联系平台处理'
+      return result.account.status_desc || '开户流程已作废，请联系平台处理'
     case 'profile_pending':
       return '请补全开户资料'
     case 'verify_fee_pending':
@@ -710,10 +670,7 @@ export function getBaofuOnboardingFeedbackMessage(result: BaofuOnboardingWorkflo
     case 'pending_confirmation':
       return '支付结果仍在同步，系统会自动确认'
     default:
-      return result.account.status_desc ||
-        getBaofuAccountNextActionText(result.account.status, result.account.verify_fee_amount) ||
-        getBaofuAccountStatusText(result.account.status) ||
-        '开户进度正在同步'
+      return result.account.status_desc || getBaofuAccountNextActionText(result.account.status, result.account.verify_fee_amount) || getBaofuAccountStatusText(result.account.status) || '开户进度正在同步'
   }
 }
 
@@ -742,10 +699,7 @@ export function shouldClearPendingBaofuAccountOnboardingContext(result: BaofuOnb
   }
 }
 
-export function buildPendingBaofuAccountOnboardingContext(
-  role: BaofuAccountOwnerRole,
-  account: BaofuSettlementAccountResponse
-): PendingWorkflowContext | null {
+export function buildPendingBaofuAccountOnboardingContext(role: BaofuAccountOwnerRole, account: BaofuSettlementAccountResponse): PendingWorkflowContext | null {
   const payment = getBaofuAccountPayment(account)
   return buildPendingWorkflowContext(role, payment, payment?.amount || account.verify_fee_amount || 200)
 }

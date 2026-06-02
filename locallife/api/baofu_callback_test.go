@@ -1682,6 +1682,9 @@ func (baofuFailingDoer) Do(*http.Request) (*http.Response, error) {
 func testAPIBaofuRootClient(t *testing.T, doer baofu.HTTPDoer) *baofu.Client {
 	t.Helper()
 	privatePEM, publicPEM := generateAPIBaofuTestKeyPair(t)
+	if recorder, ok := doer.(*baofuMerchantReportAPIDoer); ok {
+		recorder.baofuPrivatePEM = privatePEM
+	}
 	client, err := baofu.NewClient(baofu.Config{
 		Environment:        baofu.BaofuEnvironmentSandbox,
 		CollectMerchantID:  "102004465",

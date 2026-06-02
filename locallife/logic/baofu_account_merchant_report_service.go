@@ -188,6 +188,10 @@ func (s *BaofuAccountMerchantReportService) buildMerchantReportInput(ctx context
 		return SubmitBaofuMerchantReportInput{}, err
 	}
 	servicePhone := firstTrimmed(contactMobile, merchant.Phone)
+	businessLicenseType := merchantcontracts.WechatCertificateTypeNationalLegalMerge
+	if strings.TrimSpace(profile.AccountType) == db.BaofuAccountTypePersonal {
+		businessLicenseType = merchantcontracts.WechatCertificateTypeIdentityCard
+	}
 	return SubmitBaofuMerchantReportInput{
 		MerchantID:          flow.OwnerID,
 		ReportNo:            reportNo,
@@ -197,7 +201,7 @@ func (s *BaofuAccountMerchantReportService) buildMerchantReportInput(ctx context
 		ChannelID:           cfg.ChannelID,
 		ChannelName:         cfg.ChannelName,
 		Business:            cfg.Business,
-		BusinessLicenseType: merchantcontracts.WechatCertificateTypeNationalLegalMerge,
+		BusinessLicenseType: businessLicenseType,
 		BusinessLicense:     firstTrimmed(licenseNo, appData.BusinessLicenseNumber),
 		AddressInfo:         address,
 		BankCardInfo: merchantcontracts.WechatBankCardInfo{
