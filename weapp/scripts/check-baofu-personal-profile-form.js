@@ -115,6 +115,12 @@ function main() {
   assert(personalFormFromDefaults.bank_account_no === '6222020202020202', 'personal defaults should restore clear-text bank account')
   assert(personalFormFromDefaults.bank_mobile === '13800138000', 'personal defaults should trim bank mobile')
 
+  const merchantPersonalFormFromBusinessDefaults = buildBaofuPersonalFormFromDefaults(empty, {
+    legal_name: ' 张三演示测试商户 ',
+    legal_person_name: ' 张三 '
+  }, { useBusinessName: false })
+  assert(merchantPersonalFormFromBusinessDefaults.name === '', 'merchant personal opening must not backfill business license or legal-person name')
+
   const personalMaskOnlyDefaults = buildBaofuPersonalFormFromDefaults(empty, {
     certificate_no_mask: '110************011',
     bank_account_no_mask: '6222********0202'
@@ -375,6 +381,9 @@ function main() {
   assert(baofuAccountApiSource.includes('account_opening_mode'), 'Baofoo account API should submit account_opening_mode when needed')
   assert(/accountOpeningMode:\s*['"]business['"]/.test(submitFormSource), 'merchant submit page should default to business opening')
   assert(/accountOpeningMode\s*===\s*['"]personal['"]/.test(submitFormSource), 'merchant submit page should branch personal opening form')
+  assert(submitFormSource.includes('useBusinessName: false'), 'merchant personal opening form must not backfill business license name')
+  assert(submitFormSource.includes('allowedAccountTypes="{{[]}}"'), 'business-license opening must keep both public and private settlement account choices available')
+  assert(!submitFormSource.includes('option-card__desc'), 'opening mode selector must stay compact without long explanatory cards')
   assert(submitFormSource.includes('buildBaofuPersonalProfilePayload') && /['"]merchant['"]/.test(submitFormSource), 'merchant submit page should use personal merchant payload builder')
   assert(submitFormSource.includes('onSubmitPersonal'), 'merchant submit page should provide a personal submit action')
 

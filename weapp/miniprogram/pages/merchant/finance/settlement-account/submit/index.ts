@@ -79,13 +79,11 @@ Page({
     accountOpeningModeOptions: [
       {
         value: 'business',
-        label: '营业执照开户',
-        desc: '使用商户主体资料开户，可按当前规则选择对公或对私结算卡。'
+        label: '营业执照开户'
       },
       {
         value: 'personal',
-        label: '个人开户',
-        desc: '使用个人身份证和本人银行卡开户，仍会继续完成商户报备和小程序授权。'
+        label: '个人开户'
       }
     ],
     form: emptyBaofuEnterpriseProfileForm(),
@@ -104,7 +102,7 @@ Page({
       pageView,
       profileDefaults,
       form: buildBaofuEnterpriseFormFromDefaults(profileDefaults),
-      personalForm: buildBaofuPersonalFormFromDefaults(this.data.personalForm as BaofuPersonalProfileForm, profileDefaults),
+      personalForm: buildBaofuPersonalFormFromDefaults(this.data.personalForm as BaofuPersonalProfileForm, profileDefaults, { useBusinessName: false }),
       bankDraft: buildBaofuEnterpriseBankDraftFromDefaults(profileDefaults),
       canSubmitProfile: pageView.statusView.canSubmitProfile,
       initialLoading: false,

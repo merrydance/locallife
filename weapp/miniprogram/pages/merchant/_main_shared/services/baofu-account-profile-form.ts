@@ -146,10 +146,15 @@ export function validateBaofuEnterpriseProfileForm(
   return ''
 }
 
-export function buildBaofuPersonalFormFromDefaults(current: BaofuPersonalProfileForm, defaults?: BaofuSettlementAccountProfileDefaults | null): BaofuPersonalProfileForm {
+export function buildBaofuPersonalFormFromDefaults(
+  current: BaofuPersonalProfileForm,
+  defaults?: BaofuSettlementAccountProfileDefaults | null,
+  options: { useBusinessName?: boolean } = {}
+): BaofuPersonalProfileForm {
+  const shouldUseBusinessName = options.useBusinessName !== false
   return {
     ...current,
-    name: normalizeText(defaults?.legal_name || defaults?.legal_person_name || current.name),
+    name: normalizeText((shouldUseBusinessName ? defaults?.legal_name || defaults?.legal_person_name : '') || current.name),
     certificate_no: normalizeText(defaults?.certificate_no || current.certificate_no),
     bank_account_no: normalizeText(defaults?.bank_account_no || current.bank_account_no),
     bank_mobile: normalizeText(defaults?.bank_mobile || current.bank_mobile)

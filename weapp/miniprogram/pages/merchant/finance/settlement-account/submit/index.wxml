@@ -41,11 +41,8 @@
 
     <block wx:else>
       <view class="option-group">
-        <t-radio-group value="{{accountOpeningMode}}" bind:change="onOpeningModeChange">
-          <view wx:for="{{accountOpeningModeOptions}}" wx:key="value" class="option-card">
-            <t-radio value="{{item.value}}" label="{{item.label}}" />
-            <text class="option-card__desc">{{item.desc}}</text>
-          </view>
+        <t-radio-group class="opening-mode-radio" value="{{accountOpeningMode}}" bind:change="onOpeningModeChange">
+          <t-radio wx:for="{{accountOpeningModeOptions}}" wx:key="value" value="{{item.value}}" label="{{item.label}}" />
         </t-radio-group>
       </view>
 
@@ -119,7 +116,7 @@
         wx:if="{{accountOpeningMode === 'business'}}"
         initialDraft="{{bankDraft}}"
         defaultAccountType="ACCOUNT_TYPE_BUSINESS"
-        allowedAccountTypes="{{profileDefaults && profileDefaults.settlement_account_allowed_types ? profileDefaults.settlement_account_allowed_types : []}}"
+        allowedAccountTypes="{{[]}}"
         businessAccountName="{{form.legal_name}}"
         privateAccountName="{{form.legal_person_name}}"
         embedded="{{true}}"
