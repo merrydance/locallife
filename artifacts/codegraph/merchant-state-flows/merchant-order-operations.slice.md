@@ -1,6 +1,6 @@
 # Merchant Order Operations Slice
 
-Status: merchant-state flow slice created; manual refund idempotency and pending order-refund recovery repaired 2026-05-31; reject refund submission truth repaired 2026-06-01; Mini Program `order_update` realtime contract repaired 2026-06-02
+Status: merchant-state flow slice created; manual refund idempotency and pending order-refund recovery repaired 2026-05-31; reject refund submission truth repaired 2026-06-01; Mini Program `order_update` realtime contract and Baofu refund-create failure classification repaired 2026-06-02
 Risk class: G3 where merchant actions create or recover refunds; G2 for non-money order status and print transitions
 Scope: merchant order list/detail/kitchen/print anomaly pages -> merchant and kitchen order APIs -> order status/refund/print durable state -> notification, websocket, worker, callback, and recovery paths
 
@@ -109,8 +109,8 @@ Merchant order operations must converge from merchant action to durable order/re
 23. Reject flow cancels the order first, then calls `ProcessMerchantRejectRefund`; any refund error is logged and the service still returns the cancelled order as success, but since 2026-06-01 the result also carries `RefundSubmission`.
     Evidence: `locallife/logic/merchant_order.go:85`, `locallife/logic/merchant_order.go:104`, `locallife/logic/merchant_order.go:115`, `locallife/logic/order_service.go:586`, `locallife/logic/order_service.go:607`, `locallife/logic/order_service.go:612`, `locallife/logic/order_service.go:620`, `locallife/logic/order_service.go:624`.
 
-24. Merchant reject refund creates a refund order, then calls Baofu refund before share. Missing facade leaves the row pending and maps to `pending_recovery`; provider error marks failed and maps to `manual_required`; accepted provider request maps to `accepted`; no paid payment order maps to `not_needed`.
-    Evidence: `locallife/logic/merchant_reject_refund.go:79`, `locallife/logic/merchant_reject_refund.go:92`, `locallife/logic/merchant_reject_refund.go:94`, `locallife/logic/merchant_reject_refund.go:108`, `locallife/logic/merchant_reject_refund.go:115`, `locallife/logic/merchant_reject_refund.go:132`, `locallife/logic/merchant_reject_refund.go:134`, `locallife/logic/merchant_reject_refund.go:144`, `locallife/logic/merchant_reject_refund.go:148`.
+24. Merchant reject refund creates a refund order, then calls Baofu refund before share. Missing facade still maps to recovery/manual guidance; Baofu create failures now use `ClassifyBaofuRefundCreateFailure`: explicit non-retryable failures mark `failed`, retryable create failures keep `pending`, queryable or possible-provider-created failures mark `processing`, and accepted provider requests map to `accepted`; no paid payment order maps to `not_needed`.
+    Evidence: `locallife/logic/merchant_reject_refund.go:79`, `locallife/logic/merchant_reject_refund.go:92`, `locallife/logic/merchant_reject_refund.go:94`, `locallife/logic/merchant_reject_refund.go:108`, `locallife/logic/merchant_reject_refund.go:115`, `locallife/logic/merchant_reject_refund.go:185`, `locallife/logic/merchant_reject_refund.go:187`, `locallife/logic/merchant_reject_refund.go:191`, `locallife/logic/merchant_reject_refund.go:212`, `locallife/logic/merchant_reject_refund.go:214`, `locallife/logic/merchant_reject_refund.go:224`.
 
 25. Manual refund backend requires `Idempotency-Key` in the handler and service before creating or replaying refund orders.
     Evidence: `locallife/api/payment_order.go:1192`, `locallife/api/payment_order.go:1202`, `locallife/api/payment_order.go:1220`, `locallife/api/payment_order.go:1221`, `locallife/api/payment_order.go:1236`, `locallife/api/payment_order.go:1242`, `locallife/logic/refund_service.go:77`, `locallife/logic/refund_service.go:78`, `locallife/logic/refund_service.go:91`, `locallife/logic/refund_service.go:92`.
@@ -118,16 +118,19 @@ Merchant order operations must converge from merchant action to durable order/re
 26. Refund terminal convergence uses Baofu callback/query facts, payment fact application, refund outbox, and notification or alert workers for processing refund rows.
     Evidence: `locallife/logic/payment_fact_application_service.go:187`, `locallife/logic/payment_fact_application_service.go:221`, `locallife/logic/payment_fact_application_service.go:518`, `locallife/logic/payment_fact_application_service.go:536`, `locallife/logic/payment_fact_application_service.go:539`, `locallife/logic/payment_fact_application_service.go:573`, `locallife/logic/payment_fact_application_service.go:1300`, `locallife/logic/payment_fact_application_service.go:1348`, `locallife/worker/task_payment_domain_outbox.go:532`, `locallife/worker/task_payment_domain_outbox.go:594`, `locallife/worker/task_payment_domain_outbox.go:612`, `locallife/worker/task_payment_domain_outbox.go:670`.
 
-27. Refund recovery scans cancelled order payments with no refund row, pending reservation refund rows, and stuck processing refund rows.
-    Evidence: `locallife/worker/refund_recovery_scheduler.go:123`, `locallife/worker/refund_recovery_scheduler.go:129`, `locallife/db/query/payment_order.sql:224`, `locallife/db/query/payment_order.sql:233`, `locallife/worker/refund_recovery_scheduler.go:239`, `locallife/db/query/refund_order.sql:76`, `locallife/db/query/refund_order.sql:87`, `locallife/db/query/refund_order.sql:89`, `locallife/worker/refund_recovery_scheduler.go:285`, `locallife/worker/refund_recovery_scheduler.go:325`.
+27. Refund recovery scans cancelled order payments with no refund row, pending order refund rows for cancelled paid orders, pending reservation refund rows, and stuck processing refund rows.
+    Evidence: `locallife/worker/refund_recovery_scheduler.go:123`, `locallife/worker/refund_recovery_scheduler.go:129`, `locallife/db/query/payment_order.sql:224`, `locallife/db/query/payment_order.sql:233`, `locallife/db/query/refund_order.sql:76`, `locallife/db/query/refund_order.sql:87`, `locallife/db/query/refund_order.sql:89`, `locallife/worker/refund_recovery_scheduler.go:239`, `locallife/worker/refund_recovery_scheduler.go:285`, `locallife/worker/refund_recovery_scheduler.go:325`.
 
-28. Order printing is scheduled by order service, manually scheduled by `PrintMerchantOrder`, executed by the Redis print worker, then updated by direct vendor response or Feieyun callback.
+28. Fixed 2026-06-02: Baofu refund create classification is shared by manual refund, merchant-reject refund, and the refund worker. The Baofu aggregate refund client checks `resultCode=FAIL` before success-response field validation, preserving upstream `errCode` such as `ORDER_EXIST`; retryable transport/provider create errors keep command status `unknown`, queryable errors move to `processing`, and terminal business/config/validation failures remain rejected/failed.
+    Evidence: `locallife/baofu/aggregatepay/client.go:114`, `locallife/baofu/aggregatepay/client.go:125`, `locallife/logic/refund_error_mapping.go:76`, `locallife/logic/refund_error_mapping.go:90`, `locallife/logic/refund_error_mapping.go:98`, `locallife/logic/refund_error_mapping.go:129`, `locallife/logic/refund_error_mapping.go:138`, `locallife/logic/refund_service.go:350`, `locallife/logic/refund_service.go:352`, `locallife/logic/refund_service.go:356`, `locallife/logic/refund_service.go:384`, `locallife/logic/refund_service.go:386`, `locallife/logic/refund_service.go:407`, `locallife/worker/task_process_payment.go:1071`, `locallife/worker/task_process_payment.go:1074`, `locallife/worker/task_process_payment.go:1078`, `locallife/worker/task_process_payment.go:1106`, `locallife/worker/task_process_payment.go:1108`.
+
+29. Order printing is scheduled by order service, manually scheduled by `PrintMerchantOrder`, executed by the Redis print worker, then updated by direct vendor response or Feieyun callback.
     Evidence: `locallife/logic/order_service.go:683`, `locallife/logic/order_service.go:701`, `locallife/logic/order_service.go:705`, `locallife/logic/order_service.go:709`, `locallife/logic/order_service.go:726`, `locallife/logic/order_service.go:733`, `locallife/logic/order_service.go:737`, `locallife/worker/task_print_order.go:178`, `locallife/worker/task_print_order.go:192`, `locallife/worker/task_print_order.go:204`, `locallife/worker/task_print_order.go:253`, `locallife/api/feieyun_callback.go:17`, `locallife/api/feieyun_callback.go:72`, `locallife/api/feieyun_callback.go:84`.
 
-29. Timed print anomaly scheduler scans stale `print_logs` and publishes platform alerts.
+30. Timed print anomaly scheduler scans stale `print_logs` and publishes platform alerts.
     Evidence: `locallife/scheduler/data_cleanup.go:29`, `locallife/scheduler/data_cleanup.go:136`, `locallife/scheduler/data_cleanup.go:651`, `locallife/scheduler/data_cleanup.go:656`, `locallife/scheduler/data_cleanup.go:674`, `locallife/scheduler/data_cleanup.go:685`.
 
-30. Fixed 2026-06-02: backend publishes merchant order snapshots as `order_update`; the websocket package declares that message type; Mini Program order list/detail and kitchen board/detail subscribe to `order_update` and rehydrate from backend truth.
+31. Fixed 2026-06-02: backend publishes merchant order snapshots as `order_update`; the websocket package declares that message type; Mini Program order list/detail and kitchen board/detail subscribe to `order_update` and rehydrate from backend truth.
     Evidence: `locallife/api/logic_adapters.go:53`, `locallife/api/logic_adapters.go:77`, `weapp/miniprogram/pages/merchant/_main_shared/utils/websocket.ts:10`, `weapp/miniprogram/pages/merchant/_main_shared/utils/websocket.ts:12`, `weapp/miniprogram/pages/merchant/orders/list/index.ts:168`, `weapp/miniprogram/pages/merchant/orders/list/index.ts:172`, `weapp/miniprogram/pages/merchant/kitchen/index.ts:268`, `weapp/miniprogram/pages/merchant/kitchen/index.ts:273`.
 
 ## Reverse-Reference Findings
@@ -138,7 +141,7 @@ Merchant order operations must converge from merchant action to durable order/re
 - `CompleteOrderTx` is broader than merchant completion logic. Merchant logic allows ready-only non-takeout completion, while the SQL primitive allows any non-cancelled/non-completed order. DB tests use it from non-merchant flows, so it should be documented as a broad shared primitive/refactor risk rather than immediately called a defect.
 - Fixed 2026-05-31 in `6a19a9c0`: manual refund creation now satisfies the frontend/backend idempotency header contract and has a Mini Program wrapper contract test.
 - Fixed 2026-06-01: reject-order refund remains a two-step product workflow, but the API/UI now exposes refund submission truth through `refund_submission` instead of overclaiming that refund submission always started.
-- Partially fixed 2026-05-31 in `d3e84050`: refund rows that exist and are stuck in `pending` for cancelled paid normal orders are now recovered with their original `out_refund_no`. Existing terminal `failed` rows still need provider error-classification before automatic retry can be safe.
+- Fixed for new writes 2026-06-02: Baofu refund create/provider errors are classified before writing refund state. Retryable failures keep rows `pending`, queryable or possible-provider-created failures become `processing`, and explicit terminal failures become `failed`. Existing historical terminal `failed` rows still require durable command/fact evidence before any migration or automatic retry can be safe.
 - Fixed 2026-06-02: merchant order websocket status updates now refresh Mini Program order list/detail and kitchen board/detail through `order_update` subscriptions.
 - Kitchen realtime stops entirely when open-status refresh fails, which can turn an auxiliary status-check failure into stale kitchen order realtime.
 - Printing has both order-operation consumers and configuration owners. Device/display configuration should be audited separately because `auto_accept_paid_orders`, `enable_print`, trigger mode, and printer registration are outside this flow.
@@ -173,8 +176,8 @@ Merchant order operations must converge from merchant action to durable order/re
 - Flutter order actions use per-order single-flight futures, and new-order alert processing uses message/order deduplication plus pending-alert stores.
 - Backend status writes are conditional on expected status, so a repeated accept/ready/reject after the first successful transition fails instead of reapplying the same state.
 - Merchant status actions do not accept request idempotency keys. Re-entry behavior depends on state-conditional updates and frontend reload.
-- Manual refund backend requires `Idempotency-Key`, computes a request hash, and replays or rejects duplicate create attempts. Since `6a19a9c0`, the Mini Program wrapper sends the key and order detail reuses the same key for retry of an unchanged draft.
-- Merchant reject refund path creates a new refund row directly and does not use the public manual-refund idempotency table. Since `d3e84050`, pending normal-order refund rows for cancelled paid orders are recovered by original `out_refund_no`; since 2026-06-01, provider submission outcome is surfaced as `refund_submission`; automatic retry of terminal `failed` rows remains intentionally open.
+- Manual refund backend requires `Idempotency-Key`, computes a request hash, and replays or rejects duplicate create attempts. Since `6a19a9c0`, the Mini Program wrapper sends the key and order detail reuses the same key for retry of an unchanged draft; since 2026-06-02, replay of a still-`pending` refund resubmits the same `out_refund_no` instead of treating the pending row as final success.
+- Merchant reject refund path creates a new refund row directly and does not use the public manual-refund idempotency table. Since `d3e84050`, pending normal-order refund rows for cancelled paid orders are recovered by original `out_refund_no`; since 2026-06-01, provider submission outcome is surfaced as `refund_submission`; since 2026-06-02, new retryable/queryable Baofu create failures no longer become terminal `failed`.
 - Print worker dedupes accepted/ready re-entry per printer by task key; manual print intentionally creates a new task when manual mode is enabled.
 - Feieyun callback updates by vendor order id. Unknown vendor order returns a retryable failure response to the provider.
 
@@ -187,7 +190,7 @@ Merchant order operations must converge from merchant action to durable order/re
 - Accepted/ready status transitions enqueue print tasks according to display/printer config; manual print can create a task only when manual trigger mode is enabled.
 - Print execution writes `print_logs`, updates success/failed/pending, consumes Feieyun result callbacks, and surfaces anomalies through list/status/retry APIs and timed alert scheduler.
 - Manual refunds poll the refund order after creation; terminal truth comes from provider callbacks/query facts applied by payment fact service and payment-domain outbox workers.
-- Refund recovery covers cancelled order payments with no refund row, pending normal-order refund rows for cancelled paid orders, pending reservation refund rows, and stuck `processing` refund rows. It still does not automatically retry terminal `failed` rows after provider create failure.
+- Refund recovery covers cancelled order payments with no refund row, pending normal-order refund rows for cancelled paid orders, pending reservation refund rows, and stuck `processing` refund rows. It still does not automatically retry historical terminal `failed` rows after provider create failure.
 
 ## Frontend Draft And Backend Rehydration
 
@@ -226,13 +229,13 @@ Backend state branches:
 - Reject path branches: order cancellation commits first; refund creation/provider submission runs after cancellation and does not make the API fail when refund submission fails; since 2026-06-01 the response returns `refund_submission` so clients can distinguish accepted, pending recovery, manual required, and not-needed states.
 - Complete path branch: merchant logic guards ready-only non-takeout completion, while `CompleteOrderTx` itself is broader and should remain treated as a shared primitive, not a merchant-only invariant.
 - Print scheduling branches: accepted/ready automatic print via display config; manual print requires manual trigger mode; worker filters printer type/order type/role and dedupes by task key.
-- Refund branches: manual refund uses idempotency table and refund orchestrator; merchant-reject refund creates a refund order directly and uses Baofu refund-before-share command path.
+- Refund branches: manual refund uses idempotency table and refund orchestrator; merchant-reject refund creates a refund order directly and uses Baofu refund-before-share command path. New Baofu create failures branch into retryable `pending`, queryable `processing`, or terminal `failed` based on provider classification.
 
 Async branches:
 
 - Fixed 2026-06-02: merchant order websocket publish uses `order_update`, and Mini Program order/kitchen subscribers consume that type for cross-terminal backend-truth refresh.
 - Payment/refund terminal truth flows through Baofu callback/query facts, payment fact application, payment-domain outbox, and notification/alert workers.
-- Refund recovery scans no-refund cancelled payments, pending normal-order refunds, pending reservation refunds, and stuck `processing` refunds; it does not cover retryable terminal `failed` rows after merchant reject.
+- Refund recovery scans no-refund cancelled payments, pending normal-order refunds, pending reservation refunds, and stuck `processing` refunds; it does not cover historical terminal `failed` rows after merchant reject unless a future evidence-backed reconciliation explicitly promotes them.
 - Print async branches include Redis print worker, Feieyun direct response, Feieyun callback by vendor order id, retry print jobs, manual print jobs, and timed print anomaly scheduler.
 - Flutter local notification/foreground/polling branches can trigger local auto-accept and BLE print; backend observes only the ordinary accept call, not the local alert or local print side effect.
 
@@ -242,7 +245,7 @@ Failure and retry branches:
 - Flutter status actions have per-order single-flight futures; incoming alerts have message/order dedupe and pending-alert stores. Cross-channel duplicate proof still needs tests because push, websocket, and polling can race.
 - Fixed 2026-05-31 in `6a19a9c0`: manual refund retry reuses the same idempotency key for the same unchanged refund draft.
 - Fixed 2026-06-01: reject refund ambiguous/provider failures still leave `orders.status=cancelled`, but the API/UI now exposes pending-recovery or manual-required refund submission state.
-- Fixed 2026-05-31 in `d3e84050`: provider-accepted or locally-created order refund rows left in `pending` can now be picked up by refund recovery for cancelled paid normal orders.
+- Fixed 2026-06-02: retryable Baofu create errors keep new refund rows `pending` for retry/recovery, while queryable duplicate/unknown provider-created errors move to `processing` for callback/query convergence.
 - BLE print failure is App-local and has no backend recovery, print log, or merchant-visible reconciliation path.
 
 Reader and consumer branches:
@@ -265,7 +268,7 @@ Zombie and unreachable branches:
 - `CompleteOrderTx` is broader than merchant completion logic and is a refactor risk if reused without caller-side guard.
 - Fixed 2026-06-02: Mini Program websocket `order_update` handling is reachable through the shared enum and order/kitchen subscribers.
 - Fixed 2026-05-31 in `6a19a9c0`: manual refund UI path now sends `Idempotency-Key`.
-- Partially fixed 2026-05-31 in `d3e84050`: existing pending order refund rows after merchant reject are now picked up; terminal `failed` rows are still not retried automatically.
+- Fixed for new writes 2026-06-02: existing pending order refund rows after merchant reject are picked up, and new retryable/queryable Baofu create errors avoid terminal `failed`; historical terminal `failed` rows are still not retried automatically by status alone.
 - Flutter local auto-accept and backend display-config auto-accept are distinct paths; neither is a zombie, but the dual-control contract is undocumented.
 
 Test-proof gaps:
@@ -293,7 +296,7 @@ Observed tests:
 Missing high-value tests:
 
 - Fixed 2026-06-01: API/logic tests prove merchant reject surfaces refund-submission state for not-needed, pending-recovery, and manual-required branches.
-- Refund recovery tests for eligible retryable `failed` rows after merchant reject, once provider error classification defines safe retry behavior.
+- Optional historical refund reconciliation tests, only if a future migration proves retryable/queryable `failed` rows from durable command/fact evidence and intentionally promotes them.
 - Fixed 2026-06-02: Mini Program contract test proves `order_update` is declared and wired to order list/detail plus kitchen board/detail refresh handlers.
 - Kitchen realtime degradation test for open-status refresh failure.
 - Flutter App contract tests proving local auto-accept uses the same backend accept endpoint, dedupes push/poll/websocket duplicates, and does not double-print BLE receipts after retries.
@@ -302,7 +305,7 @@ Missing high-value tests:
 
 - Fixed 2026-05-31 in `6a19a9c0`: manual refund wrapper/header is now present and covered by a Mini Program contract test.
 - Fixed 2026-06-01: reject-order copy now comes from backend `refund_submission.message`, and the backend contract distinguishes accepted, pending recovery, manual required, and not needed.
-- Partially fixed 2026-05-31 in `d3e84050`: refund recovery now covers order refund rows stuck in `pending` and uses original `out_refund_no`; `failed` retry remains open pending provider duplicate/error classification.
+- Fixed for new writes 2026-06-02: refund recovery covers order refund rows stuck in `pending` and uses original `out_refund_no`; Baofu create/provider errors now classify retryable, queryable, and terminal outcomes before writing refund state. Historical `failed` retry remains a separate evidence-backed reconciliation question.
 - Fixed 2026-06-02: websocket message types were aligned by adding `order_update` handling in Mini Program order/kitchen flows and a durable contract script.
 - Keep `CompleteOrderTx` broad only if all callers deliberately guard it before use. If refactoring, rename or split it to avoid accidental merchant-like use without ready-state checks.
 - Decide product semantics for the two auto-accept controls: backend display-config `auto_accept_paid_orders` plus cloud-printer gating, and Flutter App local `autoAcceptEnabled` on new-order alerts. They currently coexist and can both accept the same order through conditional backend status logic.

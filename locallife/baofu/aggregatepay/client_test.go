@@ -114,6 +114,21 @@ func TestAggregateClientReturnsBusinessErrorForShareQueryFailureWithoutTxnState(
 	require.Equal(t, "上游原始订单不存在", providerErr.UpstreamMessage)
 }
 
+func TestAggregateClientReturnsBusinessErrorForRefundFailureWithoutSuccessFields(t *testing.T) {
+	doer := &aggregateRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"FAIL","errCode":"ORDER_EXIST","errMsg":"上游原始订单已存在","outTradeNo":"RF202605040001"}`)}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	_, err := client.CreateRefund(context.Background(), validRefundBeforeShareRequestForClientTest())
+
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "上游原始订单已存在")
+	var providerErr *baofu.ProviderError
+	require.ErrorAs(t, err, &providerErr)
+	require.Equal(t, "order_refund", providerErr.Operation)
+	require.Equal(t, "ORDER_EXIST", providerErr.UpstreamCode)
+	require.Equal(t, "上游原始订单已存在", providerErr.UpstreamMessage)
+}
+
 func TestAggregateClientValidatesBusinessFailurePayloadBeforeReturningProviderError(t *testing.T) {
 	doer := &aggregateRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"FAIL","errCode":"MERCHANT_NOT_REPORT","errMsg":"上游原始报备错误","outTradeNo":"BF202605040001","payCode":"WECHAT_JSAPI"}`)}
 	client := NewClient(testBaofuRootClient(t, doer))

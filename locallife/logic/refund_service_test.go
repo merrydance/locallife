@@ -197,7 +197,7 @@ func TestCreateRefundOrder_IdempotencyReplayReturnsExistingRefundWithoutProvider
 
 	merchant := db.Merchant{ID: 745, OwnerUserID: 168}
 	paymentOrderID := int64(723)
-	existingRefund := db.RefundOrder{ID: 756, PaymentOrderID: paymentOrderID, OutRefundNo: "RF-idempotency-replay-existing", Status: "processing"}
+	existingRefund := db.RefundOrder{ID: 756, PaymentOrderID: paymentOrderID, RefundAmount: 300, OutRefundNo: "RF-idempotency-replay-existing", Status: "processing"}
 	input := CreateRefundOrderInput{
 		ActorUserID:    merchant.OwnerUserID,
 		PaymentOrderID: paymentOrderID,
@@ -463,7 +463,7 @@ func TestCreateRefundOrder_BaofuPreShareRefundRejectedRecordsGuidanceFromRefundR
 	_, err := service.CreateRefundOrder(context.Background(), input)
 
 	requestErr := assertRequestError(t, err)
-	require.Equal(t, http.StatusBadGateway, requestErr.Status)
+	require.Equal(t, http.StatusBadRequest, requestErr.Status)
 }
 
 func TestCreateRefundOrder_BaofuPreShareRefundFallsBackToOriginOutTradeNoWhenTransactionIDMissing(t *testing.T) {
@@ -734,6 +734,284 @@ func TestCreateRefundOrder_BaofuPreShareRefundProviderErrorRecordsCommandRejecte
 
 	requestErr := assertRequestError(t, err)
 	require.Equal(t, http.StatusBadRequest, requestErr.Status)
+}
+
+func TestCreateRefundOrder_BaofuRetryableProviderErrorDoesNotFailRefund(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	baofuClient := &fakeBaofuRefundAggregateClient{
+		refundErr: &baofu.ProviderError{
+			Operation:       "order_refund",
+			UpstreamCode:    "SYSTEM_BUSY",
+			UpstreamMessage: "raw upstream retryable detail",
+			Frontend:        baofu.ClassifyBaofuError("SYSTEM_BUSY", "raw upstream retryable detail").FrontendGuidance(),
+		},
+	}
+	service := NewRefundService(
+		store,
+		NewDefaultPaymentFacadeWithBaofuAggregate(store, nil, baofuClient, BaofuAggregateFacadeConfig{
+			CollectMerchantID: "102004465",
+			CollectTerminalID: "200005200",
+			RefundNotifyURL:   "https://api.example.com/v1/webhooks/baofu/refund",
+		}),
+		nil,
+		nil,
+		refundServiceIDGeneratorStub{outRefundNo: "RF-baofu-retryable"},
+	)
+
+	merchant := db.Merchant{ID: 648, OwnerUserID: 71}
+	paymentOrder := db.PaymentOrder{
+		ID:             626,
+		Amount:         1000,
+		Status:         "paid",
+		PaymentType:    "miniprogram",
+		PaymentChannel: db.PaymentChannelBaofuAggregate,
+		BusinessType:   businessTypeOrder,
+		OrderID:        pgtype.Int8{Int64: 637, Valid: true},
+		OutTradeNo:     "BF202605040004",
+		TransactionID:  pgtype.Text{String: "BFPAY_UP_202605040004", Valid: true},
+	}
+	order := db.Order{ID: 637, MerchantID: merchant.ID}
+	refundOrder := db.RefundOrder{ID: 659, PaymentOrderID: paymentOrder.ID, OutRefundNo: "RF-baofu-retryable", Status: "pending"}
+	input := CreateRefundOrderInput{
+		ActorUserID:    merchant.OwnerUserID,
+		PaymentOrderID: paymentOrder.ID,
+		RefundType:     "full",
+		RefundAmount:   300,
+		RefundReason:   "用户申请退款",
+		IdempotencyKey: "refund-retryable",
+	}
+
+	store.EXPECT().GetMerchantByOwner(gomock.Any(), merchant.OwnerUserID).Return(merchant, nil)
+	expectNoRefundCreateReplay(t, store, input)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
+	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
+	store.EXPECT().
+		GetBaofuPaymentOrderRefundGuardForUpdate(gomock.Any(), paymentOrder.ID).
+		Return(db.GetBaofuPaymentOrderRefundGuardForUpdateRow{
+			ID:                      paymentOrder.ID,
+			Status:                  paymentOrder.Status,
+			PaymentChannel:          db.PaymentChannelBaofuAggregate,
+			HasStartedProfitSharing: false,
+		}, nil)
+	store.EXPECT().CreateRefundOrderTx(gomock.Any(), db.CreateRefundOrderTxParams{
+		PaymentOrderID:            paymentOrder.ID,
+		RefundType:                "full",
+		RefundAmount:              300,
+		RefundReason:              "用户申请退款",
+		OutRefundNo:               refundOrder.OutRefundNo,
+		IdempotencyOperationScope: refundCreateIdempotencyScope,
+		IdempotencyActorUserID:    merchant.OwnerUserID,
+		IdempotencyKey:            input.IdempotencyKey,
+		IdempotencyRequestHash:    refundCreateRequestHash(input),
+	}).Return(db.CreateRefundOrderTxResult{RefundOrder: refundOrder}, nil)
+	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
+		require.Equal(t, db.ExternalPaymentProviderBaofu, arg.Provider)
+		require.Equal(t, db.PaymentChannelBaofuAggregate, arg.Channel)
+		require.Equal(t, db.ExternalPaymentCapabilityBaofuRefund, arg.Capability)
+		require.Equal(t, db.ExternalPaymentCommandStatusUnknown, arg.CommandStatus)
+		require.False(t, arg.RejectedAt.Valid)
+		require.True(t, arg.LastErrorCode.Valid)
+		require.Equal(t, "SYSTEM_BUSY", arg.LastErrorCode.String)
+		require.True(t, arg.LastErrorMessage.Valid)
+		require.Equal(t, "支付通道处理中，请稍后重试，retry_later", arg.LastErrorMessage.String)
+		require.NotContains(t, arg.LastErrorMessage.String, "raw upstream")
+		require.Contains(t, string(arg.ResponseSnapshot), refundOrder.OutRefundNo)
+		require.Contains(t, string(arg.ResponseSnapshot), "SYSTEM_BUSY")
+		require.NotContains(t, string(arg.ResponseSnapshot), "raw upstream")
+		return db.ExternalPaymentCommand{ID: 9905}, nil
+	})
+
+	_, err := service.CreateRefundOrder(context.Background(), input)
+
+	requestErr := assertRequestError(t, err)
+	require.Equal(t, http.StatusServiceUnavailable, requestErr.Status)
+}
+
+func TestCreateRefundOrder_BaofuOrderExistMarksProcessingForQueryRecovery(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	baofuClient := &fakeBaofuRefundAggregateClient{
+		refundErr: &baofu.ProviderError{
+			Operation:       "order_refund",
+			UpstreamCode:    "ORDER_EXIST",
+			UpstreamMessage: "raw upstream duplicate detail",
+			Frontend:        baofu.ClassifyBaofuError("ORDER_EXIST", "raw upstream duplicate detail").FrontendGuidance(),
+		},
+	}
+	service := NewRefundService(
+		store,
+		NewDefaultPaymentFacadeWithBaofuAggregate(store, nil, baofuClient, BaofuAggregateFacadeConfig{
+			CollectMerchantID: "102004465",
+			CollectTerminalID: "200005200",
+			RefundNotifyURL:   "https://api.example.com/v1/webhooks/baofu/refund",
+		}),
+		nil,
+		nil,
+		refundServiceIDGeneratorStub{outRefundNo: "RF-baofu-order-exist"},
+	)
+
+	merchant := db.Merchant{ID: 650, OwnerUserID: 73}
+	paymentOrder := db.PaymentOrder{
+		ID:             628,
+		Amount:         1000,
+		Status:         "paid",
+		PaymentType:    "miniprogram",
+		PaymentChannel: db.PaymentChannelBaofuAggregate,
+		BusinessType:   businessTypeOrder,
+		OrderID:        pgtype.Int8{Int64: 639, Valid: true},
+		OutTradeNo:     "BF202606020002",
+		TransactionID:  pgtype.Text{String: "BFPAY_UP_202606020002", Valid: true},
+	}
+	order := db.Order{ID: 639, MerchantID: merchant.ID}
+	refundOrder := db.RefundOrder{ID: 661, PaymentOrderID: paymentOrder.ID, RefundAmount: 300, OutRefundNo: "RF-baofu-order-exist", Status: "pending"}
+	input := CreateRefundOrderInput{
+		ActorUserID:    merchant.OwnerUserID,
+		PaymentOrderID: paymentOrder.ID,
+		RefundType:     "full",
+		RefundAmount:   300,
+		RefundReason:   "用户申请退款",
+		IdempotencyKey: "refund-order-exist",
+	}
+
+	store.EXPECT().GetMerchantByOwner(gomock.Any(), merchant.OwnerUserID).Return(merchant, nil)
+	expectNoRefundCreateReplay(t, store, input)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
+	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
+	store.EXPECT().
+		GetBaofuPaymentOrderRefundGuardForUpdate(gomock.Any(), paymentOrder.ID).
+		Return(db.GetBaofuPaymentOrderRefundGuardForUpdateRow{
+			ID:                      paymentOrder.ID,
+			Status:                  paymentOrder.Status,
+			PaymentChannel:          db.PaymentChannelBaofuAggregate,
+			HasStartedProfitSharing: false,
+		}, nil)
+	store.EXPECT().CreateRefundOrderTx(gomock.Any(), db.CreateRefundOrderTxParams{
+		PaymentOrderID:            paymentOrder.ID,
+		RefundType:                "full",
+		RefundAmount:              300,
+		RefundReason:              "用户申请退款",
+		OutRefundNo:               refundOrder.OutRefundNo,
+		IdempotencyOperationScope: refundCreateIdempotencyScope,
+		IdempotencyActorUserID:    merchant.OwnerUserID,
+		IdempotencyKey:            input.IdempotencyKey,
+		IdempotencyRequestHash:    refundCreateRequestHash(input),
+	}).Return(db.CreateRefundOrderTxResult{RefundOrder: refundOrder}, nil)
+	store.EXPECT().UpdateRefundOrderToProcessing(gomock.Any(), db.UpdateRefundOrderToProcessingParams{
+		ID:       refundOrder.ID,
+		RefundID: pgtype.Text{},
+	}).Return(db.RefundOrder{ID: refundOrder.ID, Status: "processing", OutRefundNo: refundOrder.OutRefundNo}, nil)
+	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
+		require.Equal(t, db.ExternalPaymentCommandStatusUnknown, arg.CommandStatus)
+		require.False(t, arg.RejectedAt.Valid)
+		require.True(t, arg.LastErrorCode.Valid)
+		require.Equal(t, "ORDER_EXIST", arg.LastErrorCode.String)
+		return db.ExternalPaymentCommand{ID: 9907}, nil
+	})
+	store.EXPECT().GetRefundOrder(gomock.Any(), refundOrder.ID).Return(db.RefundOrder{ID: refundOrder.ID, Status: "processing", OutRefundNo: refundOrder.OutRefundNo}, nil)
+
+	result, err := service.CreateRefundOrder(context.Background(), input)
+
+	require.NoError(t, err)
+	require.Equal(t, "processing", result.RefundOrder.Status)
+	require.Equal(t, refundOrder.OutRefundNo, baofuClient.lastRefundRequest.OutTradeNo)
+}
+
+func TestCreateRefundOrder_ReplaysPendingRefundByResubmittingSameOutRefundNo(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	baofuClient := &fakeBaofuRefundAggregateClient{
+		refundResult: &aggregatecontracts.RefundResult{
+			OutTradeNo:      "RF-baofu-pending-replay",
+			TradeNo:         "BFREFUND202606020001",
+			RefundState:     aggregatecontracts.RefundStateAccepted,
+			ResultCode:      aggregatecontracts.BusinessResultCodeSuccess,
+			RefundAmountFen: 300,
+			TotalAmountFen:  300,
+		},
+	}
+	service := NewRefundService(
+		store,
+		NewDefaultPaymentFacadeWithBaofuAggregate(store, nil, baofuClient, BaofuAggregateFacadeConfig{
+			CollectMerchantID: "102004465",
+			CollectTerminalID: "200005200",
+			RefundNotifyURL:   "https://api.example.com/v1/webhooks/baofu/refund",
+		}),
+		nil,
+		nil,
+		refundServiceIDGeneratorStub{outRefundNo: "RF-should-not-be-used"},
+	)
+
+	merchant := db.Merchant{ID: 649, OwnerUserID: 72}
+	paymentOrder := db.PaymentOrder{
+		ID:             627,
+		Amount:         1000,
+		Status:         "paid",
+		PaymentType:    "miniprogram",
+		PaymentChannel: db.PaymentChannelBaofuAggregate,
+		BusinessType:   businessTypeOrder,
+		OrderID:        pgtype.Int8{Int64: 638, Valid: true},
+		OutTradeNo:     "BF202606020001",
+		TransactionID:  pgtype.Text{String: "BFPAY_UP_202606020001", Valid: true},
+	}
+	order := db.Order{ID: 638, MerchantID: merchant.ID}
+	refundOrder := db.RefundOrder{
+		ID:             660,
+		PaymentOrderID: paymentOrder.ID,
+		RefundAmount:   300,
+		OutRefundNo:    "RF-baofu-pending-replay",
+		Status:         "pending",
+	}
+	input := CreateRefundOrderInput{
+		ActorUserID:    merchant.OwnerUserID,
+		PaymentOrderID: paymentOrder.ID,
+		RefundType:     "full",
+		RefundAmount:   300,
+		RefundReason:   "用户申请退款",
+		IdempotencyKey: "refund-pending-replay",
+	}
+
+	store.EXPECT().GetMerchantByOwner(gomock.Any(), merchant.OwnerUserID).Return(merchant, nil)
+	store.EXPECT().GetRefundRequestIdempotency(gomock.Any(), db.GetRefundRequestIdempotencyParams{
+		OperationScope: refundCreateIdempotencyScope,
+		ActorUserID:    input.ActorUserID,
+		IdempotencyKey: input.IdempotencyKey,
+	}).Return(db.RefundRequestIdempotency{
+		OperationScope: refundCreateIdempotencyScope,
+		ActorUserID:    input.ActorUserID,
+		IdempotencyKey: input.IdempotencyKey,
+		RequestHash:    refundCreateRequestHash(input),
+		RefundOrderID:  refundOrder.ID,
+	}, nil)
+	store.EXPECT().GetRefundOrder(gomock.Any(), refundOrder.ID).Return(refundOrder, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
+	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
+	store.EXPECT().
+		GetBaofuPaymentOrderRefundGuardForUpdate(gomock.Any(), paymentOrder.ID).
+		Return(db.GetBaofuPaymentOrderRefundGuardForUpdateRow{
+			ID:                      paymentOrder.ID,
+			Status:                  paymentOrder.Status,
+			PaymentChannel:          db.PaymentChannelBaofuAggregate,
+			HasStartedProfitSharing: false,
+		}, nil)
+	store.EXPECT().UpdateRefundOrderToProcessing(gomock.Any(), db.UpdateRefundOrderToProcessingParams{
+		ID:       refundOrder.ID,
+		RefundID: pgtype.Text{String: "BFREFUND202606020001", Valid: true},
+	}).Return(db.RefundOrder{ID: refundOrder.ID, Status: "processing"}, nil)
+	expectRefundServiceExternalRefundCommand(t, store, db.PaymentChannelBaofuAggregate, db.ExternalPaymentCapabilityBaofuRefund, refundOrder.ID, refundOrder.OutRefundNo, "BFREFUND202606020001", db.ExternalPaymentCommandStatusAccepted, "", 9906, db.ExternalPaymentProviderBaofu)
+	store.EXPECT().GetRefundOrder(gomock.Any(), refundOrder.ID).Return(db.RefundOrder{ID: refundOrder.ID, Status: "processing", OutRefundNo: refundOrder.OutRefundNo}, nil)
+
+	result, err := service.CreateRefundOrder(context.Background(), input)
+
+	require.NoError(t, err)
+	require.Equal(t, "processing", result.RefundOrder.Status)
+	require.Equal(t, refundOrder.OutRefundNo, baofuClient.lastRefundRequest.OutTradeNo)
 }
 
 func TestCreateRefundOrder_RejectsMainBusinessNonBaofuPaymentOrder(t *testing.T) {

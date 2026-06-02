@@ -122,11 +122,11 @@ func (c *HTTPClient) CreateRefund(ctx context.Context, req contracts.RefundBefor
 	if err := c.root.PostAggregatePay(ctx, "order_refund", req, &result); err != nil {
 		return nil, err
 	}
-	if err := result.ValidateOrderRefundResponseForRequest(req); err != nil {
-		return nil, baofu.NewProviderContractError("order_refund", err)
-	}
 	if err := aggregateBusinessFailureError("order_refund", result.ResultCode, result.ErrorCode, result.ErrorMessage); err != nil {
 		return nil, err
+	}
+	if err := result.ValidateOrderRefundResponseForRequest(req); err != nil {
+		return nil, baofu.NewProviderContractError("order_refund", err)
 	}
 	return &result, nil
 }

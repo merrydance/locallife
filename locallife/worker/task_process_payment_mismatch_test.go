@@ -7,6 +7,7 @@ import (
 
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/merrydance/locallife/baofu"
 	aggregatecontracts "github.com/merrydance/locallife/baofu/aggregatepay/contracts"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -230,6 +231,86 @@ func TestProcessTaskInitiateRefund_OrderRefundUsesProvidedOutRefundNo(t *testing
 	require.Equal(t, refundOrder.OutRefundNo, baofuClient.lastRefundRequest.OutTradeNo)
 	require.Equal(t, int64(3600), baofuClient.lastRefundRequest.RefundAmountFen)
 	require.Equal(t, int64(3600), baofuClient.lastRefundRequest.TotalAmountFen)
+}
+
+func TestProcessTaskInitiateRefund_OrderRefundBaofuOrderExistMarksProcessingForQueryRecovery(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	baofuClient := &fakeWorkerBaofuRefundClient{
+		err: &baofu.ProviderError{
+			Operation:       "order_refund",
+			UpstreamCode:    "ORDER_EXIST",
+			UpstreamMessage: "raw upstream duplicate detail",
+			Frontend:        baofu.ClassifyBaofuError("ORDER_EXIST", "raw upstream duplicate detail").FrontendGuidance(),
+		},
+	}
+
+	paymentOrder := db.PaymentOrder{
+		ID:                    11,
+		OutTradeNo:            "ORDER_PAY_11",
+		TransactionID:         pgtype.Text{String: "BF_PAY_11", Valid: true},
+		Amount:                3900,
+		Status:                "paid",
+		BusinessType:          db.ExternalPaymentBusinessOwnerOrder,
+		PaymentType:           "profit_sharing",
+		PaymentChannel:        db.PaymentChannelBaofuAggregate,
+		RequiresProfitSharing: true,
+		OrderID:               toPgInt8(21),
+	}
+	order := db.Order{ID: 21, MerchantID: 31}
+	refundOrder := db.RefundOrder{
+		ID:             101,
+		PaymentOrderID: paymentOrder.ID,
+		Status:         "pending",
+		OutRefundNo:    "BFRFD_MERCHANT_REJECT_011",
+		RefundAmount:   3900,
+	}
+
+	store.EXPECT().
+		GetPaymentOrder(gomock.Any(), paymentOrder.ID).
+		Return(paymentOrder, nil)
+	store.EXPECT().
+		GetOrder(gomock.Any(), order.ID).
+		Return(order, nil)
+	store.EXPECT().
+		GetRefundOrderByOutRefundNo(gomock.Any(), refundOrder.OutRefundNo).
+		Return(refundOrder, nil)
+	store.EXPECT().
+		UpdateRefundOrderToProcessing(gomock.Any(), db.UpdateRefundOrderToProcessingParams{
+			ID:       refundOrder.ID,
+			RefundID: pgtype.Text{},
+		}).
+		Return(db.RefundOrder{
+			ID:             refundOrder.ID,
+			PaymentOrderID: refundOrder.PaymentOrderID,
+			Status:         "processing",
+			OutRefundNo:    refundOrder.OutRefundNo,
+			RefundAmount:   refundOrder.RefundAmount,
+		}, nil)
+	expectWorkerExternalRefundCommand(t, store, db.ExternalPaymentProviderBaofu, db.PaymentChannelBaofuAggregate, db.ExternalPaymentCapabilityBaofuRefund, refundOrder.ID, refundOrder.OutRefundNo, "", db.ExternalPaymentBusinessOwnerOrder, db.ExternalPaymentCommandStatusUnknown, "ORDER_EXIST", 9711)
+
+	processor := worker.NewTestTaskProcessor(store, nil, nil, nil)
+	processor.SetBaofuAggregateClient(baofuClient, worker.BaofuProfitSharingWorkerConfig{
+		CollectMerchantID: "COLLECT_MER",
+		CollectTerminalID: "COLLECT_TER",
+		RefundNotifyURL:   "https://api.example.com/v1/webhooks/baofu/refund",
+	})
+	payloadBytes, err := json.Marshal(worker.PayloadProcessRefund{
+		PaymentOrderID: paymentOrder.ID,
+		OrderID:        order.ID,
+		RefundAmount:   refundOrder.RefundAmount,
+		Reason:         "商户拒单：临时缺货",
+		OutRefundNo:    refundOrder.OutRefundNo,
+	})
+	require.NoError(t, err)
+
+	task := asynq.NewTask(worker.TaskProcessRefund, payloadBytes)
+	err = processor.ProcessTaskInitiateRefund(context.Background(), task)
+	require.NoError(t, err)
+	require.True(t, baofuClient.called)
+	require.Equal(t, refundOrder.OutRefundNo, baofuClient.lastRefundRequest.OutTradeNo)
 }
 
 func TestProcessTaskInitiateRefund_OrderRefundRejectsProvidedOutRefundNoPaymentMismatch(t *testing.T) {

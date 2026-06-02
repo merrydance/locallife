@@ -93,8 +93,12 @@ func (s *RefundService) CreateRefundOrder(ctx context.Context, input CreateRefun
 	if err != nil {
 		return CreateRefundOrderResult{}, err
 	}
-	if replayHandled {
+	var pendingReplay *db.RefundOrder
+	if replayHandled && replay.RefundOrder.Status != "pending" {
 		return replay, nil
+	}
+	if replayHandled {
+		pendingReplay = &replay.RefundOrder
 	}
 
 	paymentOrder, err := s.store.GetPaymentOrder(ctx, input.PaymentOrderID)
@@ -137,30 +141,35 @@ func (s *RefundService) CreateRefundOrder(ctx context.Context, input CreateRefun
 	if guard.HasStartedProfitSharing {
 		return CreateRefundOrderResult{}, NewRequestError(http.StatusBadRequest, errors.New("订单已进入结算分账流程，不支持退款"))
 	}
-	outRefundNo, err := s.idGenerator.OutRefundNo(s.clock.Now())
-	if err != nil {
-		return CreateRefundOrderResult{}, fmt.Errorf("generate out refund no: %w", err)
-	}
-	txResult, err := s.store.CreateRefundOrderTx(ctx, db.CreateRefundOrderTxParams{
-		PaymentOrderID:            input.PaymentOrderID,
-		RefundType:                input.RefundType,
-		RefundAmount:              input.RefundAmount,
-		RefundReason:              input.RefundReason,
-		OutRefundNo:               outRefundNo,
-		IdempotencyOperationScope: refundCreateIdempotencyScope,
-		IdempotencyActorUserID:    input.ActorUserID,
-		IdempotencyKey:            idempotencyKey,
-		IdempotencyRequestHash:    requestHash,
-	})
-	if err != nil {
-		if statusCode, ok := db.IsRefundRequestError(err); ok {
-			return CreateRefundOrderResult{}, NewRequestError(statusCode, errors.Unwrap(err))
+	var refundOrder db.RefundOrder
+	if pendingReplay != nil {
+		refundOrder = *pendingReplay
+	} else {
+		outRefundNo, err := s.idGenerator.OutRefundNo(s.clock.Now())
+		if err != nil {
+			return CreateRefundOrderResult{}, fmt.Errorf("generate out refund no: %w", err)
 		}
-		return CreateRefundOrderResult{}, fmt.Errorf("create baofu refund order: %w", err)
-	}
-	refundOrder := txResult.RefundOrder
-	if txResult.IdempotencyReplayed {
-		return CreateRefundOrderResult{RefundOrder: refundOrder}, nil
+		txResult, err := s.store.CreateRefundOrderTx(ctx, db.CreateRefundOrderTxParams{
+			PaymentOrderID:            input.PaymentOrderID,
+			RefundType:                input.RefundType,
+			RefundAmount:              input.RefundAmount,
+			RefundReason:              input.RefundReason,
+			OutRefundNo:               outRefundNo,
+			IdempotencyOperationScope: refundCreateIdempotencyScope,
+			IdempotencyActorUserID:    input.ActorUserID,
+			IdempotencyKey:            idempotencyKey,
+			IdempotencyRequestHash:    requestHash,
+		})
+		if err != nil {
+			if statusCode, ok := db.IsRefundRequestError(err); ok {
+				return CreateRefundOrderResult{}, NewRequestError(statusCode, errors.Unwrap(err))
+			}
+			return CreateRefundOrderResult{}, fmt.Errorf("create baofu refund order: %w", err)
+		}
+		refundOrder = txResult.RefundOrder
+		if txResult.IdempotencyReplayed && refundOrder.Status != "pending" {
+			return CreateRefundOrderResult{RefundOrder: refundOrder}, nil
+		}
 	}
 	if err := s.processBaofuPreShareRefund(ctx, paymentOrder, refundOrder, input); err != nil {
 		return CreateRefundOrderResult{}, err
@@ -192,6 +201,9 @@ func (s *RefundService) replayCreateRefundOrder(ctx context.Context, input Creat
 	}
 	if refundOrder.PaymentOrderID != input.PaymentOrderID {
 		return CreateRefundOrderResult{}, true, fmt.Errorf("idempotent refund order payment mismatch")
+	}
+	if refundOrder.RefundAmount != input.RefundAmount {
+		return CreateRefundOrderResult{}, true, fmt.Errorf("idempotent refund order amount mismatch")
 	}
 	return CreateRefundOrderResult{RefundOrder: refundOrder}, true, nil
 }
@@ -337,10 +349,14 @@ func (s *RefundService) processBaofuPreShareRefund(ctx context.Context, paymentO
 	}
 	refundResp, err := s.paymentFacade.CreateBaofuRefund(ctx, req)
 	if err != nil {
-		if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
-			log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark baofu refund as failed")
+		disposition := ClassifyBaofuRefundCreateFailure(err)
+		if dbErr := applyBaofuRefundCreateFailureDisposition(ctx, s.store, refundOrder, "", disposition); dbErr != nil {
+			return dbErr
 		}
-		recordBaofuRefundCommand(ctx, s.store, paymentOrder, refundOrder, nil, db.ExternalPaymentCommandStatusRejected, err)
+		recordBaofuRefundCommand(ctx, s.store, paymentOrder, refundOrder, nil, disposition.CommandStatus, err)
+		if disposition.MarkProcessing {
+			return nil
+		}
 		return mapBaofuRefundCreateError(err)
 	}
 	if refundResp == nil {
@@ -353,6 +369,9 @@ func (s *RefundService) processBaofuPreShareRefund(ctx context.Context, paymentO
 	}
 
 	refundID := strings.TrimSpace(refundResp.TradeNo)
+	if refundID == "" {
+		refundID = strings.TrimSpace(refundResp.OutTradeNo)
+	}
 	switch strings.ToUpper(strings.TrimSpace(refundResp.ResultCode)) {
 	case aggregatecontracts.BusinessResultCodeSuccess:
 		if _, dbErr := s.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
@@ -363,11 +382,16 @@ func (s *RefundService) processBaofuPreShareRefund(ctx context.Context, paymentO
 		}
 		recordBaofuRefundCommand(ctx, s.store, paymentOrder, refundOrder, refundResp, db.ExternalPaymentCommandStatusAccepted, nil)
 	case aggregatecontracts.BusinessResultCodeFail:
-		if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
-			return fmt.Errorf("update baofu refund order to failed: %w", dbErr)
+		providerErr := BaofuRefundCreateProviderResultError(refundResp)
+		disposition := ClassifyBaofuRefundCreateFailure(providerErr)
+		if dbErr := applyBaofuRefundCreateFailureDisposition(ctx, s.store, refundOrder, refundID, disposition); dbErr != nil {
+			return dbErr
 		}
-		recordBaofuRefundCommand(ctx, s.store, paymentOrder, refundOrder, refundResp, db.ExternalPaymentCommandStatusRejected, nil)
-		return NewRequestError(http.StatusBadGateway, errors.New("宝付退款受理失败，请稍后重试或联系平台处理"))
+		recordBaofuRefundCommand(ctx, s.store, paymentOrder, refundOrder, refundResp, disposition.CommandStatus, nil)
+		if disposition.MarkProcessing {
+			return nil
+		}
+		return mapBaofuRefundCreateError(providerErr)
 	default:
 		if _, dbErr := s.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
 			ID:       refundOrder.ID,
@@ -376,6 +400,23 @@ func (s *RefundService) processBaofuPreShareRefund(ctx context.Context, paymentO
 			return fmt.Errorf("update baofu refund order to processing: %w", dbErr)
 		}
 		recordBaofuRefundCommand(ctx, s.store, paymentOrder, refundOrder, refundResp, db.ExternalPaymentCommandStatusUnknown, nil)
+	}
+	return nil
+}
+
+func applyBaofuRefundCreateFailureDisposition(ctx context.Context, store db.Store, refundOrder db.RefundOrder, refundID string, disposition BaofuRefundCreateFailureDisposition) error {
+	switch {
+	case disposition.MarkProcessing:
+		if _, dbErr := store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
+			ID:       refundOrder.ID,
+			RefundID: pgtype.Text{String: strings.TrimSpace(refundID), Valid: strings.TrimSpace(refundID) != ""},
+		}); dbErr != nil {
+			return fmt.Errorf("update baofu refund order to processing after create uncertainty: %w", dbErr)
+		}
+	case disposition.MarkFailed:
+		if _, dbErr := store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
+			log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark baofu refund as failed")
+		}
 	}
 	return nil
 }

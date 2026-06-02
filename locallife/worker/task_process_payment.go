@@ -1071,11 +1071,15 @@ func (processor *RedisTaskProcessor) processBaofuAggregateRefund(
 	refundResp, err := processor.baofuAggregateClient.CreateRefund(ctx, req)
 	if err != nil {
 		logRefundRequestFailure(refundOrder.ID, paymentOrder.ID, outRefundNo, paymentOrder.PaymentType, err)
-		if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
-			return errors.Join(fmt.Errorf("call baofu refund API: %w", err), fmt.Errorf("mark refund order as failed: %w", dbErr))
+		disposition := logic.ClassifyBaofuRefundCreateFailure(err)
+		if dbErr := processor.applyBaofuRefundCreateFailureDisposition(ctx, refundOrder, "", disposition); dbErr != nil {
+			return errors.Join(fmt.Errorf("call baofu refund API: %w", err), dbErr)
 		}
-		recordWorkerBaofuRefundCommand(ctx, processor.store, paymentOrder, refundOrder, refundResp, db.ExternalPaymentCommandStatusRejected, err)
-		return fmt.Errorf("call baofu refund API: %w", err)
+		recordWorkerBaofuRefundCommand(ctx, processor.store, paymentOrder, refundOrder, refundResp, disposition.CommandStatus, err)
+		if disposition.RetryCreate {
+			return fmt.Errorf("call baofu refund API: %w", err)
+		}
+		return nil
 	}
 	if refundResp == nil {
 		err := errors.New("baofu refund returned empty result")
@@ -1100,11 +1104,16 @@ func (processor *RedisTaskProcessor) processBaofuAggregateRefund(
 		}
 		recordWorkerBaofuRefundCommand(ctx, processor.store, paymentOrder, refundOrder, refundResp, db.ExternalPaymentCommandStatusAccepted, nil)
 	case aggregatecontracts.BusinessResultCodeFail:
-		if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
-			return fmt.Errorf("mark baofu refund order as failed: %w", dbErr)
+		providerErr := logic.BaofuRefundCreateProviderResultError(refundResp)
+		disposition := logic.ClassifyBaofuRefundCreateFailure(providerErr)
+		if dbErr := processor.applyBaofuRefundCreateFailureDisposition(ctx, refundOrder, refundID, disposition); dbErr != nil {
+			return dbErr
 		}
-		recordWorkerBaofuRefundCommand(ctx, processor.store, paymentOrder, refundOrder, refundResp, db.ExternalPaymentCommandStatusRejected, nil)
-		return fmt.Errorf("baofu refund request rejected: %w", asynq.SkipRetry)
+		recordWorkerBaofuRefundCommand(ctx, processor.store, paymentOrder, refundOrder, refundResp, disposition.CommandStatus, nil)
+		if disposition.RetryCreate {
+			return fmt.Errorf("baofu refund request retryable")
+		}
+		return nil
 	default:
 		if dbErr := processor.markRefundOrderProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
 			ID:       refundOrder.ID,
@@ -1121,6 +1130,23 @@ func (processor *RedisTaskProcessor) processBaofuAggregateRefund(
 		Str("baofu_refund_state", strings.TrimSpace(refundResp.RefundState)).
 		Str("result_code", strings.TrimSpace(refundResp.ResultCode)).
 		Msg("baofu refund request processed")
+	return nil
+}
+
+func (processor *RedisTaskProcessor) applyBaofuRefundCreateFailureDisposition(ctx context.Context, refundOrder db.RefundOrder, refundID string, disposition logic.BaofuRefundCreateFailureDisposition) error {
+	switch {
+	case disposition.MarkProcessing:
+		if dbErr := processor.markRefundOrderProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
+			ID:       refundOrder.ID,
+			RefundID: pgtype.Text{String: strings.TrimSpace(refundID), Valid: strings.TrimSpace(refundID) != ""},
+		}); dbErr != nil {
+			return fmt.Errorf("mark baofu refund order as processing after create uncertainty: %w", dbErr)
+		}
+	case disposition.MarkFailed:
+		if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+			return fmt.Errorf("mark refund order as failed: %w", dbErr)
+		}
+	}
 	return nil
 }
 

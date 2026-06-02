@@ -184,15 +184,42 @@ func processMerchantRejectBaofuRefund(
 
 	baofuRefund, err := paymentFacade.CreateBaofuRefund(ctx, req)
 	if err != nil {
-		if _, dbErr := store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
-			log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark baofu merchant reject refund as failed")
+		disposition := ClassifyBaofuRefundCreateFailure(err)
+		if dbErr := applyBaofuRefundCreateFailureDisposition(ctx, store, refundOrder, "", disposition); dbErr != nil {
+			return dbErr
 		}
-		recordBaofuRefundCommand(ctx, store, paymentOrder, refundOrder, nil, db.ExternalPaymentCommandStatusRejected, err)
+		recordBaofuRefundCommand(ctx, store, paymentOrder, refundOrder, nil, disposition.CommandStatus, err)
+		if disposition.MarkProcessing {
+			return nil
+		}
 		return mapBaofuRefundCreateError(err)
 	}
 	refundID := ""
 	if baofuRefund != nil {
 		refundID = strings.TrimSpace(baofuRefund.TradeNo)
+		if refundID == "" {
+			refundID = strings.TrimSpace(baofuRefund.OutTradeNo)
+		}
+	}
+	if baofuRefund == nil {
+		err := errors.New("baofu refund returned empty result")
+		if _, dbErr := store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
+			log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark baofu merchant reject refund as failed")
+		}
+		recordBaofuRefundCommand(ctx, store, paymentOrder, refundOrder, nil, db.ExternalPaymentCommandStatusRejected, err)
+		return err
+	}
+	if strings.EqualFold(strings.TrimSpace(baofuRefund.ResultCode), aggregatecontracts.BusinessResultCodeFail) {
+		providerErr := BaofuRefundCreateProviderResultError(baofuRefund)
+		disposition := ClassifyBaofuRefundCreateFailure(providerErr)
+		if dbErr := applyBaofuRefundCreateFailureDisposition(ctx, store, refundOrder, refundID, disposition); dbErr != nil {
+			return dbErr
+		}
+		recordBaofuRefundCommand(ctx, store, paymentOrder, refundOrder, baofuRefund, disposition.CommandStatus, nil)
+		if disposition.MarkProcessing {
+			return nil
+		}
+		return mapBaofuRefundCreateError(providerErr)
 	}
 	if _, dbErr := store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
 		ID:       refundOrder.ID,

@@ -5,6 +5,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/merrydance/locallife/baofu"
+	aggregatecontracts "github.com/merrydance/locallife/baofu/aggregatepay/contracts"
+	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	wechaterrorcodes "github.com/merrydance/locallife/wechat/errorcodes"
@@ -60,5 +63,88 @@ func mapDirectRefundCreateError(err error) error {
 		return NewRequestErrorWithCause(http.StatusServiceUnavailable, errors.New("商户退款配置未完成，当前无法发起退款，请联系平台处理"), err)
 	default:
 		return NewRequestErrorWithCause(http.StatusServiceUnavailable, errors.New("微信退款请求失败，请稍后刷新退款状态"), err)
+	}
+}
+
+type BaofuRefundCreateFailureDisposition struct {
+	CommandStatus  string
+	MarkFailed     bool
+	MarkProcessing bool
+	RetryCreate    bool
+}
+
+func ClassifyBaofuRefundCreateFailure(err error) BaofuRefundCreateFailureDisposition {
+	disposition := BaofuRefundCreateFailureDisposition{
+		CommandStatus: db.ExternalPaymentCommandStatusRejected,
+		MarkFailed:    true,
+	}
+	if err == nil {
+		return disposition
+	}
+
+	var providerErr *baofu.ProviderError
+	if !errors.As(err, &providerErr) {
+		return disposition
+	}
+
+	code := strings.ToUpper(strings.TrimSpace(providerErr.UpstreamCode))
+	if baofuRefundCreateFailureShouldQuery(code) {
+		return BaofuRefundCreateFailureDisposition{
+			CommandStatus:  db.ExternalPaymentCommandStatusUnknown,
+			MarkProcessing: true,
+		}
+	}
+
+	classified := baofu.ClassifyBaofuError(providerErr.UpstreamCode, providerErr.UpstreamMessage)
+	if classified.Category == baofu.BaofuErrorCategoryRetryable || baofuRefundCreateRequestFailureIsRetryable(providerErr) {
+		return BaofuRefundCreateFailureDisposition{
+			CommandStatus: db.ExternalPaymentCommandStatusUnknown,
+			RetryCreate:   true,
+		}
+	}
+
+	return disposition
+}
+
+func BaofuRefundCreateProviderResultError(refundResp *aggregatecontracts.RefundResult) error {
+	if refundResp == nil {
+		return errors.New("baofu refund returned empty result")
+	}
+	upstreamCode := strings.TrimSpace(refundResp.ErrorCode)
+	if upstreamCode == "" {
+		upstreamCode = strings.TrimSpace(refundResp.RefundState)
+	}
+	if upstreamCode == "" {
+		upstreamCode = strings.TrimSpace(refundResp.ResultCode)
+	}
+	return &baofu.ProviderError{
+		Operation:       "order_refund",
+		Capability:      db.ExternalPaymentCapabilityBaofuRefund,
+		UpstreamCode:    upstreamCode,
+		UpstreamMessage: strings.TrimSpace(refundResp.ErrorMessage),
+		Frontend:        baofu.ClassifyBaofuError(upstreamCode, refundResp.ErrorMessage).FrontendGuidance(),
+	}
+}
+
+func baofuRefundCreateFailureShouldQuery(code string) bool {
+	switch strings.ToUpper(strings.TrimSpace(code)) {
+	case "ORDER_EXIST", "REPEATED_REQUEST", "BF0013", "TRADE_UNCONFIRMED", "PROCESSING", "ABNORMAL":
+		return true
+	default:
+		return false
+	}
+}
+
+func baofuRefundCreateRequestFailureIsRetryable(providerErr *baofu.ProviderError) bool {
+	if providerErr == nil {
+		return false
+	}
+	switch strings.ToUpper(strings.TrimSpace(providerErr.UpstreamCode)) {
+	case "REQUEST_FAILED":
+		return true
+	case "HTTP_STATUS":
+		return providerErr.StatusCode == 0 || providerErr.StatusCode >= http.StatusInternalServerError
+	default:
+		return false
 	}
 }

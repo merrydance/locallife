@@ -141,6 +141,153 @@ func TestOrderServiceRejectMerchantOrder_ReturnsManualRequiredWhenRefundSubmissi
 	require.Contains(t, result.RefundSubmission.Message, "请联系平台处理")
 }
 
+func TestOrderServiceRejectMerchantOrder_RetryableBaofuRefundErrorNeedsRecovery(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	order := db.Order{ID: 43, UserID: 9, MerchantID: 77, Status: db.OrderStatusPaid}
+	cancelled := order
+	cancelled.Status = db.OrderStatusCancelled
+	paymentOrder := db.PaymentOrder{
+		ID:             503,
+		OrderID:        pgtype.Int8{Int64: order.ID, Valid: true},
+		BusinessType:   businessTypeOrder,
+		Status:         "paid",
+		Amount:         2100,
+		PaymentType:    "miniprogram",
+		PaymentChannel: db.PaymentChannelBaofuAggregate,
+		OutTradeNo:     "BF_ORDER_43",
+	}
+	refundOrder := db.RefundOrder{
+		ID:             603,
+		PaymentOrderID: paymentOrder.ID,
+		RefundAmount:   paymentOrder.Amount,
+		OutRefundNo:    "RF_ORDER_43",
+		Status:         "pending",
+	}
+
+	store.EXPECT().GetOrderForUpdate(gomock.Any(), order.ID).Return(order, nil)
+	store.EXPECT().CancelOrderTx(gomock.Any(), gomock.Any()).Return(db.CancelOrderTxResult{Order: cancelled}, nil)
+	store.EXPECT().
+		GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+			OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
+			BusinessType: businessTypeOrder,
+		}).
+		Return(paymentOrder, nil)
+	store.EXPECT().CreateRefundOrderTx(gomock.Any(), gomock.Any()).Return(db.CreateRefundOrderTxResult{RefundOrder: refundOrder}, nil)
+	store.EXPECT().
+		CreateExternalPaymentCommand(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentCommandParams{})).
+		DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
+			require.Equal(t, db.ExternalPaymentCommandStatusUnknown, arg.CommandStatus)
+			require.Equal(t, refundOrder.ID, arg.BusinessObjectID.Int64)
+			require.True(t, arg.LastErrorCode.Valid)
+			require.Equal(t, "SYSTEM_BUSY", arg.LastErrorCode.String)
+			return db.ExternalPaymentCommand{ID: 2}, nil
+		})
+	store.EXPECT().GetRefundOrder(gomock.Any(), refundOrder.ID).Return(refundOrder, nil)
+
+	facade := &merchantRejectRefundPaymentFacade{
+		baofuRefundErr: &baofu.ProviderError{
+			Operation:       "order_refund",
+			UpstreamCode:    "SYSTEM_BUSY",
+			UpstreamMessage: "raw upstream retryable detail",
+		},
+	}
+	service := NewOrderService(store, nil, nil, nil, nil, nil, nil, facade, nil, nil, nil)
+
+	result, err := service.RejectMerchantOrder(context.Background(), MerchantOrderUpdateInput{
+		MerchantID: order.MerchantID,
+		OrderID:    order.ID,
+		OperatorID: 3,
+		Reason:     "临时缺货",
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, db.OrderStatusCancelled, result.Order.Status)
+	require.True(t, facade.baofuRefundCalled)
+	require.NotNil(t, result.RefundSubmission)
+	require.Equal(t, MerchantRefundSubmissionStatusPendingRecovery, result.RefundSubmission.Status)
+	require.Equal(t, refundOrder.ID, result.RefundSubmission.RefundOrder.ID)
+	require.Contains(t, result.RefundSubmission.Message, "系统会稍后自动重试")
+}
+
+func TestOrderServiceRejectMerchantOrder_BaofuOrderExistReturnsAcceptedForQueryRecovery(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	order := db.Order{ID: 44, UserID: 9, MerchantID: 77, Status: db.OrderStatusPaid}
+	cancelled := order
+	cancelled.Status = db.OrderStatusCancelled
+	paymentOrder := db.PaymentOrder{
+		ID:             504,
+		OrderID:        pgtype.Int8{Int64: order.ID, Valid: true},
+		BusinessType:   businessTypeOrder,
+		Status:         "paid",
+		Amount:         2300,
+		PaymentType:    "miniprogram",
+		PaymentChannel: db.PaymentChannelBaofuAggregate,
+		OutTradeNo:     "BF_ORDER_44",
+	}
+	refundOrder := db.RefundOrder{
+		ID:             604,
+		PaymentOrderID: paymentOrder.ID,
+		RefundAmount:   paymentOrder.Amount,
+		OutRefundNo:    "RF_ORDER_44",
+		Status:         "pending",
+	}
+	processingRefundOrder := refundOrder
+	processingRefundOrder.Status = "processing"
+
+	store.EXPECT().GetOrderForUpdate(gomock.Any(), order.ID).Return(order, nil)
+	store.EXPECT().CancelOrderTx(gomock.Any(), gomock.Any()).Return(db.CancelOrderTxResult{Order: cancelled}, nil)
+	store.EXPECT().
+		GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+			OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
+			BusinessType: businessTypeOrder,
+		}).
+		Return(paymentOrder, nil)
+	store.EXPECT().CreateRefundOrderTx(gomock.Any(), gomock.Any()).Return(db.CreateRefundOrderTxResult{RefundOrder: refundOrder}, nil)
+	store.EXPECT().UpdateRefundOrderToProcessing(gomock.Any(), db.UpdateRefundOrderToProcessingParams{
+		ID:       refundOrder.ID,
+		RefundID: pgtype.Text{},
+	}).Return(processingRefundOrder, nil)
+	store.EXPECT().
+		CreateExternalPaymentCommand(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentCommandParams{})).
+		DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
+			require.Equal(t, db.ExternalPaymentCommandStatusUnknown, arg.CommandStatus)
+			require.Equal(t, refundOrder.ID, arg.BusinessObjectID.Int64)
+			require.True(t, arg.LastErrorCode.Valid)
+			require.Equal(t, "ORDER_EXIST", arg.LastErrorCode.String)
+			return db.ExternalPaymentCommand{ID: 3}, nil
+		})
+	store.EXPECT().GetRefundOrder(gomock.Any(), refundOrder.ID).Return(processingRefundOrder, nil)
+
+	facade := &merchantRejectRefundPaymentFacade{
+		baofuRefundErr: &baofu.ProviderError{
+			Operation:       "order_refund",
+			UpstreamCode:    "ORDER_EXIST",
+			UpstreamMessage: "raw upstream duplicate detail",
+		},
+	}
+	service := NewOrderService(store, nil, nil, nil, nil, nil, nil, facade, nil, nil, nil)
+
+	result, err := service.RejectMerchantOrder(context.Background(), MerchantOrderUpdateInput{
+		MerchantID: order.MerchantID,
+		OrderID:    order.ID,
+		OperatorID: 3,
+		Reason:     "临时缺货",
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, db.OrderStatusCancelled, result.Order.Status)
+	require.True(t, facade.baofuRefundCalled)
+	require.NotNil(t, result.RefundSubmission)
+	require.Equal(t, MerchantRefundSubmissionStatusAccepted, result.RefundSubmission.Status)
+	require.Equal(t, refundOrder.ID, result.RefundSubmission.RefundOrder.ID)
+}
+
 type merchantRejectRefundPaymentFacade struct {
 	baofuRefundCalled bool
 	baofuRefundErr    error
