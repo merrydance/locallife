@@ -50,10 +50,11 @@ type dailyInventoryResponse struct {
 // @Accept json
 // @Produce json
 // @Param request body createDailyInventoryRequest true "库存信息"
-// @Success 200 {object} dailyInventoryResponse "创建成功"
+// @Success 201 {object} dailyInventoryResponse "创建成功"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 401 {object} ErrorResponse "未认证"
-// @Failure 404 {object} ErrorResponse "商户不存在"
+// @Failure 403 {object} ErrorResponse "菜品不属于当前商户"
+// @Failure 404 {object} ErrorResponse "商户或菜品不存在"
 // @Failure 500 {object} ErrorResponse "服务器错误"
 // @Router /v1/inventory [post]
 // @Security BearerAuth
@@ -82,6 +83,20 @@ func (server *Server) createDailyInventory(ctx *gin.Context) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	dish, err := server.store.GetDish(ctx, req.DishID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	if dish.MerchantID != merchant.ID {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("dish does not belong to this merchant")))
 		return
 	}
 

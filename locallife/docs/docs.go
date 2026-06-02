@@ -7983,7 +7983,7 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "200": {
+                    "201": {
                         "description": "创建成功",
                         "schema": {
                             "$ref": "#/definitions/api.dailyInventoryResponse"
@@ -8001,8 +8001,14 @@ const docTemplate = `{
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
+                    "403": {
+                        "description": "菜品不属于当前商户",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
                     "404": {
-                        "description": "商户不存在",
+                        "description": "商户或菜品不存在",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }

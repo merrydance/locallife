@@ -79,10 +79,10 @@ The merchant-visible dish and inventory workflow should have one coherent availa
     Evidence: `locallife/api/server.go:831`, `locallife/api/server.go:832`, `locallife/api/server.go:836`, `locallife/api/inventory.go:162`, `locallife/api/inventory.go:191`, `locallife/db/query/inventory.sql:27`, `locallife/db/query/inventory.sql:33`, `locallife/db/query/inventory.sql:46`.
 
 16. `updateDailyInventory` resolves the merchant, reads the row by current merchant/dish/date, verifies dish ownership before creating a missing row, updates total/sold, and returns computed available using `reserved_quantity`.
-    Evidence: `locallife/api/inventory.go:243`, `locallife/api/inventory.go:261`, `locallife/api/inventory.go:271`, `locallife/api/inventory.go:279`, `locallife/api/inventory.go:288`, `locallife/api/inventory.go:302`, `locallife/api/inventory.go:378`, `locallife/api/inventory.go:415`, `locallife/db/query/inventory.sql:55`.
+    Evidence: `locallife/api/inventory.go:258`, `locallife/api/inventory.go:276`, `locallife/api/inventory.go:287`, `locallife/api/inventory.go:294`, `locallife/api/inventory.go:303`, `locallife/api/inventory.go:317`, `locallife/api/inventory.go:393`, `locallife/api/inventory.go:430`, `locallife/db/query/inventory.sql:55`.
 
-17. The direct `createDailyInventory` POST path creates a row for current merchant and request `dish_id`, but does not first verify that the dish belongs to the merchant.
-    Evidence: `locallife/api/server.go:835`, `locallife/api/inventory.go:60`, `locallife/api/inventory.go:78`, `locallife/api/inventory.go:89`.
+17. Fixed 2026-06-02: the direct `createDailyInventory` POST path now resolves the current merchant, loads the requested dish, verifies `dish.merchant_id == merchant.id`, and returns 404/403 before insert when the dish is missing or belongs to another merchant.
+    Evidence: `locallife/api/server.go:835`, `locallife/api/inventory.go:61`, `locallife/api/inventory.go:79`, `locallife/api/inventory.go:89`, `locallife/api/inventory.go:98`, `locallife/api/inventory.go:104`, `locallife/api/inventory_test.go:101`.
 
 18. Customer order creation enforces dish ownership, `is_online`, and `is_available` before pricing customizations.
     Evidence: `locallife/logic/order_items.go:42`, `locallife/logic/order_items.go:50`, `locallife/logic/order_items.go:53`, `locallife/logic/order_items.go:56`.
@@ -119,7 +119,7 @@ The merchant-visible dish and inventory workflow should have one coherent availa
 - Dish and inventory route groups use `MerchantStaffMiddleware("owner", "manager", "chef")`.
 - Dish create/update/status/customization/featured-tag/delete handlers resolve the current merchant and check dish ownership before writes.
 - Inventory `PUT` missing-row path verifies the requested dish belongs to the merchant before creating the inventory row.
-- Direct inventory `POST` lacks the same dish-ownership verification and should be treated as an exposed tenant-boundary gap until fixed or removed.
+- Fixed 2026-06-02: direct inventory `POST` now applies the same dish-ownership verification before creating the inventory row.
 - Customer-facing readers must not rely on merchant-provided fields for authorization; they should use persisted merchant/dish state and merchant status.
 
 ## Idempotency And Duplicate-Submit Checks
@@ -154,6 +154,7 @@ Observed tests:
 - `locallife/api/dish_test.go` covers packaging-dish offline rejection for single status update.
 - `locallife/db/sqlc/dish_test.go` covers create-dish transaction rollback when customization creation fails.
 - `locallife/api/inventory_test.go` covers inventory update, including create-when-missing.
+- `locallife/api/inventory_test.go` covers direct inventory POST tenant-boundary denial for a foreign dish.
 - `locallife/api/inventory_test.go` covers check/decrement success, no auth, missing-row path, and insufficient inventory response.
 - SQL inventory tests and reservation inventory transaction tests cover lower-level decrement/reserve/release behavior.
 
@@ -164,7 +165,6 @@ Missing high-value tests:
 - `setDishFeaturedTags` store-error propagation and transactional convergence.
 - Batch dish status rowsAffected mismatch response.
 - Inventory `total_quantity < sold_quantity + reserved_quantity` rejection or explicit allowed semantics.
-- Direct inventory POST dish-ownership/tenant-boundary denial.
 - Inventory stats sold-out/available classification with reserved quantity.
 
 ## Gaps And Refactor Notes
@@ -183,8 +183,8 @@ Missing high-value tests:
 - Request branches checked: dish CRUD/status/batch status/delete, customization GET/PUT, featured-tags PUT, inventory list/update/check/stats, order payment decrement, order cancellation restore, reservation reserve/release/sync/no-show/timeout inventory paths, and public dish/menu readers.
 - Backend state branches checked: `dishes.is_online`, stale `is_available`, `is_packaging`, soft delete, category, tags, customization groups/options, `daily_inventory.total_quantity/sold_quantity/reserved_quantity`, unlimited sentinel, missing-row creation, and reserved inventory accounting.
 - Async branches checked: merchant edits are synchronous; inventory changes asynchronously from payment success, order cancellation, reservation payment/sync, reservation timeout, no-show, and release workers. No merchant inventory websocket/polling path was found.
-- Failure/retry branches checked: per-row status pending rollback, dish edit multi-write partial persistence, best-effort featured-tag store failures, inventory last-write-wins, direct inventory POST tenant gap, check endpoint mutating sold quantity, total below sold+reserved, and stale `is_available` read/write inconsistency.
+- Failure/retry branches checked: per-row status pending rollback, dish edit multi-write partial persistence, best-effort featured-tag store failures, inventory last-write-wins, fixed direct inventory POST tenant denial, check endpoint mutating sold quantity, total below sold+reserved, and stale `is_available` read/write inconsistency.
 - Reader/consumer branches checked: dish list/edit, inventory page, public merchant menu, search, scan-table menu, cart, direct order, reservation validation, packaging policy, and inventory stats.
-- Authorization/tenant branches checked: owner/manager/chef dish and inventory routes, dish ownership checks for most writes, inventory PUT ownership validation on missing-row create, missing direct inventory POST dish ownership check, and customer readers relying on persisted state.
+- Authorization/tenant branches checked: owner/manager/chef dish and inventory routes, dish ownership checks for most writes, inventory PUT ownership validation on missing-row create, direct inventory POST ownership check added 2026-06-02, and customer readers relying on persisted state.
 - Zombie/unreachable branches checked: `is_available` has stale semantics because edit resets it to true while readers vary; Mini Program wrappers for batch status/inventory check/stats appear unused; `POST /inventory/check` is named as check but mutates; single dish-edit submit is split across multiple backend writes.
-- Test-proof gaps checked: existing tests cover packaging offline rejection, create rollback, inventory update/check/decrement, and reserve/release lower layers. Missing proof remains for `is_available` product contract, dish-edit partial failure recovery, featured-tag transactional failure, batch status rowsAffected, inventory total guard, direct POST tenant denial, and reserved-quantity stats.
+- Test-proof gaps checked: existing tests cover packaging offline rejection, create rollback, inventory update/check/decrement, direct POST tenant denial, and reserve/release lower layers. Missing proof remains for `is_available` product contract, dish-edit partial failure recovery, featured-tag transactional failure, batch status rowsAffected, inventory total guard, and reserved-quantity stats.

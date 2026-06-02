@@ -61,7 +61,15 @@ func TestCreateDailyInventoryAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				dish := randomDish(merchant.ID, nil)
+				dish.ID = dishID
+
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetDish(gomock.Any(), gomock.Eq(dishID)).
+					Times(1).
+					Return(dish, nil)
 
 				store.EXPECT().
 					CreateDailyInventory(gomock.Any(), gomock.Any()).
@@ -87,6 +95,31 @@ func TestCreateDailyInventoryAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusUnauthorized, recorder.Code)
+			},
+		},
+		{
+			name: "DishBelongsToOtherMerchant",
+			body: gin.H{
+				"dish_id":        dishID,
+				"date":           "2025-11-25",
+				"total_quantity": 100,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				dish := randomDish(merchant.ID+1, nil)
+				dish.ID = dishID
+
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetDish(gomock.Any(), gomock.Eq(dishID)).
+					Times(1).
+					Return(dish, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusForbidden, recorder.Code)
 			},
 		},
 		{
