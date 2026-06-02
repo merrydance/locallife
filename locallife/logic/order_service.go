@@ -22,6 +22,8 @@ const (
 	printTriggerManual   = "manual"
 
 	printDispatchModeSingleFull = "single_full"
+
+	merchantOrderSnapshotMessageTypeOrderUpdate = "order_update"
 )
 
 type OrderService struct {
@@ -412,7 +414,7 @@ func (s *OrderService) CancelOrder(ctx context.Context, input CancelOrderInput) 
 	}
 
 	if s.eventPublisher != nil {
-		s.eventPublisher.PublishMerchantOrderSnapshot(ctx, result.Order.MerchantID, result.Order, "order_update")
+		s.eventPublisher.PublishMerchantOrderSnapshot(ctx, result.Order.MerchantID, result.Order, merchantOrderSnapshotMessageTypeOrderUpdate)
 	}
 
 	return result, nil
@@ -572,7 +574,7 @@ func (s *OrderService) AcceptMerchantOrder(ctx context.Context, input MerchantOr
 	}
 
 	if s.eventPublisher != nil {
-		s.eventPublisher.PublishMerchantOrderSnapshot(ctx, input.MerchantID, result.Order, "order_update")
+		s.eventPublisher.PublishMerchantOrderSnapshot(ctx, input.MerchantID, result.Order, merchantOrderSnapshotMessageTypeOrderUpdate)
 		if result.PoolItem != nil {
 			s.eventPublisher.PublishTakeoutOrderPooled(ctx, result.Order, *result.PoolItem)
 		}
@@ -628,7 +630,7 @@ func (s *OrderService) RejectMerchantOrder(ctx context.Context, input MerchantOr
 	}
 
 	if s.eventPublisher != nil {
-		s.eventPublisher.PublishMerchantOrderSnapshot(ctx, input.MerchantID, result.Order, "order_update")
+		s.eventPublisher.PublishMerchantOrderSnapshot(ctx, input.MerchantID, result.Order, merchantOrderSnapshotMessageTypeOrderUpdate)
 	}
 
 	return result, nil
@@ -656,7 +658,7 @@ func (s *OrderService) MarkMerchantOrderReady(ctx context.Context, input Merchan
 	}
 
 	if s.eventPublisher != nil {
-		s.eventPublisher.PublishMerchantOrderSnapshot(ctx, input.MerchantID, result.Order, "order_update")
+		s.eventPublisher.PublishMerchantOrderSnapshot(ctx, input.MerchantID, result.Order, merchantOrderSnapshotMessageTypeOrderUpdate)
 	}
 
 	s.scheduleOrderPrint(ctx, result.Order, printTriggerReady)
@@ -685,7 +687,7 @@ func (s *OrderService) CompleteMerchantOrder(ctx context.Context, input Merchant
 	}
 
 	if s.eventPublisher != nil {
-		s.eventPublisher.PublishMerchantOrderSnapshot(ctx, input.MerchantID, result.Order, "order_update")
+		s.eventPublisher.PublishMerchantOrderSnapshot(ctx, input.MerchantID, result.Order, merchantOrderSnapshotMessageTypeOrderUpdate)
 	}
 	return result, nil
 }

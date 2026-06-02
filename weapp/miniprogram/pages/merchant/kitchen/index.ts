@@ -275,6 +275,10 @@ Page({
       }
     })
 
+    const orderUpdateSub = wsManager.on(WSMessageType.ORDER_UPDATE, (data) => {
+      this.handleRealtimeOrderUpdate(data)
+    })
+
     const blockedSub = wsManager.on(WSMessageType.CONNECTION_BLOCKED, (payload) => {
       const message = typeof payload === 'object' && payload !== null && 'message' in payload
         ? String((payload as { message?: unknown }).message || '')
@@ -287,7 +291,7 @@ Page({
       wx.showToast({ title: message, icon: 'none' })
     })
 
-    this.data._wsListeners = [statusChangeSub, sub, blockedSub]
+    this.data._wsListeners = [statusChangeSub, sub, orderUpdateSub, blockedSub]
   },
 
   cleanupWebSocket() {
@@ -323,6 +327,12 @@ Page({
     } catch (err) {
       logger.warn('Load merchant open status for kitchen realtime failed', err)
       this.stopRealtimeRuntime({ disconnect: true })
+    }
+  },
+
+  handleRealtimeOrderUpdate(_data: unknown) {
+    if (this.data.isMerchantOpen) {
+      this.loadKitchenOrders(false)
     }
   },
 

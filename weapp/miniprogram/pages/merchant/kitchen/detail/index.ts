@@ -4,12 +4,20 @@ import { logger } from '../../../../utils/logger'
 import { getKitchenStatusView, KitchenStatusTheme } from '../../_utils/merchant-kitchen-detail-view'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
+import { wsManager, WSMessageType } from '../../_main_shared/utils/websocket'
 
 interface KitchenDetailOptions {
   id?: string
 }
 
 type KitchenDetailAction = '' | 'preparing' | 'ready'
+type WsUnsubscribe = () => void
+
+interface OrderUpdatePayload {
+  id?: number | string
+  order_id?: number | string
+}
+
 interface KitchenDetailItemView extends KitchenOrderItem {
   categoryLabel: string
   prepareTimeLabel: string
@@ -116,7 +124,8 @@ Page({
     actionNoticeMessage: '',
     actionLoading: false,
     actionType: '' as KitchenDetailAction,
-    detail: null as KitchenDetailView | null
+    detail: null as KitchenDetailView | null,
+    _wsListeners: [] as WsUnsubscribe[]
   },
 
   onLoad(options: KitchenDetailOptions) {
@@ -134,12 +143,24 @@ Page({
     }
 
     this.loadDetail()
+    this.initWebSocket()
   },
 
   onShow() {
+    if (this.data.orderId) {
+      this.initWebSocket()
+    }
     if (this.data.orderId && this.data.detail && !this.data.loading && !this.data.actionLoading) {
       this.loadDetail(true, true)
     }
+  },
+
+  onHide() {
+    this.stopRealtimeRuntime()
+  },
+
+  onUnload() {
+    this.stopRealtimeRuntime()
   },
 
   onPullDownRefresh() {
@@ -156,6 +177,48 @@ Page({
 
   onViewBoard() {
     wx.navigateBack()
+  },
+
+  initWebSocket() {
+    this.cleanupWebSocket()
+    wsManager.connect()
+
+    const orderUpdateSub = wsManager.on(WSMessageType.ORDER_UPDATE, (data) => {
+      this.handleRealtimeOrderUpdate(data)
+    })
+
+    const blockedSub = wsManager.on(WSMessageType.CONNECTION_BLOCKED, (payload) => {
+      const message = typeof payload === 'object' && payload !== null && 'message' in payload
+        ? String((payload as { message?: unknown }).message || '')
+        : ''
+      if (message) {
+        this.setData({ refreshErrorMessage: message })
+      }
+    })
+
+    this.data._wsListeners = [orderUpdateSub, blockedSub]
+  },
+
+  cleanupWebSocket() {
+    if (this.data._wsListeners?.length) {
+      this.data._wsListeners.forEach((unsubscribe) => unsubscribe())
+      this.data._wsListeners = []
+    }
+  },
+
+  stopRealtimeRuntime() {
+    this.cleanupWebSocket()
+    wsManager.disconnect()
+  },
+
+  handleRealtimeOrderUpdate(data: unknown) {
+    const payload = typeof data === 'object' && data !== null
+      ? (data as OrderUpdatePayload)
+      : {}
+    const orderId = Number(payload.id || payload.order_id || 0)
+    if (orderId === this.data.orderId && !this.data.actionLoading) {
+      this.loadDetail(true, true)
+    }
   },
 
   async loadDetail(silent = false, preserveActionNotice = false) {

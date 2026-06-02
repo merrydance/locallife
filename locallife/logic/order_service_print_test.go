@@ -16,10 +16,22 @@ type orderPrintTaskSchedulerStub struct {
 }
 
 type orderServiceEventPublisherStub struct {
-	pooled []db.DeliveryPool
+	snapshots []orderServiceSnapshotEvent
+	pooled    []db.DeliveryPool
+}
+
+type orderServiceSnapshotEvent struct {
+	MerchantID  int64
+	OrderID     int64
+	MessageType string
 }
 
 func (s *orderServiceEventPublisherStub) PublishMerchantOrderSnapshot(ctx context.Context, merchantID int64, order db.Order, messageType string) {
+	s.snapshots = append(s.snapshots, orderServiceSnapshotEvent{
+		MerchantID:  merchantID,
+		OrderID:     order.ID,
+		MessageType: messageType,
+	})
 }
 
 func (s *orderServiceEventPublisherStub) PublishMerchantUserRiskAlert(ctx context.Context, merchantID int64, alert MerchantUserRiskAlert) {
@@ -116,6 +128,12 @@ func TestOrderServiceAcceptMerchantOrder_BroadcastsTakeoutPoolEntry(t *testing.T
 	result, err := service.AcceptMerchantOrder(context.Background(), input)
 	require.NoError(t, err)
 	require.Equal(t, db.OrderStatusPreparing, result.Order.Status)
+	require.Len(t, events.snapshots, 1)
+	require.Equal(t, orderServiceSnapshotEvent{
+		MerchantID:  input.MerchantID,
+		OrderID:     input.OrderID,
+		MessageType: merchantOrderSnapshotMessageTypeOrderUpdate,
+	}, events.snapshots[0])
 	require.Len(t, events.pooled, 1)
 	require.Equal(t, poolItem.OrderID, events.pooled[0].OrderID)
 }

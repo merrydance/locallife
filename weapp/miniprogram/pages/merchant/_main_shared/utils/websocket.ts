@@ -14,6 +14,7 @@ export enum WSMessageType {
   PONG = 'pong',
   CONNECTION_BLOCKED = 'connection_blocked',
   MERCHANT_STATUS_CHANGE = 'merchant_status_change',
+  ORDER_UPDATE = 'order_update',
   
   // 代取业务相关 (与后端 websocket/message_types.go 保持同步)
   DELIVERY_POOL_NEW = 'delivery_pool_new',   // 代取池新增订单

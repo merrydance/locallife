@@ -1,6 +1,6 @@
 # Merchant Order Operations Slice
 
-Status: merchant-state flow slice created; manual refund idempotency and pending order-refund recovery repaired 2026-05-31; reject refund submission truth repaired 2026-06-01
+Status: merchant-state flow slice created; manual refund idempotency and pending order-refund recovery repaired 2026-05-31; reject refund submission truth repaired 2026-06-01; Mini Program `order_update` realtime contract repaired 2026-06-02
 Risk class: G3 where merchant actions create or recover refunds; G2 for non-money order status and print transitions
 Scope: merchant order list/detail/kitchen/print anomaly pages -> merchant and kitchen order APIs -> order status/refund/print durable state -> notification, websocket, worker, callback, and recovery paths
 
@@ -127,7 +127,7 @@ Merchant order operations must converge from merchant action to durable order/re
 29. Timed print anomaly scheduler scans stale `print_logs` and publishes platform alerts.
     Evidence: `locallife/scheduler/data_cleanup.go:29`, `locallife/scheduler/data_cleanup.go:136`, `locallife/scheduler/data_cleanup.go:651`, `locallife/scheduler/data_cleanup.go:656`, `locallife/scheduler/data_cleanup.go:674`, `locallife/scheduler/data_cleanup.go:685`.
 
-30. Backend publishes merchant order snapshots using the message type provided by the order service. The Mini Program websocket enum lacks `order_update`, and list/kitchen pages currently listen for `notification` messages shaped like order notifications.
+30. Fixed 2026-06-02: backend publishes merchant order snapshots as `order_update`; the websocket package declares that message type; Mini Program order list/detail and kitchen board/detail subscribe to `order_update` and rehydrate from backend truth.
     Evidence: `locallife/api/logic_adapters.go:53`, `locallife/api/logic_adapters.go:77`, `weapp/miniprogram/pages/merchant/_main_shared/utils/websocket.ts:10`, `weapp/miniprogram/pages/merchant/_main_shared/utils/websocket.ts:12`, `weapp/miniprogram/pages/merchant/orders/list/index.ts:168`, `weapp/miniprogram/pages/merchant/orders/list/index.ts:172`, `weapp/miniprogram/pages/merchant/kitchen/index.ts:268`, `weapp/miniprogram/pages/merchant/kitchen/index.ts:273`.
 
 ## Reverse-Reference Findings
@@ -139,7 +139,7 @@ Merchant order operations must converge from merchant action to durable order/re
 - Fixed 2026-05-31 in `6a19a9c0`: manual refund creation now satisfies the frontend/backend idempotency header contract and has a Mini Program wrapper contract test.
 - Fixed 2026-06-01: reject-order refund remains a two-step product workflow, but the API/UI now exposes refund submission truth through `refund_submission` instead of overclaiming that refund submission always started.
 - Partially fixed 2026-05-31 in `d3e84050`: refund rows that exist and are stuck in `pending` for cancelled paid normal orders are now recovered with their original `out_refund_no`. Existing terminal `failed` rows still need provider error-classification before automatic retry can be safe.
-- Merchant order websocket status updates may not refresh across terminals because `order_update` is not in the Mini Program enum/subscribers.
+- Fixed 2026-06-02: merchant order websocket status updates now refresh Mini Program order list/detail and kitchen board/detail through `order_update` subscriptions.
 - Kitchen realtime stops entirely when open-status refresh fails, which can turn an auxiliary status-check failure into stale kitchen order realtime.
 - Printing has both order-operation consumers and configuration owners. Device/display configuration should be audited separately because `auto_accept_paid_orders`, `enable_print`, trigger mode, and printer registration are outside this flow.
 - Flutter BLE printing is a local receipt side effect and is not observable in backend `print_logs`; it must not be mistaken for cloud-printer command truth.
@@ -196,7 +196,7 @@ Merchant order operations must converge from merchant action to durable order/re
 - Kitchen board syncs a returned order into local lists, then reloads kitchen order truth.
 - Manual refund popup holds local amount/type/reason draft. After creation it closes the popup, polls the refund row, then reloads order detail truth.
 - Detail secondary reads can preserve stale print/refund results with an explicit "保留上次结果" message, which is useful but means stale subflow state can remain visible until a later successful sync.
-- Realtime refresh is incomplete for `order_update`, so backend truth may only be seen after manual refresh/re-entry when another terminal performs the action.
+- Fixed 2026-06-02: realtime `order_update` now triggers backend-truth rehydration in Mini Program order list/detail and kitchen board/detail.
 - Flutter's local auto-accept/auto-print toggles persist in SharedPreferences and are not rehydrated from backend display-config truth.
 
 ## Branch Exhaustion
@@ -230,7 +230,7 @@ Backend state branches:
 
 Async branches:
 
-- Merchant order websocket publish uses `order_update`; Mini Program order/kitchen subscribers currently expect notification-shaped messages, so cross-terminal refresh is not exhausted by implementation.
+- Fixed 2026-06-02: merchant order websocket publish uses `order_update`, and Mini Program order/kitchen subscribers consume that type for cross-terminal backend-truth refresh.
 - Payment/refund terminal truth flows through Baofu callback/query facts, payment fact application, payment-domain outbox, and notification/alert workers.
 - Refund recovery scans no-refund cancelled payments, pending normal-order refunds, pending reservation refunds, and stuck `processing` refunds; it does not cover retryable terminal `failed` rows after merchant reject.
 - Print async branches include Redis print worker, Feieyun direct response, Feieyun callback by vendor order id, retry print jobs, manual print jobs, and timed print anomaly scheduler.
@@ -263,7 +263,7 @@ Authorization and tenant branches:
 Zombie and unreachable branches:
 
 - `CompleteOrderTx` is broader than merchant completion logic and is a refactor risk if reused without caller-side guard.
-- Mini Program websocket `order_update` handling is effectively unreachable in current enum/subscriber shape even though backend publishes it.
+- Fixed 2026-06-02: Mini Program websocket `order_update` handling is reachable through the shared enum and order/kitchen subscribers.
 - Fixed 2026-05-31 in `6a19a9c0`: manual refund UI path now sends `Idempotency-Key`.
 - Partially fixed 2026-05-31 in `d3e84050`: existing pending order refund rows after merchant reject are now picked up; terminal `failed` rows are still not retried automatically.
 - Flutter local auto-accept and backend display-config auto-accept are distinct paths; neither is a zombie, but the dual-control contract is undocumented.
@@ -273,7 +273,7 @@ Test-proof gaps:
 - Fixed 2026-05-31 in `6a19a9c0`: Mini Program contract test proves the wrapper sends `Idempotency-Key` and order detail generates/reuses the draft key.
 - Fixed 2026-06-01: logic/API tests prove merchant reject reports pending-recovery and manual-required refund submission states while preserving durable order cancellation success.
 - Fixed for `pending` on 2026-05-31 in `d3e84050`: worker and sqlc tests prove recovery includes existing normal-order refund rows stuck in `pending`. Eligible retryable `failed` rows remain open.
-- Prove `order_update` refreshes Mini Program list/kitchen/detail across terminals, or deliberately replace it with the notification event shape those pages consume.
+- Fixed 2026-06-02: `check-merchant-order-update-websocket-contract.test.js` proves backend `order_update` is declared and Mini Program order list/detail plus kitchen board/detail subscribe through dedicated refresh handlers.
 - Prove Flutter push/websocket/polling duplicate alerts cannot double-accept or double-print local BLE receipts.
 - Prove backend display-config auto-accept and Flutter local alert auto-accept converge safely on one order status and one intended print policy.
 
@@ -294,7 +294,7 @@ Missing high-value tests:
 
 - Fixed 2026-06-01: API/logic tests prove merchant reject surfaces refund-submission state for not-needed, pending-recovery, and manual-required branches.
 - Refund recovery tests for eligible retryable `failed` rows after merchant reject, once provider error classification defines safe retry behavior.
-- Merchant websocket test or integration fixture proving `order_update` refreshes order list/kitchen state across terminals.
+- Fixed 2026-06-02: Mini Program contract test proves `order_update` is declared and wired to order list/detail plus kitchen board/detail refresh handlers.
 - Kitchen realtime degradation test for open-status refresh failure.
 - Flutter App contract tests proving local auto-accept uses the same backend accept endpoint, dedupes push/poll/websocket duplicates, and does not double-print BLE receipts after retries.
 
@@ -303,6 +303,6 @@ Missing high-value tests:
 - Fixed 2026-05-31 in `6a19a9c0`: manual refund wrapper/header is now present and covered by a Mini Program contract test.
 - Fixed 2026-06-01: reject-order copy now comes from backend `refund_submission.message`, and the backend contract distinguishes accepted, pending recovery, manual required, and not needed.
 - Partially fixed 2026-05-31 in `d3e84050`: refund recovery now covers order refund rows stuck in `pending` and uses original `out_refund_no`; `failed` retry remains open pending provider duplicate/error classification.
-- Align websocket message types: either publish the notification type the Mini Program listens for, or add `order_update` handling in the Mini Program order/kitchen flows.
+- Fixed 2026-06-02: websocket message types were aligned by adding `order_update` handling in Mini Program order/kitchen flows and a durable contract script.
 - Keep `CompleteOrderTx` broad only if all callers deliberately guard it before use. If refactoring, rename or split it to avoid accidental merchant-like use without ready-state checks.
 - Decide product semantics for the two auto-accept controls: backend display-config `auto_accept_paid_orders` plus cloud-printer gating, and Flutter App local `autoAcceptEnabled` on new-order alerts. They currently coexist and can both accept the same order through conditional backend status logic.

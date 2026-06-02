@@ -11,6 +11,7 @@ import { isSettledFulfilled, isSettledRejected, settleAll } from '../../../../ut
 import dayjs from '../../_main_shared/miniprogram_npm/dayjs/index'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 import { waitForRefundTerminalResult } from '../../_main_shared/services/refund-workflow'
+import { wsManager, WSMessageType } from '../../_main_shared/utils/websocket'
 import {
   buildPaymentView,
   buildMerchantOrderFeeBreakdownView,
@@ -33,6 +34,13 @@ import {
 } from '../../_utils/merchant-order-detail-view'
 
 const getErrorMessage = getErrorUserMessage
+
+type WsUnsubscribe = () => void
+
+interface OrderUpdatePayload {
+  id?: number | string
+  order_id?: number | string
+}
 
 function buildRefundIdempotencyKey(orderId: number, paymentId: number) {
   return `merchant-manual-refund:${orderId}:${paymentId}:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`
@@ -67,7 +75,8 @@ Page({
     manualPrinting: false,
     loading: true,
     submitting: false,
-    isIPhoneX: false
+    isIPhoneX: false,
+    _wsListeners: [] as WsUnsubscribe[]
   },
 
   onLoad(options: MerchantOrderDetailOptions) {
@@ -91,6 +100,21 @@ Page({
     }
 
     this.loadDetail()
+    this.initWebSocket()
+  },
+
+  onShow() {
+    if (this.data.orderId) {
+      this.initWebSocket()
+    }
+  },
+
+  onHide() {
+    this.stopRealtimeRuntime()
+  },
+
+  onUnload() {
+    this.stopRealtimeRuntime()
   },
 
   onPullDownRefresh() {
@@ -103,6 +127,48 @@ Page({
 
   onRetryRefresh() {
     this.loadDetail(false)
+  },
+
+  initWebSocket() {
+    this.cleanupWebSocket()
+    wsManager.connect()
+
+    const orderUpdateSub = wsManager.on(WSMessageType.ORDER_UPDATE, (data) => {
+      this.handleRealtimeOrderUpdate(data)
+    })
+
+    const blockedSub = wsManager.on(WSMessageType.CONNECTION_BLOCKED, (payload) => {
+      const message = typeof payload === 'object' && payload !== null && 'message' in payload
+        ? String((payload as { message?: unknown }).message || '')
+        : ''
+      if (message) {
+        this.setData({ refreshErrorMessage: message })
+      }
+    })
+
+    this.data._wsListeners = [orderUpdateSub, blockedSub]
+  },
+
+  cleanupWebSocket() {
+    if (this.data._wsListeners?.length) {
+      this.data._wsListeners.forEach((unsubscribe) => unsubscribe())
+      this.data._wsListeners = []
+    }
+  },
+
+  stopRealtimeRuntime() {
+    this.cleanupWebSocket()
+    wsManager.disconnect()
+  },
+
+  handleRealtimeOrderUpdate(data: unknown) {
+    const payload = typeof data === 'object' && data !== null
+      ? (data as OrderUpdatePayload)
+      : {}
+    const orderId = Number(payload.id || payload.order_id || 0)
+    if (orderId === this.data.orderId && !this.data.submitting && !this.data.refundSubmitting) {
+      this.loadDetail(false)
+    }
   },
 
   async loadDetail(showLoading = true) {

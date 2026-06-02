@@ -174,6 +174,10 @@ Page({
       }
     })
 
+    const orderUpdateSub = wsManager.on(WSMessageType.ORDER_UPDATE, (data) => {
+      this.handleRealtimeOrderUpdate(data)
+    })
+
     const blockedSub = wsManager.on(WSMessageType.CONNECTION_BLOCKED, (payload) => {
       const message = typeof payload === 'object' && payload !== null && 'message' in payload
         ? String((payload as { message?: unknown }).message || '')
@@ -184,7 +188,7 @@ Page({
       this.setData({ refreshErrorMessage: message })
     })
 
-    this.data._wsListeners = [notificationSub, blockedSub]
+    this.data._wsListeners = [notificationSub, orderUpdateSub, blockedSub]
   },
 
   cleanupWebSocket() {
@@ -222,6 +226,10 @@ Page({
       }
     }
 
+    this.refreshOrdersFromRealtime()
+  },
+
+  handleRealtimeOrderUpdate(_data: unknown) {
     this.refreshOrdersFromRealtime()
   },
 

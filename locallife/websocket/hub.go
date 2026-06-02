@@ -17,7 +17,7 @@ import (
 type Message struct {
 	ID        string          `json:"id,omitempty"`       // 消息唯一ID
 	Sequence  uint64          `json:"sequence,omitempty"` // 客户端内序号
-	Type      string          `json:"type"`               // 消息类型：notification/ping/pong
+	Type      string          `json:"type"`               // 消息类型：notification/ping/pong/order_update
 	Data      json.RawMessage `json:"data"`               // 消息数据
 	Timestamp time.Time       `json:"timestamp"`          // 消息时间戳
 }

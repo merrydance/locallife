@@ -7,6 +7,7 @@ const (
 	MessageTypePong                 = "pong"
 	MessageTypeAlert                = "alert"
 	MessageTypeMerchantStatusChange = "merchant_status_change"
+	MessageTypeOrderUpdate          = "order_update"
 
 	// 代取相关消息类型
 	MessageTypeDeliveryPoolNew    = "delivery_pool_new"    // 代取池新增订单
