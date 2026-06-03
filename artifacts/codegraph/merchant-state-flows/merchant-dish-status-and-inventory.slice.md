@@ -100,8 +100,8 @@ The merchant-visible dish and inventory workflow should have one coherent availa
 - Order/cart paths reject unavailable dishes; reservation paths currently accept unavailable dishes as long as they are online.
 - `UpdateDishAvailability` SQL has coverage signals but no runtime caller was found in the merchant Mini Program or backend handlers; it looks like a legacy/zombie side path.
 - `BatchUpdateDishStatus` has an API wrapper and backend route but no current merchant-page caller found. Fixed 2026-06-03: partial SQL update results now report only actual updated IDs.
-- `InventoryManagementService.checkInventory` sends `{ items, date? }`, while backend `checkInventoryRequest` expects `{ dish_id, date, quantity }`. No current merchant-page caller was found.
-- `InventoryManagementService.getInventoryStats` sends `start_date/end_date`, while backend expects `date`. No current merchant-page caller was found.
+- Fixed 2026-06-03: `InventoryManagementService.checkInventory` now sends backend `checkInventoryRequest` shape `{ dish_id, date, quantity }` and returns `CheckInventoryResponse`. No current merchant-page caller was found.
+- Fixed 2026-06-03: `InventoryManagementService.getInventoryStats` now sends backend query shape `{ date }` and returns `InventoryStatsResponse`. No current merchant-page caller was found.
 - `ListDailyInventoryByMerchant` hides offline dishes from the inventory editor even if `daily_inventory` rows already exist for those dishes.
 - Fixed 2026-06-03: `GetInventoryStats` classifies sold-out/available using `sold_quantity + reserved_quantity`, matching page/backend available calculations.
 
@@ -177,7 +177,7 @@ Missing high-value tests:
 - Fixed 2026-06-03: `POST /v1/inventory/check` no longer mutates inventory and now aligns missing-row semantics with list, payment, and reservation paths.
 - Fixed 2026-06-03: merchant inventory saves and the database constraint now prevent finite total inventory from falling below `sold + reserved`.
 - Fixed 2026-06-03: inventory stats now classify finite rows with `sold + reserved >= total` as sold out and only treat rows with remaining uncommitted stock as available.
-- Fixed 2026-06-03: Mini Program `checkInventory` wrapper signatures now match backend `checkInventoryRequest`/`checkInventoryResponse`. Inventory stats wrapper parameters still drift from backend and the unused batch/status/check/stats wrappers remain cleanup candidates before future page binding.
+- Fixed 2026-06-03: Mini Program `checkInventory` and `getInventoryStats` wrapper signatures now match backend inventory contracts. The unused batch/status/check/stats wrappers remain cleanup candidates before future page binding.
 
 ## Branch Exhaustion
 
@@ -188,5 +188,5 @@ Missing high-value tests:
 - Failure/retry branches checked: per-row status pending rollback, fixed batch-status partial SQL update reporting, dish edit multi-write partial persistence, fixed featured-tag transactional failure, inventory last-write-wins, fixed direct inventory POST tenant denial, fixed read-only inventory check semantics, fixed total below sold+reserved rejection, and stale `is_available` read/write inconsistency.
 - Reader/consumer branches checked: dish list/edit, inventory page, public merchant menu, search, scan-table menu, cart, direct order, reservation validation, packaging policy, and inventory stats.
 - Authorization/tenant branches checked: owner/manager/chef dish and inventory routes, dish ownership checks for most writes, inventory PUT ownership validation on missing-row create, direct inventory POST ownership check added 2026-06-02, and customer readers relying on persisted state.
-- Zombie/unreachable branches checked: `is_available` has stale semantics because edit resets it to true while readers vary; Mini Program wrappers for batch status/inventory check/stats appear unused; inventory stats wrapper parameters still drift from backend; single dish-edit submit is split across multiple backend writes.
+- Zombie/unreachable branches checked: `is_available` has stale semantics because edit resets it to true while readers vary; Mini Program wrappers for batch status/inventory check/stats appear unused; single dish-edit submit is split across multiple backend writes.
 - Test-proof gaps checked: existing tests cover packaging offline rejection, batch status partial SQL update reporting, create rollback, featured-tag transactional rollback, inventory update/check-only/decrement lower layers, direct POST tenant denial, finite inventory total guard, reserved-quantity stats classification, and reserve/release lower layers. Missing proof remains for `is_available` product contract and dish-edit partial failure recovery.

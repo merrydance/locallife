@@ -992,20 +992,8 @@ export class InventoryManagementService {
      * GET /v1/inventory/stats
      */
     static async getInventoryStats(params: {
-        start_date: string
-        end_date: string
-    }): Promise<{
-        total_dishes: number
-        low_stock_dishes: number
-        out_of_stock_dishes: number
-        stats: Array<{
-            dish_id: number
-            dish_name: string
-            avg_daily_sales: number
-            total_sales: number
-            current_stock: number
-        }>
-    }> {
+        date: string
+    }): Promise<InventoryStatsResponse> {
         return await request({
             url: '/v1/inventory/stats',
             method: 'GET',
