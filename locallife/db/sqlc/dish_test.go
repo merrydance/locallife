@@ -456,6 +456,30 @@ func TestUpdateDishOnlineStatus(t *testing.T) {
 	require.False(t, updatedDish.IsOnline)
 }
 
+func TestBatchUpdateDishOnlineStatusReturnsActualUpdatedIDs(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	otherMerchant := createRandomMerchantForDish(t)
+	category := createRandomDishCategory(t)
+	dish := createRandomDish(t, merchant.ID, category.ID)
+	foreignDish := createRandomDish(t, otherMerchant.ID, category.ID)
+
+	updatedIDs, err := testStore.BatchUpdateDishOnlineStatus(context.Background(), BatchUpdateDishOnlineStatusParams{
+		IsOnline:   false,
+		Column2:    []int64{dish.ID, foreignDish.ID, util.RandomInt(100000, 200000)},
+		MerchantID: merchant.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, []int64{dish.ID}, updatedIDs)
+
+	updatedDish, err := testStore.GetDish(context.Background(), dish.ID)
+	require.NoError(t, err)
+	require.False(t, updatedDish.IsOnline)
+
+	unchangedForeignDish, err := testStore.GetDish(context.Background(), foreignDish.ID)
+	require.NoError(t, err)
+	require.True(t, unchangedForeignDish.IsOnline)
+}
+
 func TestDeleteDish(t *testing.T) {
 	merchant := createRandomMerchantForDish(t)
 	category := createRandomDishCategory(t)

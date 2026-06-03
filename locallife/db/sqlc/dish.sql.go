@@ -72,7 +72,7 @@ func (q *Queries) AddDishTag(ctx context.Context, arg AddDishTagParams) (DishTag
 	return i, err
 }
 
-const batchUpdateDishOnlineStatus = `-- name: BatchUpdateDishOnlineStatus :execrows
+const batchUpdateDishOnlineStatus = `-- name: BatchUpdateDishOnlineStatus :many
 UPDATE dishes
 SET is_online = $1, updated_at = NOW()
 WHERE id = ANY($2::bigint[])
@@ -88,12 +88,24 @@ type BatchUpdateDishOnlineStatusParams struct {
 }
 
 // 批量更新菜品上下架状态（只更新属于指定商户的菜品）
-func (q *Queries) BatchUpdateDishOnlineStatus(ctx context.Context, arg BatchUpdateDishOnlineStatusParams) (int64, error) {
-	result, err := q.db.Exec(ctx, batchUpdateDishOnlineStatus, arg.IsOnline, arg.Column2, arg.MerchantID)
+func (q *Queries) BatchUpdateDishOnlineStatus(ctx context.Context, arg BatchUpdateDishOnlineStatusParams) ([]int64, error) {
+	rows, err := q.db.Query(ctx, batchUpdateDishOnlineStatus, arg.IsOnline, arg.Column2, arg.MerchantID)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return result.RowsAffected(), nil
+	defer rows.Close()
+	items := []int64{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const countActivePackagingDishesByMerchant = `-- name: CountActivePackagingDishesByMerchant :one

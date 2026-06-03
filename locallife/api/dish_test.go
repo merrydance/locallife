@@ -1004,6 +1004,67 @@ func TestUpdateDishStatusAPI(t *testing.T) {
 	}
 }
 
+func TestBatchUpdateDishStatusAPIReportsOnlyActualUpdatedRows(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	dishA := randomDish(merchant.ID, nil)
+	dishB := randomDish(merchant.ID, nil)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+	store.EXPECT().
+		GetDishesByIDsAll(gomock.Any(), gomock.Eq([]int64{dishA.ID, dishB.ID})).
+		Times(1).
+		Return([]db.GetDishesByIDsAllRow{
+			{
+				ID:         dishA.ID,
+				MerchantID: merchant.ID,
+				Name:       dishA.Name,
+				IsOnline:   dishA.IsOnline,
+			},
+			{
+				ID:         dishB.ID,
+				MerchantID: merchant.ID,
+				Name:       dishB.Name,
+				IsOnline:   dishB.IsOnline,
+			},
+		}, nil)
+
+	store.EXPECT().
+		BatchUpdateDishOnlineStatus(gomock.Any(), gomock.Eq(db.BatchUpdateDishOnlineStatusParams{
+			IsOnline:   true,
+			Column2:    []int64{dishA.ID, dishB.ID},
+			MerchantID: merchant.ID,
+		})).
+		Times(1).
+		Return([]int64{dishA.ID}, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	data, err := json.Marshal(gin.H{
+		"dish_ids":  []int64{dishA.ID, dishB.ID},
+		"is_online": true,
+	})
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPatch, "/v1/dishes/batch/status", bytes.NewReader(data))
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var got batchDishStatusResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &got)
+	require.Equal(t, []int64{dishA.ID}, got.Updated)
+	require.Equal(t, []int64{dishB.ID}, got.Failed)
+}
+
 func TestSetDishFeaturedTagsAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)

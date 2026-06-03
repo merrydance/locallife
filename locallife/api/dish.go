@@ -1591,7 +1591,7 @@ func (server *Server) batchUpdateDishStatus(ctx *gin.Context) {
 		}
 
 		// 批量更新菜品状态
-		rowsAffected, err := server.store.BatchUpdateDishOnlineStatus(ctx, db.BatchUpdateDishOnlineStatusParams{
+		updatedDishIDs, err := server.store.BatchUpdateDishOnlineStatus(ctx, db.BatchUpdateDishOnlineStatusParams{
 			IsOnline:   *req.IsOnline,
 			Column2:    validDishIDs,
 			MerchantID: merchant.ID,
@@ -1601,11 +1601,16 @@ func (server *Server) batchUpdateDishStatus(ctx *gin.Context) {
 			return
 		}
 
-		if rowsAffected == int64(len(validDishIDs)) {
-			updated = validDishIDs
-		} else {
-			// 部分更新成功，需要查询哪些实际更新了（边缘情况）
-			updated = validDishIDs
+		updatedSet := make(map[int64]struct{}, len(updatedDishIDs))
+		for _, dishID := range updatedDishIDs {
+			updatedSet[dishID] = struct{}{}
+		}
+		for _, dishID := range validDishIDs {
+			if _, ok := updatedSet[dishID]; ok {
+				updated = append(updated, dishID)
+				continue
+			}
+			failed = append(failed, dishID)
 		}
 	}
 

@@ -708,7 +708,7 @@ FROM dishes
 WHERE id = ANY($1::bigint[])
   AND deleted_at IS NULL;
 
--- name: BatchUpdateDishOnlineStatus :execrows
+-- name: BatchUpdateDishOnlineStatus :many
 -- 批量更新菜品上下架状态（只更新属于指定商户的菜品）
 UPDATE dishes
 SET is_online = $1, updated_at = NOW()

@@ -612,10 +612,10 @@ func (mr *MockStoreMockRecorder) BatchCreateRiderLocations(ctx, arg any) *gomock
 }
 
 // BatchUpdateDishOnlineStatus mocks base method.
-func (m *MockStore) BatchUpdateDishOnlineStatus(ctx context.Context, arg db.BatchUpdateDishOnlineStatusParams) (int64, error) {
+func (m *MockStore) BatchUpdateDishOnlineStatus(ctx context.Context, arg db.BatchUpdateDishOnlineStatusParams) ([]int64, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "BatchUpdateDishOnlineStatus", ctx, arg)
-	ret0, _ := ret[0].(int64)
+	ret0, _ := ret[0].([]int64)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
