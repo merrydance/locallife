@@ -103,7 +103,7 @@ The merchant-visible dish and inventory workflow should have one coherent availa
 - `InventoryManagementService.checkInventory` sends `{ items, date? }`, while backend `checkInventoryRequest` expects `{ dish_id, date, quantity }`. No current merchant-page caller was found.
 - `InventoryManagementService.getInventoryStats` sends `start_date/end_date`, while backend expects `date`. No current merchant-page caller was found.
 - `ListDailyInventoryByMerchant` hides offline dishes from the inventory editor even if `daily_inventory` rows already exist for those dishes.
-- `GetInventoryStats` classifies sold-out/available using `sold_quantity` and ignores `reserved_quantity`, while page/backend `available` calculations subtract reserved quantity.
+- Fixed 2026-06-03: `GetInventoryStats` classifies sold-out/available using `sold_quantity + reserved_quantity`, matching page/backend available calculations.
 
 ## SQL And Durable State Boundaries
 
@@ -159,6 +159,7 @@ Observed tests:
 - `locallife/api/inventory_test.go` and `locallife/db/sqlc/inventory_test.go` cover finite-total rejection when a merchant or direct store update would set total below sold plus reserved quantities.
 - `locallife/api/inventory_test.go` covers direct inventory POST tenant-boundary denial for a foreign dish.
 - `locallife/api/inventory_test.go` covers check/decrement success, no auth, missing-row path, and insufficient inventory response.
+- `locallife/db/sqlc/inventory_test.go` covers inventory stats sold-out/available classification using reserved quantity as committed stock.
 - SQL inventory tests and reservation inventory transaction tests cover lower-level decrement/reserve/release behavior.
 
 Missing high-value tests:
@@ -166,7 +167,6 @@ Missing high-value tests:
 - Public/search/scan/detail/reservation consistency for `is_available`.
 - Dish edit product workflow partial-failure behavior and re-entry recovery after featured-tag or customization failure.
 - Batch dish status rowsAffected mismatch response.
-- Inventory stats sold-out/available classification with reserved quantity.
 
 ## Gaps And Refactor Notes
 
@@ -176,6 +176,7 @@ Missing high-value tests:
 - Split `POST /v1/inventory/check` into a true check endpoint and a mutation endpoint, or retire it if order payment is the only valid decrement writer.
 - Align inventory missing-row semantics across list, check, payment, and reservation.
 - Fixed 2026-06-03: merchant inventory saves and the database constraint now prevent finite total inventory from falling below `sold + reserved`.
+- Fixed 2026-06-03: inventory stats now classify finite rows with `sold + reserved >= total` as sold out and only treat rows with remaining uncommitted stock as available.
 - Fix or remove unused Mini Program wrappers for batch status, inventory check, and inventory stats so future page work does not bind to drifted contracts.
 
 ## Branch Exhaustion
@@ -188,4 +189,4 @@ Missing high-value tests:
 - Reader/consumer branches checked: dish list/edit, inventory page, public merchant menu, search, scan-table menu, cart, direct order, reservation validation, packaging policy, and inventory stats.
 - Authorization/tenant branches checked: owner/manager/chef dish and inventory routes, dish ownership checks for most writes, inventory PUT ownership validation on missing-row create, direct inventory POST ownership check added 2026-06-02, and customer readers relying on persisted state.
 - Zombie/unreachable branches checked: `is_available` has stale semantics because edit resets it to true while readers vary; Mini Program wrappers for batch status/inventory check/stats appear unused; `POST /inventory/check` is named as check but mutates; single dish-edit submit is split across multiple backend writes.
-- Test-proof gaps checked: existing tests cover packaging offline rejection, create rollback, featured-tag transactional rollback, inventory update/check/decrement, direct POST tenant denial, finite inventory total guard, and reserve/release lower layers. Missing proof remains for `is_available` product contract, dish-edit partial failure recovery, batch status rowsAffected, and reserved-quantity stats.
+- Test-proof gaps checked: existing tests cover packaging offline rejection, create rollback, featured-tag transactional rollback, inventory update/check/decrement, direct POST tenant denial, finite inventory total guard, reserved-quantity stats classification, and reserve/release lower layers. Missing proof remains for `is_available` product contract, dish-edit partial failure recovery, and batch status rowsAffected.

@@ -197,10 +197,10 @@ const getInventoryStats = `-- name: GetInventoryStats :one
 SELECT 
   COUNT(d.id) as total_dishes,
   COUNT(d.id) FILTER (WHERE di.total_quantity = -1 OR di.id IS NULL) as unlimited_dishes,
-  COUNT(d.id) FILTER (WHERE di.total_quantity = 0 OR (di.total_quantity > 0 AND di.sold_quantity >= di.total_quantity)) as sold_out_dishes,
+  COUNT(d.id) FILTER (WHERE di.total_quantity = 0 OR (di.total_quantity > 0 AND di.sold_quantity + di.reserved_quantity >= di.total_quantity)) as sold_out_dishes,
   COUNT(d.id) FILTER (
     WHERE (di.total_quantity = -1 OR di.id IS NULL) -- 无限库存
-    OR (di.total_quantity > 0 AND di.sold_quantity < di.total_quantity) -- 有限库存且未卖完
+    OR (di.total_quantity > 0 AND di.sold_quantity + di.reserved_quantity < di.total_quantity) -- 有限库存且仍有未提交库存
   ) as available_dishes
 FROM dishes d
 LEFT JOIN daily_inventory di ON d.id = di.dish_id AND di.date = $2

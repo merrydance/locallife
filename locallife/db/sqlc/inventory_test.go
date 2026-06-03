@@ -397,3 +397,38 @@ func TestGetInventoryStats(t *testing.T) {
 	require.GreaterOrEqual(t, stats.SoldOutDishes, int64(1))
 	require.GreaterOrEqual(t, stats.AvailableDishes, int64(1))
 }
+
+func TestGetInventoryStatsTreatsReservedQuantityAsCommitted(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	category := createRandomDishCategory(t)
+	today := time.Now()
+
+	dish := createRandomDish(t, merchant.ID, category.ID)
+	_, err := testStore.CreateDailyInventory(context.Background(), CreateDailyInventoryParams{
+		MerchantID:    merchant.ID,
+		DishID:        dish.ID,
+		Date:          pgtype.Date{Time: today, Valid: true},
+		TotalQuantity: 10,
+		SoldQuantity:  4,
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.ReserveInventory(context.Background(), ReserveInventoryParams{
+		MerchantID:       merchant.ID,
+		DishID:           dish.ID,
+		Date:             pgtype.Date{Time: today, Valid: true},
+		ReservedQuantity: 6,
+	})
+	require.NoError(t, err)
+
+	stats, err := testStore.GetInventoryStats(context.Background(), GetInventoryStatsParams{
+		MerchantID: merchant.ID,
+		Date:       pgtype.Date{Time: today, Valid: true},
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, int64(1), stats.TotalDishes)
+	require.Equal(t, int64(0), stats.UnlimitedDishes)
+	require.Equal(t, int64(1), stats.SoldOutDishes)
+	require.Equal(t, int64(0), stats.AvailableDishes)
+}
