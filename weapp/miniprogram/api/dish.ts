@@ -155,24 +155,6 @@ export interface UpdateDishRequest extends Record<string, unknown> {
     is_packaging?: boolean                       // 是否为包装菜品
     tag_ids?: number[]                           // 标签ID列表（最多10个）
 }
-
-/**
- * 批量更新菜品状态请求 - 对齐 api.batchUpdateDishStatusRequest
- */
-export interface BatchUpdateDishStatusRequest extends Record<string, unknown> {
-    dish_ids: number[]                           // 菜品ID列表（必填，最多100个）
-    is_online: boolean                           // true=上架, false=下架（必填）
-}
-
-/**
- * 批量菜品状态响应 - 对齐 api.batchDishStatusResponse
- */
-export interface BatchDishStatusResponse {
-    updated: number[]                            // 更新成功的ID
-    failed: number[]                             // 更新失败的ID
-    message?: string                             // 消息
-}
-
 // ==================== 套餐数据类型定义 ====================
 
 /**
@@ -305,35 +287,6 @@ export interface UpdateSingleInventoryRequest extends Record<string, unknown> {
     sold_quantity?: number                       // 已售数量
     total_quantity?: number                      // 总库存数量（-1表示无限库存）
 }
-
-/**
- * 检查库存请求 - 对齐 api.checkInventoryRequest
- */
-export interface CheckInventoryRequest extends Record<string, unknown> {
-    dish_id: number                              // 菜品ID（必填）
-    quantity: number                             // 数量（必填）
-    date: string                                 // 日期（YYYY-MM-DD，必填）
-}
-
-/**
- * 检查库存响应 - 对齐 api.checkInventoryResponse
- */
-export interface CheckInventoryResponse {
-    available: boolean                           // 是否有库存
-    current_stock: number                        // 当前库存
-    message?: string                             // 消息
-}
-
-/**
- * 库存统计响应 - 对齐 api.inventoryStatsResponse
- */
-export interface InventoryStatsResponse {
-    total_dishes: number                         // 总菜品数
-    available_dishes: number                     // 有库存菜品数
-    sold_out_dishes: number                      // 已售罄菜品数
-    unlimited_dishes: number                     // 无限库存菜品数
-}
-
 /**
  * 菜品分类响应 - 对齐 api.dishCategoryResponse
  */
@@ -712,19 +665,6 @@ export class DishManagementService {
             data
         })
     }
-
-    /**
-     * 批量更新菜品状态
-     * PATCH /v1/dishes/batch/status
-     */
-    static async batchUpdateDishStatus(data: BatchUpdateDishStatusRequest): Promise<BatchDishStatusResponse> {
-        return await request({
-            url: '/v1/dishes/batch/status',
-            method: 'PATCH',
-            data
-        })
-    }
-
     /**
      * 获取菜品定制化选项
      * GET /v1/dishes/{id}/customizations
@@ -972,32 +912,6 @@ export class InventoryManagementService {
             url: '/v1/inventory',
             method: 'PUT',
             data
-        })
-    }
-
-    /**
-     * 检查库存
-     * POST /v1/inventory/check
-     */
-    static async checkInventory(data: CheckInventoryRequest): Promise<CheckInventoryResponse> {
-        return await request({
-            url: '/v1/inventory/check',
-            method: 'POST',
-            data
-        })
-    }
-
-    /**
-     * 获取库存统计
-     * GET /v1/inventory/stats
-     */
-    static async getInventoryStats(params: {
-        date: string
-    }): Promise<InventoryStatsResponse> {
-        return await request({
-            url: '/v1/inventory/stats',
-            method: 'GET',
-            data: params
         })
     }
 }
