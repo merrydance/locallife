@@ -458,21 +458,22 @@ type checkInventoryResponse struct {
 	Message      string `json:"message,omitempty"`
 }
 
-// checkAndDecrementInventory godoc
-// @Summary 检查并扣减库存
-// @Description 检查库存是否充足并原子扣减（用于下单）
+// checkInventory godoc
+// @Summary 检查库存
+// @Description 只读检查指定菜品某日库存是否充足；缺少库存配置表示无限库存，实际扣减由订单/预约事务完成。
 // @Tags 库存管理
 // @Accept json
 // @Produce json
-// @Param request body checkInventoryRequest true "扣减请求"
+// @Param request body checkInventoryRequest true "检查请求"
 // @Success 200 {object} checkInventoryResponse "检查结果"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 401 {object} ErrorResponse "未认证"
-// @Failure 404 {object} ErrorResponse "商户不存在"
+// @Failure 403 {object} ErrorResponse "菜品不属于当前商户"
+// @Failure 404 {object} ErrorResponse "商户或菜品不存在"
 // @Failure 500 {object} ErrorResponse "服务器错误"
 // @Router /v1/inventory/check [post]
 // @Security BearerAuth
-func (server *Server) checkAndDecrementInventory(ctx *gin.Context) {
+func (server *Server) checkInventory(ctx *gin.Context) {
 	var req checkInventoryRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
@@ -496,38 +497,31 @@ func (server *Server) checkAndDecrementInventory(ctx *gin.Context) {
 		return
 	}
 
-	// 使用CheckAndDecrementInventory原子操作
-	inventory, err := server.store.CheckAndDecrementInventory(ctx, db.CheckAndDecrementInventoryParams{
-		MerchantID:   merchant.ID,
-		DishID:       req.DishID,
-		Date:         pgtype.Date{Time: date, Valid: true},
-		SoldQuantity: req.Quantity,
-	})
-
+	dish, err := server.store.GetDish(ctx, req.DishID)
 	if err != nil {
 		if isNotFoundError(err) {
-			// 没有库存记录或库存不足
-			existing, getErr := server.store.GetDailyInventory(ctx, db.GetDailyInventoryParams{
-				MerchantID: merchant.ID,
-				DishID:     req.DishID,
-				Date:       pgtype.Date{Time: date, Valid: true},
-			})
-			if getErr != nil {
-				if isNotFoundError(getErr) {
-					ctx.JSON(http.StatusOK, checkInventoryResponse{
-						Available:    false,
-						CurrentStock: 0,
-						Message:      "inventory not found",
-					})
-					return
-				}
-				ctx.JSON(http.StatusInternalServerError, internalError(ctx, getErr))
-				return
-			}
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	if dish.MerchantID != merchant.ID {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("dish does not belong to this merchant")))
+		return
+	}
+
+	inventory, err := server.store.GetDailyInventory(ctx, db.GetDailyInventoryParams{
+		MerchantID: merchant.ID,
+		DishID:     req.DishID,
+		Date:       pgtype.Date{Time: date, Valid: true},
+	})
+	if err != nil {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusOK, checkInventoryResponse{
-				Available:    false,
-				CurrentStock: calculateAvailable(existing.TotalQuantity, existing.SoldQuantity, existing.ReservedQuantity),
-				Message:      "insufficient inventory",
+				Available:    true,
+				CurrentStock: -1,
+				Message:      "unlimited inventory",
 			})
 			return
 		}
@@ -535,9 +529,28 @@ func (server *Server) checkAndDecrementInventory(ctx *gin.Context) {
 		return
 	}
 
+	currentStock := calculateAvailable(inventory.TotalQuantity, inventory.SoldQuantity, inventory.ReservedQuantity)
+	if currentStock == -1 {
+		ctx.JSON(http.StatusOK, checkInventoryResponse{
+			Available:    true,
+			CurrentStock: -1,
+			Message:      "unlimited inventory",
+		})
+		return
+	}
+
+	if currentStock < req.Quantity {
+		ctx.JSON(http.StatusOK, checkInventoryResponse{
+			Available:    false,
+			CurrentStock: currentStock,
+			Message:      "insufficient inventory",
+		})
+		return
+	}
+
 	ctx.JSON(http.StatusOK, checkInventoryResponse{
 		Available:    true,
-		CurrentStock: calculateAvailable(inventory.TotalQuantity, inventory.SoldQuantity, inventory.ReservedQuantity),
+		CurrentStock: currentStock,
 		Message:      "success",
 	})
 }

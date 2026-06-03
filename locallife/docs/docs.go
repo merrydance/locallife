@@ -8029,7 +8029,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "检查库存是否充足并原子扣减（用于下单）",
+                "description": "只读检查指定菜品某日库存是否充足；缺少库存配置表示无限库存，实际扣减由订单/预约事务完成。",
                 "consumes": [
                     "application/json"
                 ],
@@ -8039,10 +8039,10 @@ const docTemplate = `{
                 "tags": [
                     "库存管理"
                 ],
-                "summary": "检查并扣减库存",
+                "summary": "检查库存",
                 "parameters": [
                     {
-                        "description": "扣减请求",
+                        "description": "检查请求",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -8070,8 +8070,14 @@ const docTemplate = `{
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
+                    "403": {
+                        "description": "菜品不属于当前商户",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
                     "404": {
-                        "description": "商户不存在",
+                        "description": "商户或菜品不存在",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }

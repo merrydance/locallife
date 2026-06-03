@@ -348,11 +348,11 @@
       "line": 243
     },
     {
-      "id": "api.checkAndDecrementInventory",
+      "id": "api.checkInventory",
       "kind": "handler",
-      "label": "Server.checkAndDecrementInventory",
+      "label": "Server.checkInventory",
       "file": "locallife/api/inventory.go",
-      "line": 445
+      "line": 461
     },
     {
       "id": "api.getInventoryStats",
@@ -1048,18 +1048,18 @@
     },
     {
       "from": "route.checkInventory",
-      "to": "api.checkAndDecrementInventory",
+      "to": "api.checkInventory",
       "kind": "route"
     },
     {
-      "from": "api.checkAndDecrementInventory",
-      "to": "sql.CheckAndDecrementInventory",
-      "kind": "write"
+      "from": "api.checkInventory",
+      "to": "table.dishes",
+      "kind": "read"
     },
     {
-      "from": "sql.CheckAndDecrementInventory",
-      "to": "field.daily_inventory.sold_quantity",
-      "kind": "write"
+      "from": "api.checkInventory",
+      "to": "sql.GetDailyInventory",
+      "kind": "read"
     },
     {
       "from": "apiWrapper.getInventoryStats",

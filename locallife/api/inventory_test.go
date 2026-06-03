@@ -455,11 +455,12 @@ func TestUpdateDailyInventoryAPI(t *testing.T) {
 	}
 }
 
-// ==================== 检查并扣减库存测试 ====================
+// ==================== 检查库存测试 ====================
 
-func TestCheckAndDecrementInventoryAPI(t *testing.T) {
+func TestCheckInventoryAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
+	dish := randomDish(merchant.ID, nil)
 
 	testCases := []struct {
 		name          string
@@ -471,8 +472,8 @@ func TestCheckAndDecrementInventoryAPI(t *testing.T) {
 		{
 			name: "OK",
 			body: gin.H{
-				"dish_id":  1,
-				"quantity": 2,
+				"dish_id":  dish.ID,
+				"quantity": 10,
 				"date":     "2025-11-25",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
@@ -481,20 +482,36 @@ func TestCheckAndDecrementInventoryAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
-				inventory := randomDailyInventory(merchant.ID, 1)
+				store.EXPECT().
+					GetDish(gomock.Any(), gomock.Eq(dish.ID)).
+					Times(1).
+					Return(dish, nil)
+
+				inventory := randomDailyInventory(merchant.ID, dish.ID)
+				inventory.TotalQuantity = 50
+				inventory.SoldQuantity = 20
+				inventory.ReservedQuantity = 5
 				store.EXPECT().
 					CheckAndDecrementInventory(gomock.Any(), gomock.Any()).
+					Times(0)
+				store.EXPECT().
+					GetDailyInventory(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(inventory, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
+				var response checkInventoryResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.True(t, response.Available)
+				require.Equal(t, int32(25), response.CurrentStock)
+				require.Equal(t, "success", response.Message)
 			},
 		},
 		{
 			name: "NoAuthorization",
 			body: gin.H{
-				"dish_id":  1,
+				"dish_id":  dish.ID,
 				"quantity": 2,
 				"date":     "2025-11-25",
 			},
@@ -509,9 +526,9 @@ func TestCheckAndDecrementInventoryAPI(t *testing.T) {
 			},
 		},
 		{
-			name: "UnlimitedInventory",
+			name: "MissingInventoryMeansUnlimitedAfterDishOwnershipCheck",
 			body: gin.H{
-				"dish_id":  1,
+				"dish_id":  dish.ID,
 				"quantity": 2,
 				"date":     "2025-11-25",
 			},
@@ -521,13 +538,14 @@ func TestCheckAndDecrementInventoryAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
-				// CheckAndDecrementInventory返回ErrNoRows表示没有库存记录
+				store.EXPECT().
+					GetDish(gomock.Any(), gomock.Eq(dish.ID)).
+					Times(1).
+					Return(dish, nil)
+
 				store.EXPECT().
 					CheckAndDecrementInventory(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.DailyInventory{}, db.ErrRecordNotFound)
-
-				// GetDailyInventory也返回ErrNoRows表示无限库存
+					Times(0)
 				store.EXPECT().
 					GetDailyInventory(gomock.Any(), gomock.Any()).
 					Times(1).
@@ -535,12 +553,49 @@ func TestCheckAndDecrementInventoryAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
+				var response checkInventoryResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.True(t, response.Available)
+				require.Equal(t, int32(-1), response.CurrentStock)
+				require.Equal(t, "unlimited inventory", response.Message)
+			},
+		},
+		{
+			name: "DishBelongsToOtherMerchant",
+			body: gin.H{
+				"dish_id":  dish.ID,
+				"quantity": 2,
+				"date":     "2025-11-25",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				foreignDish := dish
+				foreignDish.MerchantID = merchant.ID + 1
+
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetDish(gomock.Any(), gomock.Eq(dish.ID)).
+					Times(1).
+					Return(foreignDish, nil)
+
+				store.EXPECT().
+					CheckAndDecrementInventory(gomock.Any(), gomock.Any()).
+					Times(0)
+				store.EXPECT().
+					GetDailyInventory(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusForbidden, recorder.Code)
 			},
 		},
 		{
 			name: "InsufficientInventory",
 			body: gin.H{
-				"dish_id":  1,
+				"dish_id":  dish.ID,
 				"quantity": 100, // Request more than available
 				"date":     "2025-11-25",
 			},
@@ -550,19 +605,21 @@ func TestCheckAndDecrementInventoryAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
-				// CheckAndDecrementInventory返回ErrNoRows表示库存不足
+				store.EXPECT().
+					GetDish(gomock.Any(), gomock.Eq(dish.ID)).
+					Times(1).
+					Return(dish, nil)
+
 				store.EXPECT().
 					CheckAndDecrementInventory(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.DailyInventory{}, db.ErrRecordNotFound)
-
-				// GetDailyInventory返回库存记录，说明是库存不足而非无限库存
+					Times(0)
 				existingInventory := db.DailyInventory{
-					ID:            1,
-					MerchantID:    merchant.ID,
-					DishID:        1,
-					TotalQuantity: 50,
-					SoldQuantity:  30,
+					ID:               1,
+					MerchantID:       merchant.ID,
+					DishID:           dish.ID,
+					TotalQuantity:    50,
+					SoldQuantity:     20,
+					ReservedQuantity: 5,
 				}
 				store.EXPECT().
 					GetDailyInventory(gomock.Any(), gomock.Any()).
@@ -575,14 +632,14 @@ func TestCheckAndDecrementInventoryAPI(t *testing.T) {
 				var response checkInventoryResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.False(t, response.Available)
-				require.Equal(t, int32(20), response.CurrentStock) // 50 - 30 = 20
+				require.Equal(t, int32(25), response.CurrentStock)
 				require.Equal(t, "insufficient inventory", response.Message)
 			},
 		},
 		{
 			name: "InvalidQuantity",
 			body: gin.H{
-				"dish_id":  1,
+				"dish_id":  dish.ID,
 				"quantity": 0, // Invalid: must be > 0
 				"date":     "2025-11-25",
 			},

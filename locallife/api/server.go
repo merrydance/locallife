@@ -843,7 +843,7 @@ func (server *Server) setupRouter() {
 		inventoryGroup.GET("", server.listDailyInventory)
 		inventoryGroup.PUT("", server.updateDailyInventory)
 		inventoryGroup.PATCH("/:dish_id", server.updateSingleInventory) // 更新单品库存
-		inventoryGroup.POST("/check", server.checkAndDecrementInventory)
+		inventoryGroup.POST("/check", server.checkInventory)
 		inventoryGroup.GET("/stats", server.getInventoryStats)
 	}
 

@@ -979,21 +979,7 @@ export class InventoryManagementService {
      * 检查库存
      * POST /v1/inventory/check
      */
-    static async checkInventory(data: {
-        items: Array<{
-            dish_id: number
-            quantity: number
-        }>
-        date?: string
-    }): Promise<{
-        available: boolean
-        unavailable_items?: Array<{
-            dish_id: number
-            dish_name: string
-            requested_quantity: number
-            available_quantity: number
-        }>
-    }> {
+    static async checkInventory(data: CheckInventoryRequest): Promise<CheckInventoryResponse> {
         return await request({
             url: '/v1/inventory/check',
             method: 'POST',
