@@ -162,6 +162,31 @@ func TestUpdateDailyInventory(t *testing.T) {
 	require.Equal(t, newSoldQty, updatedInventory.SoldQuantity)
 }
 
+func TestUpdateDailyInventoryRejectsFiniteTotalBelowCommittedQuantity(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	category := createRandomDishCategory(t)
+	dish := createRandomDish(t, merchant.ID, category.ID)
+	today := time.Now()
+
+	inventory := createRandomDailyInventory(t, merchant.ID, dish.ID, today)
+	_, err := testStore.ReserveInventory(context.Background(), ReserveInventoryParams{
+		MerchantID:       merchant.ID,
+		DishID:           dish.ID,
+		Date:             pgtype.Date{Time: today, Valid: true},
+		ReservedQuantity: 5,
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.UpdateDailyInventory(context.Background(), UpdateDailyInventoryParams{
+		MerchantID:    merchant.ID,
+		DishID:        dish.ID,
+		Date:          pgtype.Date{Time: today, Valid: true},
+		TotalQuantity: pgtype.Int4{Int32: 4, Valid: true},
+		SoldQuantity:  pgtype.Int4{Int32: inventory.SoldQuantity, Valid: true},
+	})
+	require.Error(t, err)
+}
+
 func TestIncrementSoldQuantity(t *testing.T) {
 	merchant := createRandomMerchantForDish(t)
 	category := createRandomDishCategory(t)

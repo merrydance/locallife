@@ -1,0 +1,2 @@
+ALTER TABLE daily_inventory
+DROP CONSTRAINT IF EXISTS daily_inventory_total_committed_quantity_check;

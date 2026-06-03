@@ -26,6 +26,13 @@ func calculateAvailable(totalQuantity, soldQuantity, reservedQuantity int32) int
 	return available
 }
 
+func validateInventoryCommittedQuantity(totalQuantity, soldQuantity, reservedQuantity int32) error {
+	if totalQuantity != -1 && totalQuantity < soldQuantity+reservedQuantity {
+		return errors.New("total quantity cannot be less than sold plus reserved quantity")
+	}
+	return nil
+}
+
 type createDailyInventoryRequest struct {
 	DishID        int64  `json:"dish_id" binding:"required,min=1"`
 	Date          string `json:"date" binding:"required"`                  // 日期 YYYY-MM-DD
@@ -313,6 +320,10 @@ func (server *Server) updateDailyInventory(ctx *gin.Context) {
 			if req.SoldQuantity != nil {
 				soldQuantity = *req.SoldQuantity
 			}
+			if err := validateInventoryCommittedQuantity(totalQuantity, soldQuantity, 0); err != nil {
+				ctx.JSON(http.StatusBadRequest, errorResponse(err))
+				return
+			}
 
 			created, createErr := server.store.CreateDailyInventory(ctx, db.CreateDailyInventoryParams{
 				MerchantID:    merchant.ID,
@@ -387,6 +398,10 @@ func (server *Server) updateDailyInventory(ctx *gin.Context) {
 			Int32: *req.SoldQuantity,
 			Valid: true,
 		}
+	}
+	if err := validateInventoryCommittedQuantity(params.TotalQuantity.Int32, params.SoldQuantity.Int32, existing.ReservedQuantity); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
 	}
 
 	// 执行更新
@@ -685,6 +700,10 @@ func (server *Server) updateSingleInventory(ctx *gin.Context) {
 			if req.SoldQuantity != nil {
 				soldQuantity = *req.SoldQuantity
 			}
+			if err := validateInventoryCommittedQuantity(totalQuantity, soldQuantity, 0); err != nil {
+				ctx.JSON(http.StatusBadRequest, errorResponse(err))
+				return
+			}
 
 			created, createErr := server.store.CreateDailyInventory(ctx, db.CreateDailyInventoryParams{
 				MerchantID:    merchant.ID,
@@ -752,6 +771,10 @@ func (server *Server) updateSingleInventory(ctx *gin.Context) {
 	}
 	if req.SoldQuantity != nil {
 		params.SoldQuantity = pgtype.Int4{Int32: *req.SoldQuantity, Valid: true}
+	}
+	if err := validateInventoryCommittedQuantity(params.TotalQuantity.Int32, params.SoldQuantity.Int32, existing.ReservedQuantity); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
 	}
 
 	// 执行更新

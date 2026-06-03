@@ -368,6 +368,64 @@ func TestUpdateDailyInventoryAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 			},
 		},
+		{
+			name: "RejectExistingTotalBelowSoldAndReserved",
+			body: gin.H{
+				"dish_id":        dishID,
+				"date":           "2025-11-25",
+				"total_quantity": 12,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				existingInventory := inventory
+				existingInventory.TotalQuantity = 20
+				existingInventory.SoldQuantity = 8
+				existingInventory.ReservedQuantity = 5
+
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetDailyInventory(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(existingInventory, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name: "RejectCreateTotalBelowSold",
+			body: gin.H{
+				"dish_id":        dishID,
+				"date":           "2025-11-25",
+				"total_quantity": 4,
+				"sold_quantity":  5,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				dish := randomDish(merchant.ID, nil)
+				dish.ID = dishID
+
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetDailyInventory(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.DailyInventory{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
+					GetDish(gomock.Any(), gomock.Eq(dishID)).
+					Times(1).
+					Return(dish, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
 	}
 
 	for i := range testCases {
@@ -772,6 +830,33 @@ func TestUpdateSingleInventoryAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
+			},
+		},
+		{
+			name:   "RejectExistingSoldAboveFiniteTotalAfterReserved",
+			dishID: dishID,
+			body: gin.H{
+				"date":          "2025-11-25",
+				"sold_quantity": 8,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				existingInventory := inventory
+				existingInventory.TotalQuantity = 10
+				existingInventory.SoldQuantity = 4
+				existingInventory.ReservedQuantity = 3
+
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetDailyInventory(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(existingInventory, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
 		},
 		{
