@@ -129,6 +129,37 @@ func expectNoActiveReservationAdjustment(store *mockdb.MockStore, reservationID 
 		Return(db.ReservationAdjustment{}, db.ErrRecordNotFound)
 }
 
+func TestValidateReservationItemsRejectsUnavailableDish(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	merchantID := int64(20)
+	dishID := int64(40)
+
+	store.EXPECT().
+		GetDish(gomock.Any(), dishID).
+		Return(db.Dish{
+			ID:          dishID,
+			MerchantID:  merchantID,
+			Name:        "暂不可售菜品",
+			Price:       3000,
+			IsAvailable: false,
+			IsOnline:    true,
+		}, nil)
+
+	_, _, err := ValidateReservationItems(context.Background(), store, merchantID, []ReservationItemInput{{
+		DishID:   &dishID,
+		Quantity: 1,
+	}})
+
+	require.Error(t, err)
+	var requestErr *RequestError
+	require.ErrorAs(t, err, &requestErr)
+	require.Equal(t, 400, requestErr.Status)
+	require.Contains(t, requestErr.Error(), "暂不可售")
+}
+
 func TestModifyReservationDishesPositiveDeltaCreatesPendingAdjustmentWithoutReplacingItems(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -156,7 +187,7 @@ func TestModifyReservationDishesPositiveDeltaCreatesPendingAdjustmentWithoutRepl
 	store.EXPECT().GetTableReservationForUpdate(gomock.Any(), reservationID).Return(reservation, nil)
 	expectNoActiveReservationAdjustment(store, reservationID)
 	store.EXPECT().SumReservationItemsTotal(gomock.Any(), reservationID).Return(int64(3000), nil)
-	store.EXPECT().GetDish(gomock.Any(), dishID).Return(db.Dish{ID: dishID, MerchantID: merchantID, Price: 5000, IsOnline: true}, nil)
+	store.EXPECT().GetDish(gomock.Any(), dishID).Return(db.Dish{ID: dishID, MerchantID: merchantID, Price: 5000, IsAvailable: true, IsOnline: true}, nil)
 
 	result, err := ModifyReservationDishes(context.Background(), store, ModifyReservationDishesInput{
 		ReservationID: reservationID,
@@ -202,7 +233,7 @@ func TestAddReservationDishesPositiveDeltaCreatesPendingAdjustmentWithoutAppendi
 	store.EXPECT().GetTableReservationForUpdate(gomock.Any(), reservationID).Return(reservation, nil)
 	expectNoActiveReservationAdjustment(store, reservationID)
 	store.EXPECT().SumReservationItemsTotal(gomock.Any(), reservationID).Return(int64(0), nil)
-	store.EXPECT().GetDish(gomock.Any(), dishID).Return(db.Dish{ID: dishID, MerchantID: merchantID, Price: 1800, IsOnline: true}, nil)
+	store.EXPECT().GetDish(gomock.Any(), dishID).Return(db.Dish{ID: dishID, MerchantID: merchantID, Price: 1800, IsAvailable: true, IsOnline: true}, nil)
 	store.EXPECT().GetReservationItemsByReservation(gomock.Any(), reservationID).Return([]db.ReservationItem{}, nil)
 
 	result, err := AddReservationDishes(context.Background(), store, AddReservationDishesInput{

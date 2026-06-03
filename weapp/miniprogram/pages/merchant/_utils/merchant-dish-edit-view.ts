@@ -244,7 +244,7 @@ export function buildDishEditLoadPatch(params: {
       price: params.detail?.price || 0,
       member_price: params.detail?.member_price || 0,
       is_online: params.detail?.is_online ?? true,
-      is_available: true,
+      is_available: params.detail?.is_available ?? true,
       is_packaging: params.detail?.is_packaging ?? false,
       sort_order: params.detail?.sort_order || 0,
       prepare_time: params.detail?.prepare_time || 15,
@@ -524,7 +524,7 @@ export function buildDishSubmitPayload(params: {
     category_id: params.formData.category_id,
     price: params.formData.price,
     is_online: params.formData.is_online,
-    is_available: true,
+    is_available: params.formData.is_packaging ? true : params.formData.is_available,
     is_packaging: params.formData.is_packaging,
     prepare_time: params.formData.prepare_time
   }

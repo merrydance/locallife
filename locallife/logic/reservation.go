@@ -792,6 +792,9 @@ func ValidateReservationItems(ctx context.Context, store db.Store, merchantID in
 			if !dish.IsOnline {
 				return nil, 0, NewRequestError(http.StatusBadRequest, fmt.Errorf("菜品 %s 已下架", dish.Name))
 			}
+			if !dish.IsAvailable {
+				return nil, 0, NewRequestError(http.StatusBadRequest, fmt.Errorf("菜品 %s 暂不可售", dish.Name))
+			}
 			unitPrice = dish.Price
 		}
 

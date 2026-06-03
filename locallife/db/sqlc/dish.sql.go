@@ -153,6 +153,7 @@ WHERE
   AND deleted_at IS NULL
   AND name ILIKE '%' || $2 || '%'
   AND is_online = true
+  AND is_available = true
 `
 
 type CountSearchDishesByNameParams struct {
@@ -181,7 +182,7 @@ WHERE
   AND m.region_id = $2
   AND d.deleted_at IS NULL
   AND d.is_online = true
-  AND d.is_online = true
+  AND d.is_available = true
   AND d.name ILIKE '%' || $1 || '%'
   AND ($3::bigint IS NULL OR EXISTS (
     SELECT 1 FROM dish_tags dt WHERE dt.dish_id = d.id AND dt.tag_id = $3
@@ -905,6 +906,7 @@ FROM dishes
 WHERE id = ANY($1::bigint[])
   AND deleted_at IS NULL
   AND is_online = true
+  AND is_available = true
 `
 
 type GetDishesByIDsRow struct {
@@ -1045,6 +1047,7 @@ JOIN merchants m ON m.id = d.merchant_id
 WHERE d.id = ANY($1::bigint[])
   AND d.deleted_at IS NULL
   AND d.is_online = true
+  AND d.is_available = true
   AND m.status = 'active'
 `
 
@@ -1739,6 +1742,7 @@ SELECT
 FROM dishes d
 WHERE d.merchant_id = $1
   AND d.is_online = true
+  AND d.is_available = true
   AND d.deleted_at IS NULL
 ORDER BY d.category_id, d.sort_order ASC, d.id ASC
 `
@@ -1880,6 +1884,7 @@ WHERE
   AND m.deleted_at IS NULL
   AND d.deleted_at IS NULL
   AND d.is_online = true
+  AND d.is_available = true
   AND d.name ILIKE '%' || $1 || '%'
 ORDER BY d.sort_order ASC, d.name ASC
 `
@@ -1912,6 +1917,7 @@ WHERE
   AND deleted_at IS NULL
   AND name ILIKE '%' || $2 || '%'
   AND is_online = true
+  AND is_available = true
 ORDER BY sort_order ASC, name ASC
 LIMIT $3 OFFSET $4
 `
@@ -2023,7 +2029,7 @@ WHERE
   AND m.region_id = $6
   AND d.deleted_at IS NULL
   AND d.is_online = true
-  AND d.is_online = true
+  AND d.is_available = true
   AND d.name ILIKE '%' || $1 || '%'
   AND ($7::bigint IS NULL OR EXISTS (
     SELECT 1 FROM dish_tags dt WHERE dt.dish_id = d.id AND dt.tag_id = $7

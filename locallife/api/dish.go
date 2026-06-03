@@ -950,7 +950,7 @@ func (server *Server) getPublicDishDetail(ctx *gin.Context) {
 	}
 
 	// 检查菜品是否上架且可用
-	if !dish.IsOnline {
+	if !dish.IsOnline || !dish.IsAvailable {
 		ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish is not available")))
 		return
 	}

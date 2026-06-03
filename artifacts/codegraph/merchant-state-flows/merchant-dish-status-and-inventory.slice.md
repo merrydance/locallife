@@ -25,7 +25,7 @@ This slice does not fully cover:
 The merchant-visible dish and inventory workflow should have one coherent availability contract:
 
 - `dishes.is_online` controls whether the merchant intentionally publishes the dish.
-- `dishes.is_available` should either be a real merchant-controlled temporary availability flag honored by every customer-facing reader and validator, or be retired from the merchant workflow.
+- `dishes.is_available` is a real merchant-controlled temporary availability flag and must be honored by every customer-facing reader and validator.
 - Packaging dishes must remain online and available.
 - `daily_inventory.total_quantity = -1` means unlimited; finite inventory must not oversell across sold and reserved quantities.
 - Missing daily inventory rows must have one consistent meaning across display, checks, order payment, and reservation flows.
@@ -54,8 +54,8 @@ The merchant-visible dish and inventory workflow should have one coherent availa
 7. Dish edit loads categories, system tags, dish detail, and customizations. Partial tag/customization load failures become warnings rather than blocking base edit.
    Evidence: `weapp/miniprogram/pages/merchant/dishes/edit/index.ts:122`, `weapp/miniprogram/pages/merchant/dishes/edit/index.ts:151`, `weapp/miniprogram/pages/merchant/dishes/edit/index.ts:155`, `weapp/miniprogram/pages/merchant/dishes/edit/index.ts:171`.
 
-8. The edit view maps backend detail into form state, but sets `is_available: true` regardless of backend detail. Submit payload also always sends `is_available: true`.
-   Evidence: `weapp/miniprogram/pages/merchant/_utils/merchant-dish-edit-view.ts:246`, `weapp/miniprogram/pages/merchant/_utils/merchant-dish-edit-view.ts:247`, `weapp/miniprogram/pages/merchant/_utils/merchant-dish-edit-view.ts:515`, `weapp/miniprogram/pages/merchant/_utils/merchant-dish-edit-view.ts:527`.
+8. Fixed 2026-06-03: the edit view maps backend `is_available` into form state, renders a merchant-facing `是否可售` TDesign switch, and submits the merchant-selected value. Packaging dishes remain forced available on submit.
+   Evidence: `weapp/miniprogram/pages/merchant/_utils/merchant-dish-edit-view.ts:247`, `weapp/miniprogram/pages/merchant/_utils/merchant-dish-edit-view.ts:527`, `weapp/miniprogram/pages/merchant/dishes/edit/index.wxml:110`, `weapp/miniprogram/pages/merchant/dishes/edit/index.wxml:111`.
 
 9. Packaging switch forces `is_packaging`, `is_online`, and `is_available` to true in the page. Backend create/update normalization also forces packaging dishes online and available.
    Evidence: `weapp/miniprogram/pages/merchant/dishes/edit/index.ts:313`, `weapp/miniprogram/pages/merchant/dishes/edit/index.ts:317`, `weapp/miniprogram/pages/merchant/dishes/edit/index.ts:318`, `locallife/api/dish.go:417`, `locallife/api/dish.go:428`.
@@ -90,14 +90,13 @@ The merchant-visible dish and inventory workflow should have one coherent availa
 19. Payment success decrements inventory inside a transaction after checking paid-state idempotency. Missing inventory rows are treated as unlimited; finite rows use locked reads and conditional decrement.
     Evidence: `locallife/db/sqlc/tx_create_order.go:311`, `locallife/db/sqlc/tx_create_order.go:364`, `locallife/db/sqlc/tx_create_order.go:371`, `locallife/db/sqlc/tx_create_order.go:378`, `locallife/db/sqlc/tx_create_order.go:400`, `locallife/db/query/inventory.sql:77`.
 
-20. Reservation item validation checks merchant ownership and `is_online`, but does not check `is_available`. Reservation inventory paths separately reserve/release inventory.
-    Evidence: `locallife/logic/reservation.go:782`, `locallife/logic/reservation.go:789`, `locallife/logic/reservation.go:792`.
+20. Fixed 2026-06-03: reservation item validation checks merchant ownership, `is_online`, and `is_available`. Reservation inventory paths separately reserve/release inventory.
+    Evidence: `locallife/logic/reservation.go:786`, `locallife/logic/reservation.go:793`, `locallife/logic/reservation.go:796`, `locallife/logic/reservation_dishes_test.go:132`.
 
 ## Reverse-Reference Findings
 
-- `is_available` is persisted in `dishes` and is supported by `UpdateDish`, but the Mini Program editor always loads and saves it as `true`.
-- Public merchant dish list filters both `is_online` and `is_available`, while scan menu and search filter only `is_online`. Public dish detail checks `is_online` but not `is_available`.
-- Order/cart paths reject unavailable dishes; reservation paths currently accept unavailable dishes as long as they are online.
+- Fixed 2026-06-03: `is_available` is persisted in `dishes`, preserved by the Mini Program editor, exposed as a merchant-facing availability switch, and submitted as backend truth.
+- Fixed 2026-06-03: public merchant dish list, public dish detail, scan menu, merchant/global search, recommendation ID/detail readers, order/cart paths, and reservation validation now consistently exclude or reject unavailable dishes.
 - `UpdateDishAvailability` SQL has coverage signals but no runtime caller was found in the merchant Mini Program or backend handlers; it looks like a legacy/zombie side path.
 - `BatchUpdateDishStatus` has an API wrapper and backend route but no current merchant-page caller found. Fixed 2026-06-03: partial SQL update results now report only actual updated IDs.
 - Fixed 2026-06-03: `InventoryManagementService.checkInventory` now sends backend `checkInventoryRequest` shape `{ dish_id, date, quantity }` and returns `CheckInventoryResponse`. No current merchant-page caller was found.
@@ -145,7 +144,7 @@ The merchant-visible dish and inventory workflow should have one coherent availa
 
 - Dish list has no long-lived draft for status; it stores pending UI state and either commits local online status or restores from the previous list.
 - Dish edit keeps a local form and customization draft. Base response rehydrates only the base dish state; featured tags and customizations are not merged back into one authoritative server response.
-- `is_available` is not an honest backend-truth field in the edit page because it is always reset to `true`.
+- Fixed 2026-06-03: `is_available` is an honest backend-truth field in the edit page; it is loaded from detail, editable for non-packaging dishes, and submitted back to the backend.
 - Inventory rows keep draft text and numeric quantity separately; save rehydrates from backend response and resets draft fields to the saved backend total.
 
 ## Test Coverage Signals
@@ -161,16 +160,17 @@ Observed tests:
 - `locallife/api/inventory_test.go` covers direct inventory POST tenant-boundary denial for a foreign dish.
 - `locallife/api/inventory_test.go` covers check-only success, no auth, foreign-dish denial, missing-row unlimited semantics, and insufficient inventory response.
 - `locallife/db/sqlc/inventory_test.go` covers inventory stats sold-out/available classification using reserved quantity as committed stock.
+- `weapp/scripts/check-merchant-dish-availability-contract.test.js` covers Mini Program load/submit/WXML binding for `is_available`.
+- `locallife/api/dish_test.go`, `locallife/logic/reservation_dishes_test.go`, and `locallife/db/sqlc/dish_test.go` cover public detail, reservation validation, search, scan menu, and recommendation readers excluding/rejecting unavailable dishes.
 - SQL inventory tests and reservation inventory transaction tests cover lower-level decrement/reserve/release behavior.
 
 Missing high-value tests:
 
-- Public/search/scan/detail/reservation consistency for `is_available`.
 - Dish edit product workflow partial-failure behavior and re-entry recovery after featured-tag or customization failure.
 
 ## Gaps And Refactor Notes
 
-- Decide whether `is_available` is a real merchant-controlled temporary availability flag. If yes, restore a UI control and make public detail, scan menu, search, reservation validation, and tests honor it consistently. If no, remove/retire stale update/read paths and stop carrying it as a meaningful state.
+- Fixed 2026-06-03: `is_available` is now treated as a real merchant-controlled temporary availability flag. Mini Program edit preserves/submits it, and public detail, scan menu, search, recommendation readers, and reservation validation honor it consistently.
 - Move featured tags and customizations behind a single backend dish-edit workflow or make the frontend partial-save recovery explicit and resumable.
 - Fixed 2026-06-03: featured-tag updates now use a transaction-backed replace operation that propagates failures.
 - Fixed 2026-06-03: batch status now uses actual SQL-returned updated IDs and no longer reports all prefiltered IDs as successful when a stale/deleted row is missed.
@@ -183,10 +183,10 @@ Missing high-value tests:
 
 - Entry branches checked: Mini Program dish list/status toggle, dish edit/create, customization editor, featured tags, category adjacency, inventory page/save, unused batch/check/stats wrappers, public/search/scan readers, cart/order/reservation validators, and payment/reservation inventory writers. Flutter App has no dish/inventory management entry in `merchant_app/lib/features/**`.
 - Request branches checked: dish CRUD/status/batch status/delete, customization GET/PUT, featured-tags PUT, inventory list/update/check/stats, order payment decrement, order cancellation restore, reservation reserve/release/sync/no-show/timeout inventory paths, and public dish/menu readers.
-- Backend state branches checked: `dishes.is_online`, stale `is_available`, `is_packaging`, soft delete, category, tags, customization groups/options, `daily_inventory.total_quantity/sold_quantity/reserved_quantity`, unlimited sentinel, missing-row creation, and reserved inventory accounting.
+- Backend state branches checked: `dishes.is_online`, fixed merchant-controlled `is_available`, `is_packaging`, soft delete, category, tags, customization groups/options, `daily_inventory.total_quantity/sold_quantity/reserved_quantity`, unlimited sentinel, missing-row creation, and reserved inventory accounting.
 - Async branches checked: merchant edits are synchronous; inventory changes asynchronously from payment success, order cancellation, reservation payment/sync, reservation timeout, no-show, and release workers. No merchant inventory websocket/polling path was found.
-- Failure/retry branches checked: per-row status pending rollback, fixed batch-status partial SQL update reporting, dish edit multi-write partial persistence, fixed featured-tag transactional failure, inventory last-write-wins, fixed direct inventory POST tenant denial, fixed read-only inventory check semantics, fixed total below sold+reserved rejection, and stale `is_available` read/write inconsistency.
+- Failure/retry branches checked: per-row status pending rollback, fixed batch-status partial SQL update reporting, dish edit multi-write partial persistence, fixed featured-tag transactional failure, inventory last-write-wins, fixed direct inventory POST tenant denial, fixed read-only inventory check semantics, fixed total below sold+reserved rejection, and fixed `is_available` read/write inconsistency.
 - Reader/consumer branches checked: dish list/edit, inventory page, public merchant menu, search, scan-table menu, cart, direct order, reservation validation, packaging policy, and inventory stats.
 - Authorization/tenant branches checked: owner/manager/chef dish and inventory routes, dish ownership checks for most writes, inventory PUT ownership validation on missing-row create, direct inventory POST ownership check added 2026-06-02, and customer readers relying on persisted state.
-- Zombie/unreachable branches checked: `is_available` has stale semantics because edit resets it to true while readers vary; Mini Program wrappers for batch status/inventory check/stats appear unused; single dish-edit submit is split across multiple backend writes.
-- Test-proof gaps checked: existing tests cover packaging offline rejection, batch status partial SQL update reporting, create rollback, featured-tag transactional rollback, inventory update/check-only/decrement lower layers, direct POST tenant denial, finite inventory total guard, reserved-quantity stats classification, and reserve/release lower layers. Missing proof remains for `is_available` product contract and dish-edit partial failure recovery.
+- Zombie/unreachable branches checked: legacy `UpdateDishAvailability` SQL remains without a runtime caller found now that edit/update handles the merchant-controlled field; Mini Program wrappers for batch status/inventory check/stats appear unused; single dish-edit submit is split across multiple backend writes.
+- Test-proof gaps checked: existing tests cover packaging offline rejection, `is_available` product contract, batch status partial SQL update reporting, create rollback, featured-tag transactional rollback, inventory update/check-only/decrement lower layers, direct POST tenant denial, finite inventory total guard, reserved-quantity stats classification, and reserve/release lower layers. Missing proof remains for dish-edit partial failure recovery.

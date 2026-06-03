@@ -672,6 +672,52 @@ func TestGetDishAPI(t *testing.T) {
 	}
 }
 
+func TestGetPublicDishDetailRejectsUnavailableDish(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	dish := randomDish(merchant.ID, nil)
+	completeDish := db.GetDishCompleteRow{
+		ID:                  dish.ID,
+		MerchantID:          dish.MerchantID,
+		CategoryID:          dish.CategoryID,
+		Name:                dish.Name,
+		Description:         dish.Description,
+		ImageMediaAssetID:   dish.ImageMediaAssetID,
+		Price:               dish.Price,
+		MemberPrice:         dish.MemberPrice,
+		IsAvailable:         false,
+		IsOnline:            true,
+		SortOrder:           dish.SortOrder,
+		CreatedAt:           dish.CreatedAt,
+		UpdatedAt:           dish.UpdatedAt,
+		CategoryName:        pgtype.Text{String: "热菜", Valid: true},
+		Ingredients:         []byte(`[]`),
+		Tags:                []byte(`[]`),
+		CustomizationGroups: []byte(`[]`),
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetDishComplete(gomock.Any(), dish.ID).
+		Times(1).
+		Return(completeDish, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	url := fmt.Sprintf("/v1/public/dishes/%d", dish.ID)
+	request, err := http.NewRequest(http.MethodGet, url, nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusNotFound, recorder.Code)
+}
+
 func TestListDishesByMerchantAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)

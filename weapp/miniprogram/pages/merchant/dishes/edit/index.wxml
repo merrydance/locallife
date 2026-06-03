@@ -107,6 +107,9 @@
           <t-cell title="是否上架">
             <t-switch slot="note" value="{{formData.is_online}}" disabled="{{formData.is_packaging}}" bind:change="onSwitchChange" data-field="is_online" />
           </t-cell>
+          <t-cell title="是否可售">
+            <t-switch slot="note" value="{{formData.is_available}}" disabled="{{formData.is_packaging}}" bind:change="onSwitchChange" data-field="is_available" />
+          </t-cell>
           <t-input
             label="预估出餐"
             suffix="分钟"

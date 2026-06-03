@@ -395,6 +395,43 @@ func TestSearchDishesByName(t *testing.T) {
 	require.True(t, found, "Created dish should be found in search results")
 }
 
+func TestSearchDishesByNameExcludesUnavailable(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	category := createRandomDishCategory(t)
+	uniqueName := "UnavailableByName_" + util.RandomString(10)
+
+	dish, err := testStore.CreateDish(context.Background(), CreateDishParams{
+		MerchantID:  merchant.ID,
+		CategoryID:  pgtype.Int8{Int64: category.ID, Valid: true},
+		Name:        uniqueName,
+		Price:       util.RandomMoney(),
+		IsAvailable: false,
+		IsOnline:    true,
+	})
+	require.NoError(t, err)
+
+	dishes, err := testStore.SearchDishesByName(context.Background(), SearchDishesByNameParams{
+		MerchantID: merchant.ID,
+		Column2:    pgtype.Text{String: uniqueName, Valid: true},
+		Limit:      10,
+		Offset:     0,
+	})
+	require.NoError(t, err)
+	require.Empty(t, dishes, "不可售菜品不应出现在商户内搜索结果")
+
+	count, err := testStore.CountSearchDishesByName(context.Background(), CountSearchDishesByNameParams{
+		MerchantID: merchant.ID,
+		Column2:    pgtype.Text{String: uniqueName, Valid: true},
+	})
+	require.NoError(t, err)
+	require.Zero(t, count)
+
+	allDishes, err := testStore.GetDishesByIDsAll(context.Background(), []int64{dish.ID})
+	require.NoError(t, err)
+	require.Len(t, allDishes, 1, "测试数据应真实创建成功")
+	require.False(t, allDishes[0].IsAvailable)
+}
+
 func TestUpdateDish(t *testing.T) {
 	merchant := createRandomMerchantForDish(t)
 	category := createRandomDishCategory(t)
@@ -999,6 +1036,58 @@ func TestSearchDishesGlobal_ExcludesTakeoutSuspendedMerchants(t *testing.T) {
 	require.Zero(t, count)
 }
 
+func TestSearchDishesGlobalExcludesUnavailable(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	_, err := testStore.UpdateMerchantStatus(context.Background(), UpdateMerchantStatusParams{
+		ID:     merchant.ID,
+		Status: "active",
+	})
+	require.NoError(t, err)
+
+	category := createRandomDishCategory(t)
+	uniqueName := "UnavailableGlobal_" + util.RandomString(10)
+	dish, err := testStore.CreateDish(context.Background(), CreateDishParams{
+		MerchantID:  merchant.ID,
+		CategoryID:  pgtype.Int8{Int64: category.ID, Valid: true},
+		Name:        uniqueName,
+		Price:       util.RandomMoney(),
+		IsAvailable: false,
+		IsOnline:    true,
+	})
+	require.NoError(t, err)
+
+	dishes, err := testStore.SearchDishesGlobal(context.Background(), SearchDishesGlobalParams{
+		Column1: pgtype.Text{String: uniqueName, Valid: true},
+		Limit:   10,
+		Offset:  0,
+		Column4: 39.9282,
+		Column5: 116.4507,
+		RegionID: pgtype.Int8{
+			Int64: merchant.RegionID,
+			Valid: true,
+		},
+		TagID: pgtype.Int8{Valid: false},
+	})
+	require.NoError(t, err)
+	require.Empty(t, dishes, "不可售菜品不应出现在全局搜索结果")
+
+	count, err := testStore.CountSearchDishesGlobal(context.Background(), CountSearchDishesGlobalParams{
+		Column1: pgtype.Text{String: uniqueName, Valid: true},
+		RegionID: pgtype.Int8{
+			Int64: merchant.RegionID,
+			Valid: true,
+		},
+		TagID: pgtype.Int8{Valid: false},
+	})
+	require.NoError(t, err)
+	require.Zero(t, count)
+
+	ids, err := testStore.SearchDishIDsGlobal(context.Background(), pgtype.Text{String: uniqueName, Valid: true})
+	require.NoError(t, err)
+	require.NotContains(t, ids, dish.ID, "不可售菜品不应出现在推荐关键词过滤ID结果")
+}
+
 func TestSearchDishesGlobal_Pagination(t *testing.T) {
 	// 创建已激活的商户
 	owner := createRandomUser(t)
@@ -1236,4 +1325,76 @@ func TestGetDishesWithMerchantByIDs_FilterOffline(t *testing.T) {
 	results, err := testStore.GetDishesWithMerchantByIDs(context.Background(), []int64{offlineDish.ID})
 	require.NoError(t, err)
 	require.Empty(t, results, "下架菜品不应被返回")
+}
+
+func TestGetDishesByIDsFiltersUnavailable(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	category := createRandomDishCategory(t)
+
+	unavailableDish, err := testStore.CreateDish(context.Background(), CreateDishParams{
+		MerchantID:  merchant.ID,
+		CategoryID:  pgtype.Int8{Int64: category.ID, Valid: true},
+		Name:        "推荐不可售菜品_" + util.RandomString(6),
+		Price:       1000,
+		IsAvailable: false,
+		IsOnline:    true,
+	})
+	require.NoError(t, err)
+
+	results, err := testStore.GetDishesByIDs(context.Background(), []int64{unavailableDish.ID})
+	require.NoError(t, err)
+	require.Empty(t, results, "不可售菜品不应被推荐详情批量查询返回")
+}
+
+func TestGetDishesWithMerchantByIDsFilterUnavailable(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	category := createRandomDishCategory(t)
+
+	unavailableDish, err := testStore.CreateDish(context.Background(), CreateDishParams{
+		MerchantID:  merchant.ID,
+		CategoryID:  pgtype.Int8{Int64: category.ID, Valid: true},
+		Name:        "推荐流不可售菜品_" + util.RandomString(6),
+		Price:       1000,
+		IsAvailable: false,
+		IsOnline:    true,
+	})
+	require.NoError(t, err)
+
+	results, err := testStore.GetDishesWithMerchantByIDs(context.Background(), []int64{unavailableDish.ID})
+	require.NoError(t, err)
+	require.Empty(t, results, "不可售菜品不应被推荐流返回")
+}
+
+func TestListDishesForMenuFiltersUnavailable(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	category := createRandomDishCategory(t)
+
+	availableDish, err := testStore.CreateDish(context.Background(), CreateDishParams{
+		MerchantID:  merchant.ID,
+		CategoryID:  pgtype.Int8{Int64: category.ID, Valid: true},
+		Name:        "扫码菜单可售菜品_" + util.RandomString(6),
+		Price:       1000,
+		IsAvailable: true,
+		IsOnline:    true,
+	})
+	require.NoError(t, err)
+	unavailableDish, err := testStore.CreateDish(context.Background(), CreateDishParams{
+		MerchantID:  merchant.ID,
+		CategoryID:  pgtype.Int8{Int64: category.ID, Valid: true},
+		Name:        "扫码菜单不可售菜品_" + util.RandomString(6),
+		Price:       1000,
+		IsAvailable: false,
+		IsOnline:    true,
+	})
+	require.NoError(t, err)
+
+	menuDishes, err := testStore.ListDishesForMenu(context.Background(), merchant.ID)
+	require.NoError(t, err)
+
+	menuIDs := make([]int64, 0, len(menuDishes))
+	for _, dish := range menuDishes {
+		menuIDs = append(menuIDs, dish.ID)
+	}
+	require.Contains(t, menuIDs, availableDish.ID)
+	require.NotContains(t, menuIDs, unavailableDish.ID, "不可售菜品不应出现在扫码菜单")
 }
