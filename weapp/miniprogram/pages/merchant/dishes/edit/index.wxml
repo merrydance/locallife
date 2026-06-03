@@ -18,6 +18,9 @@
       <view wx:if="{{loadWarningMessage}}" class="notice-banner">
         <t-notice-bar theme="warning" visible="{{true}}" content="{{loadWarningMessage}}" />
       </view>
+      <view wx:if="{{partialSavePending && partialSaveMessage}}" class="notice-banner">
+        <t-notice-bar theme="warning" visible="{{true}}" content="{{partialSaveMessage}}" />
+      </view>
 
       <view class="section-panel">
         <view class="section-top">

@@ -63,8 +63,8 @@ The merchant-visible dish and inventory workflow should have one coherent availa
 10. Base create/update calls are transactional at the backend level. `CreateDishTx` creates dish/tags/image/customizations in one transaction when customizations are included in the base payload; `UpdateDishTx` updates the base dish and optionally replaces tags in one transaction.
     Evidence: `locallife/api/dish.go:378`, `locallife/api/dish.go:1000`, `locallife/api/dish.go:1148`, `locallife/db/sqlc/tx_dish.go:37`, `locallife/db/sqlc/tx_dish.go:139`, `locallife/db/query/dish.sql:296`.
 
-11. The Mini Program dish edit submit is a multi-call product workflow: save base dish, then set featured tags, then set customizations. If a later step fails, the page tells the merchant that base information has been saved.
-    Evidence: `weapp/miniprogram/pages/merchant/dishes/edit/index.ts:569`, `weapp/miniprogram/pages/merchant/dishes/edit/index.ts:581`, `weapp/miniprogram/pages/merchant/dishes/edit/index.ts:593`, `weapp/miniprogram/pages/merchant/dishes/edit/index.ts:597`, `weapp/miniprogram/pages/merchant/dishes/edit/index.ts:610`.
+11. Fixed 2026-06-03: the Mini Program dish edit submit remains a multi-call product workflow, but later featured-tag/customization failures now leave the page in edit mode with the saved dish id, a persistent TDesign warning, and the same save action available for retry.
+    Evidence: `weapp/miniprogram/pages/merchant/dishes/edit/index.ts:569`, `weapp/miniprogram/pages/merchant/dishes/edit/index.ts:594`, `weapp/miniprogram/pages/merchant/dishes/edit/index.ts:599`, `weapp/miniprogram/pages/merchant/dishes/edit/index.ts:611`, `weapp/miniprogram/pages/merchant/dishes/edit/index.wxml:21`, `weapp/miniprogram/pages/merchant/_utils/merchant-dish-edit-view.ts:343`.
 
 12. `setDishCustomizations` validates merchant/dish ownership and option tags, then replaces all customization groups/options inside `SetDishCustomizationsTx`.
     Evidence: `locallife/api/dish.go:1723`, `locallife/api/dish.go:1734`, `locallife/api/dish.go:1745`, `locallife/api/dish.go:1750`, `locallife/api/dish.go:1788`, `locallife/db/sqlc/tx_dish.go:247`, `locallife/db/sqlc/tx_dish.go:287`.
@@ -135,7 +135,7 @@ The merchant-visible dish and inventory workflow should have one coherent availa
 ## Recovery And Async Convergence Paths
 
 - Dish list rolls local status pending state back on status-update failure and reloads filtered views on success.
-- Dish edit rehydrates base form state from base create/update response, but later featured-tag/customization failure leaves the merchant on the page with partial durable state.
+- Fixed 2026-06-03: dish edit rehydrates base form state from base create/update response and, if featured-tag or customization sync then fails, keeps the merchant on the page with a visible recovery state and retryable save action.
 - Inventory page uses backend response after save to rehydrate `sold_quantity`, `reserved_quantity`, `total_quantity`, and `available`.
 - Inventory can change after the merchant page loads because payment success, order cancellation, reservation sync, no-show, and timeout workers can adjust sold/reserved quantities.
 - No websocket or polling path was found that pushes inventory updates to the merchant inventory page; re-entry, pull refresh, or stale-window reload are the recovery paths.
@@ -161,17 +161,18 @@ Observed tests:
 - `locallife/api/inventory_test.go` covers check-only success, no auth, foreign-dish denial, missing-row unlimited semantics, and insufficient inventory response.
 - `locallife/db/sqlc/inventory_test.go` covers inventory stats sold-out/available classification using reserved quantity as committed stock.
 - `weapp/scripts/check-merchant-dish-availability-contract.test.js` covers Mini Program load/submit/WXML binding for `is_available`.
+- `weapp/scripts/check-merchant-dish-edit-partial-save-recovery.test.js` covers Mini Program partial-save recovery patch builders, failed-step tracking, and persistent TDesign warning wiring.
 - `locallife/api/dish_test.go`, `locallife/logic/reservation_dishes_test.go`, and `locallife/db/sqlc/dish_test.go` cover public detail, reservation validation, search, scan menu, and recommendation readers excluding/rejecting unavailable dishes.
 - SQL inventory tests and reservation inventory transaction tests cover lower-level decrement/reserve/release behavior.
 
 Missing high-value tests:
 
-- Dish edit product workflow partial-failure behavior and re-entry recovery after featured-tag or customization failure.
+- Backend single-workflow transaction coverage if dish base, featured tags, and customizations are later moved behind one endpoint.
 
 ## Gaps And Refactor Notes
 
 - Fixed 2026-06-03: `is_available` is now treated as a real merchant-controlled temporary availability flag. Mini Program edit preserves/submits it, and public detail, scan menu, search, recommendation readers, and reservation validation honor it consistently.
-- Move featured tags and customizations behind a single backend dish-edit workflow or make the frontend partial-save recovery explicit and resumable.
+- Fixed 2026-06-03: the frontend partial-save recovery is now explicit and retryable. A future backend single-workflow endpoint would still reduce the product workflow from three writes to one atomic operation.
 - Fixed 2026-06-03: featured-tag updates now use a transaction-backed replace operation that propagates failures.
 - Fixed 2026-06-03: batch status now uses actual SQL-returned updated IDs and no longer reports all prefiltered IDs as successful when a stale/deleted row is missed.
 - Fixed 2026-06-03: `POST /v1/inventory/check` no longer mutates inventory and now aligns missing-row semantics with list, payment, and reservation paths.
@@ -185,8 +186,8 @@ Missing high-value tests:
 - Request branches checked: dish CRUD/status/batch status/delete, customization GET/PUT, featured-tags PUT, inventory list/update/check/stats, order payment decrement, order cancellation restore, reservation reserve/release/sync/no-show/timeout inventory paths, and public dish/menu readers.
 - Backend state branches checked: `dishes.is_online`, fixed merchant-controlled `is_available`, `is_packaging`, soft delete, category, tags, customization groups/options, `daily_inventory.total_quantity/sold_quantity/reserved_quantity`, unlimited sentinel, missing-row creation, and reserved inventory accounting.
 - Async branches checked: merchant edits are synchronous; inventory changes asynchronously from payment success, order cancellation, reservation payment/sync, reservation timeout, no-show, and release workers. No merchant inventory websocket/polling path was found.
-- Failure/retry branches checked: per-row status pending rollback, fixed batch-status partial SQL update reporting, dish edit multi-write partial persistence, fixed featured-tag transactional failure, inventory last-write-wins, fixed direct inventory POST tenant denial, fixed read-only inventory check semantics, fixed total below sold+reserved rejection, and fixed `is_available` read/write inconsistency.
+- Failure/retry branches checked: per-row status pending rollback, fixed batch-status partial SQL update reporting, fixed dish edit partial-save recovery, fixed featured-tag transactional failure, inventory last-write-wins, fixed direct inventory POST tenant denial, fixed read-only inventory check semantics, fixed total below sold+reserved rejection, and fixed `is_available` read/write inconsistency.
 - Reader/consumer branches checked: dish list/edit, inventory page, public merchant menu, search, scan-table menu, cart, direct order, reservation validation, packaging policy, and inventory stats.
 - Authorization/tenant branches checked: owner/manager/chef dish and inventory routes, dish ownership checks for most writes, inventory PUT ownership validation on missing-row create, direct inventory POST ownership check added 2026-06-02, and customer readers relying on persisted state.
 - Zombie/unreachable branches checked: legacy `UpdateDishAvailability` SQL remains without a runtime caller found now that edit/update handles the merchant-controlled field; Mini Program wrappers for batch status/inventory check/stats appear unused; single dish-edit submit is split across multiple backend writes.
-- Test-proof gaps checked: existing tests cover packaging offline rejection, `is_available` product contract, batch status partial SQL update reporting, create rollback, featured-tag transactional rollback, inventory update/check-only/decrement lower layers, direct POST tenant denial, finite inventory total guard, reserved-quantity stats classification, and reserve/release lower layers. Missing proof remains for dish-edit partial failure recovery.
+- Test-proof gaps checked: existing tests cover packaging offline rejection, `is_available` product contract, dish-edit partial-save recovery, batch status partial SQL update reporting, create rollback, featured-tag transactional rollback, inventory update/check-only/decrement lower layers, direct POST tenant denial, finite inventory total guard, reserved-quantity stats classification, and reserve/release lower layers. Backend single-workflow transaction proof remains relevant only if the workflow is collapsed into one endpoint later.

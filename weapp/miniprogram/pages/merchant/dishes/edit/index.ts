@@ -20,13 +20,16 @@ import {
   buildDishEditLoadPatch,
   buildDishFeaturedTags,
   buildDishFileList,
+  buildDishPartialSaveRecoveryPatch,
   buildDishPersistedStatePatch,
+  buildDishSaveRecoveredPatch,
   buildDishSubmitPayload,
   buildDishTagCreateSuccessPatch,
   buildSelectedDishTagState,
   cloneUploadFileList,
   CustomizationGroupDraft,
   CreatePopupMode,
+  DishPartialSaveStep,
   CategoryOption,
   DishEditPageOptions,
   extractSelectedDishTagIds,
@@ -52,6 +55,8 @@ Page({
     initialError: false,
     initialErrorMessage: '',
     loadWarningMessage: '',
+    partialSavePending: false,
+    partialSaveMessage: '',
     submitting: false,
     imageUploading: false,
     persistedImageAssetId: 0,
@@ -554,6 +559,7 @@ Page({
     const startedAsEdit = this.data.isEdit
     let currentDishId = this.data.dishId
     let baseDishSaved = false
+    let syncStep: DishPartialSaveStep = 'featured_tags'
 
     try {
       const featuredTags = buildDishFeaturedTags({
@@ -591,14 +597,17 @@ Page({
       }
 
       if (currentDishId > 0) {
+        syncStep = 'featured_tags'
         await DishManagementService.setDishFeaturedTags(currentDishId, featuredTags)
       }
 
+      syncStep = 'customizations'
       const customizationGroups = await buildDishCustomizationPayload(this.data.customizationGroups)
       if (currentDishId > 0 && (startedAsEdit || customizationGroups.length > 0)) {
         await DishManagementService.setDishCustomizations(currentDishId, { groups: customizationGroups })
       }
 
+      this.setData(buildDishSaveRecoveredPatch())
       const pages = getCurrentPages()
       const prevPage = pages[pages.length - 2] as { refreshAll?: () => void } | undefined
       if (prevPage?.refreshAll) {
@@ -608,8 +617,11 @@ Page({
     } catch (err) {
       logger.error('Submit dish failed', err)
       const message = baseDishSaved && currentDishId > 0
-        ? '基础信息已保存，规格或标签同步失败，请重试'
+        ? buildDishPartialSaveRecoveryPatch({ dishId: currentDishId, step: syncStep }).partialSaveMessage
         : getErrorUserMessage(err, '提交失败，请重试')
+      if (baseDishSaved && currentDishId > 0) {
+        this.setData(buildDishPartialSaveRecoveryPatch({ dishId: currentDishId, step: syncStep }))
+      }
       wx.showToast({ title: message, icon: 'none' })
     } finally {
       this.setData({ submitting: false })

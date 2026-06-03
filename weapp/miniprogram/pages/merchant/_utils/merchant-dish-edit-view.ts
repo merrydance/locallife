@@ -64,6 +64,7 @@ interface CurrencyInputState {
 }
 
 export type CreatePopupMode = 'category' | 'tag' | ''
+export type DishPartialSaveStep = 'featured_tags' | 'customizations'
 
 const FEATURED_TAG_NAMES = new Set(['推荐', '热卖'])
 
@@ -337,6 +338,29 @@ export function buildDishPersistedStatePatch(params: {
     fileList: buildDishFileList(previewUrl),
     selectedCategoryName: params.dish.category_name || params.selectedCategoryName,
     selectedCategoryValue: params.dish.category_id ? String(params.dish.category_id) : params.selectedCategoryValue
+  }
+}
+
+export function buildDishPartialSaveRecoveryPatch(params: {
+  dishId: number
+  step: DishPartialSaveStep
+}) {
+  const partialSaveMessage = params.step === 'featured_tags'
+    ? '基础信息已保存，标签未同步，请重试保存'
+    : '基础信息已保存，规格未同步，请重试保存'
+
+  return {
+    dishId: params.dishId,
+    isEdit: true,
+    partialSavePending: true,
+    partialSaveMessage
+  }
+}
+
+export function buildDishSaveRecoveredPatch() {
+  return {
+    partialSavePending: false,
+    partialSaveMessage: ''
   }
 }
 
