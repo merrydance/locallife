@@ -781,20 +781,20 @@ func (server *Server) listDishesByMerchant(ctx *gin.Context) {
 			imgURL = imgURLs[*assetID]
 		}
 		result[i] = dishResponse{
-			ID:            dish.ID,
-			MerchantID:    dish.MerchantID,
-			CategoryID:    toPtrInt64(dish.CategoryID),
-			Name:          dish.Name,
-			Description:   dish.Description.String,
-			ImageAssetID:  assetID,
-			ImageURL:      imgURL,
-			Price:         dish.Price,
-			OriginalPrice: dish.Price,
-			MemberPrice:   toPtrInt64(dish.MemberPrice),
-			IsAvailable:   dish.IsAvailable,
-			IsOnline:      dish.IsOnline,
-			IsPackaging:   dish.IsPackaging,
-			SortOrder:     dish.SortOrder,
+			ID:                  dish.ID,
+			MerchantID:          dish.MerchantID,
+			CategoryID:          toPtrInt64(dish.CategoryID),
+			Name:                dish.Name,
+			Description:         dish.Description.String,
+			ImageAssetID:        assetID,
+			ImageURL:            imgURL,
+			Price:               dish.Price,
+			OriginalPrice:       dish.Price,
+			MemberPrice:         toPtrInt64(dish.MemberPrice),
+			IsAvailable:         dish.IsAvailable,
+			IsOnline:            dish.IsOnline,
+			IsPackaging:         dish.IsPackaging,
+			SortOrder:           dish.SortOrder,
 			CustomizationGroups: customizationGroups,
 		}
 	}
@@ -1972,55 +1972,26 @@ func (server *Server) setDishFeaturedTags(ctx *gin.Context) {
 
 	// 只允许推荐/热卖两个标签
 	allowed := map[string]bool{"推荐": true, "热卖": true}
-	wantSet := map[string]bool{}
+	featuredTags := make([]string, 0, len(req.Tags))
+	seen := map[string]bool{}
 	for _, name := range req.Tags {
-		if allowed[name] {
-			wantSet[name] = true
+		if allowed[name] && !seen[name] {
+			featuredTags = append(featuredTags, name)
+			seen[name] = true
 		}
 	}
 
-	// 获取当前菜品的推荐/热卖标签状态
-	currentTags, err := server.store.ListDishTags(ctx, uri.ID)
+	result, err := server.store.SetDishFeaturedTagsTx(ctx, db.SetDishFeaturedTagsTxParams{
+		DishID: uri.ID,
+		Tags:   featuredTags,
+	})
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("list dish tags: %w", err)))
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("set dish featured tags: %w", err)))
 		return
 	}
 
-	// 删除不再需要的推荐/热卖标签
-	for _, tag := range currentTags {
-		if allowed[tag.Name] && !wantSet[tag.Name] {
-			_ = server.store.RemoveDishTag(ctx, db.RemoveDishTagParams{
-				DishID: uri.ID,
-				TagID:  tag.ID,
-			})
-		}
-	}
-
-	// 构建当前已有标签集合
-	currentTagNames := map[string]bool{}
-	for _, tag := range currentTags {
-		currentTagNames[tag.Name] = true
-	}
-
-	// 添加新需要的标签
-	for name := range wantSet {
-		if currentTagNames[name] {
-			continue // 已存在，跳过
-		}
-		sysTag, err := server.store.GetSystemTagByName(ctx, name)
-		if err != nil {
-			continue // 标签不存在则跳过
-		}
-		_ = server.store.UpsertDishTag(ctx, db.UpsertDishTagParams{
-			DishID: uri.ID,
-			TagID:  sysTag.ID,
-		})
-	}
-
-	// 返回更新后的标签
-	updatedTags, _ := server.store.ListDishTags(ctx, uri.ID)
-	tagNames := make([]string, 0, len(updatedTags))
-	for _, t := range updatedTags {
+	tagNames := make([]string, 0, len(result.Tags))
+	for _, t := range result.Tags {
 		tagNames = append(tagNames, t.Name)
 	}
 	ctx.JSON(http.StatusOK, dishTagsResponse{Tags: tagNames})

@@ -681,24 +681,24 @@ func TestListDishesByMerchantAPI(t *testing.T) {
 	for i := 0; i < n; i++ {
 		rawDish := randomDish(merchant.ID, nil)
 		dishes[i] = db.ListDishesByMerchantRow{
-			ID:                rawDish.ID,
-			MerchantID:        rawDish.MerchantID,
-			CategoryID:        rawDish.CategoryID,
-			Name:              rawDish.Name,
-			Description:       rawDish.Description,
-			Price:             rawDish.Price,
-			MemberPrice:       rawDish.MemberPrice,
-			IsAvailable:       rawDish.IsAvailable,
-			IsOnline:          rawDish.IsOnline,
-			SortOrder:         rawDish.SortOrder,
-			CreatedAt:         rawDish.CreatedAt,
-			UpdatedAt:         rawDish.UpdatedAt,
-			PrepareTime:       rawDish.PrepareTime,
-			DeletedAt:         rawDish.DeletedAt,
-			MonthlySales:      rawDish.MonthlySales,
-			RepurchaseRate:    rawDish.RepurchaseRate,
-			ImageMediaAssetID: rawDish.ImageMediaAssetID,
-			IsPackaging:       rawDish.IsPackaging,
+			ID:                  rawDish.ID,
+			MerchantID:          rawDish.MerchantID,
+			CategoryID:          rawDish.CategoryID,
+			Name:                rawDish.Name,
+			Description:         rawDish.Description,
+			Price:               rawDish.Price,
+			MemberPrice:         rawDish.MemberPrice,
+			IsAvailable:         rawDish.IsAvailable,
+			IsOnline:            rawDish.IsOnline,
+			SortOrder:           rawDish.SortOrder,
+			CreatedAt:           rawDish.CreatedAt,
+			UpdatedAt:           rawDish.UpdatedAt,
+			PrepareTime:         rawDish.PrepareTime,
+			DeletedAt:           rawDish.DeletedAt,
+			MonthlySales:        rawDish.MonthlySales,
+			RepurchaseRate:      rawDish.RepurchaseRate,
+			ImageMediaAssetID:   rawDish.ImageMediaAssetID,
+			IsPackaging:         rawDish.IsPackaging,
 			CustomizationGroups: []byte(`[]`),
 		}
 	}
@@ -995,6 +995,111 @@ func TestUpdateDishStatusAPI(t *testing.T) {
 
 			url := fmt.Sprintf("/v1/dishes/%d/status", tc.dishID)
 			request, err := http.NewRequest(http.MethodPatch, url, bytes.NewReader(data))
+			require.NoError(t, err)
+
+			tc.setupAuth(t, request, server.tokenMaker)
+			server.router.ServeHTTP(recorder, request)
+			tc.checkResponse(t, recorder)
+		})
+	}
+}
+
+func TestSetDishFeaturedTagsAPI(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	dish := randomDish(merchant.ID, nil)
+
+	testCases := []struct {
+		name          string
+		dishID        int64
+		body          gin.H
+		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
+		buildStubs    func(store *mockdb.MockStore)
+		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+	}{
+		{
+			name:   "OK",
+			dishID: dish.ID,
+			body: gin.H{
+				"tags": []string{"推荐", "热卖", "普通标签"},
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetDish(gomock.Any(), gomock.Eq(dish.ID)).
+					Times(1).
+					Return(dish, nil)
+
+				store.EXPECT().
+					SetDishFeaturedTagsTx(gomock.Any(), db.SetDishFeaturedTagsTxParams{
+						DishID: dish.ID,
+						Tags:   []string{"推荐", "热卖"},
+					}).
+					Times(1).
+					Return(db.SetDishFeaturedTagsTxResult{
+						Tags: []db.Tag{
+							{Name: "推荐"},
+							{Name: "热卖"},
+						},
+					}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+			},
+		},
+		{
+			name:   "StoreError",
+			dishID: dish.ID,
+			body: gin.H{
+				"tags": []string{"推荐"},
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetDish(gomock.Any(), gomock.Eq(dish.ID)).
+					Times(1).
+					Return(dish, nil)
+
+				store.EXPECT().
+					SetDishFeaturedTagsTx(gomock.Any(), db.SetDishFeaturedTagsTxParams{
+						DishID: dish.ID,
+						Tags:   []string{"推荐"},
+					}).
+					Times(1).
+					Return(db.SetDishFeaturedTagsTxResult{}, db.ErrRecordNotFound)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusInternalServerError, recorder.Code)
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			tc.buildStubs(store)
+
+			server := newTestServer(t, store)
+			recorder := httptest.NewRecorder()
+
+			data, err := json.Marshal(tc.body)
+			require.NoError(t, err)
+
+			url := fmt.Sprintf("/v1/dishes/%d/featured-tags", tc.dishID)
+			request, err := http.NewRequest(http.MethodPut, url, bytes.NewReader(data))
 			require.NoError(t, err)
 
 			tc.setupAuth(t, request, server.tokenMaker)

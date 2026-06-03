@@ -19369,6 +19369,21 @@ func (mr *MockStoreMockRecorder) SetDishCustomizationsTx(ctx, arg any) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetDishCustomizationsTx", reflect.TypeOf((*MockStore)(nil).SetDishCustomizationsTx), ctx, arg)
 }
 
+// SetDishFeaturedTagsTx mocks base method.
+func (m *MockStore) SetDishFeaturedTagsTx(ctx context.Context, arg db.SetDishFeaturedTagsTxParams) (db.SetDishFeaturedTagsTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetDishFeaturedTagsTx", ctx, arg)
+	ret0, _ := ret[0].(db.SetDishFeaturedTagsTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SetDishFeaturedTagsTx indicates an expected call of SetDishFeaturedTagsTx.
+func (mr *MockStoreMockRecorder) SetDishFeaturedTagsTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetDishFeaturedTagsTx", reflect.TypeOf((*MockStore)(nil).SetDishFeaturedTagsTx), ctx, arg)
+}
+
 // SetMediaAssetModerationStatus mocks base method.
 func (m *MockStore) SetMediaAssetModerationStatus(ctx context.Context, arg db.SetMediaAssetModerationStatusParams) (db.MediaAsset, error) {
 	m.ctrl.T.Helper()

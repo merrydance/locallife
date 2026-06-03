@@ -238,6 +238,15 @@ type SetDishCustomizationsTxResult struct {
 	Groups []DishCustomizationGroupWithOptions
 }
 
+type SetDishFeaturedTagsTxParams struct {
+	DishID int64
+	Tags   []string
+}
+
+type SetDishFeaturedTagsTxResult struct {
+	Tags []Tag
+}
+
 // DishCustomizationGroupWithOptions represents a group with its options
 type DishCustomizationGroupWithOptions struct {
 	Group   DishCustomizationGroup
@@ -299,4 +308,69 @@ func (store *SQLStore) SetDishCustomizationsTx(ctx context.Context, arg SetDishC
 	})
 
 	return result, err
+}
+
+// SetDishFeaturedTagsTx replaces only the featured system tags for a dish.
+// Non-featured dish tags are preserved, and any failure rolls back the whole replacement.
+func (store *SQLStore) SetDishFeaturedTagsTx(ctx context.Context, arg SetDishFeaturedTagsTxParams) (SetDishFeaturedTagsTxResult, error) {
+	var result SetDishFeaturedTagsTxResult
+	featuredTagNames := normalizeFeaturedDishTagNames(arg.Tags)
+
+	err := store.execTx(ctx, func(q *Queries) error {
+		currentTags, err := q.ListDishTags(ctx, arg.DishID)
+		if err != nil {
+			return fmt.Errorf("list dish tags: %w", err)
+		}
+
+		for _, tag := range currentTags {
+			if !isFeaturedDishTagName(tag.Name) {
+				continue
+			}
+			if err := q.RemoveDishTag(ctx, RemoveDishTagParams{
+				DishID: arg.DishID,
+				TagID:  tag.ID,
+			}); err != nil {
+				return fmt.Errorf("remove featured dish tag %d: %w", tag.ID, err)
+			}
+		}
+
+		for _, name := range featuredTagNames {
+			tag, err := q.GetSystemTagByName(ctx, name)
+			if err != nil {
+				return fmt.Errorf("get featured system tag %q: %w", name, err)
+			}
+			if err := q.UpsertDishTag(ctx, UpsertDishTagParams{
+				DishID: arg.DishID,
+				TagID:  tag.ID,
+			}); err != nil {
+				return fmt.Errorf("upsert featured dish tag %d: %w", tag.ID, err)
+			}
+		}
+
+		result.Tags, err = q.ListDishTags(ctx, arg.DishID)
+		if err != nil {
+			return fmt.Errorf("list updated dish tags: %w", err)
+		}
+
+		return nil
+	})
+
+	return result, err
+}
+
+func isFeaturedDishTagName(name string) bool {
+	return name == "推荐" || name == "热卖"
+}
+
+func normalizeFeaturedDishTagNames(names []string) []string {
+	featuredNames := make([]string, 0, len(names))
+	seen := make(map[string]bool, len(names))
+	for _, name := range names {
+		if !isFeaturedDishTagName(name) || seen[name] {
+			continue
+		}
+		featuredNames = append(featuredNames, name)
+		seen[name] = true
+	}
+	return featuredNames
 }

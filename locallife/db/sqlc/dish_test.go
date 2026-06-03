@@ -630,6 +630,144 @@ func TestRemoveDishTag(t *testing.T) {
 	}
 }
 
+func TestSetDishFeaturedTagsTx(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	category := createRandomDishCategory(t)
+	dish := createRandomDish(t, merchant.ID, category.ID)
+
+	recommended, err := testStore.GetSystemTagByName(context.Background(), "推荐")
+	require.NoError(t, err)
+	hot, err := testStore.GetSystemTagByName(context.Background(), "热卖")
+	require.NoError(t, err)
+	normal, err := testStore.CreateTag(context.Background(), CreateTagParams{
+		Name: "普通-" + util.RandomString(6),
+		Type: "dish",
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.AddDishTag(context.Background(), AddDishTagParams{
+		DishID: dish.ID,
+		TagID:  recommended.ID,
+	})
+	require.NoError(t, err)
+	_, err = testStore.AddDishTag(context.Background(), AddDishTagParams{
+		DishID: dish.ID,
+		TagID:  normal.ID,
+	})
+	require.NoError(t, err)
+
+	result, err := testStore.SetDishFeaturedTagsTx(context.Background(), SetDishFeaturedTagsTxParams{
+		DishID: dish.ID,
+		Tags:   []string{hot.Name},
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Tags, 2)
+	require.ElementsMatch(t, []string{normal.Name, hot.Name}, tagNames(result.Tags))
+
+	tags, err := testStore.ListDishTags(context.Background(), dish.ID)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{normal.Name, hot.Name}, tagNames(tags))
+}
+
+func TestSetDishFeaturedTagsTxFiltersAndDedupesInput(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	category := createRandomDishCategory(t)
+	dish := createRandomDish(t, merchant.ID, category.ID)
+
+	hot, err := testStore.GetSystemTagByName(context.Background(), "热卖")
+	require.NoError(t, err)
+	normal, err := testStore.CreateTag(context.Background(), CreateTagParams{
+		Name: "普通-" + util.RandomString(6),
+		Type: "dish",
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.AddDishTag(context.Background(), AddDishTagParams{
+		DishID: dish.ID,
+		TagID:  normal.ID,
+	})
+	require.NoError(t, err)
+
+	result, err := testStore.SetDishFeaturedTagsTx(context.Background(), SetDishFeaturedTagsTxParams{
+		DishID: dish.ID,
+		Tags:   []string{"普通标签", hot.Name, hot.Name},
+	})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{normal.Name, hot.Name}, tagNames(result.Tags))
+
+	tags, err := testStore.ListDishTags(context.Background(), dish.ID)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{normal.Name, hot.Name}, tagNames(tags))
+}
+
+func TestSetDishFeaturedTagsTxIgnoresUnknownNonFeaturedInput(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	category := createRandomDishCategory(t)
+	dish := createRandomDish(t, merchant.ID, category.ID)
+
+	recommended, err := testStore.GetSystemTagByName(context.Background(), "推荐")
+	require.NoError(t, err)
+
+	_, err = testStore.AddDishTag(context.Background(), AddDishTagParams{
+		DishID: dish.ID,
+		TagID:  recommended.ID,
+	})
+	require.NoError(t, err)
+
+	result, err := testStore.SetDishFeaturedTagsTx(context.Background(), SetDishFeaturedTagsTxParams{
+		DishID: dish.ID,
+		Tags:   []string{"missing-featured-" + util.RandomString(6)},
+	})
+	require.NoError(t, err)
+	require.Empty(t, result.Tags)
+
+	tags, err := testStore.ListDishTags(context.Background(), dish.ID)
+	require.NoError(t, err)
+	require.Empty(t, tags)
+}
+
+func TestSetDishFeaturedTagsTxRollsBackWhenFeaturedSystemTagMissing(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	category := createRandomDishCategory(t)
+	dish := createRandomDish(t, merchant.ID, category.ID)
+
+	recommended, err := testStore.GetSystemTagByName(context.Background(), "推荐")
+	require.NoError(t, err)
+
+	_, err = testStore.AddDishTag(context.Background(), AddDishTagParams{
+		DishID: dish.ID,
+		TagID:  recommended.ID,
+	})
+	require.NoError(t, err)
+
+	store, ok := testStore.(*SQLStore)
+	require.True(t, ok)
+	_, err = store.connPool.Exec(context.Background(), "UPDATE tags SET type = 'dish' WHERE id = $1", recommended.ID)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, restoreErr := store.connPool.Exec(context.Background(), "UPDATE tags SET type = 'system' WHERE id = $1", recommended.ID)
+		require.NoError(t, restoreErr)
+	})
+
+	_, err = testStore.SetDishFeaturedTagsTx(context.Background(), SetDishFeaturedTagsTxParams{
+		DishID: dish.ID,
+		Tags:   []string{recommended.Name},
+	})
+	require.Error(t, err)
+
+	tags, err := testStore.ListDishTags(context.Background(), dish.ID)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{recommended.Name}, tagNames(tags))
+}
+
+func tagNames(tags []Tag) []string {
+	names := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		names = append(names, tag.Name)
+	}
+	return names
+}
+
 // ============================================
 // 复杂查询测试 - GetDishWithDetails
 // ============================================
