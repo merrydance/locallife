@@ -243,6 +243,10 @@ func buildMerchantCredentialActivationInputs(application db.MerchantApplication)
 	if err != nil {
 		return nil, fmt.Errorf("parse food permit expiry: %w", err)
 	}
+	businessLicenseNumber := strings.TrimSpace(businessLicenseOCR.RegNum)
+	if businessLicenseNumber == "" {
+		businessLicenseNumber = strings.TrimSpace(businessLicenseOCR.CreditCode)
+	}
 
 	return []CredentialActivationInput{
 		{
@@ -250,7 +254,7 @@ func buildMerchantCredentialActivationInputs(application db.MerchantApplication)
 			MediaAssetID: application.BusinessLicenseMediaAssetID.Int64,
 			ExpiresAt:    businessLicenseExpiry,
 			NormalizedPayload: map[string]any{
-				"license_number":       strings.TrimSpace(businessLicenseOCR.RegNum),
+				"license_number":       businessLicenseNumber,
 				"credit_code":          strings.TrimSpace(businessLicenseOCR.CreditCode),
 				"enterprise_name":      strings.TrimSpace(businessLicenseOCR.EnterpriseName),
 				"legal_representative": strings.TrimSpace(businessLicenseOCR.LegalRepresentative),

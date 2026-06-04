@@ -9311,6 +9311,76 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/merchant/application/documents/{document_type}/ocr-fields": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "允许商户在草稿状态下更正营业执照和食品经营许可证 OCR 字段。更正会写回 OCR JSON 并记录 correction 审计元数据；法人身份证字段不支持此接口。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户申请"
+                ],
+                "summary": "更正商户申请证照 OCR 识别字段",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "证照类型: business_license|food_permit",
+                        "name": "document_type",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "证照 OCR 更正字段；business_license 使用营业执照字段，food_permit 使用食品经营许可证字段",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.patchMerchantDocumentOCRFieldsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "更新后的申请信息",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantApplicationDraftResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误或状态不允许修改",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未登录",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "申请不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/merchant/application/images": {
             "put": {
                 "security": [
@@ -31628,6 +31698,9 @@ const docTemplate = `{
                     "description": "经营范围",
                     "type": "string"
                 },
+                "correction": {
+                    "$ref": "#/definitions/api.OCRCorrection"
+                },
                 "credit_code": {
                     "description": "统一社会信用代码",
                     "type": "string"
@@ -31757,6 +31830,9 @@ const docTemplate = `{
                 "company_name": {
                     "description": "企业名称",
                     "type": "string"
+                },
+                "correction": {
+                    "$ref": "#/definitions/api.OCRCorrection"
                 },
                 "error": {
                     "description": "failure reason (if any)",
@@ -40892,6 +40968,47 @@ const docTemplate = `{
                 },
                 "ready_count": {
                     "type": "integer"
+                }
+            }
+        },
+        "api.patchMerchantDocumentOCRFieldsRequest": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "string"
+                },
+                "business_scope": {
+                    "type": "string"
+                },
+                "company_name": {
+                    "type": "string"
+                },
+                "credit_code": {
+                    "type": "string"
+                },
+                "enterprise_name": {
+                    "type": "string"
+                },
+                "legal_representative": {
+                    "type": "string"
+                },
+                "operator_name": {
+                    "type": "string"
+                },
+                "permit_no": {
+                    "type": "string"
+                },
+                "reg_num": {
+                    "type": "string"
+                },
+                "valid_from": {
+                    "type": "string"
+                },
+                "valid_period": {
+                    "type": "string"
+                },
+                "valid_to": {
+                    "type": "string"
                 }
             }
         },

@@ -6,6 +6,7 @@ import {
   buildMerchantApplicationStatusView,
   getMerchantApplication,
   updateMerchantBasicInfo,
+  patchMerchantApplicationOCRFields,
   ocrBusinessLicense,
   ocrFoodPermit,
   ocrIdCard,
@@ -49,6 +50,8 @@ import {
   buildMerchantUploadedImagePatch,
   buildRegionSearchKeywords,
   buildUploadRenderImages,
+  hasMerchantBusinessLicenseResult,
+  hasMerchantFoodPermitResult,
   getMerchantShopImageFilesFieldName,
   getMerchantShopImageImagesFieldName,
   getMerchantStoreRegistrationDocumentRemovalTarget,
@@ -82,6 +85,10 @@ export type OCRResult = {
   status?: string
   error?: string
   legal_representative?: string
+  operator_name?: string
+  permit_no?: string
+  company_name?: string
+  valid_from?: string
   person?: string
   name?: string
   enterprise_name?: string
@@ -141,6 +148,28 @@ function toSafeString(value: unknown): string {
     return ''
   }
   return String(value)
+}
+
+const MERCHANT_OCR_CORRECTION_FORM_FIELDS = new Set([
+  'licenseName',
+  'creditCode',
+  'licenseLegalRepresentative',
+  'registerAddress',
+  'licenseValidity',
+  'businessScope',
+  'foodLicensePermitNo',
+  'foodLicenseCompanyName',
+  'foodLicenseOperatorName',
+  'foodLicenseValidFrom',
+  'foodLicenseValidity'
+])
+
+function formOCRFieldValue(formData: Record<string, unknown>, touchedFields: Record<string, unknown>, fieldName: string, fallback: unknown): string {
+  const formValue = toSafeString(formData[fieldName]).trim()
+  if (touchedFields[fieldName] || formValue) {
+    return formValue
+  }
+  return toSafeString(fallback).trim()
 }
 
 export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & ThisType<MerchantStoreRegistrationPageContext> = {
@@ -278,6 +307,7 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
         ...this.data.formData,
         ...buildMerchantLatestOcrFormPatch(data, this.data.formData.address)
       },
+      ocrCorrectionTouchedFields: {},
       ocrDisplayState: this.buildMerchantOcrDisplayState(data),
       uploadFeedback: this.buildMerchantUploadFeedback(data),
       ocrResults: {
@@ -441,6 +471,44 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
     }
   },
 
+  async saveMerchantOCRCorrections(): Promise<MerchantApplicationDraftResponse | null> {
+    if (!this.data.applicationInitialized) return null
+
+    const formData = (this.data.formData || {}) as Record<string, unknown>
+    const touchedFields = (this.data.ocrCorrectionTouchedFields || {}) as Record<string, unknown>
+    const latestDraft = await getMerchantApplication() as MerchantDraftExt
+    let currentDraft: MerchantDraftExt = latestDraft
+
+    const businessLicenseOCR = (latestDraft.business_license_ocr || {}) as OCRResult
+    const shouldSaveBusinessLicense = buildMerchantApplicationOCRStatusView(businessLicenseOCR.status).isReady || hasMerchantBusinessLicenseResult(latestDraft)
+    if (latestDraft.business_license_media_asset_id && shouldSaveBusinessLicense) {
+      currentDraft = await patchMerchantApplicationOCRFields('business_license', {
+        enterprise_name: formOCRFieldValue(formData, touchedFields, 'licenseName', businessLicenseOCR.enterprise_name),
+        credit_code: formOCRFieldValue(formData, touchedFields, 'creditCode', businessLicenseOCR.credit_code || businessLicenseOCR.reg_num || latestDraft.business_license_number),
+        reg_num: formOCRFieldValue(formData, touchedFields, 'creditCode', businessLicenseOCR.reg_num || businessLicenseOCR.credit_code),
+        legal_representative: formOCRFieldValue(formData, touchedFields, 'licenseLegalRepresentative', businessLicenseOCR.legal_representative),
+        address: formOCRFieldValue(formData, touchedFields, 'registerAddress', businessLicenseOCR.address),
+        business_scope: formOCRFieldValue(formData, touchedFields, 'businessScope', latestDraft.business_scope || businessLicenseOCR.business_scope),
+        valid_period: formOCRFieldValue(formData, touchedFields, 'licenseValidity', businessLicenseOCR.valid_period)
+      }) as MerchantDraftExt
+    }
+
+    const foodPermitOCR = (currentDraft.food_permit_ocr || latestDraft.food_permit_ocr || {}) as OCRResult
+    const shouldSaveFoodPermit = buildMerchantApplicationOCRStatusView(foodPermitOCR.status).isReady || hasMerchantFoodPermitResult(currentDraft)
+    if (currentDraft.food_permit_media_asset_id && shouldSaveFoodPermit) {
+      currentDraft = await patchMerchantApplicationOCRFields('food_permit', {
+        permit_no: formOCRFieldValue(formData, touchedFields, 'foodLicensePermitNo', foodPermitOCR.permit_no),
+        company_name: formOCRFieldValue(formData, touchedFields, 'foodLicenseCompanyName', foodPermitOCR.company_name || currentDraft.business_license_ocr?.enterprise_name || formData.licenseName),
+        operator_name: formOCRFieldValue(formData, touchedFields, 'foodLicenseOperatorName', foodPermitOCR.operator_name || currentDraft.business_license_ocr?.legal_representative || formData.legalPerson),
+        valid_from: formOCRFieldValue(formData, touchedFields, 'foodLicenseValidFrom', foodPermitOCR.valid_from),
+        valid_to: formOCRFieldValue(formData, touchedFields, 'foodLicenseValidity', foodPermitOCR.valid_to)
+      }) as MerchantDraftExt
+    }
+
+    this.applyLatestOcrDraft(currentDraft)
+    return currentDraft
+  },
+
   async resolveRegionIdByLocation(latitude?: number, longitude?: number): Promise<number> {
     const lat = Number(latitude)
     const lng = Number(longitude)
@@ -548,7 +616,11 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
   },
 
   updateFormData(key: string, value: unknown) {
-    this.setData({ [`formData.${key}`]: value })
+    const nextData: Record<string, unknown> = { [`formData.${key}`]: value }
+    if (MERCHANT_OCR_CORRECTION_FORM_FIELDS.has(key)) {
+      nextData[`ocrCorrectionTouchedFields.${key}`] = true
+    }
+    this.setData(nextData)
     this.saveDraft()
   },
 
@@ -565,9 +637,14 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
   onAddressDetailInput(e: WechatMiniprogram.Input) { this.updateFormData('addressDetail', e.detail.value) },
   onLicenseNameInput(e: WechatMiniprogram.Input) { this.updateFormData('licenseName', e.detail.value) },
   onCreditCodeInput(e: WechatMiniprogram.Input) { this.updateFormData('creditCode', e.detail.value) },
+  onLicenseLegalRepresentativeInput(e: WechatMiniprogram.Input) { this.updateFormData('licenseLegalRepresentative', e.detail.value) },
   onRegisterAddressInput(e: WechatMiniprogram.Input) { this.updateFormData('registerAddress', e.detail.value) },
   onLicenseValidityInput(e: WechatMiniprogram.Input) { this.updateFormData('licenseValidity', e.detail.value) },
   onBusinessScopeInput(e: WechatMiniprogram.Input) { this.updateFormData('businessScope', e.detail.value) },
+  onFoodLicensePermitNoInput(e: WechatMiniprogram.Input) { this.updateFormData('foodLicensePermitNo', e.detail.value) },
+  onFoodLicenseCompanyNameInput(e: WechatMiniprogram.Input) { this.updateFormData('foodLicenseCompanyName', e.detail.value) },
+  onFoodLicenseOperatorNameInput(e: WechatMiniprogram.Input) { this.updateFormData('foodLicenseOperatorName', e.detail.value) },
+  onFoodLicenseValidFromInput(e: WechatMiniprogram.Input) { this.updateFormData('foodLicenseValidFrom', e.detail.value) },
   onFoodLicenseValidityInput(e: WechatMiniprogram.Input) { this.updateFormData('foodLicenseValidity', e.detail.value) },
   onLegalPersonInput(e: WechatMiniprogram.Input) { this.updateFormData('legalPerson', e.detail.value) },
   onIdCardInput(e: WechatMiniprogram.Input) { this.updateFormData('idCard', e.detail.value) },
@@ -688,15 +765,16 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
     if (currentStep === 2) {
       let latestDraft: MerchantDraftExt | null = null
       try {
-        latestDraft = await getMerchantApplication() as MerchantDraftExt
-        this.applyLatestOcrDraft(latestDraft)
+        latestDraft = await this.saveMerchantOCRCorrections() as MerchantDraftExt
       } catch (error) {
-        logger.warn('[MerchantRegister] 刷新 OCR 草稿失败', error, 'nextStep')
+        logger.warn('[MerchantRegister] 保存 OCR 更正失败', error, 'nextStep')
+        wx.showToast({ title: getErrorMessage(error, '证照信息保存失败，请检查后重试'), icon: 'none', duration: 3000 })
+        return
       }
 
       const currentFormData = this.data.formData
-      const mergedCreditCode = currentFormData.creditCode || toSafeString(latestDraft?.business_license_number || latestDraft?.business_license_ocr?.reg_num || latestDraft?.business_license_ocr?.credit_code)
-      const mergedLegalPerson = currentFormData.legalPerson || toSafeString(latestDraft?.id_card_front_ocr?.name || latestDraft?.legal_person_name || latestDraft?.business_license_ocr?.legal_representative)
+      const mergedCreditCode = currentFormData.creditCode || toSafeString(latestDraft?.business_license_number || latestDraft?.business_license_ocr?.credit_code || latestDraft?.business_license_ocr?.reg_num)
+      const mergedLegalPerson = currentFormData.legalPerson || toSafeString(latestDraft?.id_card_front_ocr?.name || latestDraft?.legal_person_name)
       const mergedIdCard = currentFormData.idCard || toSafeString(latestDraft?.id_card_front_ocr?.id_number || latestDraft?.legal_person_id_number)
 
       const missingOCRFields: string[] = []
@@ -1303,6 +1381,7 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
       }
 
       await this.syncToBackend()
+      await this.saveMerchantOCRCorrections()
 
       const latestDraft = await getMerchantApplication() as MerchantDraftExt
       const latestRegionId = Number(latestDraft.region_id || 0)

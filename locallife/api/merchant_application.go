@@ -54,43 +54,45 @@ func (l *loggingReader) Close() error {
 
 // BusinessLicenseOCRData 营业执照OCR识别数据
 type BusinessLicenseOCRData struct {
-	Status              string        `json:"status,omitempty"`           // pending/processing/done/failed
-	Error               string        `json:"error,omitempty"`            // failure reason (if any)
-	ErrorCode           string        `json:"error_code,omitempty"`       // machine-readable failure code
-	AlertEmittedAt      string        `json:"alert_emitted_at,omitempty"` // 平台告警发送时间
-	Readiness           *OCRReadiness `json:"readiness,omitempty"`
-	QueuedAt            string        `json:"queued_at,omitempty"`            // task enqueued time
-	StartedAt           string        `json:"started_at,omitempty"`           // task started processing time
-	OCRJobID            *int64        `json:"ocr_job_id,omitempty"`           // 统一 OCR 任务 ID
-	RegNum              string        `json:"reg_num,omitempty"`              // 注册号
-	EnterpriseName      string        `json:"enterprise_name,omitempty"`      // 企业名称
-	LegalRepresentative string        `json:"legal_representative,omitempty"` // 法定代表人
-	TypeOfEnterprise    string        `json:"type_of_enterprise,omitempty"`   // 类型
-	Address             string        `json:"address,omitempty"`              // 地址
-	BusinessScope       string        `json:"business_scope,omitempty"`       // 经营范围
-	RegisteredCapital   string        `json:"registered_capital,omitempty"`   // 注册资本
-	ValidPeriod         string        `json:"valid_period"`                   // 营业期限（如：2020年01月01日至2040年01月01日 或 长期）
-	CreditCode          string        `json:"credit_code,omitempty"`          // 统一社会信用代码
-	OCRAt               string        `json:"ocr_at,omitempty"`               // OCR识别时间
+	Status              string         `json:"status,omitempty"`           // pending/processing/done/failed
+	Error               string         `json:"error,omitempty"`            // failure reason (if any)
+	ErrorCode           string         `json:"error_code,omitempty"`       // machine-readable failure code
+	AlertEmittedAt      string         `json:"alert_emitted_at,omitempty"` // 平台告警发送时间
+	Readiness           *OCRReadiness  `json:"readiness,omitempty"`
+	Correction          *OCRCorrection `json:"correction,omitempty"`
+	QueuedAt            string         `json:"queued_at,omitempty"`            // task enqueued time
+	StartedAt           string         `json:"started_at,omitempty"`           // task started processing time
+	OCRJobID            *int64         `json:"ocr_job_id,omitempty"`           // 统一 OCR 任务 ID
+	RegNum              string         `json:"reg_num,omitempty"`              // 注册号
+	EnterpriseName      string         `json:"enterprise_name,omitempty"`      // 企业名称
+	LegalRepresentative string         `json:"legal_representative,omitempty"` // 法定代表人
+	TypeOfEnterprise    string         `json:"type_of_enterprise,omitempty"`   // 类型
+	Address             string         `json:"address,omitempty"`              // 地址
+	BusinessScope       string         `json:"business_scope,omitempty"`       // 经营范围
+	RegisteredCapital   string         `json:"registered_capital,omitempty"`   // 注册资本
+	ValidPeriod         string         `json:"valid_period"`                   // 营业期限（如：2020年01月01日至2040年01月01日 或 长期）
+	CreditCode          string         `json:"credit_code,omitempty"`          // 统一社会信用代码
+	OCRAt               string         `json:"ocr_at,omitempty"`               // OCR识别时间
 }
 
 // FoodPermitOCRData 食品经营许可证OCR识别数据（通用印刷体识别后解析）
 type FoodPermitOCRData struct {
-	Status         string        `json:"status,omitempty"`           // pending/processing/done/failed
-	Error          string        `json:"error,omitempty"`            // failure reason (if any)
-	ErrorCode      string        `json:"error_code,omitempty"`       // machine-readable failure code
-	AlertEmittedAt string        `json:"alert_emitted_at,omitempty"` // 平台告警发送时间
-	Readiness      *OCRReadiness `json:"readiness,omitempty"`
-	QueuedAt       string        `json:"queued_at,omitempty"`     // task enqueued time
-	StartedAt      string        `json:"started_at,omitempty"`    // task started processing time
-	OCRJobID       *int64        `json:"ocr_job_id,omitempty"`    // 统一 OCR 任务 ID
-	RawText        string        `json:"raw_text,omitempty"`      // 原始OCR文本
-	PermitNo       string        `json:"permit_no,omitempty"`     // 许可证编号
-	CompanyName    string        `json:"company_name,omitempty"`  // 企业名称
-	OperatorName   string        `json:"operator_name,omitempty"` // 经营者/法定代表人姓名
-	ValidFrom      string        `json:"valid_from,omitempty"`    // 有效期起
-	ValidTo        string        `json:"valid_to,omitempty"`      // 有效期止（如：2025年12月31日 或 长期）
-	OCRAt          string        `json:"ocr_at,omitempty"`        // OCR识别时间
+	Status         string         `json:"status,omitempty"`           // pending/processing/done/failed
+	Error          string         `json:"error,omitempty"`            // failure reason (if any)
+	ErrorCode      string         `json:"error_code,omitempty"`       // machine-readable failure code
+	AlertEmittedAt string         `json:"alert_emitted_at,omitempty"` // 平台告警发送时间
+	Readiness      *OCRReadiness  `json:"readiness,omitempty"`
+	Correction     *OCRCorrection `json:"correction,omitempty"`
+	QueuedAt       string         `json:"queued_at,omitempty"`     // task enqueued time
+	StartedAt      string         `json:"started_at,omitempty"`    // task started processing time
+	OCRJobID       *int64         `json:"ocr_job_id,omitempty"`    // 统一 OCR 任务 ID
+	RawText        string         `json:"raw_text,omitempty"`      // 原始OCR文本
+	PermitNo       string         `json:"permit_no,omitempty"`     // 许可证编号
+	CompanyName    string         `json:"company_name,omitempty"`  // 企业名称
+	OperatorName   string         `json:"operator_name,omitempty"` // 经营者/法定代表人姓名
+	ValidFrom      string         `json:"valid_from,omitempty"`    // 有效期起
+	ValidTo        string         `json:"valid_to,omitempty"`      // 有效期止（如：2025年12月31日 或 长期）
+	OCRAt          string         `json:"ocr_at,omitempty"`        // OCR识别时间
 }
 
 // MerchantIDCardOCRData 商户法人身份证OCR识别数据

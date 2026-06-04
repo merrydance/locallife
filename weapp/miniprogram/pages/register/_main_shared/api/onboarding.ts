@@ -43,6 +43,7 @@ export interface FoodPermitOCRData extends BaseOCRData {
   raw_text?: string
   permit_no?: string
   company_name?: string
+  operator_name?: string
   valid_from?: string
   valid_to?: string
 }
@@ -365,6 +366,7 @@ export function buildMerchantApplicationOCRStatusView(status?: OCRStatus | strin
 
   switch (normalizedStatus) {
     case 'done':
+    case 'succeeded':
       return {
         statusCode: normalizedStatus,
         text: '识别完成',
@@ -573,6 +575,24 @@ export interface UpdateMerchantBasicInfoRequest {
   environment_images?: string[]
 }
 
+export interface PatchMerchantBusinessLicenseOCRFieldsRequest {
+  enterprise_name?: string
+  credit_code?: string
+  reg_num?: string
+  legal_representative?: string
+  address?: string
+  business_scope?: string
+  valid_period?: string
+}
+
+export interface PatchMerchantFoodPermitOCRFieldsRequest {
+  permit_no?: string
+  company_name?: string
+  operator_name?: string
+  valid_from?: string
+  valid_to?: string
+}
+
 // ==================== API Methods ====================
 
 /**
@@ -597,6 +617,25 @@ export function updateMerchantBasicInfo(data: UpdateMerchantBasicInfoRequest) {
   return request<MerchantApplicationDraftResponse>({
     url: '/v1/merchant/application/basic',
     method: 'PUT',
+    data
+  })
+}
+
+export function patchMerchantApplicationOCRFields(
+  documentType: 'business_license',
+  data: PatchMerchantBusinessLicenseOCRFieldsRequest
+): Promise<MerchantApplicationDraftResponse>
+export function patchMerchantApplicationOCRFields(
+  documentType: 'food_permit',
+  data: PatchMerchantFoodPermitOCRFieldsRequest
+): Promise<MerchantApplicationDraftResponse>
+export function patchMerchantApplicationOCRFields(
+  documentType: 'business_license' | 'food_permit',
+  data: PatchMerchantBusinessLicenseOCRFieldsRequest | PatchMerchantFoodPermitOCRFieldsRequest
+) {
+  return request<MerchantApplicationDraftResponse>({
+    url: `/v1/merchant/application/documents/${documentType}/ocr-fields`,
+    method: 'PATCH',
     data
   })
 }

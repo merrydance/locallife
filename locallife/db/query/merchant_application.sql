@@ -48,6 +48,10 @@ SET
   business_license_media_asset_id = COALESCE(sqlc.narg(business_license_media_asset_id), business_license_media_asset_id),
   business_license_number = COALESCE(sqlc.narg(business_license_number), business_license_number),
   business_scope = COALESCE(sqlc.narg(business_scope), business_scope),
+  merchant_name = CASE
+    WHEN COALESCE(NULLIF(btrim(merchant_name), ''), '') = '' THEN COALESCE(sqlc.narg(merchant_name), merchant_name)
+    ELSE merchant_name
+  END,
   business_license_ocr = COALESCE(sqlc.narg(business_license_ocr), business_license_ocr),
   updated_at = now()
 WHERE id = $1 AND status = 'draft'

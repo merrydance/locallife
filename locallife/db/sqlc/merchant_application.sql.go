@@ -711,7 +711,11 @@ SET
   business_license_media_asset_id = COALESCE($2, business_license_media_asset_id),
   business_license_number = COALESCE($3, business_license_number),
   business_scope = COALESCE($4, business_scope),
-  business_license_ocr = COALESCE($5, business_license_ocr),
+  merchant_name = CASE
+    WHEN COALESCE(NULLIF(btrim(merchant_name), ''), '') = '' THEN COALESCE($5, merchant_name)
+    ELSE merchant_name
+  END,
+  business_license_ocr = COALESCE($6, business_license_ocr),
   updated_at = now()
 WHERE id = $1 AND status = 'draft'
 RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id, review_summary
@@ -722,6 +726,7 @@ type UpdateMerchantApplicationBusinessLicenseParams struct {
 	BusinessLicenseMediaAssetID pgtype.Int8 `json:"business_license_media_asset_id"`
 	BusinessLicenseNumber       pgtype.Text `json:"business_license_number"`
 	BusinessScope               pgtype.Text `json:"business_scope"`
+	MerchantName                pgtype.Text `json:"merchant_name"`
 	BusinessLicenseOcr          []byte      `json:"business_license_ocr"`
 }
 
@@ -732,6 +737,7 @@ func (q *Queries) UpdateMerchantApplicationBusinessLicense(ctx context.Context, 
 		arg.BusinessLicenseMediaAssetID,
 		arg.BusinessLicenseNumber,
 		arg.BusinessScope,
+		arg.MerchantName,
 		arg.BusinessLicenseOcr,
 	)
 	var i MerchantApplication

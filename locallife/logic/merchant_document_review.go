@@ -60,6 +60,7 @@ func EvaluateMerchantDocumentReview(input MerchantDocumentReviewInput, now time.
 			"address":              "营业执照注册地址未识别，请重新上传清晰完整的营业执照照片",
 			"business_scope":       "营业执照经营范围未识别，请重新上传清晰完整的营业执照照片",
 			"valid_period":         "营业执照有效期未识别，请重新上传清晰完整的营业执照照片",
+			"credit_code|reg_num":  "营业执照统一信用代码未识别，请重新上传清晰完整的营业执照照片",
 		},
 		"营业执照信息未识别，请重新上传清晰的营业执照照片",
 		"营业执照信息解析失败，请重新上传清晰完整的营业执照照片",

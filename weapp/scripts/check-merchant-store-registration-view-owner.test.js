@@ -238,9 +238,16 @@ assert.deepStrictEqual(plain(owner.getMerchantStoreRegistrationDocumentRemovalTa
     licenseImages: [],
     'formData.licenseName': '',
     'formData.creditCode': '',
+    'formData.licenseLegalRepresentative': '',
     'formData.registerAddress': '',
     'formData.licenseValidity': '',
     'formData.businessScope': '',
+    'ocrCorrectionTouchedFields.licenseName': false,
+    'ocrCorrectionTouchedFields.creditCode': false,
+    'ocrCorrectionTouchedFields.licenseLegalRepresentative': false,
+    'ocrCorrectionTouchedFields.registerAddress': false,
+    'ocrCorrectionTouchedFields.licenseValidity': false,
+    'ocrCorrectionTouchedFields.businessScope': false,
     'ocrResults.license': null
   }
 })
@@ -248,7 +255,16 @@ assert.deepStrictEqual(plain(owner.getMerchantStoreRegistrationDocumentRemovalTa
   documentType: 'food_permit',
   data: {
     foodLicenseImages: [],
-    'formData.foodLicenseValidity': ''
+    'formData.foodLicensePermitNo': '',
+    'formData.foodLicenseCompanyName': '',
+    'formData.foodLicenseOperatorName': '',
+    'formData.foodLicenseValidFrom': '',
+    'formData.foodLicenseValidity': '',
+    'ocrCorrectionTouchedFields.foodLicensePermitNo': false,
+    'ocrCorrectionTouchedFields.foodLicenseCompanyName': false,
+    'ocrCorrectionTouchedFields.foodLicenseOperatorName': false,
+    'ocrCorrectionTouchedFields.foodLicenseValidFrom': false,
+    'ocrCorrectionTouchedFields.foodLicenseValidity': false
   }
 })
 assert.deepStrictEqual(plain(owner.getMerchantStoreRegistrationDocumentRemovalTarget('idCardFront')), {
@@ -311,12 +327,17 @@ assert.deepStrictEqual(plain(owner.buildMerchantLatestOcrFormPatch({
 }, '保留地址')), {
   licenseName: '本地生活餐饮店',
   creditCode: '91310000MA1LOCAL1X',
+  licenseLegalRepresentative: '张三',
   address: '上海市徐汇区',
   registerAddress: '上海市徐汇区',
   licenseValidity: '2026-01-01 至 2036-01-01',
   businessScope: '热食类食品制售',
+  foodLicensePermitNo: '',
+  foodLicenseCompanyName: '',
+  foodLicenseOperatorName: '',
+  foodLicenseValidFrom: '',
   foodLicenseValidity: '2030-01-01',
-  legalPerson: '张三',
+  legalPerson: '',
   idCard: '310101199001010011',
   gender: '男',
   hometown: '上海市黄浦区',
@@ -345,6 +366,10 @@ assert.deepStrictEqual(plain(owner.buildMerchantInitialDraftFormPatch({
     legal_representative: '李四'
   },
   food_permit_ocr: {
+    permit_no: 'JY13100000000002',
+    company_name: '营业执照主体',
+    operator_name: '李四',
+    valid_from: '2026-06-01',
     valid_to: '2030-06-01'
   },
   legal_person_name: '',
@@ -372,9 +397,14 @@ assert.deepStrictEqual(plain(owner.buildMerchantInitialDraftFormPatch({
   longitude: 121.445,
   licenseName: '营业执照主体',
   creditCode: '91310000MA1LOCAL1X',
+  licenseLegalRepresentative: '李四',
   registerAddress: '上海市静安区',
   licenseValidity: '2026-01-01 至 2036-01-01',
   businessScope: '热食类食品制售',
+  foodLicensePermitNo: 'JY13100000000002',
+  foodLicenseCompanyName: '营业执照主体',
+  foodLicenseOperatorName: '李四',
+  foodLicenseValidFrom: '2026-06-01',
   foodLicenseValidity: '2030-06-01',
   legalPerson: '李四',
   idCard: '310106199001010011',
@@ -410,9 +440,9 @@ const recognizedLicenseOcr = {
 assert.deepStrictEqual(plain(owner.buildMerchantBusinessLicenseOcrRecognizedPatch(recognizedLicenseOcr, '保留地址')), {
   'formData.licenseName': '本地生活餐饮店',
   'formData.creditCode': '91310000MA1LOCAL1X',
+  'formData.licenseLegalRepresentative': '张三',
   'formData.registerAddress': '上海市徐汇区',
   'formData.address': '上海市徐汇区',
-  'formData.legalPerson': '张三',
   'formData.licenseValidity': '2026-01-01 至 2036-01-01',
   'formData.businessScope': '热食类食品制售',
   'ocrResults.license': recognizedLicenseOcr
@@ -422,8 +452,16 @@ assert.strictEqual(
   '保留地址'
 )
 assert.deepStrictEqual(plain(owner.buildMerchantFoodPermitOcrRecognizedPatch({
+  permit_no: 'JY13100000000001',
+  company_name: '本地生活餐饮店',
+  operator_name: '张三',
+  valid_from: '2026-01-01',
   valid_to: '2030-01-01'
 })), {
+  'formData.foodLicensePermitNo': 'JY13100000000001',
+  'formData.foodLicenseCompanyName': '本地生活餐饮店',
+  'formData.foodLicenseOperatorName': '张三',
+  'formData.foodLicenseValidFrom': '2026-01-01',
   'formData.foodLicenseValidity': '2030-01-01'
 })
 const recognizedIdCardFrontOcr = {
@@ -550,6 +588,10 @@ const forbiddenRuntimePatterns = [
   'const documentMap',
   '请稍候，识别结果会显示在当前卡片中',
   'licenseName: toSafeString(data.business_license_ocr',
+  'foodLicensePermitNo: toSafeString(data.food_permit_ocr',
+  'foodLicenseCompanyName: toSafeString(data.food_permit_ocr',
+  'foodLicenseOperatorName: toSafeString(data.food_permit_ocr',
+  'foodLicenseValidFrom: toSafeString(data.food_permit_ocr',
   'foodLicenseValidity: toSafeString(data.food_permit_ocr',
   'idCardValidity: toSafeString(data.id_card_back_ocr',
   'name: safeStr(data.merchant_name)',
@@ -559,6 +601,10 @@ const forbiddenRuntimePatterns = [
   "kind === 'storefront' ? 'storefrontImages' : 'environmentImages'",
   'storefront_images: kind ===',
   "'formData.licenseName': ocr.enterprise_name",
+  "'formData.foodLicensePermitNo': ocr.permit_no",
+  "'formData.foodLicenseCompanyName': ocr.company_name",
+  "'formData.foodLicenseOperatorName': ocr.operator_name",
+  "'formData.foodLicenseValidFrom': ocr.valid_from",
   "'formData.foodLicenseValidity': ocr.valid_to",
   "'formData.legalPerson': ocr.name",
   "'formData.idCardValidity': ocr.valid_date",

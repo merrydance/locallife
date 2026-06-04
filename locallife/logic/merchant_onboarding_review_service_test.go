@@ -122,7 +122,7 @@ func merchantReviewTestApplication() db.MerchantApplication {
 		FoodPermitMediaAssetID:      pgtype.Int8{Int64: 12, Valid: true},
 		IDCardFrontMediaAssetID:     pgtype.Int8{Int64: 13, Valid: true},
 		IDCardBackMediaAssetID:      pgtype.Int8{Int64: 14, Valid: true},
-		BusinessLicenseOcr:          []byte(`{"ocr_job_id":101,"reg_num":"91110000MA12345678","enterprise_name":"测试餐饮店","legal_representative":"张三","address":"北京市朝阳区测试路100号","business_scope":"餐饮服务","valid_period":"2020年01月01日至2040年01月01日","credit_code":"91110000MA12345678"}`),
+		BusinessLicenseOcr:          []byte(`{"ocr_job_id":101,"enterprise_name":"测试餐饮店","legal_representative":"张三","address":"北京市朝阳区测试路100号","business_scope":"餐饮服务","valid_period":"2020年01月01日至2040年01月01日","credit_code":"91110000MA12345678"}`),
 		FoodPermitOcr:               []byte(`{"ocr_job_id":102,"permit_no":"JY11105000000001","company_name":"测试餐饮店","operator_name":"张三","valid_to":"2030年12月31日"}`),
 		StorefrontImages:            []byte(`["storefront-a.jpg","storefront-b.jpg"]`),
 		EnvironmentImages:           []byte(`["environment-a.jpg"]`),
@@ -313,6 +313,7 @@ func TestMerchantOnboardingReviewServiceProcessSubmittedApplication_ActivatesCre
 			require.Equal(t, db.CredentialDocumentTypeFoodPermit, arg.Entries[1].DocumentType)
 			var businessPayload map[string]any
 			require.NoError(t, json.Unmarshal(arg.Entries[0].NormalizedPayload, &businessPayload))
+			require.Equal(t, "91110000MA12345678", businessPayload["license_number"])
 			require.Equal(t, "91110000MA12345678", businessPayload["credit_code"])
 			return []db.CredentialLedger{{ID: 101}, {ID: 102}}, nil
 		},

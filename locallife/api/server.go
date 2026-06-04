@@ -710,6 +710,7 @@ func (server *Server) setupRouter() {
 		merchantAppGroup.PUT("/basic", server.updateMerchantApplicationBasicInfo) // 更新基础信息
 		merchantAppGroup.PUT("/images", server.updateMerchantApplicationImages)   // 更新门头照/环境照
 		merchantAppGroup.DELETE("/documents/:document_type", server.deleteMerchantApplicationDocument)
+		merchantAppGroup.PATCH("/documents/:document_type/ocr-fields", server.patchMerchantApplicationDocumentOCRFields)
 		merchantAppGroup.POST("/submit", server.submitMerchantApplication) // 提交申请（自动审核）
 		merchantAppGroup.POST("/reset", server.resetMerchantApplication)   // 重置申请（被拒后）
 	}

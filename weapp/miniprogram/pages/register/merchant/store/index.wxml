@@ -54,21 +54,19 @@
         </view>
     </view>
 
-    <!-- Step 2: 信息确认 (OCR 识别结果，只读) -->
+    <!-- Step 2: 信息确认 (OCR 识别结果) -->
     <view class="step-content" wx:if="{{currentStep === 2}}">
         <view class="section-header">证照信息 (OCR识别)</view>
         <view class="ocr-progress-notice" wx:if="{{ocrProgressMessage}}">{{ocrProgressMessage}}</view>
         <view class="form-group readonly-group ocr-section-card">
             <view class="ocr-section-title">营业执照</view>
             <block wx:if="{{ocrDisplayState.businessLicenseReady}}">
-                <t-cell title="营业执照名" note="{{formData.licenseName || '--'}}" />
-                <t-cell title="统一信用代码" note="{{formData.creditCode || '--'}}" />
-                <t-cell title="注册地址" note="{{formData.registerAddress || '--'}}" />
-                <t-cell title="营业期限" note="{{formData.licenseValidity || '--'}}" />
-                <view class="scope-cell">
-                    <view class="scope-label">经营范围</view>
-                    <view class="scope-content">{{formData.businessScope || '--'}}</view>
-                </view>
+                <t-input label="营业执照名" value="{{formData.licenseName}}" bindchange="onLicenseNameInput" data-field="licenseName" />
+                <t-input label="统一信用代码" value="{{formData.creditCode}}" bindchange="onCreditCodeInput" data-field="creditCode" />
+                <t-input label="法定代表人" value="{{formData.licenseLegalRepresentative}}" bindchange="onLicenseLegalRepresentativeInput" data-field="licenseLegalRepresentative" />
+                <t-input label="注册地址" value="{{formData.registerAddress}}" bindchange="onRegisterAddressInput" data-field="registerAddress" />
+                <t-input label="营业期限" value="{{formData.licenseValidity}}" placeholder="例：2020-01-01至2040-01-01" bindchange="onLicenseValidityInput" data-field="licenseValidity" />
+                <t-textarea label="经营范围" value="{{formData.businessScope}}" autosize bindchange="onBusinessScopeInput" data-field="businessScope" />
             </block>
             <view class="ocr-status-panel" wx:elif="{{ocrDisplayState.businessLicenseProcessing}}">
                 <view class="ocr-status-title">营业执照识别中</view>
@@ -83,7 +81,11 @@
         <view class="form-group readonly-group ocr-section-card">
             <view class="ocr-section-title">食品经营许可证</view>
             <block wx:if="{{ocrDisplayState.foodPermitReady}}">
-                <t-cell title="许可证有效期" note="{{formData.foodLicenseValidity || '--'}}" />
+                <t-input label="许可证编号" value="{{formData.foodLicensePermitNo}}" bindchange="onFoodLicensePermitNoInput" data-field="foodLicensePermitNo" />
+                <t-input label="主体名称" value="{{formData.foodLicenseCompanyName}}" bindchange="onFoodLicenseCompanyNameInput" data-field="foodLicenseCompanyName" />
+                <t-input label="经营者" value="{{formData.foodLicenseOperatorName}}" bindchange="onFoodLicenseOperatorNameInput" data-field="foodLicenseOperatorName" />
+                <t-input label="有效期起" value="{{formData.foodLicenseValidFrom}}" placeholder="例：2025-01-01" bindchange="onFoodLicenseValidFromInput" data-field="foodLicenseValidFrom" />
+                <t-input label="有效期止" value="{{formData.foodLicenseValidity}}" placeholder="例：2030-12-31" bindchange="onFoodLicenseValidityInput" data-field="foodLicenseValidity" />
             </block>
             <view class="ocr-status-panel" wx:elif="{{ocrDisplayState.foodPermitProcessing}}">
                 <view class="ocr-status-title">许可证识别中</view>

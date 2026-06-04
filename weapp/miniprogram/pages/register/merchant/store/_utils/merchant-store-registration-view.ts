@@ -58,10 +58,15 @@ export type MerchantDocumentRemovalTarget = {
 export type MerchantLatestOcrFormPatch = {
   licenseName: string
   creditCode: string
+  licenseLegalRepresentative: string
   address: string
   registerAddress: string
   licenseValidity: string
   businessScope: string
+  foodLicensePermitNo: string
+  foodLicenseCompanyName: string
+  foodLicenseOperatorName: string
+  foodLicenseValidFrom: string
   foodLicenseValidity: string
   legalPerson: string
   idCard: string
@@ -92,6 +97,10 @@ export type MerchantRecognizedOcrResult = {
   address?: string
   valid_period?: string
   business_scope?: string
+  permit_no?: string
+  company_name?: string
+  operator_name?: string
+  valid_from?: string
   valid_to?: string
   id_number?: string
   gender?: string
@@ -116,6 +125,10 @@ const EMPTY_UPLOAD_FEEDBACK: UploadFeedback = {
   description: ''
 }
 
+function canUseLegacyOCRResult(status?: string): boolean {
+  return !String(status || '').trim()
+}
+
 export const DEFAULT_MERCHANT_UPLOAD_FEEDBACK: MerchantUploadFeedback = {
   license: { ...EMPTY_UPLOAD_FEEDBACK },
   foodPermit: { ...EMPTY_UPLOAD_FEEDBACK },
@@ -130,9 +143,16 @@ const MERCHANT_DOCUMENT_REMOVAL_TARGETS: Record<MerchantRegistrationUploadField,
       licenseImages: [],
       'formData.licenseName': '',
       'formData.creditCode': '',
+      'formData.licenseLegalRepresentative': '',
       'formData.registerAddress': '',
       'formData.licenseValidity': '',
       'formData.businessScope': '',
+      'ocrCorrectionTouchedFields.licenseName': false,
+      'ocrCorrectionTouchedFields.creditCode': false,
+      'ocrCorrectionTouchedFields.licenseLegalRepresentative': false,
+      'ocrCorrectionTouchedFields.registerAddress': false,
+      'ocrCorrectionTouchedFields.licenseValidity': false,
+      'ocrCorrectionTouchedFields.businessScope': false,
       'ocrResults.license': null
     }
   },
@@ -140,7 +160,16 @@ const MERCHANT_DOCUMENT_REMOVAL_TARGETS: Record<MerchantRegistrationUploadField,
     documentType: 'food_permit',
     data: {
       foodLicenseImages: [],
-      'formData.foodLicenseValidity': ''
+      'formData.foodLicensePermitNo': '',
+      'formData.foodLicenseCompanyName': '',
+      'formData.foodLicenseOperatorName': '',
+      'formData.foodLicenseValidFrom': '',
+      'formData.foodLicenseValidity': '',
+      'ocrCorrectionTouchedFields.foodLicensePermitNo': false,
+      'ocrCorrectionTouchedFields.foodLicenseCompanyName': false,
+      'ocrCorrectionTouchedFields.foodLicenseOperatorName': false,
+      'ocrCorrectionTouchedFields.foodLicenseValidFrom': false,
+      'ocrCorrectionTouchedFields.foodLicenseValidity': false
     }
   },
   idCardFront: {
@@ -534,13 +563,18 @@ export function buildMerchantInitialDocumentImagesPatch(params: {
 export function buildMerchantLatestOcrFormPatch(data: MerchantDraftExt, currentAddress?: string): MerchantLatestOcrFormPatch {
   return {
     licenseName: toSafeString(data.business_license_ocr?.enterprise_name),
-    creditCode: toSafeString(data.business_license_number || data.business_license_ocr?.reg_num || data.business_license_ocr?.credit_code),
+    creditCode: toSafeString(data.business_license_number || data.business_license_ocr?.credit_code || data.business_license_ocr?.reg_num),
+    licenseLegalRepresentative: toSafeString(data.business_license_ocr?.legal_representative),
     address: toSafeString(data.business_address || data.business_license_ocr?.address || currentAddress),
     registerAddress: toSafeString(data.business_license_ocr?.address),
     licenseValidity: toSafeString(data.business_license_ocr?.valid_period),
     businessScope: toSafeString(data.business_scope || data.business_license_ocr?.business_scope),
+    foodLicensePermitNo: toSafeString(data.food_permit_ocr?.permit_no),
+    foodLicenseCompanyName: toSafeString(data.food_permit_ocr?.company_name),
+    foodLicenseOperatorName: toSafeString(data.food_permit_ocr?.operator_name),
+    foodLicenseValidFrom: toSafeString(data.food_permit_ocr?.valid_from),
     foodLicenseValidity: toSafeString(data.food_permit_ocr?.valid_to),
-    legalPerson: toSafeString(data.id_card_front_ocr?.name || data.legal_person_name || data.business_license_ocr?.legal_representative),
+    legalPerson: toSafeString(data.id_card_front_ocr?.name || data.legal_person_name),
     idCard: toSafeString(data.id_card_front_ocr?.id_number || data.legal_person_id_number),
     gender: toSafeString(data.id_card_front_ocr?.gender),
     hometown: toSafeString(data.id_card_front_ocr?.address),
@@ -578,10 +612,10 @@ export function buildMerchantBusinessLicenseOcrRecognizedPatch(
 ): Record<string, unknown> {
   return {
     'formData.licenseName': toSafeString(ocr.enterprise_name),
-    'formData.creditCode': toSafeString(ocr.reg_num || ocr.credit_code),
+    'formData.creditCode': toSafeString(ocr.credit_code || ocr.reg_num),
+    'formData.licenseLegalRepresentative': toSafeString(ocr.legal_representative),
     'formData.registerAddress': toSafeString(ocr.address),
     'formData.address': toSafeString(ocr.address || currentAddress),
-    'formData.legalPerson': toSafeString(ocr.legal_representative),
     'formData.licenseValidity': toSafeString(ocr.valid_period),
     'formData.businessScope': toSafeString(ocr.business_scope),
     'ocrResults.license': ocr
@@ -590,6 +624,10 @@ export function buildMerchantBusinessLicenseOcrRecognizedPatch(
 
 export function buildMerchantFoodPermitOcrRecognizedPatch(ocr: MerchantRecognizedOcrResult): Record<string, unknown> {
   return {
+    'formData.foodLicensePermitNo': toSafeString(ocr.permit_no),
+    'formData.foodLicenseCompanyName': toSafeString(ocr.company_name),
+    'formData.foodLicenseOperatorName': toSafeString(ocr.operator_name),
+    'formData.foodLicenseValidFrom': toSafeString(ocr.valid_from),
     'formData.foodLicenseValidity': toSafeString(ocr.valid_to)
   }
 }
@@ -633,7 +671,6 @@ export function hasMerchantIDCardFrontResult(data?: MerchantDraftExt): boolean {
   return Boolean(
     String(data?.id_card_front_ocr?.name || '').trim()
     || String(data?.legal_person_name || '').trim()
-    || String(data?.business_license_ocr?.legal_representative || '').trim()
     || String(data?.id_card_front_ocr?.id_number || '').trim()
     || String(data?.legal_person_id_number || '').trim()
   )
@@ -700,10 +737,10 @@ export function buildMerchantOcrDisplayState(params: {
   const idCardFrontStatusView = buildMerchantApplicationOCRStatusView(data?.id_card_front_ocr?.status)
   const idCardBackStatusView = buildMerchantApplicationOCRStatusView(data?.id_card_back_ocr?.status)
 
-  const businessLicenseDone = businessLicenseStatusView.isReady || hasMerchantBusinessLicenseResult(data)
-  const foodPermitDone = foodPermitStatusView.isReady || hasMerchantFoodPermitResult(data)
-  const idCardFrontDone = idCardFrontStatusView.isReady || hasMerchantIDCardFrontResult(data)
-  const idCardBackDone = idCardBackStatusView.isReady || hasMerchantIDCardBackResult(data)
+  const businessLicenseDone = businessLicenseStatusView.isReady || (canUseLegacyOCRResult(data?.business_license_ocr?.status) && hasMerchantBusinessLicenseResult(data))
+  const foodPermitDone = foodPermitStatusView.isReady || (canUseLegacyOCRResult(data?.food_permit_ocr?.status) && hasMerchantFoodPermitResult(data))
+  const idCardFrontDone = idCardFrontStatusView.isReady || (canUseLegacyOCRResult(data?.id_card_front_ocr?.status) && hasMerchantIDCardFrontResult(data))
+  const idCardBackDone = idCardBackStatusView.isReady || (canUseLegacyOCRResult(data?.id_card_back_ocr?.status) && hasMerchantIDCardBackResult(data))
 
   return {
     businessLicenseReady: businessLicenseDone,
@@ -735,10 +772,10 @@ export function buildMerchantUploadFeedback(params: {
   const foodPermitStatusView = buildMerchantApplicationOCRStatusView(data?.food_permit_ocr?.status)
   const idCardFrontStatusView = buildMerchantApplicationOCRStatusView(data?.id_card_front_ocr?.status)
   const idCardBackStatusView = buildMerchantApplicationOCRStatusView(data?.id_card_back_ocr?.status)
-  const businessLicenseReady = businessLicenseStatusView.isReady || hasMerchantBusinessLicenseResult(data)
-  const foodPermitReady = foodPermitStatusView.isReady || hasMerchantFoodPermitResult(data)
-  const idCardFrontReady = idCardFrontStatusView.isReady || hasMerchantIDCardFrontResult(data)
-  const idCardBackReady = idCardBackStatusView.isReady || hasMerchantIDCardBackResult(data)
+  const businessLicenseReady = businessLicenseStatusView.isReady || (canUseLegacyOCRResult(data?.business_license_ocr?.status) && hasMerchantBusinessLicenseResult(data))
+  const foodPermitReady = foodPermitStatusView.isReady || (canUseLegacyOCRResult(data?.food_permit_ocr?.status) && hasMerchantFoodPermitResult(data))
+  const idCardFrontReady = idCardFrontStatusView.isReady || (canUseLegacyOCRResult(data?.id_card_front_ocr?.status) && hasMerchantIDCardFrontResult(data))
+  const idCardBackReady = idCardBackStatusView.isReady || (canUseLegacyOCRResult(data?.id_card_back_ocr?.status) && hasMerchantIDCardBackResult(data))
 
   return {
     license: businessLicenseUploaded
