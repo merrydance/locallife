@@ -98,7 +98,7 @@ func BaofuAccountOpeningInputMissingFields(ownerType string, input BaofuAccountO
 	case db.BaofuAccountOwnerTypeMerchant:
 		if strings.TrimSpace(input.AccountType) == db.BaofuAccountTypePersonal {
 			fields = append(fields,
-				baofuAccountOpeningProfileField{code: "id_card_number", value: firstTrimmed(input.CertificateNo, input.LegalPersonIDNumber)},
+				baofuAccountOpeningProfileField{code: "id_card_number", value: input.CertificateNo},
 				baofuAccountOpeningProfileField{code: "bank_mobile", value: input.BankMobile},
 			)
 			return missingBaofuProfileFieldCodes(fields)
@@ -138,7 +138,7 @@ func BaofuAccountOpeningInputMissingFields(ownerType string, input BaofuAccountO
 		}
 	case db.BaofuAccountOwnerTypeRider, db.BaofuAccountOwnerTypeOperator:
 		fields = append(fields,
-			baofuAccountOpeningProfileField{code: "id_card_number", value: firstTrimmed(input.CertificateNo, input.LegalPersonIDNumber)},
+			baofuAccountOpeningProfileField{code: "id_card_number", value: input.CertificateNo},
 			baofuAccountOpeningProfileField{code: "bank_mobile", value: input.BankMobile},
 		)
 	default:

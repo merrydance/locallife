@@ -4,15 +4,20 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
 )
 
-func (defaults baofuSettlementAccountProfileDefaultsWithSecrets) toOpeningProfileInput() *logic.BaofuAccountOpeningProfileInput {
+func (defaults baofuSettlementAccountProfileDefaultsWithSecrets) toOpeningProfileInput(accountType string) *logic.BaofuAccountOpeningProfileInput {
 	if defaults.isZero() {
 		return nil
 	}
 	input := logic.BaofuAccountOpeningProfileInput{}
-	defaults.mergeIntoOpeningProfileInput(&input)
+	if strings.TrimSpace(accountType) == db.BaofuAccountTypePersonal {
+		defaults.mergeIntoPersonalOpeningProfileInput(&input)
+	} else {
+		defaults.mergeIntoOpeningProfileInput(&input)
+	}
 	return &input
 }
 
@@ -314,6 +319,41 @@ func (defaults baofuSettlementAccountProfileDefaultsWithSecrets) mergeIntoOpenin
 	if strings.TrimSpace(input.ContactMobile) == "" {
 		input.ContactMobile = defaults.contactMobile
 	}
+}
+
+func (defaults baofuSettlementAccountProfileDefaultsWithSecrets) mergeIntoPersonalOpeningProfileInput(input *logic.BaofuAccountOpeningProfileInput) {
+	if input == nil {
+		return
+	}
+	personalName := defaults.personalIdentityName()
+	if strings.TrimSpace(input.LegalName) == "" {
+		input.LegalName = personalName
+	}
+	if strings.TrimSpace(input.CertificateNo) == "" {
+		input.CertificateNo = defaults.certificateNo
+	}
+	if strings.TrimSpace(input.CardUserName) == "" {
+		input.CardUserName = firstNonBlank(personalName, input.LegalName)
+	}
+	if strings.TrimSpace(input.BankAccountNo) == "" {
+		input.BankAccountNo = defaults.bankAccountNo
+	}
+	if strings.TrimSpace(input.BankMobile) == "" {
+		input.BankMobile = defaults.bankMobile
+	}
+	if strings.TrimSpace(input.ContactName) == "" {
+		input.ContactName = firstNonBlank(defaults.contactName, personalName, input.LegalName)
+	}
+	if strings.TrimSpace(input.ContactMobile) == "" {
+		input.ContactMobile = defaults.contactMobile
+	}
+}
+
+func (defaults baofuSettlementAccountProfileDefaultsWithSecrets) personalIdentityName() string {
+	if strings.TrimSpace(defaults.certificateNo) == "" {
+		return ""
+	}
+	return firstNonBlank(defaults.legalName, defaults.cardUserName, defaults.legalPersonName, defaults.defaults.LegalName)
 }
 
 func (defaults baofuSettlementAccountProfileDefaultsWithSecrets) overrideMerchantIdentityIntoOpeningProfileInput(input *logic.BaofuAccountOpeningProfileInput) {

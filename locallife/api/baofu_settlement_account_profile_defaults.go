@@ -77,7 +77,7 @@ func (server *Server) baofuSettlementAccountProfileInputWithDefaults(ctx context
 		if !found {
 			return nil, nil
 		}
-		return defaults.toOpeningProfileInput(), nil
+		return defaults.toOpeningProfileInput(scope.AccountType), nil
 	}
 	if !found {
 		return input, nil
@@ -86,7 +86,11 @@ func (server *Server) baofuSettlementAccountProfileInputWithDefaults(ctx context
 		return nil, logic.NewRequestError(http.StatusBadRequest, errors.New("当前主体仅支持对公结算账户，请选择对公账户后重新提交"))
 	}
 	merged := *input
-	defaults.mergeIntoOpeningProfileInput(&merged)
+	if strings.TrimSpace(scope.AccountType) == db.BaofuAccountTypePersonal {
+		defaults.mergeIntoPersonalOpeningProfileInput(&merged)
+	} else {
+		defaults.mergeIntoOpeningProfileInput(&merged)
+	}
 	if strings.TrimSpace(scope.OwnerType) == db.BaofuAccountOwnerTypeMerchant && strings.TrimSpace(scope.AccountType) != db.BaofuAccountTypePersonal {
 		defaults.overrideMerchantIdentityIntoOpeningProfileInput(&merged)
 	}
@@ -118,7 +122,7 @@ func (server *Server) loadBaofuSettlementAccountProfileDefaultsWithExisting(ctx 
 	}
 	if existingFound {
 		existingDefaults.mergeFrom(externalDefaults)
-		if strings.TrimSpace(scope.OwnerType) == db.BaofuAccountOwnerTypeMerchant {
+		if strings.TrimSpace(scope.OwnerType) == db.BaofuAccountOwnerTypeMerchant && strings.TrimSpace(scope.AccountType) != db.BaofuAccountTypePersonal {
 			existingDefaults.overrideMerchantIdentityFrom(externalDefaults)
 		}
 		if !existingDefaults.isZero() {

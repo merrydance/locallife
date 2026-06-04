@@ -31,6 +31,9 @@ func (s *BaofuAccountOnboardingService) openFromProfile(ctx context.Context, flo
 	if err != nil {
 		return db.BaofuAccountOpeningFlow{}, nil, err
 	}
+	if err := validateBaofuOpenRequestProfile(req); err != nil {
+		return db.BaofuAccountOpeningFlow{}, nil, err
+	}
 	requestSnapshot := baofuOpeningRequestSnapshot(req)
 	flow, err = s.store.MarkBaofuAccountOpeningFlowOpeningProcessing(ctx, db.MarkBaofuAccountOpeningFlowOpeningProcessingParams{
 		ID:                      flow.ID,
@@ -139,6 +142,9 @@ func (s *BaofuAccountOnboardingService) buildOpenRequest(profile db.BaofuAccount
 		DepositBankName:     profile.DepositBankName.String,
 		CardUserName:        firstTrimmed(profile.CardUserName.String, profile.LegalName.String),
 		SelfEmployed:        baofuProfileUsesPrivateBusinessCard(profile),
+	}
+	if err := validateBaofuOpenRequestProfile(req); err != nil {
+		return baofucontracts.OpenAccountRequest{}, err
 	}
 	if err := req.Validate(); err != nil {
 		return baofucontracts.OpenAccountRequest{}, err

@@ -183,7 +183,15 @@ func (s *BaofuAccountOnboardingService) StartOrRecoverOpening(ctx context.Contex
 		return BaofuAccountOpeningResult{}, err
 	}
 
-	profile, err := s.resolveProfile(ctx, ownerType, ownerID, accountType, input.Profile)
+	existingFlow, existingFlowFound, err := s.activeOpeningFlow(ctx, ownerType, ownerID)
+	if err != nil {
+		return BaofuAccountOpeningResult{}, err
+	}
+	if !implicitMode && existingFlowFound && strings.TrimSpace(existingFlow.AccountType) != strings.TrimSpace(accountType) && strings.TrimSpace(existingFlow.State) != db.BaofuAccountOpeningStateProfilePending {
+		return BaofuAccountOpeningResult{}, baofuAccountOpeningModeConflictError()
+	}
+
+	profile, err := s.resolveProfile(ctx, ownerType, ownerID, accountType, input.Profile, implicitMode)
 	if err != nil {
 		return BaofuAccountOpeningResult{}, err
 	}
@@ -192,7 +200,7 @@ func (s *BaofuAccountOnboardingService) StartOrRecoverOpening(ctx context.Contex
 			accountType = profileType
 		}
 	}
-	flow, err := s.getOrCreateFlow(ctx, ownerType, ownerID, accountType, profile)
+	flow, err := s.getOrCreateFlowWithExisting(ctx, ownerType, ownerID, accountType, profile, existingFlow, existingFlowFound)
 	if err != nil {
 		return BaofuAccountOpeningResult{}, err
 	}
@@ -264,6 +272,17 @@ func (s *BaofuAccountOnboardingService) StartOrRecoverOpening(ctx context.Contex
 		result.Binding = binding
 	}
 	return result, nil
+}
+
+func (s *BaofuAccountOnboardingService) activeOpeningFlow(ctx context.Context, ownerType string, ownerID int64) (db.BaofuAccountOpeningFlow, bool, error) {
+	flow, err := s.store.GetActiveBaofuAccountOpeningFlowByOwner(ctx, db.GetActiveBaofuAccountOpeningFlowByOwnerParams{OwnerType: ownerType, OwnerID: ownerID})
+	if err == nil {
+		return flow, true, nil
+	}
+	if errors.Is(err, db.ErrRecordNotFound) {
+		return db.BaofuAccountOpeningFlow{}, false, nil
+	}
+	return db.BaofuAccountOpeningFlow{}, false, err
 }
 
 type baofuMerchantReportLookupStore interface {
