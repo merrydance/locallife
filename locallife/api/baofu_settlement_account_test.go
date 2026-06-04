@@ -843,6 +843,18 @@ func TestBaofuSettlementAccountMerchantDefaultsAllowPrivateWhenIndividualBusines
 	require.True(t, defaults.accountTypesAuthoritative)
 }
 
+func TestBaofuSettlementAccountMerchantDefaultsAllowPrivateWhenNameDoesNotEndWithCompany(t *testing.T) {
+	app := approvedMerchantApplicationForBaofuDefaults(1)
+	app.MerchantName = "宁晋县张姐快餐店"
+	app.BusinessLicenseNumber = "92130528MADDF0BX42"
+	app.BusinessLicenseOcr = []byte(`{"status":"done","enterprise_name":"宁晋县张姐快餐店"}`)
+
+	defaults := baofuProfileDefaultsFromMerchantApplication(app)
+
+	require.Equal(t, []string{"ACCOUNT_TYPE_BUSINESS", "ACCOUNT_TYPE_PRIVATE"}, defaults.defaults.SettlementAccountAllowedTypes)
+	require.True(t, defaults.accountTypesAuthoritative)
+}
+
 func TestBaofuSettlementAccountMerchantDefaultsFallbackToSnapshotWhenLatestApplicationIsDraft(t *testing.T) {
 	owner, _ := randomUser(t)
 	merchant := randomMerchant(owner.ID)

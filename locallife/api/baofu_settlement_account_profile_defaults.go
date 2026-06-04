@@ -472,8 +472,11 @@ func baofuProfileDefaultsFromMerchantApplication(app db.MerchantApplication) bao
 }
 
 func baofuSettlementAccountAllowedTypesFromMerchantBusinessLicenseOCR(raw []byte, names ...string) ([]string, bool) {
-	if baofuMerchantBusinessSubjectTypeFromNames(names...) == "individual_business" {
+	switch baofuMerchantBusinessSubjectTypeFromNames(names...) {
+	case "individual_business":
 		return []string{baofuSettlementAccountTypeBusiness, baofuSettlementAccountTypePrivate}, true
+	case "company":
+		return []string{baofuSettlementAccountTypeBusiness}, true
 	}
 	if len(raw) == 0 {
 		return []string{baofuSettlementAccountTypeBusiness}, true
@@ -508,11 +511,25 @@ func baofuSettlementAccountAllowsPrivate(values []string) bool {
 
 func baofuMerchantBusinessSubjectTypeFromNames(values ...string) string {
 	for _, value := range values {
-		if strings.Contains(strings.TrimSpace(value), "个体工商户") {
+		normalized := strings.TrimSpace(value)
+		if normalized == "" {
+			continue
+		}
+		if strings.Contains(normalized, "个体工商户") {
 			return "individual_business"
 		}
+		if baofuMerchantBusinessNameEndsWithCompanySuffix(normalized) {
+			return "company"
+		}
+		return "individual_business"
 	}
 	return "unknown"
+}
+
+func baofuMerchantBusinessNameEndsWithCompanySuffix(value string) bool {
+	normalized := strings.TrimSpace(value)
+	normalized = strings.TrimRight(normalized, " \t\r\n()（）[]【】")
+	return strings.HasSuffix(normalized, "公司")
 }
 
 func (defaults baofuSettlementAccountProfileDefaultsWithSecrets) applyIndividualBusinessPrivateCardDefault(input *logic.BaofuAccountOpeningProfileInput) {
