@@ -1,7 +1,8 @@
-import { 
+import {
   buildRiderApplicationStatusView,
-  getOrCreateRiderApplication, 
-  updateRiderApplicationBasic, 
+  getOrCreateRiderApplication,
+  patchRiderHealthCertOCRFields,
+  updateRiderApplicationBasic,
   submitRiderApplication,
   type RiderApplicationResponse
 } from './_api/rider-application'
@@ -14,7 +15,10 @@ import {
   buildOnboardingReviewDisplay,
   type ApplicationStatus
 } from '../_main_shared/api/onboarding'
-import { getErrorDebugMessage, getErrorUserMessage } from '../../../utils/user-facing'
+import {
+  getErrorDebugMessage,
+  getErrorUserMessage
+} from '../../../utils/user-facing'
 import {
   DEFAULT_RIDER_OCR_DISPLAY_STATE,
   DEFAULT_RIDER_OCR_PANEL_STATE,
@@ -43,6 +47,7 @@ Page({
     navBarHeight: 88,
     currentStep: 0,
     isSubmitting: false,
+    isSavingHealthCertCorrection: false,
     idFront: { url: '', assetId: undefined } as UploadFieldValue,
     idBack: { url: '', assetId: undefined } as UploadFieldValue,
     healthCert: { url: '', assetId: undefined } as UploadFieldValue,
@@ -94,7 +99,7 @@ Page({
       if (res) {
         this.mapResponseToData(res)
         const statusView = buildRiderApplicationStatusView(res.status)
-        
+
         if (statusView.isSubmitted) {
           this.setData({ currentStep: 4, isSubmitting: false })
         } else if (statusView.isApproved) {
@@ -116,16 +121,19 @@ Page({
   },
 
   mapResponseToData(res: RiderApplicationResponse) {
-    this.setData(buildRiderApplicationResponsePatch(res, {
-      formData: this.data.formData,
-      phoneError: this.data.phoneError,
-      currentStep: this.data.currentStep,
-      idFront: this.data.idFront,
-      idBack: this.data.idBack,
-      healthCert: this.data.healthCert
-    }), () => {
-      void this.refreshUploadPreviewURLs()
-    })
+    this.setData(
+      buildRiderApplicationResponsePatch(res, {
+        formData: this.data.formData,
+        phoneError: this.data.phoneError,
+        currentStep: this.data.currentStep,
+        idFront: this.data.idFront,
+        idBack: this.data.idBack,
+        healthCert: this.data.healthCert
+      }),
+      () => {
+        void this.refreshUploadPreviewURLs()
+      }
+    )
   },
 
   showRejectedApplicationModal(res: RiderApplicationResponse) {
@@ -158,19 +166,26 @@ Page({
     return this.documentRequestVersion[field] === version
   },
 
-  applyDocumentResponse(field: UploadField, version: number, res: RiderApplicationResponse) {
+  applyDocumentResponse(
+    field: UploadField,
+    version: number,
+    res: RiderApplicationResponse
+  ) {
     if (!this.isLatestDocumentRequest(field, version)) {
       return
     }
 
-    this.setData(buildRiderDocumentResponsePatch(field, res, {
-      formData: this.data.formData,
-      idFront: this.data.idFront,
-      idBack: this.data.idBack,
-      healthCert: this.data.healthCert
-    }), () => {
-      void this.refreshUploadPreviewURLs()
-    })
+    this.setData(
+      buildRiderDocumentResponsePatch(field, res, {
+        formData: this.data.formData,
+        idFront: this.data.idFront,
+        idBack: this.data.idBack,
+        healthCert: this.data.healthCert
+      }),
+      () => {
+        void this.refreshUploadPreviewURLs()
+      }
+    )
   },
 
   isApplicationEditable() {
@@ -210,7 +225,10 @@ Page({
 
   async refreshUploadPreviewURLs() {
     const refreshVersion = ++this.previewRefreshVersion
-    const uploads: Array<{ key: 'idFront' | 'idBack' | 'healthCert', value: UploadFieldValue }> = [
+    const uploads: Array<{
+      key: 'idFront' | 'idBack' | 'healthCert'
+      value: UploadFieldValue
+    }> = [
       { key: 'idFront', value: this.data.idFront },
       { key: 'idBack', value: this.data.idBack },
       { key: 'healthCert', value: this.data.healthCert }
@@ -223,10 +241,10 @@ Page({
       const resolved = await this.resolveUploadPreviewURL(assetId)
       const latestValue = this.data[item.key] as UploadFieldValue | undefined
       if (
-        refreshVersion === this.previewRefreshVersion
-        && latestValue?.assetId === assetId
-        && resolved
-        && resolved !== latestValue?.url
+        refreshVersion === this.previewRefreshVersion &&
+        latestValue?.assetId === assetId &&
+        resolved &&
+        resolved !== latestValue?.url
       ) {
         this.setData({ [`${item.key}.url`]: resolved })
       }
@@ -266,8 +284,14 @@ Page({
         this.applyDocumentResponse(field, requestVersion, res)
       })
     } catch (e) {
-      logger.error('Delete rider application document failed', { field, error: e })
-      wx.showToast({ title: getErrorMessage(e, '删除失败，请重试'), icon: 'none' })
+      logger.error('Delete rider application document failed', {
+        field,
+        error: e
+      })
+      wx.showToast({
+        title: getErrorMessage(e, '删除失败，请重试'),
+        icon: 'none'
+      })
     } finally {
       wx.hideLoading()
     }
@@ -293,8 +317,35 @@ Page({
       this.applyDocumentResponse(workflow.field, requestVersion, res)
     } catch (e) {
       logger.error('OCR failed', e)
-      const message = getErrorMessage(e, '识别失败，请提供更清晰更规整的图片重试')
-      this.setData(buildRiderDocumentOCRFailurePatch(workflow.displayType, workflow.feedbackField, message))
+      const message = getErrorMessage(
+        e,
+        '识别失败，请提供更清晰更规整的图片重试'
+      )
+      this.setData(
+        buildRiderDocumentOCRFailurePatch(
+          workflow.displayType,
+          workflow.feedbackField,
+          message
+        )
+      )
+    }
+  },
+
+  async saveHealthCertOCRCorrection() {
+    const healthCertDate = this.data.formData.healthCertDate.trim()
+    if (!this.data.healthCert.assetId || !healthCertDate) {
+      return
+    }
+
+    this.setData({ isSavingHealthCertCorrection: true })
+    try {
+      const res = await patchRiderHealthCertOCRFields({
+        cert_number: this.data.formData.healthCertNo.trim(),
+        valid_end: healthCertDate
+      })
+      this.mapResponseToData(res)
+    } finally {
+      this.setData({ isSavingHealthCertCorrection: false })
     }
   },
 
@@ -333,7 +384,9 @@ Page({
     this.setData({ consentChecked: true, consentPopupVisible: false })
   },
 
-  onViewAgreement(e: WechatMiniprogram.CustomEvent<{ type?: string, title?: string }>) {
+  onViewAgreement(
+    e: WechatMiniprogram.CustomEvent<{ type?: string, title?: string }>
+  ) {
     const type = (e.currentTarget.dataset as { type?: string }).type
     const title = (e.currentTarget.dataset as { title?: string }).title
     if (!type) return
@@ -380,8 +433,14 @@ Page({
           real_name: realName,
           phone
         })
+        await this.saveHealthCertOCRCorrection()
       } catch (e) {
-        logger.error('Update basic failed', e)
+        logger.error('Update rider application confirmation failed', e)
+        wx.showToast({
+          title: getErrorMessage(e, '保存信息失败，请重试'),
+          icon: 'none'
+        })
+        return
       } finally {
         wx.hideLoading()
       }
@@ -399,12 +458,16 @@ Page({
     try {
       consentPayload = await buildAgreementConsentPayload()
     } catch (e: unknown) {
-      wx.showToast({ title: getErrorMessage(e, '协议信息加载失败，请稍后重试'), icon: 'none' })
+      wx.showToast({
+        title: getErrorMessage(e, '协议信息加载失败，请稍后重试'),
+        icon: 'none'
+      })
       return
     }
 
     this.setData({ isSubmitting: true, currentStep: 4 })
     try {
+      await this.saveHealthCertOCRCorrection()
       const res = await submitRiderApplication(consentPayload)
 
       this.mapResponseToData(res)
@@ -434,13 +497,20 @@ Page({
     } catch (e: unknown) {
       const message = getErrorMessage(e, '提交失败')
       const debugMessage = getErrorDebugMessage(e)
-      logger.error('[RiderRegister] Submit failed', {
-        error: e,
-        userMessage: message,
-        debugMessage
-      }, 'rider-register-submit')
+      logger.error(
+        '[RiderRegister] Submit failed',
+        {
+          error: e,
+          userMessage: message,
+          debugMessage
+        },
+        'rider-register-submit'
+      )
       const shouldReturnToEdit = isDocumentCorrectionError(message)
-      this.setData({ isSubmitting: false, currentStep: shouldReturnToEdit ? 2 : 3 })
+      this.setData({
+        isSubmitting: false,
+        currentStep: shouldReturnToEdit ? 2 : 3
+      })
       wx.showModal({
         title: shouldReturnToEdit ? '请修改资料后重试' : '提交失败',
         content: message,

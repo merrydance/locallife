@@ -27194,6 +27194,76 @@
                 }
             }
         },
+        "/v1/rider/application/documents/{document_type}/ocr-fields": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "允许骑手在草稿状态下更正健康证号和有效期字段。更正会保留原 OCR 结果并写入 correction 审计元数据；身份证字段不支持此接口。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "骑手申请"
+                ],
+                "summary": "更正骑手申请健康证识别字段",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "证照类型: health_cert",
+                        "name": "document_type",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "健康证识别字段",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.patchRiderHealthCertOCRFieldsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "更新后的申请信息",
+                        "schema": {
+                            "$ref": "#/definitions/api.riderApplicationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误或状态不允许修改",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未登录",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "申请不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/rider/application/health-cert": {
             "delete": {
                 "security": [
@@ -31745,6 +31815,9 @@
                     "description": "证书编号",
                     "type": "string"
                 },
+                "correction": {
+                    "$ref": "#/definitions/api.OCRCorrection"
+                },
                 "error": {
                     "type": "string"
                 },
@@ -31930,6 +32003,32 @@
                 "message": {
                     "type": "string",
                     "example": "ok"
+                }
+            }
+        },
+        "api.OCRCorrection": {
+            "type": "object",
+            "properties": {
+                "corrected_at": {
+                    "type": "string"
+                },
+                "corrected_by": {
+                    "type": "integer"
+                },
+                "fields": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "previous": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "source": {
+                    "type": "string"
                 }
             }
         },
@@ -40787,6 +40886,26 @@
                 },
                 "ready_count": {
                     "type": "integer"
+                }
+            }
+        },
+        "api.patchRiderHealthCertOCRFieldsRequest": {
+            "type": "object",
+            "required": [
+                "valid_end"
+            ],
+            "properties": {
+                "cert_number": {
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "valid_end": {
+                    "type": "string",
+                    "maxLength": 32
+                },
+                "valid_start": {
+                    "type": "string",
+                    "maxLength": 32
                 }
             }
         },

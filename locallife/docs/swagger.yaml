@@ -177,6 +177,8 @@ definitions:
       cert_number:
         description: 证书编号
         type: string
+      correction:
+        $ref: '#/definitions/api.OCRCorrection'
       error:
         type: string
       error_code:
@@ -308,6 +310,23 @@ definitions:
     properties:
       message:
         example: ok
+        type: string
+    type: object
+  api.OCRCorrection:
+    properties:
+      corrected_at:
+        type: string
+      corrected_by:
+        type: integer
+      fields:
+        items:
+          type: string
+        type: array
+      previous:
+        additionalProperties:
+          type: string
+        type: object
+      source:
         type: string
     type: object
   api.OCRReadiness:
@@ -6382,6 +6401,20 @@ definitions:
         type: integer
       ready_count:
         type: integer
+    type: object
+  api.patchRiderHealthCertOCRFieldsRequest:
+    properties:
+      cert_number:
+        maxLength: 64
+        type: string
+      valid_end:
+        maxLength: 32
+        type: string
+      valid_start:
+        maxLength: 32
+        type: string
+    required:
+    - valid_end
     type: object
   api.paymentCapabilitiesResponse:
     properties:
@@ -28373,6 +28406,51 @@ paths:
       security:
       - BearerAuth: []
       summary: 删除骑手申请证照
+      tags:
+      - 骑手申请
+  /v1/rider/application/documents/{document_type}/ocr-fields:
+    patch:
+      consumes:
+      - application/json
+      description: 允许骑手在草稿状态下更正健康证号和有效期字段。更正会保留原 OCR 结果并写入 correction 审计元数据；身份证字段不支持此接口。
+      parameters:
+      - description: '证照类型: health_cert'
+        in: path
+        name: document_type
+        required: true
+        type: string
+      - description: 健康证识别字段
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.patchRiderHealthCertOCRFieldsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 更新后的申请信息
+          schema:
+            $ref: '#/definitions/api.riderApplicationResponse'
+        "400":
+          description: 参数错误或状态不允许修改
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未登录
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 申请不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 更正骑手申请健康证识别字段
       tags:
       - 骑手申请
   /v1/rider/application/health-cert:

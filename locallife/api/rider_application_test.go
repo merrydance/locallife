@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -81,6 +82,15 @@ func TestValidateRiderApplicationSubmissionReadiness_BlocksPendingHealthCertOCR(
 	_, err := validateRiderApplicationSubmissionReadiness(app)
 
 	require.EqualError(t, err, "健康证OCR处理中，请稍后再提交")
+}
+
+func TestValidateRiderApplicationSubmissionReadiness_AllowsCorrectedHealthCertValidEnd(t *testing.T) {
+	app := randomRiderApplicationWithData(1)
+	app.HealthCertOcr = []byte(`{"status":"done","name":"张三","valid_end":"2030年12月31日","readiness":{"state":"ready","reason_code":"ok","required_fields":["name","valid_end"]},"correction":{"corrected_by":1,"corrected_at":"2026-06-04T21:00:00+08:00","source":"rider","fields":["valid_end"],"previous":{"valid_end":""}}}`)
+
+	_, err := validateRiderApplicationSubmissionReadiness(app)
+
+	require.NoError(t, err)
 }
 
 // ==================== 创建/获取草稿测试 ====================
@@ -292,6 +302,180 @@ func TestUpdateRiderApplicationBasic(t *testing.T) {
 			require.NoError(t, err)
 
 			request, err := http.NewRequest(http.MethodPut, "/v1/rider/application/basic", bytes.NewReader(body))
+			require.NoError(t, err)
+			request.Header.Set("Content-Type", "application/json")
+
+			tc.setupAuth(t, request, server.tokenMaker)
+			server.router.ServeHTTP(recorder, request)
+			tc.checkResponse(t, recorder)
+		})
+	}
+}
+
+func TestPatchRiderApplicationHealthCertOCRFields(t *testing.T) {
+	user, _ := randomUser(t)
+	futureValidEnd := time.Now().AddDate(1, 0, 0).Format("2006-01-02")
+
+	testCases := []struct {
+		name          string
+		body          map[string]interface{}
+		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
+		buildStubs    func(store *mockdb.MockStore)
+		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+	}{
+		{
+			name: "OK_CorrectsMissingValidEndWithAuditMetadata",
+			body: map[string]interface{}{
+				"cert_number": "A690",
+				"valid_end":   futureValidEnd,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomRiderApplicationWithData(user.ID)
+				app.HealthCertOcr = []byte(`{"status":"done","name":"张三","readiness":{"state":"partial","reason_code":"required_field_missing","required_fields":["name","valid_end"],"missing_fields":["valid_end"]},"ocr_job_id":173}`)
+				updatedApp := app
+
+				store.EXPECT().
+					GetRiderApplicationByUserID(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+
+				store.EXPECT().
+					UpdateRiderApplicationHealthCert(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ context.Context, arg db.UpdateRiderApplicationHealthCertParams) (db.RiderApplication, error) {
+						require.Equal(t, app.ID, arg.ID)
+						require.False(t, arg.HealthCertMediaAssetID.Valid)
+
+						var payload map[string]any
+						require.NoError(t, json.Unmarshal(arg.HealthCertOcr, &payload))
+						require.Equal(t, "done", payload["status"])
+						require.Equal(t, "张三", payload["name"])
+						require.Equal(t, "A690", payload["cert_number"])
+						require.Equal(t, futureValidEnd, payload["valid_end"])
+
+						readiness, ok := payload["readiness"].(map[string]any)
+						require.True(t, ok)
+						require.Equal(t, "ready", readiness["state"])
+						require.Equal(t, "ok", readiness["reason_code"])
+
+						correction, ok := payload["correction"].(map[string]any)
+						require.True(t, ok)
+						require.Equal(t, float64(user.ID), correction["corrected_by"])
+						require.NotEmpty(t, correction["corrected_at"])
+						require.Equal(t, "rider", correction["source"])
+
+						fields, ok := correction["fields"].([]any)
+						require.True(t, ok)
+						require.ElementsMatch(t, []any{"cert_number", "valid_end"}, fields)
+
+						previous, ok := correction["previous"].(map[string]any)
+						require.True(t, ok)
+						require.Equal(t, "", previous["cert_number"])
+						require.Equal(t, "", previous["valid_end"])
+
+						updatedApp.HealthCertOcr = arg.HealthCertOcr
+						return updatedApp, nil
+					})
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp riderApplicationResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.NotNil(t, resp.HealthCertOCR)
+				require.Equal(t, "A690", resp.HealthCertOCR.CertNumber)
+				require.Equal(t, futureValidEnd, resp.HealthCertOCR.ValidEnd)
+				require.Equal(t, "ready", resp.HealthCertOCR.Readiness.State)
+			},
+		},
+		{
+			name: "NoChangeReturnsCurrentApplicationWithoutOverwritingCorrection",
+			body: map[string]interface{}{
+				"cert_number": "A690",
+				"valid_end":   futureValidEnd,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomRiderApplicationWithData(user.ID)
+				app.HealthCertOcr = []byte(fmt.Sprintf(`{"status":"done","name":"张三","cert_number":"A690","valid_end":%q,"readiness":{"state":"ready","reason_code":"ok","required_fields":["name","valid_end"]},"correction":{"corrected_by":1,"corrected_at":"2026-06-04T21:00:00+08:00","source":"rider","fields":["cert_number","valid_end"],"previous":{"cert_number":"","valid_end":""}}}`, futureValidEnd))
+
+				store.EXPECT().
+					GetRiderApplicationByUserID(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+				store.EXPECT().
+					UpdateRiderApplicationHealthCert(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp riderApplicationResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.NotNil(t, resp.HealthCertOCR)
+				require.NotNil(t, resp.HealthCertOCR.Correction)
+				require.Equal(t, []string{"cert_number", "valid_end"}, resp.HealthCertOCR.Correction.Fields)
+				require.Equal(t, "", resp.HealthCertOCR.Correction.Previous["cert_number"])
+				require.Equal(t, "", resp.HealthCertOCR.Correction.Previous["valid_end"])
+			},
+		},
+		{
+			name: "InvalidDateRejected",
+			body: map[string]interface{}{
+				"valid_end": "76年4月71日",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().GetRiderApplicationByUserID(gomock.Any(), gomock.Any()).Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Contains(t, recorder.Body.String(), "健康证有效期格式无法识别")
+			},
+		},
+		{
+			name: "SubmittedRejected",
+			body: map[string]interface{}{
+				"valid_end": futureValidEnd,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomRiderApplicationWithData(user.ID)
+				app.Status = "submitted"
+				store.EXPECT().
+					GetRiderApplicationByUserID(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			tc.buildStubs(store)
+
+			server := newTestServer(t, store)
+			recorder := httptest.NewRecorder()
+
+			body, err := json.Marshal(tc.body)
+			require.NoError(t, err)
+
+			request, err := http.NewRequest(http.MethodPatch, "/v1/rider/application/documents/health_cert/ocr-fields", bytes.NewReader(body))
 			require.NoError(t, err)
 			request.Header.Set("Content-Type", "application/json")
 

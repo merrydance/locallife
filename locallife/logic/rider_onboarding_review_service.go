@@ -325,6 +325,10 @@ func normalizeRiderPersonName(name string) string {
 	return name
 }
 
+func ParseRiderFlexibleDocumentEndDate(dateStr string) (time.Time, error) {
+	return parseRiderFlexibleDocumentEndDate(dateStr)
+}
+
 func parseRiderFlexibleDocumentEndDate(dateStr string) (time.Time, error) {
 	trimmed := strings.TrimSpace(dateStr)
 	if trimmed == "" {

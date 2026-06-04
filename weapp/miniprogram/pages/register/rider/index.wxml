@@ -143,10 +143,20 @@
 
       <view class="card-group gray-bg ocr-section-card">
         <view class="ocr-section-title">健康证信息</view>
-        <block wx:if="{{formData.healthCertNo || formData.healthCertDate}}">
-          <t-cell title="健康证号" note="{{formData.healthCertNo || '--'}}" />
-          <t-cell title="有效期至" note="{{formData.healthCertDate || '--'}}" />
-        </block>
+        <t-input
+          label="健康证号"
+          placeholder="例：A690"
+          value="{{formData.healthCertNo}}"
+          bindchange="onInput"
+          data-field="healthCertNo"
+        />
+        <t-input
+          label="有效期至"
+          placeholder="例：2027-06-03"
+          value="{{formData.healthCertDate}}"
+          bindchange="onInput"
+          data-field="healthCertDate"
+        />
         <view class="ocr-status-card" wx:if="{{ocrPanelState.healthProcessing}}">
           <view class="ocr-status-title">健康证识别中</view>
           <view class="ocr-status-desc">已识别到的健康证字段会先展示，剩余字段完成后继续回填。</view>

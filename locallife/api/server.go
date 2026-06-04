@@ -1104,6 +1104,7 @@ func (server *Server) setupRouter() {
 		riderGroup.GET("/application", server.createOrGetRiderApplicationDraft)  // 创建/获取草稿
 		riderGroup.PUT("/application/basic", server.updateRiderApplicationBasic) // 更新基础信息
 		riderGroup.DELETE("/application/documents/:document_type", server.deleteRiderApplicationDocument)
+		riderGroup.PATCH("/application/documents/:document_type/ocr-fields", server.patchRiderApplicationDocumentOCRFields)
 		riderGroup.DELETE("/application/health-cert", server.deleteRiderApplicationHealthCert)
 		riderGroup.POST("/application/submit", server.submitRiderApplication) // 提交申请
 		riderGroup.POST("/application/reset", server.resetRiderApplication)   // 重置待处理申请

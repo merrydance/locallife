@@ -27,20 +27,29 @@ type IDCardOCRData struct {
 
 // HealthCertOCRData 健康证OCR识别数据
 type HealthCertOCRData struct {
-	Status         string        `json:"status,omitempty"`
-	Error          string        `json:"error,omitempty"`
-	ErrorCode      string        `json:"error_code,omitempty"`
-	AlertEmittedAt string        `json:"alert_emitted_at,omitempty"`
-	Readiness      *OCRReadiness `json:"readiness,omitempty"`
-	QueuedAt       string        `json:"queued_at,omitempty"`
-	StartedAt      string        `json:"started_at,omitempty"`
-	OCRJobID       *int64        `json:"ocr_job_id,omitempty"`
-	Name           string        `json:"name,omitempty"`        // 姓名
-	IDNumber       string        `json:"id_number,omitempty"`   // 身份证号
-	CertNumber     string        `json:"cert_number,omitempty"` // 证书编号
-	ValidStart     string        `json:"valid_start,omitempty"` // 有效期起始
-	ValidEnd       string        `json:"valid_end,omitempty"`   // 有效期截止
-	OCRAt          string        `json:"ocr_at,omitempty"`      // OCR识别时间
+	Status         string         `json:"status,omitempty"`
+	Error          string         `json:"error,omitempty"`
+	ErrorCode      string         `json:"error_code,omitempty"`
+	AlertEmittedAt string         `json:"alert_emitted_at,omitempty"`
+	Readiness      *OCRReadiness  `json:"readiness,omitempty"`
+	Correction     *OCRCorrection `json:"correction,omitempty"`
+	QueuedAt       string         `json:"queued_at,omitempty"`
+	StartedAt      string         `json:"started_at,omitempty"`
+	OCRJobID       *int64         `json:"ocr_job_id,omitempty"`
+	Name           string         `json:"name,omitempty"`        // 姓名
+	IDNumber       string         `json:"id_number,omitempty"`   // 身份证号
+	CertNumber     string         `json:"cert_number,omitempty"` // 证书编号
+	ValidStart     string         `json:"valid_start,omitempty"` // 有效期起始
+	ValidEnd       string         `json:"valid_end,omitempty"`   // 有效期截止
+	OCRAt          string         `json:"ocr_at,omitempty"`      // OCR识别时间
+}
+
+type OCRCorrection struct {
+	CorrectedBy int64             `json:"corrected_by,omitempty"`
+	CorrectedAt string            `json:"corrected_at,omitempty"`
+	Source      string            `json:"source,omitempty"`
+	Fields      []string          `json:"fields,omitempty"`
+	Previous    map[string]string `json:"previous,omitempty"`
 }
 
 func decodeOCRPayload(data []byte, target any) error {
@@ -88,4 +97,28 @@ func normalizePersonName(name string) string {
 	name = strings.ReplaceAll(name, " ", "")
 	name = strings.ReplaceAll(name, "\t", "")
 	return name
+}
+
+func buildHealthCertOCRReadinessForAPI(name string, validEnd string) *OCRReadiness {
+	required := []string{"name", "valid_end"}
+	missing := make([]string, 0, len(required))
+	if strings.TrimSpace(name) == "" {
+		missing = append(missing, "name")
+	}
+	if strings.TrimSpace(validEnd) == "" {
+		missing = append(missing, "valid_end")
+	}
+	if len(missing) == 0 {
+		return &OCRReadiness{
+			State:          ocrReadinessStateReady,
+			ReasonCode:     "ok",
+			RequiredFields: required,
+		}
+	}
+	return &OCRReadiness{
+		State:          ocrReadinessStatePartial,
+		ReasonCode:     ocrReadinessReasonRequiredFieldMissing,
+		RequiredFields: required,
+		MissingFields:  missing,
+	}
 }

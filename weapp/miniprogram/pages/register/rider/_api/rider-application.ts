@@ -1,7 +1,11 @@
 import { request } from '../../../../utils/request'
 import { uploadMedia } from '../../../../utils/media'
 import { enqueueOCRJobAndRefresh } from '../../_main_shared/api/ocr-jobs'
-import type { ActiveCredentialSummary, ApplicationStatus, OnboardingReviewSummary } from '../../_main_shared/api/onboarding'
+import type {
+  ActiveCredentialSummary,
+  ApplicationStatus,
+  OnboardingReviewSummary
+} from '../../_main_shared/api/onboarding'
 import type { AgreementConsentPayload } from '../../_main_shared/api/agreement-consent'
 import { AppError, ErrorType } from '../../../../utils/error-handler'
 
@@ -44,6 +48,13 @@ export interface RiderApplicationResponse {
     valid_start?: string
     valid_end?: string
     ocr_at?: string
+    correction?: {
+      corrected_by?: number
+      corrected_at?: string
+      source?: string
+      fields?: string[]
+      previous?: Record<string, string>
+    }
   }
   status: ApplicationStatus
   reject_reason?: string
@@ -64,8 +75,13 @@ export interface RiderApplicationStatusView {
   canSubmit: boolean
 }
 
-export function buildRiderApplicationStatusView(status?: ApplicationStatus | string): RiderApplicationStatusView {
-  const normalizedStatus = String(status || 'draft').trim().toLowerCase() || 'draft'
+export function buildRiderApplicationStatusView(
+  status?: ApplicationStatus | string
+): RiderApplicationStatusView {
+  const normalizedStatus =
+    String(status || 'draft')
+      .trim()
+      .toLowerCase() || 'draft'
 
   switch (normalizedStatus) {
     case 'submitted':
@@ -116,8 +132,10 @@ function hasRiderText(value?: string) {
 }
 
 function hasRiderHealthCertKeyFields(latest: RiderApplicationResponse) {
-  return hasRiderText(latest.health_cert_ocr?.valid_end)
-    && hasRiderText(latest.health_cert_ocr?.name)
+  return (
+    hasRiderText(latest.health_cert_ocr?.valid_end) &&
+    hasRiderText(latest.health_cert_ocr?.name)
+  )
 }
 
 function buildRiderApplicationReadonlyMessage(status: ApplicationStatus) {
@@ -145,7 +163,10 @@ function assertRiderApplicationEditable(application: RiderApplicationResponse) {
   })
 }
 
-function checkRiderIDCardWriteback(latest: RiderApplicationResponse, side: 'Front' | 'Back') {
+function checkRiderIDCardWriteback(
+  latest: RiderApplicationResponse,
+  side: 'Front' | 'Back'
+) {
   const status = latest.id_card_ocr?.status || ''
   const error = latest.id_card_ocr?.error || ''
 
@@ -171,15 +192,23 @@ function checkRiderHealthCertWriteback(latest: RiderApplicationResponse) {
   return {
     ready: hasKeyFields,
     failed: status === 'failed' || (status === 'done' && !hasKeyFields),
-    errorMessage: error || (status === 'done' && !hasKeyFields
-      ? '健康证关键字段未识别，请重新上传清晰、无遮挡的健康证照片'
-      : '')
+    errorMessage:
+      error ||
+      (status === 'done' && !hasKeyFields
+        ? '健康证关键字段未识别，请重新上传清晰、无遮挡的健康证照片'
+        : '')
   }
 }
 
 export interface UpdateRiderBasicRequest {
   real_name?: string
   phone?: string
+}
+
+export interface PatchRiderHealthCertOCRFieldsRequest {
+  cert_number?: string
+  valid_start?: string
+  valid_end: string
 }
 
 /**
@@ -199,6 +228,16 @@ export function updateRiderApplicationBasic(data: UpdateRiderBasicRequest) {
   return request<RiderApplicationResponse>({
     url: '/v1/rider/application/basic',
     method: 'PUT',
+    data
+  })
+}
+
+export function patchRiderHealthCertOCRFields(
+  data: PatchRiderHealthCertOCRFieldsRequest
+) {
+  return request<RiderApplicationResponse>({
+    url: '/v1/rider/application/documents/health_cert/ocr-fields',
+    method: 'PATCH',
     data
   })
 }
