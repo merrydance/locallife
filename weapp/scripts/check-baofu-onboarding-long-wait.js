@@ -12,6 +12,18 @@ const onboardingService = read('miniprogram/pages/merchant/_main_shared/services
 const statusHelpers = read('miniprogram/pages/merchant/_main_shared/api/baofu-account-status.ts')
 const statusBehavior = read('miniprogram/pages/merchant/_main_shared/behaviors/baofu-settlement-status.ts')
 const submitBehavior = read('miniprogram/pages/merchant/_main_shared/behaviors/baofu-settlement-submit.ts')
+const waitPatchConsumers = [
+  'miniprogram/pages/merchant/_main_shared/behaviors/baofu-settlement-status.ts',
+  'miniprogram/pages/merchant/_main_shared/behaviors/baofu-settlement-submit.ts',
+  'miniprogram/pages/merchant/finance/settlement-account/submit/index.ts',
+  'miniprogram/pages/operator/_main_shared/behaviors/baofu-settlement-status.ts',
+  'miniprogram/pages/operator/_main_shared/behaviors/baofu-settlement-submit.ts',
+  'miniprogram/pages/operator/finance/settlement-account/submit/index.ts',
+  'miniprogram/pages/platform/_main_shared/behaviors/baofu-settlement-status.ts',
+  'miniprogram/pages/rider/_main_shared/behaviors/baofu-settlement-status.ts',
+  'miniprogram/pages/rider/_main_shared/behaviors/baofu-settlement-submit.ts',
+  'miniprogram/pages/rider/settlement-account/submit/index.ts'
+]
 const waitComponentTs = read('miniprogram/pages/merchant/_components/baofu-onboarding-wait/index.ts')
 const waitComponentWxml = read('miniprogram/pages/merchant/_components/baofu-onboarding-wait/index.wxml')
 
@@ -59,6 +71,14 @@ for (const [label, source] of [
   assert(
     source.includes('waitElapsedSeconds') && source.includes('waitUntilTerminal') && source.includes('waitTimerVisible'),
     `${label} must pass countdown state to the wait UI`
+  )
+}
+
+for (const relativePath of waitPatchConsumers) {
+  const source = read(relativePath)
+  assert(
+    !source.includes('...buildBaofuOnboardingWaitViewFromText({'),
+    `${relativePath} must map Baofoo wait views into wait* page data fields before setData`
   )
 }
 

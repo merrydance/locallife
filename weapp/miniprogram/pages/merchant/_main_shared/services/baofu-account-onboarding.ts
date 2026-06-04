@@ -43,6 +43,26 @@ export interface BaofuOnboardingWaitView {
   primaryAction: BaofuOnboardingWaitAction
 }
 
+export interface BaofuOnboardingWaitDataPatch {
+  waitState: BaofuOnboardingWaitState
+  waitTheme: 'success' | 'warning' | 'error'
+  waitTitle: string
+  waitDescription: string
+  waitPrimaryAction: BaofuOnboardingWaitAction
+  waitPrimaryActionText: string
+}
+
+export function buildBaofuOnboardingWaitDataPatch(waitView: BaofuOnboardingWaitView): BaofuOnboardingWaitDataPatch {
+  return {
+    waitState: waitView.state,
+    waitTheme: waitView.theme,
+    waitTitle: waitView.title,
+    waitDescription: waitView.description,
+    waitPrimaryAction: waitView.primaryAction,
+    waitPrimaryActionText: waitView.primaryActionText
+  }
+}
+
 interface WorkflowOptions {
   role?: BaofuAccountOwnerRole
   accountOpeningMode?: BaofuAccountOpeningMode

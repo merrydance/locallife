@@ -21,6 +21,7 @@
 import type { BaofuSettlementAccountResponse } from '../api/baofu-account'
 import {
   buildBaofuOnboardingWaitView,
+  buildBaofuOnboardingWaitDataPatch,
   buildBaofuOnboardingWaitViewFromText,
   formatBaofuOnboardingPollProgress,
   pollBaofuSettlementAccountStatus,
@@ -290,14 +291,14 @@ export function baofuSettlementSubmitBehavior(config: BaofuSettlementSubmitConfi
           waitRemainingSeconds: 0,
           waitUntilTerminal: true,
           waitTimerVisible: true,
-          ...buildBaofuOnboardingWaitViewFromText({
+          ...buildBaofuOnboardingWaitDataPatch(buildBaofuOnboardingWaitViewFromText({
             state: 'opening_processing',
             title: '开户状态同步中',
             description: '正在向后端确认最新开户状态。',
             theme: 'warning',
             primaryAction: 'refresh_status',
             primaryActionText: ''
-          }),
+          })),
           waitProgressText: ''
         })
 
@@ -322,14 +323,14 @@ export function baofuSettlementSubmitBehavior(config: BaofuSettlementSubmitConfi
           const message = getErrorUserMessage(error, config.refreshErrorFallback)
           this.setData({
             waitVisible: true,
-            ...buildBaofuOnboardingWaitViewFromText({
+            ...buildBaofuOnboardingWaitDataPatch(buildBaofuOnboardingWaitViewFromText({
               state: 'error',
               title: '状态同步失败',
               description: message,
               theme: 'error',
               primaryAction: 'retry',
               primaryActionText: '重试'
-            }),
+            })),
             waitProgressText: '',
             waitElapsedSeconds: 0,
             waitRemainingSeconds: 0,

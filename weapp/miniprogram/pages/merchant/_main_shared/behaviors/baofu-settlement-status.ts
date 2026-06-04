@@ -22,6 +22,7 @@ import type {
 } from '../api/baofu-account'
 import {
   buildBaofuOnboardingWaitView,
+  buildBaofuOnboardingWaitDataPatch,
   buildBaofuOnboardingWaitViewFromAccount,
   buildBaofuOnboardingWaitViewFromText,
   clearPendingBaofuAccountOnboardingContext,
@@ -274,14 +275,14 @@ export function baofuSettlementStatusBehavior(config: BaofuSettlementStatusConfi
           syncing: true,
           refreshErrorMessage: '',
           waitVisible: true,
-          ...buildBaofuOnboardingWaitViewFromText({
+          ...buildBaofuOnboardingWaitDataPatch(buildBaofuOnboardingWaitViewFromText({
             state: 'opening_processing',
             title: '开户状态同步中',
             description: '正在向后端确认开户、支付报备和授权目录状态。',
             theme: 'warning',
             primaryAction: 'refresh_status',
             primaryActionText: ''
-          }),
+          })),
           waitProgressText: '',
           waitElapsedSeconds: 0,
           waitRemainingSeconds: 0,
@@ -312,14 +313,14 @@ export function baofuSettlementStatusBehavior(config: BaofuSettlementStatusConfi
           this.setData({
             refreshErrorMessage: message,
             waitVisible: true,
-            ...buildBaofuOnboardingWaitViewFromText({
+            ...buildBaofuOnboardingWaitDataPatch(buildBaofuOnboardingWaitViewFromText({
               state: 'error',
               title: '状态同步失败',
               description: message,
               theme: 'error',
               primaryAction: 'retry',
               primaryActionText: '重试'
-            }),
+            })),
             waitProgressText: '',
             waitElapsedSeconds: 0,
             waitRemainingSeconds: 0,
@@ -390,14 +391,14 @@ export function baofuSettlementStatusBehavior(config: BaofuSettlementStatusConfi
             waitRemainingSeconds: 0,
             waitUntilTerminal: true,
             waitTimerVisible: true,
-            ...buildBaofuOnboardingWaitViewFromText({
+            ...buildBaofuOnboardingWaitDataPatch(buildBaofuOnboardingWaitViewFromText({
               state: 'payment_confirming',
               title: '开户进度恢复中',
               description: '正在向后端确认支付和开户状态。',
               theme: 'warning',
               primaryAction: 'refresh_status',
               primaryActionText: ''
-            }),
+            })),
             waitProgressText: ''
           })
           didSetSyncing = true
@@ -427,14 +428,14 @@ export function baofuSettlementStatusBehavior(config: BaofuSettlementStatusConfi
           this.setData({
             refreshErrorMessage: '开户进度恢复失败，请稍后重试。',
             waitVisible: true,
-            ...buildBaofuOnboardingWaitViewFromText({
+            ...buildBaofuOnboardingWaitDataPatch(buildBaofuOnboardingWaitViewFromText({
               state: 'error',
               title: '恢复失败',
               description: '开户进度恢复失败，请稍后重试。',
               theme: 'error',
               primaryAction: 'retry',
               primaryActionText: '重试'
-            }),
+            })),
             waitProgressText: '',
             waitElapsedSeconds: 0,
             waitRemainingSeconds: 0,
@@ -490,14 +491,14 @@ export function baofuSettlementStatusBehavior(config: BaofuSettlementStatusConfi
           waitRemainingSeconds: 0,
           waitUntilTerminal: true,
           waitTimerVisible: true,
-          ...buildBaofuOnboardingWaitViewFromText({
+          ...buildBaofuOnboardingWaitDataPatch(buildBaofuOnboardingWaitViewFromText({
             state: 'payment_confirming',
             title: '支付结果确认中',
             description: '正在确认核验费支付和开户状态。',
             theme: 'warning',
             primaryAction: 'refresh_status',
             primaryActionText: ''
-          }),
+          })),
           waitProgressText: ''
         })
         const sessionId = this._beginBaofuLongWaitSession()
@@ -524,14 +525,14 @@ export function baofuSettlementStatusBehavior(config: BaofuSettlementStatusConfi
           const message = getErrorUserMessage(error, '支付进度恢复失败，请稍后重试')
           this.setData({
             waitVisible: true,
-            ...buildBaofuOnboardingWaitViewFromText({
+            ...buildBaofuOnboardingWaitDataPatch(buildBaofuOnboardingWaitViewFromText({
               state: 'error',
               title: '支付进度恢复失败',
               description: message,
               theme: 'error',
               primaryAction: 'retry',
               primaryActionText: '重试'
-            }),
+            })),
             waitProgressText: '',
             waitElapsedSeconds: 0,
             waitRemainingSeconds: 0,

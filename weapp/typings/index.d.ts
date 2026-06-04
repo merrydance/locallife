@@ -51,6 +51,7 @@ interface IAppOption {
     getLocation(): void
     getLocationCoordinates(): void
     reverseGeocodeWhenReady(retryCount?: number): Promise<void>
+    syncCurrentRegionFromCoordinates(): Promise<void>
     isDemoMode(): boolean
     bootstrapDemoUser(): void
     reportErrorToMonitor(error: any, type: string): void

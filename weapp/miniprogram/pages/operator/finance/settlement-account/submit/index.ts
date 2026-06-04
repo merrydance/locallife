@@ -5,6 +5,7 @@ import type {
 import { getOperatorBaofuSettlementAccount } from '../../../_main_shared/api/baofu-account'
 import { baofuSettlementSubmitBehavior } from '../../../_main_shared/behaviors/baofu-settlement-submit'
 import {
+  buildBaofuOnboardingWaitDataPatch,
   buildBaofuOnboardingWaitViewFromText,
   startBaofuAccountOnboarding
 } from '../../../_main_shared/services/baofu-account-onboarding'
@@ -95,14 +96,14 @@ Page({
       waitElapsedSeconds: 0,
       waitRemainingSeconds: 0,
       waitTimerVisible: true,
-      ...buildBaofuOnboardingWaitViewFromText({
+      ...buildBaofuOnboardingWaitDataPatch(buildBaofuOnboardingWaitViewFromText({
         state: 'submitting',
         title: '开户资料提交中',
         description: '正在提交资料并发起核验，结果以后端开户状态为准。',
         theme: 'warning',
         primaryAction: 'dismiss',
         primaryActionText: ''
-      })
+      }))
     })
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -135,15 +136,22 @@ Page({
       logger.error('Submit operator baofu settlement profile failed action=submit_profile role=operator', error, 'operator-baofu-settlement-submit')
       const message = getErrorUserMessage(error, '运营商宝付开户资料提交失败，请稍后重试')
       this.setData({
+        submitting: false,
+        syncing: false,
         waitVisible: true,
-        ...buildBaofuOnboardingWaitViewFromText({
+        ...buildBaofuOnboardingWaitDataPatch(buildBaofuOnboardingWaitViewFromText({
           state: 'error',
           title: '提交失败',
           description: message,
           theme: 'error',
           primaryAction: 'back_to_status',
           primaryActionText: '返回状态页'
-        })
+        })),
+        waitProgressText: '',
+        waitElapsedSeconds: 0,
+        waitRemainingSeconds: 0,
+        waitUntilTerminal: true,
+        waitTimerVisible: false
       })
     } finally {
       this.setData({ submitting: false })

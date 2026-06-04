@@ -3,7 +3,7 @@ import { getMerchantBaofuSettlementAccount } from '../../../_main_shared/api/bao
 import type { ApplymentBankFormDraftPayload, ApplymentBankFormPayload } from './_components/applyment-bank-form/index'
 import { baofuSettlementSubmitBehavior } from '../../../_main_shared/behaviors/baofu-settlement-submit'
 import type { AccessCheckResult } from '../../../_main_shared/behaviors/baofu-settlement-status'
-import { buildBaofuOnboardingWaitViewFromText, startBaofuAccountOnboarding } from '../../../_main_shared/services/baofu-account-onboarding'
+import { buildBaofuOnboardingWaitDataPatch, buildBaofuOnboardingWaitViewFromText, startBaofuAccountOnboarding } from '../../../_main_shared/services/baofu-account-onboarding'
 import { buildBaofuRolePageView } from '../../../_main_shared/services/baofu-account-role-page'
 import {
   buildBaofuEnterpriseBankDraftFromDefaults,
@@ -208,14 +208,14 @@ Page({
       waitElapsedSeconds: 0,
       waitRemainingSeconds: 0,
       waitTimerVisible: true,
-      ...buildBaofuOnboardingWaitViewFromText({
+      ...buildBaofuOnboardingWaitDataPatch(buildBaofuOnboardingWaitViewFromText({
         state: 'submitting',
         title: '开户资料提交中',
         description: '正在提交资料，结果以后端开户状态为准。',
         theme: 'warning',
         primaryAction: 'dismiss',
         primaryActionText: ''
-      })
+      }))
     })
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -251,15 +251,22 @@ Page({
       logger.error('Submit merchant baofu settlement profile failed action=submit_profile role=merchant', error, 'merchant-baofu-settlement-submit')
       const message = getErrorUserMessage(error, '商户宝付开户资料提交失败，请稍后重试')
       this.setData({
+        submitting: false,
+        syncing: false,
         waitVisible: true,
-        ...buildBaofuOnboardingWaitViewFromText({
+        ...buildBaofuOnboardingWaitDataPatch(buildBaofuOnboardingWaitViewFromText({
           state: 'error',
           title: '提交失败',
           description: message,
           theme: 'error',
           primaryAction: 'back_to_status',
           primaryActionText: '返回状态页'
-        })
+        })),
+        waitProgressText: '',
+        waitElapsedSeconds: 0,
+        waitRemainingSeconds: 0,
+        waitUntilTerminal: true,
+        waitTimerVisible: false
       })
     } finally {
       this.setData({ submitting: false })

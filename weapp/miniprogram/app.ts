@@ -531,6 +531,35 @@ App<IAppOption>({
         lastLoc.name,
         lastLoc.address || lastLoc.name
       )
+
+      if (this.globalData.currentRegion?.id) {
+        return
+      }
+
+      const { getToken } = require('./utils/auth')
+      const token = getToken()
+
+      if (!token) {
+        if (retryCount >= MAX_RETRIES) {
+          logger.warn('⏰ Token 等待超时，当前运营区域匹配失败', { retryCount }, 'reverseGeocodeWhenReady')
+          return
+        }
+
+        if (retryCount === 0) {
+          logger.debug('等待 token 准备好以匹配当前运营区域...', undefined, 'reverseGeocodeWhenReady')
+        }
+
+        setTimeout(() => {
+          this.reverseGeocodeWhenReady(retryCount + 1)
+        }, RETRY_INTERVAL)
+        return
+      }
+
+      try {
+        await this.syncCurrentRegionFromCoordinates()
+      } catch (regionErr) {
+        logger.warn('当前运营区域匹配失败', regionErr, 'reverseGeocodeWhenReady')
+      }
       return
     }
     // ============================
@@ -566,14 +595,7 @@ App<IAppOption>({
       }, 'reverseGeocodeWhenReady')
 
       try {
-        const { getCurrentRegion } = require('./api/location')
-        const region = await getCurrentRegion({
-          latitude: this.globalData.latitude,
-          longitude: this.globalData.longitude
-        })
-        this.globalData.currentRegion = { id: Number(region.region_id || 0), name: region.region_name || '' }
-        const { globalStore } = require('./utils/global-store')
-        globalStore.set('currentRegion', this.globalData.currentRegion)
+        await this.syncCurrentRegionFromCoordinates()
       } catch (regionErr) {
         logger.warn('当前运营区域匹配失败', regionErr, 'reverseGeocodeWhenReady')
       }
@@ -637,6 +659,21 @@ App<IAppOption>({
 
       logger.warn('❌ 逆地理编码失败', err, 'reverseGeocodeWhenReady')
     }
+  },
+
+  async syncCurrentRegionFromCoordinates() {
+    if (!this.globalData.latitude || !this.globalData.longitude) {
+      return
+    }
+
+    const { getCurrentRegion } = require('./api/location')
+    const region = await getCurrentRegion({
+      latitude: this.globalData.latitude,
+      longitude: this.globalData.longitude
+    })
+    this.globalData.currentRegion = { id: Number(region.region_id || 0), name: region.region_name || '' }
+    const { globalStore } = require('./utils/global-store')
+    globalStore.set('currentRegion', this.globalData.currentRegion)
   },
 
   /**
