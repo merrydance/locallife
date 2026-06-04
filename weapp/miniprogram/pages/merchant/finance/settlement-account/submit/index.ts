@@ -221,6 +221,8 @@ Page({
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const waitSessionId = (this as any)._beginBaofuLongWaitSession()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(this as any)._startBaofuSubmitPendingTick(waitSessionId)
     try {
       const result = await startBaofuAccountOnboarding(
         accountOpeningMode === 'personal'

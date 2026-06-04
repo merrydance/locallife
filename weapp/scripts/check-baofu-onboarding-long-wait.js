@@ -8,10 +8,29 @@ function read(relativePath) {
   return fs.readFileSync(path.join(ROOT, relativePath), 'utf8')
 }
 
+function assertInOrder(source, tokens, message) {
+  let cursor = -1
+  for (const token of tokens) {
+    const next = source.indexOf(token, cursor + 1)
+    assert(next > cursor, message)
+    cursor = next
+  }
+}
+
 const onboardingService = read('miniprogram/pages/merchant/_main_shared/services/baofu-account-onboarding.ts')
 const statusHelpers = read('miniprogram/pages/merchant/_main_shared/api/baofu-account-status.ts')
 const statusBehavior = read('miniprogram/pages/merchant/_main_shared/behaviors/baofu-settlement-status.ts')
 const submitBehavior = read('miniprogram/pages/merchant/_main_shared/behaviors/baofu-settlement-submit.ts')
+const submitBehaviorPaths = [
+  'miniprogram/pages/merchant/_main_shared/behaviors/baofu-settlement-submit.ts',
+  'miniprogram/pages/operator/_main_shared/behaviors/baofu-settlement-submit.ts',
+  'miniprogram/pages/rider/_main_shared/behaviors/baofu-settlement-submit.ts'
+]
+const submitPagePaths = [
+  'miniprogram/pages/merchant/finance/settlement-account/submit/index.ts',
+  'miniprogram/pages/operator/finance/settlement-account/submit/index.ts',
+  'miniprogram/pages/rider/settlement-account/submit/index.ts'
+]
 const waitPatchConsumers = [
   'miniprogram/pages/merchant/_main_shared/behaviors/baofu-settlement-status.ts',
   'miniprogram/pages/merchant/_main_shared/behaviors/baofu-settlement-submit.ts',
@@ -59,6 +78,60 @@ assert(
   onboardingService.includes('已等待'),
   'Baofoo onboarding wait progress must expose elapsed seconds copy'
 )
+
+for (const relativePath of submitBehaviorPaths) {
+  const source = read(relativePath)
+  for (const token of [
+    '_startBaofuSubmitPendingTick',
+    '_stopBaofuSubmitPendingTick',
+    'setInterval(tick, 1000)',
+    'clearInterval(timer)',
+    'waitElapsedSeconds',
+    'waitTimerVisible'
+  ]) {
+    assert(
+      source.includes(token),
+      `${relativePath} must maintain local submit-pending countdown while POST has not returned`
+    )
+  }
+  assertInOrder(
+    source,
+    ['_beginBaofuLongWaitSession(): number {', 'this._stopBaofuSubmitPendingTick()', 'const nextSessionId'],
+    `${relativePath} must stop any previous submit-pending countdown before starting a new wait session`
+  )
+  assertInOrder(
+    source,
+    ['_cancelBaofuLongWaitSession() {', 'this._stopBaofuSubmitPendingTick()', 'this.data._waitSessionId'],
+    `${relativePath} must stop the submit-pending countdown when the wait session is cancelled`
+  )
+  assertInOrder(
+    source,
+    ['_handleBaofuOnboardingProgress', 'this._stopBaofuSubmitPendingTick()', 'waitProgressText'],
+    `${relativePath} must stop local submit-pending countdown before backend polling progress owns the timer`
+  )
+  assert(
+    (source.match(/this\.setData\(\{ syncing: false, submitting: false \}\)/g) || []).length >= 2,
+    `${relativePath} must clear submitting state on hide and unload so submit-pending countdown cannot leak`
+  )
+}
+
+for (const relativePath of submitPagePaths) {
+  const source = read(relativePath)
+  assert(
+    source.includes('const waitSessionId = (this as any)._beginBaofuLongWaitSession()') &&
+      source.includes('(this as any)._startBaofuSubmitPendingTick(waitSessionId)'),
+    `${relativePath} must start the submit-pending countdown immediately after opening the wait session`
+  )
+  assertInOrder(
+    source,
+    [
+      'const waitSessionId = (this as any)._beginBaofuLongWaitSession()',
+      '(this as any)._startBaofuSubmitPendingTick(waitSessionId)',
+      'await startBaofuAccountOnboarding'
+    ],
+    `${relativePath} must start the submit-pending countdown before awaiting the submit request`
+  )
+}
 
 for (const [label, source] of [
   ['status behavior', statusBehavior],

@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/hibiken/asynq"
+	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
 	"github.com/rs/zerolog/log"
 )
@@ -18,6 +19,35 @@ type PaymentFactApplicationTaskDistributor interface {
 
 type PaymentFactApplicationPayload struct {
 	ApplicationID int64 `json:"application_id"`
+}
+
+type BaofuVerifyFeeAsyncContinuation struct {
+	service     *logic.BaofuAccountOnboardingService
+	distributor BaofuAccountOpeningTaskDistributor
+}
+
+func NewBaofuVerifyFeeAsyncContinuation(service *logic.BaofuAccountOnboardingService, distributor TaskDistributor) BaofuVerifyFeeAsyncContinuation {
+	return BaofuVerifyFeeAsyncContinuation{
+		service:     service,
+		distributor: baofuAccountOpeningDistributor(distributor),
+	}
+}
+
+func (c BaofuVerifyFeeAsyncContinuation) ContinueAfterVerifyFeePaid(ctx context.Context, paymentOrder db.PaymentOrder) error {
+	if c.service == nil {
+		return logic.ErrBaofuAccountOnboardingNotConfigured
+	}
+	result, err := c.service.PrepareOpeningAfterVerifyFeePaid(ctx, paymentOrder)
+	if err != nil {
+		return err
+	}
+	if !result.ShouldEnqueueOpening {
+		return nil
+	}
+	if c.distributor == nil {
+		return financialTaskDistributorUnavailable("baofu account opening")
+	}
+	return c.distributor.DistributeTaskProcessBaofuAccountOpening(ctx, &BaofuAccountOpeningPayload{FlowID: result.Flow.ID}, asynq.Queue(QueueCritical), asynq.MaxRetry(5), asynq.Unique(baofuAccountOpeningTaskUnique))
 }
 
 func (distributor *RedisTaskDistributor) DistributeTaskProcessPaymentFactApplication(
@@ -71,7 +101,7 @@ func (processor *RedisTaskProcessor) ProcessTaskPaymentFactApplication(ctx conte
 
 	service := logic.NewPaymentFactService(processor.store).
 		WithPaymentSuccessConfig(processor.config.RiderAverageSpeed, processor.config.DefaultPrepareTime).
-		WithBaofuVerifyFeeContinuation(baofuContinuation)
+		WithBaofuVerifyFeeContinuation(NewBaofuVerifyFeeAsyncContinuation(baofuContinuation, processor.distributor))
 	result, err := service.ApplyExternalPaymentFactApplication(ctx, payload.ApplicationID)
 	if err != nil {
 		return err

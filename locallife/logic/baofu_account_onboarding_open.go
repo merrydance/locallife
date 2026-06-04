@@ -12,15 +12,23 @@ import (
 )
 
 func (s *BaofuAccountOnboardingService) openFromProfile(ctx context.Context, flow db.BaofuAccountOpeningFlow, profile db.BaofuAccountOpeningProfile, cfg BaofuAccountOnboardingConfig) (db.BaofuAccountOpeningFlow, *db.BaofuAccountBinding, error) {
+	flow, err := s.prepareFlowForOpen(ctx, flow, profile, cfg)
+	if err != nil {
+		return db.BaofuAccountOpeningFlow{}, nil, err
+	}
+	return s.openFromPreparedProfile(ctx, flow, profile, cfg)
+}
+
+func (s *BaofuAccountOnboardingService) prepareFlowForOpen(ctx context.Context, flow db.BaofuAccountOpeningFlow, profile db.BaofuAccountOpeningProfile, cfg BaofuAccountOnboardingConfig) (db.BaofuAccountOpeningFlow, error) {
 	if s.accountClient == nil {
-		return db.BaofuAccountOpeningFlow{}, nil, ErrBaofuAccountOnboardingNotConfigured
+		return db.BaofuAccountOpeningFlow{}, ErrBaofuAccountOnboardingNotConfigured
 	}
 	openTrans := strings.TrimSpace(flow.OpenTransSerialNo.String)
 	if openTrans == "" {
 		var err error
 		openTrans, err = util.GenerateOutTradeNo("BFO")
 		if err != nil {
-			return db.BaofuAccountOpeningFlow{}, nil, err
+			return db.BaofuAccountOpeningFlow{}, err
 		}
 	}
 	loginNo := strings.TrimSpace(flow.LoginNo.String)
@@ -29,10 +37,10 @@ func (s *BaofuAccountOnboardingService) openFromProfile(ctx context.Context, flo
 	}
 	req, err := s.buildOpenRequest(profile, openTrans, loginNo, cfg)
 	if err != nil {
-		return db.BaofuAccountOpeningFlow{}, nil, err
+		return db.BaofuAccountOpeningFlow{}, err
 	}
 	if err := validateBaofuOpenRequestProfile(req); err != nil {
-		return db.BaofuAccountOpeningFlow{}, nil, err
+		return db.BaofuAccountOpeningFlow{}, err
 	}
 	requestSnapshot := baofuOpeningRequestSnapshot(req)
 	openingMode := baofuAccountOpeningModeForFlow(flow)
@@ -46,18 +54,24 @@ func (s *BaofuAccountOnboardingService) openFromProfile(ctx context.Context, flo
 		RawSnapshot:             baofuOpeningSnapshot(map[string]any{"state": db.BaofuAccountOpeningStateOpeningProcessing, "opening_mode": openingMode}),
 	})
 	if err != nil {
-		return db.BaofuAccountOpeningFlow{}, nil, err
+		return db.BaofuAccountOpeningFlow{}, err
 	}
-	binding, err := s.store.UpsertBaofuAccountBinding(ctx, db.UpsertBaofuAccountBindingParams{
-		OwnerType:             flow.OwnerType,
-		OwnerID:               flow.OwnerID,
-		AccountType:           flow.AccountType,
-		OpeningMode:           baofuAccountOpeningModeForFlow(flow),
-		LoginNo:               pgtype.Text{String: loginNo, Valid: true},
-		OpenState:             db.BaofuAccountOpenStateProcessing,
-		LastOpenTransSerialNo: pgtype.Text{String: openTrans, Valid: true},
-		RawSnapshot:           baofuOpeningSnapshot(map[string]any{"state": db.BaofuAccountOpeningStateOpeningProcessing}),
-	})
+	return flow, nil
+}
+
+func (s *BaofuAccountOnboardingService) openFromPreparedProfile(ctx context.Context, flow db.BaofuAccountOpeningFlow, profile db.BaofuAccountOpeningProfile, cfg BaofuAccountOnboardingConfig) (db.BaofuAccountOpeningFlow, *db.BaofuAccountBinding, error) {
+	if s.accountClient == nil {
+		return db.BaofuAccountOpeningFlow{}, nil, ErrBaofuAccountOnboardingNotConfigured
+	}
+	openTrans := strings.TrimSpace(flow.OpenTransSerialNo.String)
+	loginNo := strings.TrimSpace(flow.LoginNo.String)
+	if openTrans == "" {
+		return db.BaofuAccountOpeningFlow{}, nil, errors.New("baofu account opening open trans serial no is required")
+	}
+	if loginNo == "" {
+		return db.BaofuAccountOpeningFlow{}, nil, errors.New("baofu account opening login no is required")
+	}
+	req, err := s.buildOpenRequest(profile, openTrans, loginNo, cfg)
 	if err != nil {
 		return db.BaofuAccountOpeningFlow{}, nil, err
 	}
@@ -80,11 +94,21 @@ func (s *BaofuAccountOnboardingService) openFromProfile(ctx context.Context, flo
 		if err != nil {
 			return db.BaofuAccountOpeningFlow{}, nil, err
 		}
-		if applied.Binding != nil {
-			return applied.Flow, applied.Binding, nil
-		}
-		return applied.Flow, &binding, nil
+		return applied.Flow, applied.Binding, nil
 	default:
+		binding, err := s.store.UpsertBaofuAccountBinding(ctx, db.UpsertBaofuAccountBindingParams{
+			OwnerType:             flow.OwnerType,
+			OwnerID:               flow.OwnerID,
+			AccountType:           flow.AccountType,
+			OpeningMode:           baofuAccountOpeningModeForFlow(flow),
+			LoginNo:               pgtype.Text{String: loginNo, Valid: true},
+			OpenState:             db.BaofuAccountOpenStateProcessing,
+			LastOpenTransSerialNo: pgtype.Text{String: openTrans, Valid: true},
+			RawSnapshot:           baofuAccountRawSnapshot(normalized.Raw),
+		})
+		if err != nil {
+			return db.BaofuAccountOpeningFlow{}, nil, err
+		}
 		return flow, &binding, nil
 	}
 }

@@ -52,6 +52,10 @@ func (NoopTaskDistributor) DistributeTaskProcessBaofuProfitSharing(ctx context.C
 	return financialTaskDistributorUnavailable("baofu profit sharing")
 }
 
+func (NoopTaskDistributor) DistributeTaskProcessBaofuAccountOpening(ctx context.Context, payload *BaofuAccountOpeningPayload, opts ...asynq.Option) error {
+	return financialTaskDistributorUnavailable("baofu account opening")
+}
+
 func (NoopTaskDistributor) DistributeTaskProcessBaofuWithdrawalFactApplication(ctx context.Context, payload *BaofuWithdrawalFactApplicationPayload, opts ...asynq.Option) error {
 	return financialTaskDistributorUnavailable("baofu withdrawal fact application")
 }

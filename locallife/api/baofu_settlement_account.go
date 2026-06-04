@@ -11,6 +11,7 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/token"
+	"github.com/merrydance/locallife/worker"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -267,7 +268,7 @@ func (server *Server) createBaofuSettlementAccount(ctx *gin.Context, scope baofu
 		}
 	}
 	service := server.newBaofuAccountOnboardingService()
-	result, err := service.StartOrRecoverOpening(ctx, logic.BaofuAccountOpeningInput{
+	result, err := service.PrepareOpening(ctx, logic.BaofuAccountOpeningInput{
 		OwnerType:          scope.OwnerType,
 		OwnerID:            scope.OwnerID,
 		UserID:             authPayload.UserID,
@@ -286,7 +287,24 @@ func (server *Server) createBaofuSettlementAccount(ctx *gin.Context, scope baofu
 		ctx.JSON(http.StatusServiceUnavailable, loggedBaofuSettlementAccountServerError(ctx, err, scope, "宝付开户服务暂不可用，请稍后重试；如持续失败请联系平台处理", "baofu settlement account start failed"))
 		return
 	}
-	ctx.JSON(http.StatusAccepted, server.baofuSettlementAccountResponseFromResult(scope, result))
+	if result.ShouldEnqueueOpening {
+		if err := server.enqueueBaofuAccountOpening(ctx, result.Flow.ID); err != nil {
+			ctx.JSON(http.StatusServiceUnavailable, loggedBaofuSettlementAccountServerError(ctx, err, scope, "宝付开户任务暂不可用，请稍后重试；如持续失败请联系平台处理", "baofu account opening enqueue failed"))
+			return
+		}
+	}
+	ctx.JSON(http.StatusAccepted, server.baofuSettlementAccountResponseFromResult(scope, result.BaofuAccountOpeningResult))
+}
+
+func (server *Server) enqueueBaofuAccountOpening(ctx *gin.Context, flowID int64) error {
+	distributor, ok := server.taskDistributor.(worker.BaofuAccountOpeningTaskDistributor)
+	if !ok {
+		return errors.New("baofu account opening task distributor is not configured")
+	}
+	if flowID <= 0 {
+		return errors.New("baofu account opening flow id is required")
+	}
+	return distributor.DistributeTaskProcessBaofuAccountOpening(ctx.Request.Context(), &worker.BaofuAccountOpeningPayload{FlowID: flowID})
 }
 
 func baofuSettlementAccountScopeForRequest(scope baofuSettlementAccountScope, req baofuSettlementAccountRequest) (baofuSettlementAccountScope, error) {

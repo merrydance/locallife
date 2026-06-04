@@ -209,12 +209,14 @@ export function baofuSettlementSubmitBehavior(config: BaofuSettlementSubmitConfi
       },
 
       _beginBaofuLongWaitSession(): number {
+        this._stopBaofuSubmitPendingTick()
         const nextSessionId = Number(this.data._waitSessionId || 0) + 1
         this.data._waitSessionId = nextSessionId
         return nextSessionId
       },
 
       _cancelBaofuLongWaitSession() {
+        this._stopBaofuSubmitPendingTick()
         this.data._waitSessionId = Number(this.data._waitSessionId || 0) + 1
       },
 
@@ -222,10 +224,44 @@ export function baofuSettlementSubmitBehavior(config: BaofuSettlementSubmitConfi
         return !this.data._pageActive || this.data._waitSessionId !== sessionId
       },
 
+      _stopBaofuSubmitPendingTick() {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const timer = (this as any)._baofuSubmitPendingTickTimer as ReturnType<typeof setInterval> | undefined
+        if (!timer) {
+          return
+        }
+        clearInterval(timer)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ;(this as any)._baofuSubmitPendingTickTimer = undefined
+      },
+
+      _startBaofuSubmitPendingTick(sessionId: number) {
+        this._stopBaofuSubmitPendingTick()
+        const startedAt = Date.now()
+        const tick = () => {
+          if (this._shouldStopBaofuLongWait(sessionId) || !this.data.submitting) {
+            this._stopBaofuSubmitPendingTick()
+            return
+          }
+          const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000))
+          this.setData({
+            waitProgressText: `已等待 ${elapsedSeconds} 秒，正在提交资料`,
+            waitElapsedSeconds: elapsedSeconds,
+            waitRemainingSeconds: 0,
+            waitUntilTerminal: true,
+            waitTimerVisible: true
+          })
+        }
+        tick()
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ;(this as any)._baofuSubmitPendingTickTimer = setInterval(tick, 1000)
+      },
+
       _handleBaofuOnboardingProgress(progress: BaofuOnboardingPollProgress, sessionId?: number) {
         if (sessionId !== undefined && this._shouldStopBaofuLongWait(sessionId)) {
           return
         }
+        this._stopBaofuSubmitPendingTick()
         const waitView = progress.account ? buildBaofuOnboardingWaitViewFromAccount(progress.account) : null
         this.setData({
           ...(waitView ? {
@@ -268,13 +304,13 @@ export function baofuSettlementSubmitBehavior(config: BaofuSettlementSubmitConfi
       onHide() {
         this.data._pageActive = false
         this._cancelBaofuLongWaitSession()
-        this.setData({ syncing: false })
+        this.setData({ syncing: false, submitting: false })
       },
 
       onUnload() {
         this.data._pageActive = false
         this._cancelBaofuLongWaitSession()
-        this.setData({ syncing: false })
+        this.setData({ syncing: false, submitting: false })
       },
 
       onRetry() {

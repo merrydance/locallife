@@ -300,11 +300,11 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		keywordWorker: newSearchKeywordWorker(store),
 		paymentFactService: logic.NewPaymentFactService(store).
 			WithPaymentSuccessConfig(config.RiderAverageSpeed, config.DefaultPrepareTime).
-			WithBaofuVerifyFeeContinuation(logic.NewBaofuAccountOnboardingService(store, baofuAccountClient, paymentClient, dataEncryptor, logic.BaofuAccountOnboardingConfig{
+			WithBaofuVerifyFeeContinuation(worker.NewBaofuVerifyFeeAsyncContinuation(logic.NewBaofuAccountOnboardingService(store, baofuAccountClient, paymentClient, dataEncryptor, logic.BaofuAccountOnboardingConfig{
 				VerifyFeeFen:      config.BaofuAccountVerifyFeeFen,
 				IndustryID:        config.BaofuBusinessIndustryID,
 				CollectMerchantID: config.BaofuCollectMerchantID,
-			})),
+			}), taskDistributor)),
 		baofuAccountNotificationParser: baofuAccountNotificationParser,
 		baofuPaymentNotificationParser: baofuPaymentNotificationParser,
 		onboardingReviewService:        logic.NewOnboardingReviewService(store),

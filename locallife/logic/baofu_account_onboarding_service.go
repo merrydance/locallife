@@ -25,6 +25,7 @@ type baofuAccountOnboardingStore interface {
 	GetBaofuAccountOpeningProfile(ctx context.Context, id int64) (db.BaofuAccountOpeningProfile, error)
 	UpsertBaofuAccountOpeningProfile(ctx context.Context, arg db.UpsertBaofuAccountOpeningProfileParams) (db.BaofuAccountOpeningProfile, error)
 	GetActiveBaofuAccountOpeningFlowByOwner(ctx context.Context, arg db.GetActiveBaofuAccountOpeningFlowByOwnerParams) (db.BaofuAccountOpeningFlow, error)
+	GetBaofuAccountOpeningFlow(ctx context.Context, id int64) (db.BaofuAccountOpeningFlow, error)
 	GetBaofuAccountOpeningFlowByPaymentOrder(ctx context.Context, verifyFeePaymentOrderID pgtype.Int8) (db.BaofuAccountOpeningFlow, error)
 	CreateBaofuAccountOpeningFlow(ctx context.Context, arg db.CreateBaofuAccountOpeningFlowParams) (db.BaofuAccountOpeningFlow, error)
 	VoidBaofuAccountOpeningFlow(ctx context.Context, arg db.VoidBaofuAccountOpeningFlowParams) (db.BaofuAccountOpeningFlow, error)
@@ -110,6 +111,11 @@ type BaofuAccountOpenApplyResult struct {
 	Binding *db.BaofuAccountBinding
 }
 
+type BaofuAccountOpeningPrepareResult struct {
+	BaofuAccountOpeningResult
+	ShouldEnqueueOpening bool
+}
+
 type BaofuAccountOnboardingService struct {
 	store                baofuAccountOnboardingStore
 	accountClient        BaofuAccountClient
@@ -120,6 +126,13 @@ type BaofuAccountOnboardingService struct {
 	merchantReportConfig BaofuAccountMerchantReportConfig
 	now                  func() time.Time
 }
+
+type baofuAccountOpeningExecutionMode int
+
+const (
+	baofuAccountOpeningExecutionPrepare baofuAccountOpeningExecutionMode = iota
+	baofuAccountOpeningExecutionSync
+)
 
 func NewBaofuAccountOnboardingService(store baofuAccountOnboardingStore, accountClient BaofuAccountClient, directPaymentClient wechat.DirectPaymentClientInterface, encryptor util.DataEncryptor, config BaofuAccountOnboardingConfig) *BaofuAccountOnboardingService {
 	return &BaofuAccountOnboardingService{
@@ -153,15 +166,15 @@ func (c BaofuAccountOnboardingConfig) normalized() BaofuAccountOnboardingConfig 
 	return c
 }
 
-func (s *BaofuAccountOnboardingService) StartOrRecoverOpening(ctx context.Context, input BaofuAccountOpeningInput) (BaofuAccountOpeningResult, error) {
+func (s *BaofuAccountOnboardingService) openingFromInput(ctx context.Context, input BaofuAccountOpeningInput, mode baofuAccountOpeningExecutionMode) (BaofuAccountOpeningPrepareResult, error) {
 	if s == nil || s.store == nil {
-		return BaofuAccountOpeningResult{}, ErrBaofuAccountOnboardingNotConfigured
+		return BaofuAccountOpeningPrepareResult{}, ErrBaofuAccountOnboardingNotConfigured
 	}
 	cfg := s.config.normalized()
 	ownerType := strings.TrimSpace(input.OwnerType)
 	accountType, err := baofuOpeningAccountType(ownerType, input.AccountOpeningMode)
 	if err != nil {
-		return BaofuAccountOpeningResult{}, err
+		return BaofuAccountOpeningPrepareResult{}, err
 	}
 	ownerID := input.OwnerID
 	if ownerType == db.BaofuAccountOwnerTypePlatform {
@@ -181,30 +194,34 @@ func (s *BaofuAccountOnboardingService) StartOrRecoverOpening(ctx context.Contex
 				accountType = bindingType
 			}
 			if bindingType != accountType {
-				return BaofuAccountOpeningResult{}, baofuAccountOpeningModeConflictError()
+				return BaofuAccountOpeningPrepareResult{}, baofuAccountOpeningModeConflictError()
 			}
 		}
 		if bindingMode := baofuAccountOpeningModeForBinding(binding); bindingMode != "" &&
 			requestedOpeningMode != "" &&
 			bindingMode != requestedOpeningMode {
-			return BaofuAccountOpeningResult{}, baofuAccountOpeningModeConflictError()
+			return BaofuAccountOpeningPrepareResult{}, baofuAccountOpeningModeConflictError()
 		}
-		return s.activeBindingOpeningResult(ctx, ownerType, ownerID, binding)
+		active, err := s.activeBindingOpeningResult(ctx, ownerType, ownerID, binding)
+		if err != nil {
+			return BaofuAccountOpeningPrepareResult{}, err
+		}
+		return BaofuAccountOpeningPrepareResult{BaofuAccountOpeningResult: active}, nil
 	} else if err != nil && !errors.Is(err, db.ErrRecordNotFound) {
-		return BaofuAccountOpeningResult{}, err
+		return BaofuAccountOpeningPrepareResult{}, err
 	}
 
 	existingFlow, existingFlowFound, err := s.activeOpeningFlow(ctx, ownerType, ownerID)
 	if err != nil {
-		return BaofuAccountOpeningResult{}, err
+		return BaofuAccountOpeningPrepareResult{}, err
 	}
 	if !implicitMode && existingFlowFound && strings.TrimSpace(existingFlow.AccountType) != strings.TrimSpace(accountType) && strings.TrimSpace(existingFlow.State) != db.BaofuAccountOpeningStateProfilePending {
-		return BaofuAccountOpeningResult{}, baofuAccountOpeningModeConflictError()
+		return BaofuAccountOpeningPrepareResult{}, baofuAccountOpeningModeConflictError()
 	}
 
 	profile, err := s.resolveProfile(ctx, ownerType, ownerID, accountType, input.Profile, implicitMode)
 	if err != nil {
-		return BaofuAccountOpeningResult{}, err
+		return BaofuAccountOpeningPrepareResult{}, err
 	}
 	if implicitMode {
 		if profileType := strings.TrimSpace(profile.AccountType); profileType != "" {
@@ -213,19 +230,22 @@ func (s *BaofuAccountOnboardingService) StartOrRecoverOpening(ctx context.Contex
 	}
 	flow, err := s.getOrCreateFlowWithExisting(ctx, ownerType, ownerID, accountType, profile, existingFlow, existingFlowFound)
 	if err != nil {
-		return BaofuAccountOpeningResult{}, err
+		return BaofuAccountOpeningPrepareResult{}, err
 	}
 	if strings.TrimSpace(profile.ProfileStatus) != db.BaofuAccountOpeningProfileStatusComplete {
 		flow, err = s.markProfilePending(ctx, flow, profile)
 		if err != nil {
-			return BaofuAccountOpeningResult{}, err
+			return BaofuAccountOpeningPrepareResult{}, err
 		}
-		return baofuOpeningResult(flow, profile), nil
+		return BaofuAccountOpeningPrepareResult{BaofuAccountOpeningResult: baofuOpeningResult(flow, profile)}, nil
 	}
 	if baofuOpeningFlowInProviderProgress(flow.State) {
+		if mode == baofuAccountOpeningExecutionPrepare {
+			return BaofuAccountOpeningPrepareResult{BaofuAccountOpeningResult: baofuOpeningResult(flow, profile), ShouldEnqueueOpening: strings.TrimSpace(flow.State) == db.BaofuAccountOpeningStateOpeningProcessing}, nil
+		}
 		applied, err := s.RecoverOpeningFlow(ctx, flow)
 		if err != nil {
-			return BaofuAccountOpeningResult{}, err
+			return BaofuAccountOpeningPrepareResult{}, err
 		}
 		if applied.Flow.ID != 0 {
 			flow = applied.Flow
@@ -237,7 +257,7 @@ func (s *BaofuAccountOnboardingService) StartOrRecoverOpening(ctx context.Contex
 		if strings.TrimSpace(result.State) == db.BaofuAccountOpeningStateReady && result.Binding != nil {
 			result.Label = baofuOnboardingStateLabel(db.BaofuAccountOpeningStateReady)
 		}
-		return result, nil
+		return BaofuAccountOpeningPrepareResult{BaofuAccountOpeningResult: result}, nil
 	}
 
 	if baofuOpeningRequiresUserFee(ownerType) {
@@ -250,12 +270,12 @@ func (s *BaofuAccountOnboardingService) StartOrRecoverOpening(ctx context.Contex
 				RawSnapshot:             baofuOpeningSnapshot(map[string]any{"state": db.BaofuAccountOpeningStateVerifyFeePending, "profile_id": profile.ID}),
 			})
 			if err != nil {
-				return BaofuAccountOpeningResult{}, err
+				return BaofuAccountOpeningPrepareResult{}, err
 			}
 		}
 		payment, payParams, err := s.ensureVerifyFeePayment(ctx, flow, input.UserID, input.ClientIP, cfg)
 		if err != nil {
-			return BaofuAccountOpeningResult{}, err
+			return BaofuAccountOpeningPrepareResult{}, err
 		}
 		if strings.TrimSpace(payment.Status) != "paid" {
 			flow, err = s.store.MarkBaofuAccountOpeningFlowVerifyFeeProcessing(ctx, db.MarkBaofuAccountOpeningFlowVerifyFeeProcessingParams{
@@ -264,25 +284,40 @@ func (s *BaofuAccountOnboardingService) StartOrRecoverOpening(ctx context.Contex
 				RawSnapshot:             baofuOpeningSnapshot(map[string]any{"state": db.BaofuAccountOpeningStateVerifyFeeProcessing, "payment_order_id": payment.ID}),
 			})
 			if err != nil {
-				return BaofuAccountOpeningResult{}, err
+				return BaofuAccountOpeningPrepareResult{}, err
 			}
 			result := baofuOpeningResult(flow, profile)
 			result.PaymentOrder = payment
 			result.PayParams = payParams
-			return result, nil
+			return BaofuAccountOpeningPrepareResult{BaofuAccountOpeningResult: result}, nil
 		}
 		flow.VerifyFeePaymentOrderID = pgtype.Int8{Int64: payment.ID, Valid: true}
 	}
 
+	if mode == baofuAccountOpeningExecutionPrepare {
+		flow, err = s.prepareFlowForOpen(ctx, flow, profile, cfg)
+		if err != nil {
+			return BaofuAccountOpeningPrepareResult{}, err
+		}
+		return BaofuAccountOpeningPrepareResult{BaofuAccountOpeningResult: baofuOpeningResult(flow, profile), ShouldEnqueueOpening: true}, nil
+	}
 	flow, binding, err := s.openFromProfile(ctx, flow, profile, cfg)
 	if err != nil {
-		return BaofuAccountOpeningResult{}, err
+		return BaofuAccountOpeningPrepareResult{}, err
 	}
 	result := baofuOpeningResult(flow, profile)
 	if binding != nil {
 		result.Binding = binding
 	}
-	return result, nil
+	return BaofuAccountOpeningPrepareResult{BaofuAccountOpeningResult: result}, nil
+}
+
+func (s *BaofuAccountOnboardingService) StartOrRecoverOpening(ctx context.Context, input BaofuAccountOpeningInput) (BaofuAccountOpeningResult, error) {
+	result, err := s.openingFromInput(ctx, input, baofuAccountOpeningExecutionSync)
+	if err != nil {
+		return BaofuAccountOpeningResult{}, err
+	}
+	return result.BaofuAccountOpeningResult, nil
 }
 
 func (s *BaofuAccountOnboardingService) activeOpeningFlow(ctx context.Context, ownerType string, ownerID int64) (db.BaofuAccountOpeningFlow, bool, error) {

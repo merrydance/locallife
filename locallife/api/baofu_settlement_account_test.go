@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/baofu"
 	baofucontracts "github.com/merrydance/locallife/baofu/account/contracts"
@@ -25,6 +26,7 @@ import (
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
+	"github.com/merrydance/locallife/worker"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/require"
@@ -126,7 +128,7 @@ func TestBaofuSettlementAccountMerchantOwnerCanReadSafeSummary(t *testing.T) {
 	require.Empty(t, response.MissingFields)
 }
 
-func TestBaofuSettlementAccountMerchantGetRecoversOpeningProcessingFromBaofoo(t *testing.T) {
+func TestBaofuSettlementAccountMerchantGetKeepsOpeningProcessingPureRead(t *testing.T) {
 	owner, _ := randomUser(t)
 	merchant := randomMerchant(owner.ID)
 	now := time.Now()
@@ -163,15 +165,6 @@ func TestBaofuSettlementAccountMerchantGetRecoversOpeningProcessingFromBaofoo(t 
 		OpenState:   db.BaofuAccountOpenStateProcessing,
 		UpdatedAt:   now.Add(-10 * time.Minute),
 	}
-	activeBinding := binding
-	activeBinding.OpenState = db.BaofuAccountOpenStateActive
-	activeBinding.ContractNo = pgtype.Text{String: "CM202605170001", Valid: true}
-	activeBinding.SharingMerID = pgtype.Text{String: "CM202605170001", Valid: true}
-	recoveredFlow := flow
-	recoveredFlow.State = db.BaofuAccountOpeningStateMerchantReportProcessing
-	recoveredFlow.AccountBindingID = pgtype.Int8{Int64: binding.ID, Valid: true}
-	recoveredFlow.UpdatedAt = now
-
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -186,51 +179,9 @@ func TestBaofuSettlementAccountMerchantGetRecoversOpeningProcessingFromBaofoo(t 
 	store.EXPECT().
 		GetLatestBaofuAccountOpeningFlowByOwner(gomock.Any(), gomock.Eq(db.GetLatestBaofuAccountOpeningFlowByOwnerParams{OwnerType: db.BaofuAccountOwnerTypeMerchant, OwnerID: merchant.ID})).
 		Return(flow, nil)
-	store.EXPECT().
-		GetBaofuAccountBindingByOwner(gomock.Any(), gomock.Eq(db.GetBaofuAccountBindingByOwnerParams{OwnerType: flow.OwnerType, OwnerID: flow.OwnerID})).
-		Return(binding, nil)
-	store.EXPECT().
-		GetBaofuAccountOpeningProfile(gomock.Any(), profile.ID).
-		Return(profile, nil)
-	store.EXPECT().
-		GetBaofuAccountBindingByContractNo(gomock.Any(), pgtype.Text{String: "CM202605170001", Valid: true}).
-		Return(db.BaofuAccountBinding{}, db.ErrRecordNotFound)
-	store.EXPECT().
-		GetBaofuAccountBindingByOwner(gomock.Any(), gomock.Eq(db.GetBaofuAccountBindingByOwnerParams{OwnerType: flow.OwnerType, OwnerID: flow.OwnerID})).
-		Return(binding, nil)
-	store.EXPECT().
-		MarkBaofuAccountBindingActiveWithFeeLedgerTx(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, arg db.MarkBaofuAccountBindingActiveWithFeeLedgerTxParams) (db.MarkBaofuAccountBindingActiveWithFeeLedgerTxResult, error) {
-			require.Equal(t, binding.ID, arg.ActiveBinding.ID)
-			require.Equal(t, pgtype.Text{String: "CM202605170001", Valid: true}, arg.ActiveBinding.ContractNo)
-			return db.MarkBaofuAccountBindingActiveWithFeeLedgerTxResult{Binding: activeBinding}, nil
-		})
-	store.EXPECT().
-		MarkBaofuAccountOpeningFlowMerchantReportProcessing(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, arg db.MarkBaofuAccountOpeningFlowMerchantReportProcessingParams) (db.BaofuAccountOpeningFlow, error) {
-			require.Equal(t, flow.ID, arg.ID)
-			require.Equal(t, pgtype.Int8{Int64: binding.ID, Valid: true}, arg.AccountBindingID)
-			return recoveredFlow, nil
-		})
-	store.EXPECT().
-		GetBaofuMerchantReportByOwner(gomock.Any(), gomock.Eq(db.GetBaofuMerchantReportByOwnerParams{
-			OwnerType:  db.BaofuAccountOwnerTypeMerchant,
-			OwnerID:    merchant.ID,
-			ReportType: db.BaofuMerchantReportTypeWechat,
-		})).
-		Return(db.BaofuMerchantReport{}, db.ErrRecordNotFound)
 
 	server := newTestServer(t, store)
-	server.config.BaofuCollectMerchantID = "102004465"
-	accountClient := &fakeBaofuSettlementAccountClient{
-		queryResult: &baofucontracts.AccountResult{
-			ContractNo:    "CM202605170001",
-			SharingMerID:  "CM202605170001",
-			OpenState:     db.BaofuAccountOpenStateActive,
-			UpstreamState: "1",
-			Raw:           []byte(`{"state":"1","contractNo":"CM202605170001"}`),
-		},
-	}
+	accountClient := &fakeBaofuSettlementAccountClient{}
 	server.baofuAccountClient = accountClient
 	recorder := httptest.NewRecorder()
 	request, err := http.NewRequest(http.MethodGet, "/v1/merchant/settlement-account", nil)
@@ -242,11 +193,11 @@ func TestBaofuSettlementAccountMerchantGetRecoversOpeningProcessingFromBaofoo(t 
 	require.Equal(t, http.StatusOK, recorder.Code)
 	var response baofuSettlementAccountResponse
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
-	require.Equal(t, db.BaofuAccountOpeningStateMerchantReportProcessing, response.Status)
-	require.Equal(t, db.BaofuAccountOpenStateActive, response.OpenState)
+	require.Equal(t, db.BaofuAccountOpeningStateOpeningProcessing, response.Status)
+	require.Equal(t, db.BaofuAccountOpenStateProcessing, response.OpenState)
 	require.False(t, response.PaymentReady)
-	require.Equal(t, "LLBFOM0000000002", accountClient.lastQuery.LoginNo)
-	require.Equal(t, server.config.BaofuCollectMerchantID, accountClient.lastQuery.PlatformNo)
+	require.Equal(t, db.BaofuAccountOpeningStateOpeningProcessing, response.FlowState)
+	require.Zero(t, accountClient.queryCalls)
 }
 
 func TestBaofuSettlementAccountRiderProfileInputMergesApprovedIdentityDefaults(t *testing.T) {
@@ -980,15 +931,6 @@ func TestBaofuSettlementAccountMerchantPostOverridesMistypedIdentityBeforeOpenin
 	store.EXPECT().
 		MarkBaofuAccountOpeningFlowOpeningProcessing(gomock.Any(), gomock.Any()).
 		Return(processingFlow, nil)
-	store.EXPECT().
-		UpsertBaofuAccountBinding(gomock.Any(), gomock.Any()).
-		Return(db.BaofuAccountBinding{
-			ID:          513,
-			OwnerType:   db.BaofuAccountOwnerTypeMerchant,
-			OwnerID:     merchant.ID,
-			AccountType: db.BaofuAccountTypeBusiness,
-			OpenState:   db.BaofuAccountOpenStateProcessing,
-		}, nil)
 
 	server := newTestServer(t, store)
 	accountClient := &fakeBaofuSettlementAccountClient{
@@ -999,6 +941,8 @@ func TestBaofuSettlementAccountMerchantPostOverridesMistypedIdentityBeforeOpenin
 		},
 	}
 	server.baofuAccountClient = accountClient
+	taskRecorder := &baofuSettlementAccountOpeningTaskRecorder{}
+	server.SetTaskDistributorForTest(taskRecorder)
 	body := completeMerchantBaofuSettlementProfileBody()
 	profile := body["profile"].(map[string]any)
 	profile["legal_name"] = "杭州市示例猪脚饭快餐店（个体工商户）"
@@ -1016,13 +960,8 @@ func TestBaofuSettlementAccountMerchantPostOverridesMistypedIdentityBeforeOpenin
 	server.router.ServeHTTP(recorder, request)
 
 	require.Equal(t, http.StatusAccepted, recorder.Code)
-	require.Equal(t, app.MerchantName, accountClient.lastOpen.LegalName)
-	require.Equal(t, app.MerchantName, accountClient.lastOpen.CustomerName)
-	require.Equal(t, app.BusinessLicenseNumber, accountClient.lastOpen.CertificateNo)
-	require.Equal(t, app.LegalPersonName, accountClient.lastOpen.CorporateName)
-	require.Equal(t, app.LegalPersonIDNumber, accountClient.lastOpen.CorporateCertID)
-	require.False(t, accountClient.lastOpen.SelfEmployed)
-	require.Empty(t, accountClient.lastOpen.CardUserName)
+	require.Zero(t, accountClient.openCalls)
+	require.Equal(t, []worker.BaofuAccountOpeningPayload{{FlowID: processingFlow.ID}}, taskRecorder.payloads)
 }
 
 func TestBaofuSettlementAccountProfileInputMergesExistingBaofuProfileDefaults(t *testing.T) {
@@ -1403,7 +1342,7 @@ func TestBaofuSettlementAccountMerchantActiveBindingWaitsForAppletAuth(t *testin
 	require.Equal(t, "***0118", response.WechatSubMchIDMask)
 }
 
-func TestBaofuSettlementAccountMerchantGetRecoversAppletAuthPendingFromBaofoo(t *testing.T) {
+func TestBaofuSettlementAccountMerchantGetKeepsAppletAuthPendingPureRead(t *testing.T) {
 	owner, _ := randomUser(t)
 	merchant := randomMerchant(owner.ID)
 	now := time.Now()
@@ -1448,12 +1387,6 @@ func TestBaofuSettlementAccountMerchantGetRecoversAppletAuthPendingFromBaofoo(t 
 		SubMchID:        pgtype.Text{String: "1900000196", Valid: true},
 		BctMerID:        "CM202605090096",
 	}
-	readyFlow := flow
-	readyFlow.State = db.BaofuAccountOpeningStateReady
-	readyFlow.UpdatedAt = now
-	readyReport := report
-	readyReport.AppletAuthState = db.BaofuMerchantReportAppletAuthStateSucceeded
-
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -1484,58 +1417,8 @@ func TestBaofuSettlementAccountMerchantGetRecoversAppletAuthPendingFromBaofoo(t 
 			ReportType: db.BaofuMerchantReportTypeWechat,
 		})).
 		Return(report, nil)
-	store.EXPECT().
-		GetExternalPaymentCommandByExternalObject(gomock.Any(), gomock.Eq(db.GetExternalPaymentCommandByExternalObjectParams{
-			Provider:           db.ExternalPaymentProviderBaofu,
-			Channel:            db.PaymentChannelBaofuAggregate,
-			Capability:         db.ExternalPaymentCapabilityBaofuMerchantReport,
-			CommandType:        db.ExternalPaymentCommandTypeBaofuBindSubConfig,
-			ExternalObjectType: "baofu_bind_sub_config",
-			ExternalObjectKey:  "1900000196",
-		})).
-		Return(db.ExternalPaymentCommand{}, db.ErrRecordNotFound)
-	store.EXPECT().
-		CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
-			require.Equal(t, db.ExternalPaymentCommandTypeBaofuBindSubConfig, arg.CommandType)
-			require.Equal(t, "1900000196", arg.ExternalObjectKey)
-			return db.ExternalPaymentCommand{ID: 9604, CommandType: arg.CommandType}, nil
-		})
-	store.EXPECT().
-		MarkBaofuMerchantReportAppletAuthSucceeded(gomock.Any(), report.ID).
-		Return(readyReport, nil)
-	store.EXPECT().
-		MarkMerchantBaofuAccountOpeningReadyTx(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, arg db.MarkMerchantBaofuAccountOpeningReadyTxParams) (db.MarkMerchantBaofuAccountOpeningReadyTxResult, error) {
-			require.Equal(t, merchant.ID, arg.PaymentConfig.MerchantID)
-			require.Equal(t, "1900000196", arg.PaymentConfig.SubMchID)
-			require.Equal(t, flow.ID, arg.Flow.ID)
-			return db.MarkMerchantBaofuAccountOpeningReadyTxResult{Flow: readyFlow}, nil
-		})
-	store.EXPECT().
-		GetBaofuAccountBindingByOwner(gomock.Any(), gomock.Eq(db.GetBaofuAccountBindingByOwnerParams{
-			OwnerType: db.BaofuAccountOwnerTypeMerchant,
-			OwnerID:   merchant.ID,
-		})).
-		Return(binding, nil)
-	store.EXPECT().
-		GetBaofuMerchantReportByOwner(gomock.Any(), gomock.Eq(db.GetBaofuMerchantReportByOwnerParams{
-			OwnerType:  db.BaofuAccountOwnerTypeMerchant,
-			OwnerID:    merchant.ID,
-			ReportType: db.BaofuMerchantReportTypeWechat,
-		})).
-		Return(readyReport, nil)
 
 	server := newTestServer(t, store)
-	server.config.BaofuCollectMerchantID = "102004465"
-	server.config.BaofuCollectTerminalID = "200005200"
-	server.config.WechatMiniAppID = "wx1234567890abcdef"
-	server.config.BaofuMerchantReportChannelID = "CH001"
-	server.config.BaofuMerchantReportChannelName = "LocalLife"
-	server.baofuMerchantReportClient = merchantreport.NewClient(testAPIBaofuRootClient(t, &baofuMerchantReportAPIDoer{
-		responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","merId":"102004465","terId":"200005200","subMchId":"1900000196","authType":"APPLET","authContent":"wx1234567890abcdef"}`),
-	}))
-
 	recorder := httptest.NewRecorder()
 	request, err := http.NewRequest(http.MethodGet, "/v1/merchant/settlement-account", nil)
 	require.NoError(t, err)
@@ -1546,8 +1429,9 @@ func TestBaofuSettlementAccountMerchantGetRecoversAppletAuthPendingFromBaofoo(t 
 	require.Equal(t, http.StatusOK, recorder.Code)
 	var response baofuSettlementAccountResponse
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
-	require.Equal(t, db.BaofuAccountOpeningStateReady, response.Status)
-	require.True(t, response.PaymentReady)
+	require.Equal(t, db.BaofuAccountOpeningStateAppletAuthPending, response.Status)
+	require.False(t, response.PaymentReady)
+	require.Equal(t, db.BaofuAccountOpeningStateAppletAuthPending, response.FlowState)
 	require.Equal(t, "***0196", response.WechatSubMchIDMask)
 }
 
@@ -2228,18 +2112,6 @@ func TestBaofuSettlementAccountMerchantPostPersonalOpeningModeUsesPersonalAccoun
 			require.Contains(t, string(arg.ProviderRequestSnapshot), `"login_no":"`+expectedLoginNo+`"`)
 			return processingFlow, nil
 		})
-	store.EXPECT().
-		UpsertBaofuAccountBinding(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, arg db.UpsertBaofuAccountBindingParams) (db.BaofuAccountBinding, error) {
-			require.Equal(t, db.BaofuAccountTypePersonal, arg.AccountType)
-			return db.BaofuAccountBinding{
-				ID:          511,
-				OwnerType:   db.BaofuAccountOwnerTypeMerchant,
-				OwnerID:     merchant.ID,
-				AccountType: db.BaofuAccountTypePersonal,
-				OpenState:   db.BaofuAccountOpenStateProcessing,
-			}, nil
-		})
 
 	server := newTestServer(t, store)
 	accountClient := &fakeBaofuSettlementAccountClient{
@@ -2250,6 +2122,8 @@ func TestBaofuSettlementAccountMerchantPostPersonalOpeningModeUsesPersonalAccoun
 		},
 	}
 	server.baofuAccountClient = accountClient
+	taskRecorder := &baofuSettlementAccountOpeningTaskRecorder{}
+	server.SetTaskDistributorForTest(taskRecorder)
 	rawBody := []byte(`{
 		"account_opening_mode":"personal",
 		"profile":{
@@ -2274,13 +2148,9 @@ func TestBaofuSettlementAccountMerchantPostPersonalOpeningModeUsesPersonalAccoun
 	var response baofuSettlementAccountResponse
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 	require.Equal(t, db.BaofuAccountTypePersonal, response.AccountType)
-	require.Equal(t, db.BaofuAccountTypePersonal, accountClient.lastOpen.AccountType)
-	require.Equal(t, expectedLoginNo, accountClient.lastOpen.LoginNo)
-	require.Equal(t, "李四", accountClient.lastOpen.LegalName)
-	require.Equal(t, "110101199001010011", accountClient.lastOpen.CertificateNo)
-	require.Equal(t, "6222020202020202", accountClient.lastOpen.BankAccountNo)
-	require.Equal(t, "13800138000", accountClient.lastOpen.BankMobile)
-	require.Empty(t, accountClient.lastOpen.CorporateName)
+	require.Equal(t, db.BaofuAccountOpeningStateOpeningProcessing, response.Status)
+	require.Zero(t, accountClient.openCalls)
+	require.Equal(t, []worker.BaofuAccountOpeningPayload{{FlowID: processingFlow.ID}}, taskRecorder.payloads)
 }
 
 func TestBaofuSettlementAccountMerchantEmptyPostContinuesPersonalDraft(t *testing.T) {
@@ -2348,20 +2218,6 @@ func TestBaofuSettlementAccountMerchantEmptyPostContinuesPersonalDraft(t *testin
 			require.Contains(t, string(arg.ProviderRequestSnapshot), `"login_no":"LLBFOMP0000000010R1"`)
 			return processingFlow, nil
 		})
-	store.EXPECT().
-		UpsertBaofuAccountBinding(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, arg db.UpsertBaofuAccountBindingParams) (db.BaofuAccountBinding, error) {
-			require.Equal(t, db.BaofuAccountTypePersonal, arg.AccountType)
-			require.Equal(t, flow.LoginNo, arg.LoginNo)
-			return db.BaofuAccountBinding{
-				ID:          521,
-				OwnerType:   db.BaofuAccountOwnerTypeMerchant,
-				OwnerID:     merchant.ID,
-				AccountType: db.BaofuAccountTypePersonal,
-				LoginNo:     arg.LoginNo,
-				OpenState:   db.BaofuAccountOpenStateProcessing,
-			}, nil
-		})
 
 	server := newTestServer(t, store)
 	accountClient := &fakeBaofuSettlementAccountClient{
@@ -2372,6 +2228,8 @@ func TestBaofuSettlementAccountMerchantEmptyPostContinuesPersonalDraft(t *testin
 		},
 	}
 	server.baofuAccountClient = accountClient
+	taskRecorder := &baofuSettlementAccountOpeningTaskRecorder{}
+	server.SetTaskDistributorForTest(taskRecorder)
 	recorder := httptest.NewRecorder()
 	request, err := http.NewRequest(http.MethodPost, "/v1/merchant/settlement-account", bytes.NewBufferString(`{}`))
 	require.NoError(t, err)
@@ -2384,12 +2242,9 @@ func TestBaofuSettlementAccountMerchantEmptyPostContinuesPersonalDraft(t *testin
 	var response baofuSettlementAccountResponse
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 	require.Equal(t, db.BaofuAccountTypePersonal, response.AccountType)
-	require.Equal(t, db.BaofuAccountTypePersonal, accountClient.lastOpen.AccountType)
-	require.Equal(t, "LLBFOMP0000000010R1", accountClient.lastOpen.LoginNo)
-	require.Equal(t, "李四", accountClient.lastOpen.LegalName)
-	require.Equal(t, "110101199001010011", accountClient.lastOpen.CertificateNo)
-	require.Equal(t, "6222020202020202", accountClient.lastOpen.BankAccountNo)
-	require.Equal(t, "13800138000", accountClient.lastOpen.BankMobile)
+	require.Equal(t, db.BaofuAccountOpeningStateOpeningProcessing, response.Status)
+	require.Zero(t, accountClient.openCalls)
+	require.Equal(t, []worker.BaofuAccountOpeningPayload{{FlowID: processingFlow.ID}}, taskRecorder.payloads)
 }
 
 func TestBaofuSettlementAccountOperatorCanReadActiveBinding(t *testing.T) {
@@ -3216,15 +3071,6 @@ func TestBaofuSettlementAccountMerchantPostPrivateBusinessCardFieldsReachOnboard
 			require.Contains(t, string(arg.ProviderRequestSnapshot), `"account_type":"business"`)
 			return processingFlow, nil
 		})
-	store.EXPECT().
-		UpsertBaofuAccountBinding(gomock.Any(), gomock.Any()).
-		Return(db.BaofuAccountBinding{
-			ID:          510,
-			OwnerType:   db.BaofuAccountOwnerTypeMerchant,
-			OwnerID:     merchant.ID,
-			AccountType: db.BaofuAccountTypeBusiness,
-			OpenState:   db.BaofuAccountOpenStateProcessing,
-		}, nil)
 
 	server := newTestServer(t, store)
 	accountClient := &fakeBaofuSettlementAccountClient{
@@ -3235,6 +3081,8 @@ func TestBaofuSettlementAccountMerchantPostPrivateBusinessCardFieldsReachOnboard
 		},
 	}
 	server.baofuAccountClient = accountClient
+	taskRecorder := &baofuSettlementAccountOpeningTaskRecorder{}
+	server.SetTaskDistributorForTest(taskRecorder)
 	body := completeMerchantBaofuSettlementProfileBody()
 	profile := body["profile"].(map[string]any)
 	profile["self_employed"] = true
@@ -3256,9 +3104,8 @@ func TestBaofuSettlementAccountMerchantPostPrivateBusinessCardFieldsReachOnboard
 	require.Equal(t, db.BaofuAccountOwnerTypeMerchant, response.OwnerType)
 	require.Equal(t, db.BaofuAccountTypeBusiness, response.AccountType)
 	require.Equal(t, db.BaofuAccountOpeningStateOpeningProcessing, response.Status)
-	require.True(t, accountClient.lastOpen.SelfEmployed)
-	require.Equal(t, "李四", accountClient.lastOpen.CardUserName)
-	require.Equal(t, "13800138000", accountClient.lastOpen.CorporateMobile)
+	require.Zero(t, accountClient.openCalls)
+	require.Equal(t, []worker.BaofuAccountOpeningPayload{{FlowID: processingFlow.ID}}, taskRecorder.payloads)
 }
 
 func TestBaofuSettlementAccountMerchantPostIndividualBusinessPrivateCardDefaultsSelfEmployed(t *testing.T) {
@@ -3343,15 +3190,6 @@ func TestBaofuSettlementAccountMerchantPostIndividualBusinessPrivateCardDefaults
 	store.EXPECT().
 		MarkBaofuAccountOpeningFlowOpeningProcessing(gomock.Any(), gomock.Any()).
 		Return(processingFlow, nil)
-	store.EXPECT().
-		UpsertBaofuAccountBinding(gomock.Any(), gomock.Any()).
-		Return(db.BaofuAccountBinding{
-			ID:          511,
-			OwnerType:   db.BaofuAccountOwnerTypeMerchant,
-			OwnerID:     merchant.ID,
-			AccountType: db.BaofuAccountTypeBusiness,
-			OpenState:   db.BaofuAccountOpenStateProcessing,
-		}, nil)
 
 	server := newTestServer(t, store)
 	accountClient := &fakeBaofuSettlementAccountClient{
@@ -3362,6 +3200,8 @@ func TestBaofuSettlementAccountMerchantPostIndividualBusinessPrivateCardDefaults
 		},
 	}
 	server.baofuAccountClient = accountClient
+	taskRecorder := &baofuSettlementAccountOpeningTaskRecorder{}
+	server.SetTaskDistributorForTest(taskRecorder)
 	body := completeMerchantBaofuSettlementProfileBody()
 	profile := body["profile"].(map[string]any)
 	profile["card_user_name"] = app.LegalPersonName
@@ -3377,22 +3217,13 @@ func TestBaofuSettlementAccountMerchantPostIndividualBusinessPrivateCardDefaults
 	server.router.ServeHTTP(recorder, request)
 
 	require.Equal(t, http.StatusAccepted, recorder.Code)
-	require.Equal(t, 1, accountClient.openCalls)
-	require.True(t, accountClient.lastOpen.SelfEmployed)
-	require.Equal(t, app.LegalPersonName, accountClient.lastOpen.CardUserName)
-	require.Equal(t, "13800138000", accountClient.lastOpen.CorporateMobile)
+	require.Zero(t, accountClient.openCalls)
+	require.Equal(t, []worker.BaofuAccountOpeningPayload{{FlowID: processingFlow.ID}}, taskRecorder.payloads)
 }
 
-func TestBaofuSettlementAccountMerchantPostBaofooProviderFailureReturnsSafeGuidance(t *testing.T) {
+func TestBaofuSettlementAccountMerchantPostEnqueueFailureReturnsSafeGuidance(t *testing.T) {
 	owner, _ := randomUser(t)
 	merchant := randomMerchant(owner.ID)
-	providerErr := &baofu.ProviderError{
-		Operation:       "open_account",
-		Capability:      "baofu_account_open",
-		StatusCode:      http.StatusBadGateway,
-		UpstreamCode:    "BF00061",
-		UpstreamMessage: "raw upstream id card failure: 110101199001010011",
-	}
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -3473,18 +3304,11 @@ func TestBaofuSettlementAccountMerchantPostBaofooProviderFailureReturnsSafeGuida
 	store.EXPECT().
 		MarkBaofuAccountOpeningFlowOpeningProcessing(gomock.Any(), gomock.Any()).
 		Return(processingFlow, nil)
-	store.EXPECT().
-		UpsertBaofuAccountBinding(gomock.Any(), gomock.Any()).
-		Return(db.BaofuAccountBinding{
-			ID:          511,
-			OwnerType:   db.BaofuAccountOwnerTypeMerchant,
-			OwnerID:     merchant.ID,
-			AccountType: db.BaofuAccountTypeBusiness,
-			OpenState:   db.BaofuAccountOpenStateProcessing,
-		}, nil)
 
 	server := newTestServer(t, store)
-	server.baofuAccountClient = &fakeBaofuSettlementAccountClient{openErr: providerErr}
+	server.baofuAccountClient = &fakeBaofuSettlementAccountClient{}
+	taskRecorder := &baofuSettlementAccountOpeningTaskRecorder{err: errors.New("redis unavailable")}
+	server.SetTaskDistributorForTest(taskRecorder)
 	recorder := httptest.NewRecorder()
 	rawBody, err := json.Marshal(completeMerchantBaofuSettlementProfileBody())
 	require.NoError(t, err)
@@ -3495,17 +3319,14 @@ func TestBaofuSettlementAccountMerchantPostBaofooProviderFailureReturnsSafeGuida
 
 	server.router.ServeHTTP(recorder, request)
 
-	require.Equal(t, http.StatusBadRequest, recorder.Code)
-	require.NotContains(t, recorder.Body.String(), providerErr.UpstreamMessage)
-	require.NotContains(t, recorder.Body.String(), providerErr.UpstreamCode)
+	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
 	require.NotContains(t, recorder.Body.String(), "110101199001010011")
-	require.Contains(t, recorder.Body.String(), "身份或银行卡信息核验未通过，请核对后重新提交")
+	require.Contains(t, recorder.Body.String(), "宝付开户任务暂不可用，请稍后重试")
 }
 
-func TestBaofuSettlementAccountMerchantPostUnexpectedOpenFailureReturnsSafeGuidance(t *testing.T) {
+func TestBaofuSettlementAccountMerchantPostWithoutOpeningDistributorReturnsSafeGuidance(t *testing.T) {
 	owner, _ := randomUser(t)
 	merchant := randomMerchant(owner.ID)
-	rawErr := errors.New("internal baofu transport secret failure")
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -3582,18 +3403,10 @@ func TestBaofuSettlementAccountMerchantPostUnexpectedOpenFailureReturnsSafeGuida
 	store.EXPECT().
 		MarkBaofuAccountOpeningFlowOpeningProcessing(gomock.Any(), gomock.Any()).
 		Return(processingFlow, nil)
-	store.EXPECT().
-		UpsertBaofuAccountBinding(gomock.Any(), gomock.Any()).
-		Return(db.BaofuAccountBinding{
-			ID:          512,
-			OwnerType:   db.BaofuAccountOwnerTypeMerchant,
-			OwnerID:     merchant.ID,
-			AccountType: db.BaofuAccountTypeBusiness,
-			OpenState:   db.BaofuAccountOpenStateProcessing,
-		}, nil)
 
 	server := newTestServer(t, store)
-	server.baofuAccountClient = &fakeBaofuSettlementAccountClient{openErr: rawErr}
+	server.baofuAccountClient = &fakeBaofuSettlementAccountClient{}
+	server.SetTaskDistributorForTest(nil)
 	recorder := httptest.NewRecorder()
 	rawBody, err := json.Marshal(completeMerchantBaofuSettlementProfileBody())
 	require.NoError(t, err)
@@ -3605,8 +3418,7 @@ func TestBaofuSettlementAccountMerchantPostUnexpectedOpenFailureReturnsSafeGuida
 	server.router.ServeHTTP(recorder, request)
 
 	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
-	require.NotContains(t, recorder.Body.String(), rawErr.Error())
-	require.Contains(t, recorder.Body.String(), "宝付开户服务暂不可用，请稍后重试")
+	require.Contains(t, recorder.Body.String(), "宝付开户任务暂不可用，请稍后重试")
 }
 
 func completeMerchantBaofuSettlementProfileBody() map[string]any {
@@ -3663,4 +3475,20 @@ func (c *fakeBaofuSettlementAccountClient) QueryAccount(_ context.Context, req b
 		return nil, c.queryErr
 	}
 	return c.queryResult, nil
+}
+
+type baofuSettlementAccountOpeningTaskRecorder struct {
+	worker.NoopTaskDistributor
+	payloads []worker.BaofuAccountOpeningPayload
+	err      error
+}
+
+func (r *baofuSettlementAccountOpeningTaskRecorder) DistributeTaskProcessBaofuAccountOpening(_ context.Context, payload *worker.BaofuAccountOpeningPayload, _ ...asynq.Option) error {
+	if r.err != nil {
+		return r.err
+	}
+	if payload != nil {
+		r.payloads = append(r.payloads, *payload)
+	}
+	return nil
 }
