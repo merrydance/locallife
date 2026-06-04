@@ -35,6 +35,7 @@ func (s *BaofuAccountOnboardingService) openFromProfile(ctx context.Context, flo
 		return db.BaofuAccountOpeningFlow{}, nil, err
 	}
 	requestSnapshot := baofuOpeningRequestSnapshot(req)
+	openingMode := baofuAccountOpeningModeForFlow(flow)
 	flow, err = s.store.MarkBaofuAccountOpeningFlowOpeningProcessing(ctx, db.MarkBaofuAccountOpeningFlowOpeningProcessingParams{
 		ID:                      flow.ID,
 		ProfileID:               pgtype.Int8{Int64: profile.ID, Valid: profile.ID > 0},
@@ -42,7 +43,7 @@ func (s *BaofuAccountOnboardingService) openFromProfile(ctx context.Context, flo
 		OpenTransSerialNo:       pgtype.Text{String: openTrans, Valid: true},
 		LoginNo:                 pgtype.Text{String: loginNo, Valid: true},
 		ProviderRequestSnapshot: requestSnapshot,
-		RawSnapshot:             baofuOpeningSnapshot(map[string]any{"state": db.BaofuAccountOpeningStateOpeningProcessing}),
+		RawSnapshot:             baofuOpeningSnapshot(map[string]any{"state": db.BaofuAccountOpeningStateOpeningProcessing, "opening_mode": openingMode}),
 	})
 	if err != nil {
 		return db.BaofuAccountOpeningFlow{}, nil, err
@@ -51,6 +52,7 @@ func (s *BaofuAccountOnboardingService) openFromProfile(ctx context.Context, flo
 		OwnerType:             flow.OwnerType,
 		OwnerID:               flow.OwnerID,
 		AccountType:           flow.AccountType,
+		OpeningMode:           baofuAccountOpeningModeForFlow(flow),
 		LoginNo:               pgtype.Text{String: loginNo, Valid: true},
 		OpenState:             db.BaofuAccountOpenStateProcessing,
 		LastOpenTransSerialNo: pgtype.Text{String: openTrans, Valid: true},
@@ -116,6 +118,17 @@ func (s *BaofuAccountOnboardingService) buildOpenRequest(profile db.BaofuAccount
 	if err != nil {
 		return baofucontracts.OpenAccountRequest{}, err
 	}
+	usesPrivateBusinessCard := baofuProfileUsesPrivateBusinessCard(profile)
+	cardUserName := firstTrimmed(profile.CardUserName.String, profile.LegalName.String)
+	if strings.TrimSpace(profile.AccountType) == db.BaofuAccountTypeBusiness {
+		cardUserName = ""
+		if usesPrivateBusinessCard {
+			cardUserName = strings.TrimSpace(profile.CardUserName.String)
+		}
+	}
+	if strings.TrimSpace(profile.AccountType) == db.BaofuAccountTypeBusiness && !usesPrivateBusinessCard {
+		corporateMobile = ""
+	}
 	req := baofucontracts.OpenAccountRequest{
 		OwnerType:           profile.OwnerType,
 		OwnerID:             profile.OwnerID,
@@ -140,8 +153,8 @@ func (s *BaofuAccountOnboardingService) buildOpenRequest(profile db.BaofuAccount
 		DepositBankProvince: profile.DepositBankProvince.String,
 		DepositBankCity:     profile.DepositBankCity.String,
 		DepositBankName:     profile.DepositBankName.String,
-		CardUserName:        firstTrimmed(profile.CardUserName.String, profile.LegalName.String),
-		SelfEmployed:        baofuProfileUsesPrivateBusinessCard(profile),
+		CardUserName:        cardUserName,
+		SelfEmployed:        usesPrivateBusinessCard,
 	}
 	if err := validateBaofuOpenRequestProfile(req); err != nil {
 		return baofucontracts.OpenAccountRequest{}, err

@@ -17,6 +17,7 @@ INSERT INTO baofu_account_opening_flows (
     owner_type,
     owner_id,
     account_type,
+    opening_mode,
     profile_id,
     state,
     verify_fee_amount,
@@ -36,15 +37,17 @@ INSERT INTO baofu_account_opening_flows (
     $8,
     $9,
     $10,
-    $11
+    $11,
+    $12
 )
-RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at
+RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at, opening_mode
 `
 
 type CreateBaofuAccountOpeningFlowParams struct {
 	OwnerType               string      `json:"owner_type"`
 	OwnerID                 int64       `json:"owner_id"`
 	AccountType             string      `json:"account_type"`
+	OpeningMode             string      `json:"opening_mode"`
 	ProfileID               pgtype.Int8 `json:"profile_id"`
 	State                   string      `json:"state"`
 	VerifyFeeAmount         int64       `json:"verify_fee_amount"`
@@ -60,6 +63,7 @@ func (q *Queries) CreateBaofuAccountOpeningFlow(ctx context.Context, arg CreateB
 		arg.OwnerType,
 		arg.OwnerID,
 		arg.AccountType,
+		arg.OpeningMode,
 		arg.ProfileID,
 		arg.State,
 		arg.VerifyFeeAmount,
@@ -89,12 +93,13 @@ func (q *Queries) CreateBaofuAccountOpeningFlow(ctx context.Context, arg CreateB
 		&i.RawSnapshot,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OpeningMode,
 	)
 	return i, err
 }
 
 const getActiveBaofuAccountOpeningFlowByOwner = `-- name: GetActiveBaofuAccountOpeningFlowByOwner :one
-SELECT id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at
+SELECT id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at, opening_mode
 FROM baofu_account_opening_flows
 WHERE owner_type = $1
   AND owner_id = $2
@@ -137,12 +142,13 @@ func (q *Queries) GetActiveBaofuAccountOpeningFlowByOwner(ctx context.Context, a
 		&i.RawSnapshot,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OpeningMode,
 	)
 	return i, err
 }
 
 const getBaofuAccountOpeningFlow = `-- name: GetBaofuAccountOpeningFlow :one
-SELECT id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at
+SELECT id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at, opening_mode
 FROM baofu_account_opening_flows
 WHERE id = $1
 LIMIT 1
@@ -170,12 +176,13 @@ func (q *Queries) GetBaofuAccountOpeningFlow(ctx context.Context, id int64) (Bao
 		&i.RawSnapshot,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OpeningMode,
 	)
 	return i, err
 }
 
 const getBaofuAccountOpeningFlowByOpenTransSerialNo = `-- name: GetBaofuAccountOpeningFlowByOpenTransSerialNo :one
-SELECT id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at
+SELECT id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at, opening_mode
 FROM baofu_account_opening_flows
 WHERE open_trans_serial_no = $1
 LIMIT 1
@@ -203,12 +210,13 @@ func (q *Queries) GetBaofuAccountOpeningFlowByOpenTransSerialNo(ctx context.Cont
 		&i.RawSnapshot,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OpeningMode,
 	)
 	return i, err
 }
 
 const getBaofuAccountOpeningFlowByPaymentOrder = `-- name: GetBaofuAccountOpeningFlowByPaymentOrder :one
-SELECT id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at
+SELECT id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at, opening_mode
 FROM baofu_account_opening_flows
 WHERE verify_fee_payment_order_id = $1
 ORDER BY created_at DESC, id DESC
@@ -237,12 +245,13 @@ func (q *Queries) GetBaofuAccountOpeningFlowByPaymentOrder(ctx context.Context, 
 		&i.RawSnapshot,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OpeningMode,
 	)
 	return i, err
 }
 
 const getLatestBaofuAccountOpeningFlowByOwner = `-- name: GetLatestBaofuAccountOpeningFlowByOwner :one
-SELECT id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at
+SELECT id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at, opening_mode
 FROM baofu_account_opening_flows
 WHERE owner_type = $1 AND owner_id = $2
 ORDER BY created_at DESC, id DESC
@@ -276,12 +285,13 @@ func (q *Queries) GetLatestBaofuAccountOpeningFlowByOwner(ctx context.Context, a
 		&i.RawSnapshot,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OpeningMode,
 	)
 	return i, err
 }
 
 const listRecoverableBaofuAccountOpeningFlows = `-- name: ListRecoverableBaofuAccountOpeningFlows :many
-SELECT id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at
+SELECT id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at, opening_mode
 FROM baofu_account_opening_flows
 WHERE (
     state IN ('opening_processing', 'merchant_report_processing', 'applet_auth_pending')
@@ -336,6 +346,7 @@ func (q *Queries) ListRecoverableBaofuAccountOpeningFlows(ctx context.Context, a
 			&i.RawSnapshot,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.OpeningMode,
 		); err != nil {
 			return nil, err
 		}
@@ -356,7 +367,7 @@ SET
     updated_at = now()
 WHERE id = $3
   AND state IN ('merchant_report_processing', 'applet_auth_pending')
-RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at
+RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at, opening_mode
 `
 
 type MarkBaofuAccountOpeningFlowAppletAuthPendingParams struct {
@@ -387,6 +398,7 @@ func (q *Queries) MarkBaofuAccountOpeningFlowAppletAuthPending(ctx context.Conte
 		&i.RawSnapshot,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OpeningMode,
 	)
 	return i, err
 }
@@ -402,7 +414,7 @@ SET
 WHERE id = $4
   AND state <> 'ready'
   AND state <> 'voided'
-RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at
+RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at, opening_mode
 `
 
 type MarkBaofuAccountOpeningFlowFailedParams struct {
@@ -439,6 +451,7 @@ func (q *Queries) MarkBaofuAccountOpeningFlowFailed(ctx context.Context, arg Mar
 		&i.RawSnapshot,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OpeningMode,
 	)
 	return i, err
 }
@@ -453,7 +466,7 @@ SET
     updated_at = now()
 WHERE id = $4
   AND state IN ('opening_processing', 'merchant_report_processing')
-RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at
+RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at, opening_mode
 `
 
 type MarkBaofuAccountOpeningFlowMerchantReportProcessingParams struct {
@@ -490,6 +503,7 @@ func (q *Queries) MarkBaofuAccountOpeningFlowMerchantReportProcessing(ctx contex
 		&i.RawSnapshot,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OpeningMode,
 	)
 	return i, err
 }
@@ -509,7 +523,7 @@ SET
     updated_at = now()
 WHERE id = $7
   AND state IN ('profile_pending', 'verify_fee_pending', 'verify_fee_processing', 'opening_processing')
-RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at
+RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at, opening_mode
 `
 
 type MarkBaofuAccountOpeningFlowOpeningProcessingParams struct {
@@ -552,6 +566,7 @@ func (q *Queries) MarkBaofuAccountOpeningFlowOpeningProcessing(ctx context.Conte
 		&i.RawSnapshot,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OpeningMode,
 	)
 	return i, err
 }
@@ -571,7 +586,7 @@ WHERE id = $4
       state IN ('opening_processing', 'merchant_report_processing', 'applet_auth_pending', 'ready')
       OR (state = 'failed' AND failure_code IN ('BF00060', 'EXISTED_LOGIN_NO'))
   )
-RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at
+RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at, opening_mode
 `
 
 type MarkBaofuAccountOpeningFlowReadyParams struct {
@@ -608,6 +623,7 @@ func (q *Queries) MarkBaofuAccountOpeningFlowReady(ctx context.Context, arg Mark
 		&i.RawSnapshot,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OpeningMode,
 	)
 	return i, err
 }
@@ -625,7 +641,7 @@ SET
     updated_at = now()
 WHERE id = $5
   AND state IN ('profile_pending', 'verify_fee_pending', 'verify_fee_processing')
-RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at
+RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at, opening_mode
 `
 
 type MarkBaofuAccountOpeningFlowVerifyFeePendingParams struct {
@@ -664,6 +680,7 @@ func (q *Queries) MarkBaofuAccountOpeningFlowVerifyFeePending(ctx context.Contex
 		&i.RawSnapshot,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OpeningMode,
 	)
 	return i, err
 }
@@ -677,7 +694,7 @@ SET
     updated_at = now()
 WHERE id = $3
   AND state IN ('verify_fee_pending', 'verify_fee_processing')
-RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at
+RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at, opening_mode
 `
 
 type MarkBaofuAccountOpeningFlowVerifyFeeProcessingParams struct {
@@ -708,6 +725,7 @@ func (q *Queries) MarkBaofuAccountOpeningFlowVerifyFeeProcessing(ctx context.Con
 		&i.RawSnapshot,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OpeningMode,
 	)
 	return i, err
 }
@@ -735,11 +753,12 @@ WHERE baofu_account_opening_flows.id = $3
         AND b.owner_type = baofu_account_opening_flows.owner_type
         AND b.owner_id = baofu_account_opening_flows.owner_id
         AND b.account_type = baofu_account_opening_flows.account_type
+        AND b.opening_mode = baofu_account_opening_flows.opening_mode
         AND b.open_state = 'active'
         AND b.last_open_trans_serial_no = baofu_account_opening_flows.open_trans_serial_no
         AND b.contract_no = $5
   )
-RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at
+RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at, opening_mode
 `
 
 type RecoverFailedBaofuAccountOpeningFlowFromActiveBindingParams struct {
@@ -778,6 +797,7 @@ func (q *Queries) RecoverFailedBaofuAccountOpeningFlowFromActiveBinding(ctx cont
 		&i.RawSnapshot,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OpeningMode,
 	)
 	return i, err
 }
@@ -793,7 +813,7 @@ SET
     updated_at = now()
 WHERE id = $3
   AND state IN ('profile_pending', 'verify_fee_pending', 'verify_fee_processing', 'failed')
-RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at
+RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at, opening_mode
 `
 
 type SetBaofuAccountOpeningFlowProfilePendingParams struct {
@@ -824,6 +844,7 @@ func (q *Queries) SetBaofuAccountOpeningFlowProfilePending(ctx context.Context, 
 		&i.RawSnapshot,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OpeningMode,
 	)
 	return i, err
 }
@@ -846,7 +867,7 @@ WHERE id = $4
       'applet_auth_pending',
       'failed'
   )
-RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at
+RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at, opening_mode
 `
 
 type VoidBaofuAccountOpeningFlowParams struct {
@@ -883,6 +904,7 @@ func (q *Queries) VoidBaofuAccountOpeningFlow(ctx context.Context, arg VoidBaofu
 		&i.RawSnapshot,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OpeningMode,
 	)
 	return i, err
 }

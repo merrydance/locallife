@@ -556,7 +556,7 @@ func TestBaofuSettlementAccountMerchantApplicationDefaultsOverrideMistypedBaofuP
 	require.Equal(t, app.BusinessLicenseNumber, merged.BusinessLicenseNo)
 	require.Equal(t, app.LegalPersonName, merged.LegalPersonName)
 	require.Equal(t, app.LegalPersonIDNumber, merged.LegalPersonIDNumber)
-	require.Equal(t, app.LegalPersonName, merged.CardUserName)
+	require.Empty(t, merged.CardUserName)
 	require.Equal(t, "new-contact@example.com", merged.Email)
 	require.Equal(t, "6222020202020202", merged.BankAccountNo)
 	require.Equal(t, "招商银行", merged.BankName)
@@ -777,6 +777,8 @@ func TestBaofuSettlementAccountMerchantCompanyDefaultsDisallowPrivateBusinessCar
 	require.NoError(t, err)
 	require.True(t, found)
 	require.Equal(t, []string{"ACCOUNT_TYPE_BUSINESS"}, defaults.defaults.SettlementAccountAllowedTypes)
+	require.Empty(t, defaults.defaults.CardUserName)
+	require.Empty(t, defaults.cardUserName)
 	require.False(t, defaults.defaults.SelfEmployed)
 	require.False(t, defaults.selfEmployed)
 
@@ -785,7 +787,7 @@ func TestBaofuSettlementAccountMerchantCompanyDefaultsDisallowPrivateBusinessCar
 	require.NotNil(t, merged)
 	require.False(t, merged.SelfEmployed)
 	require.False(t, merged.SelfEmployedSet)
-	require.Equal(t, app.LegalPersonName, merged.CardUserName)
+	require.Empty(t, merged.CardUserName)
 }
 
 func TestBaofuSettlementAccountMerchantDefaultsFallbackToApprovedMerchantSnapshot(t *testing.T) {
@@ -916,7 +918,7 @@ func TestBaofuSettlementAccountMerchantPostOverridesMistypedIdentityBeforeOpenin
 			require.Equal(t, app.BusinessLicenseNumber, arg.CertificateNoCiphertext.String)
 			require.Equal(t, app.LegalPersonName, arg.CorporateName.String)
 			require.Equal(t, app.LegalPersonIDNumber, arg.CorporateCertIDCiphertext.String)
-			require.Equal(t, app.LegalPersonName, arg.CardUserName.String)
+			require.Empty(t, arg.CardUserName.String)
 			return db.BaofuAccountOpeningProfile{
 				ID:                        313,
 				OwnerType:                 arg.OwnerType,
@@ -1007,7 +1009,8 @@ func TestBaofuSettlementAccountMerchantPostOverridesMistypedIdentityBeforeOpenin
 	require.Equal(t, app.BusinessLicenseNumber, accountClient.lastOpen.CertificateNo)
 	require.Equal(t, app.LegalPersonName, accountClient.lastOpen.CorporateName)
 	require.Equal(t, app.LegalPersonIDNumber, accountClient.lastOpen.CorporateCertID)
-	require.Equal(t, app.LegalPersonName, accountClient.lastOpen.CardUserName)
+	require.False(t, accountClient.lastOpen.SelfEmployed)
+	require.Empty(t, accountClient.lastOpen.CardUserName)
 }
 
 func TestBaofuSettlementAccountProfileInputMergesExistingBaofuProfileDefaults(t *testing.T) {
@@ -1198,7 +1201,7 @@ func TestBaofuSettlementAccountProfileInputExplicitPublicAccountOverridesPrivate
 	require.NotNil(t, merged)
 	require.False(t, merged.SelfEmployed)
 	require.True(t, merged.SelfEmployedSet)
-	require.Equal(t, "李四", merged.CardUserName)
+	require.Empty(t, merged.CardUserName)
 }
 
 func TestDecodeBaofuSettlementAccountRequestExplicitPublicAccountIsNotZero(t *testing.T) {

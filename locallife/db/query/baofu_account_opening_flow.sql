@@ -3,6 +3,7 @@ INSERT INTO baofu_account_opening_flows (
     owner_type,
     owner_id,
     account_type,
+    opening_mode,
     profile_id,
     state,
     verify_fee_amount,
@@ -15,6 +16,7 @@ INSERT INTO baofu_account_opening_flows (
     sqlc.arg(owner_type),
     sqlc.arg(owner_id),
     sqlc.arg(account_type),
+    sqlc.arg(opening_mode),
     sqlc.narg(profile_id),
     sqlc.arg(state),
     sqlc.arg(verify_fee_amount),
@@ -24,16 +26,16 @@ INSERT INTO baofu_account_opening_flows (
     sqlc.arg(provider_request_snapshot),
     sqlc.arg(raw_snapshot)
 )
-RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at;
+RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at, opening_mode;
 
 -- name: GetBaofuAccountOpeningFlow :one
-SELECT id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at
+SELECT id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at, opening_mode
 FROM baofu_account_opening_flows
 WHERE id = $1
 LIMIT 1;
 
 -- name: GetActiveBaofuAccountOpeningFlowByOwner :one
-SELECT id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at
+SELECT id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at, opening_mode
 FROM baofu_account_opening_flows
 WHERE owner_type = $1
   AND owner_id = $2
@@ -49,20 +51,20 @@ ORDER BY created_at DESC, id DESC
 LIMIT 1;
 
 -- name: GetLatestBaofuAccountOpeningFlowByOwner :one
-SELECT id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at
+SELECT id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at, opening_mode
 FROM baofu_account_opening_flows
 WHERE owner_type = $1 AND owner_id = $2
 ORDER BY created_at DESC, id DESC
 LIMIT 1;
 
 -- name: GetBaofuAccountOpeningFlowByOpenTransSerialNo :one
-SELECT id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at
+SELECT id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at, opening_mode
 FROM baofu_account_opening_flows
 WHERE open_trans_serial_no = $1
 LIMIT 1;
 
 -- name: GetBaofuAccountOpeningFlowByPaymentOrder :one
-SELECT id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at
+SELECT id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at, opening_mode
 FROM baofu_account_opening_flows
 WHERE verify_fee_payment_order_id = $1
 ORDER BY created_at DESC, id DESC
@@ -79,7 +81,7 @@ SET
     updated_at = now()
 WHERE id = sqlc.arg(id)
   AND state IN ('profile_pending', 'verify_fee_pending', 'verify_fee_processing', 'failed')
-RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at;
+RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at, opening_mode;
 
 -- name: MarkBaofuAccountOpeningFlowVerifyFeePending :one
 UPDATE baofu_account_opening_flows
@@ -94,7 +96,7 @@ SET
     updated_at = now()
 WHERE id = sqlc.arg(id)
   AND state IN ('profile_pending', 'verify_fee_pending', 'verify_fee_processing')
-RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at;
+RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at, opening_mode;
 
 -- name: MarkBaofuAccountOpeningFlowVerifyFeeProcessing :one
 UPDATE baofu_account_opening_flows
@@ -105,7 +107,7 @@ SET
     updated_at = now()
 WHERE id = sqlc.arg(id)
   AND state IN ('verify_fee_pending', 'verify_fee_processing')
-RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at;
+RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at, opening_mode;
 
 -- name: MarkBaofuAccountOpeningFlowOpeningProcessing :one
 UPDATE baofu_account_opening_flows
@@ -122,7 +124,7 @@ SET
     updated_at = now()
 WHERE id = sqlc.arg(id)
   AND state IN ('profile_pending', 'verify_fee_pending', 'verify_fee_processing', 'opening_processing')
-RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at;
+RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at, opening_mode;
 
 -- name: MarkBaofuAccountOpeningFlowMerchantReportProcessing :one
 UPDATE baofu_account_opening_flows
@@ -134,7 +136,7 @@ SET
     updated_at = now()
 WHERE id = sqlc.arg(id)
   AND state IN ('opening_processing', 'merchant_report_processing')
-RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at;
+RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at, opening_mode;
 
 -- name: MarkBaofuAccountOpeningFlowAppletAuthPending :one
 UPDATE baofu_account_opening_flows
@@ -145,7 +147,7 @@ SET
     updated_at = now()
 WHERE id = sqlc.arg(id)
   AND state IN ('merchant_report_processing', 'applet_auth_pending')
-RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at;
+RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at, opening_mode;
 
 -- name: MarkBaofuAccountOpeningFlowReady :one
 UPDATE baofu_account_opening_flows
@@ -162,7 +164,7 @@ WHERE id = sqlc.arg(id)
       state IN ('opening_processing', 'merchant_report_processing', 'applet_auth_pending', 'ready')
       OR (state = 'failed' AND failure_code IN ('BF00060', 'EXISTED_LOGIN_NO'))
   )
-RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at;
+RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at, opening_mode;
 
 -- name: RecoverFailedBaofuAccountOpeningFlowFromActiveBinding :one
 UPDATE baofu_account_opening_flows
@@ -187,11 +189,12 @@ WHERE baofu_account_opening_flows.id = sqlc.arg(id)
         AND b.owner_type = baofu_account_opening_flows.owner_type
         AND b.owner_id = baofu_account_opening_flows.owner_id
         AND b.account_type = baofu_account_opening_flows.account_type
+        AND b.opening_mode = baofu_account_opening_flows.opening_mode
         AND b.open_state = 'active'
         AND b.last_open_trans_serial_no = baofu_account_opening_flows.open_trans_serial_no
         AND b.contract_no = sqlc.arg(contract_no)
   )
-RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at;
+RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at, opening_mode;
 
 -- name: MarkBaofuAccountOpeningFlowFailed :one
 UPDATE baofu_account_opening_flows
@@ -204,7 +207,7 @@ SET
 WHERE id = sqlc.arg(id)
   AND state <> 'ready'
   AND state <> 'voided'
-RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at;
+RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at, opening_mode;
 
 -- name: VoidBaofuAccountOpeningFlow :one
 UPDATE baofu_account_opening_flows
@@ -224,10 +227,10 @@ WHERE id = sqlc.arg(id)
       'applet_auth_pending',
       'failed'
   )
-RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at;
+RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at, opening_mode;
 
 -- name: ListRecoverableBaofuAccountOpeningFlows :many
-SELECT id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at
+SELECT id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at, opening_mode
 FROM baofu_account_opening_flows
 WHERE (
     state IN ('opening_processing', 'merchant_report_processing', 'applet_auth_pending')

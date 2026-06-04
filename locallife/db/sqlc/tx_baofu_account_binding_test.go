@@ -14,6 +14,7 @@ func TestMarkBaofuAccountBindingActiveWithFeeLedgerTx(t *testing.T) {
 		OwnerType:   BaofuAccountOwnerTypeRider,
 		OwnerID:     time.Now().UnixNano(),
 		AccountType: BaofuAccountTypePersonal,
+		OpeningMode: BaofuAccountOpeningModePersonal,
 		OpenState:   BaofuAccountOpenStateProcessing,
 		RawSnapshot: []byte(`{}`),
 	})
@@ -124,6 +125,7 @@ func TestMarkBaofuAccountBindingAbnormal(t *testing.T) {
 		OwnerType:   BaofuAccountOwnerTypeRider,
 		OwnerID:     time.Now().UnixNano(),
 		AccountType: BaofuAccountTypePersonal,
+		OpeningMode: BaofuAccountOpeningModePersonal,
 		OpenState:   BaofuAccountOpenStateProcessing,
 		RawSnapshot: []byte(`{}`),
 	})

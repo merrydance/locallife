@@ -196,6 +196,11 @@ const (
 	BaofuAccountTypePersonal = "personal"
 	BaofuAccountTypeBusiness = "business"
 
+	BaofuAccountOpeningModePersonal                  = "personal"
+	BaofuAccountOpeningModeMerchantPersonalMicro     = "merchant_personal_micro"
+	BaofuAccountOpeningModeBusinessPublic            = "business_public"
+	BaofuAccountOpeningModeIndividualBusinessPrivate = "individual_business_private"
+
 	BaofuAccountOpenStateProcessing = "processing"
 	BaofuAccountOpenStateActive     = "active"
 	BaofuAccountOpenStateFailed     = "failed"

@@ -64,7 +64,7 @@ func NewBaofuAccountService(store baofuAccountStore, client BaofuAccountClient) 
 func (s *BaofuAccountService) ValidateOwnerAccount(ownerType, accountType string) error {
 	switch strings.TrimSpace(ownerType) {
 	case db.BaofuAccountOwnerTypeMerchant:
-		if accountType == db.BaofuAccountTypeBusiness {
+		if accountType == db.BaofuAccountTypeBusiness || accountType == db.BaofuAccountTypePersonal {
 			return nil
 		}
 	case db.BaofuAccountOwnerTypeRider:
@@ -133,6 +133,7 @@ func (s *BaofuAccountService) OpenAccount(ctx context.Context, req baofucontract
 		OwnerType:             strings.TrimSpace(req.OwnerType),
 		OwnerID:               req.OwnerID,
 		AccountType:           strings.TrimSpace(req.AccountType),
+		OpeningMode:           baofuAccountOpeningModeForOwnerAccount(req.OwnerType, req.AccountType),
 		LoginNo:               pgtype.Text{},
 		OpenState:             db.BaofuAccountOpenStateProcessing,
 		WechatSubMchID:        pgtype.Text{},

@@ -13,7 +13,7 @@ import (
 )
 
 const getBaofuAccountBinding = `-- name: GetBaofuAccountBinding :one
-SELECT id, owner_type, owner_id, account_type, contract_no, sharing_mer_id, login_no, open_state, wechat_sub_mch_id, bank_card_last4, last_open_trans_serial_no, raw_snapshot, created_at, updated_at
+SELECT id, owner_type, owner_id, account_type, contract_no, sharing_mer_id, login_no, open_state, wechat_sub_mch_id, bank_card_last4, last_open_trans_serial_no, raw_snapshot, created_at, updated_at, opening_mode
 FROM baofu_account_bindings
 WHERE id = $1
 LIMIT 1
@@ -37,12 +37,13 @@ func (q *Queries) GetBaofuAccountBinding(ctx context.Context, id int64) (BaofuAc
 		&i.RawSnapshot,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OpeningMode,
 	)
 	return i, err
 }
 
 const getBaofuAccountBindingByContractNo = `-- name: GetBaofuAccountBindingByContractNo :one
-SELECT id, owner_type, owner_id, account_type, contract_no, sharing_mer_id, login_no, open_state, wechat_sub_mch_id, bank_card_last4, last_open_trans_serial_no, raw_snapshot, created_at, updated_at
+SELECT id, owner_type, owner_id, account_type, contract_no, sharing_mer_id, login_no, open_state, wechat_sub_mch_id, bank_card_last4, last_open_trans_serial_no, raw_snapshot, created_at, updated_at, opening_mode
 FROM baofu_account_bindings
 WHERE contract_no = $1
 LIMIT 1
@@ -66,12 +67,13 @@ func (q *Queries) GetBaofuAccountBindingByContractNo(ctx context.Context, contra
 		&i.RawSnapshot,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OpeningMode,
 	)
 	return i, err
 }
 
 const getBaofuAccountBindingByOwner = `-- name: GetBaofuAccountBindingByOwner :one
-SELECT id, owner_type, owner_id, account_type, contract_no, sharing_mer_id, login_no, open_state, wechat_sub_mch_id, bank_card_last4, last_open_trans_serial_no, raw_snapshot, created_at, updated_at
+SELECT id, owner_type, owner_id, account_type, contract_no, sharing_mer_id, login_no, open_state, wechat_sub_mch_id, bank_card_last4, last_open_trans_serial_no, raw_snapshot, created_at, updated_at, opening_mode
 FROM baofu_account_bindings
 WHERE owner_type = $1 AND owner_id = $2
 LIMIT 1
@@ -100,12 +102,13 @@ func (q *Queries) GetBaofuAccountBindingByOwner(ctx context.Context, arg GetBaof
 		&i.RawSnapshot,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OpeningMode,
 	)
 	return i, err
 }
 
 const listProcessingBaofuAccountBindings = `-- name: ListProcessingBaofuAccountBindings :many
-SELECT id, owner_type, owner_id, account_type, contract_no, sharing_mer_id, login_no, open_state, wechat_sub_mch_id, bank_card_last4, last_open_trans_serial_no, raw_snapshot, created_at, updated_at
+SELECT id, owner_type, owner_id, account_type, contract_no, sharing_mer_id, login_no, open_state, wechat_sub_mch_id, bank_card_last4, last_open_trans_serial_no, raw_snapshot, created_at, updated_at, opening_mode
 FROM baofu_account_bindings
 WHERE open_state IN ('processing', 'abnormal')
   AND updated_at <= $1
@@ -142,6 +145,7 @@ func (q *Queries) ListProcessingBaofuAccountBindings(ctx context.Context, arg Li
 			&i.RawSnapshot,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.OpeningMode,
 		); err != nil {
 			return nil, err
 		}
@@ -159,7 +163,7 @@ SET open_state = 'abnormal',
     raw_snapshot = $1,
     updated_at = now()
 WHERE id = $2
-RETURNING id, owner_type, owner_id, account_type, contract_no, sharing_mer_id, login_no, open_state, wechat_sub_mch_id, bank_card_last4, last_open_trans_serial_no, raw_snapshot, created_at, updated_at
+RETURNING id, owner_type, owner_id, account_type, contract_no, sharing_mer_id, login_no, open_state, wechat_sub_mch_id, bank_card_last4, last_open_trans_serial_no, raw_snapshot, created_at, updated_at, opening_mode
 `
 
 type MarkBaofuAccountBindingAbnormalParams struct {
@@ -185,6 +189,7 @@ func (q *Queries) MarkBaofuAccountBindingAbnormal(ctx context.Context, arg MarkB
 		&i.RawSnapshot,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OpeningMode,
 	)
 	return i, err
 }
@@ -197,7 +202,7 @@ SET open_state = 'active',
     raw_snapshot = $3,
     updated_at = now()
 WHERE id = $4
-RETURNING id, owner_type, owner_id, account_type, contract_no, sharing_mer_id, login_no, open_state, wechat_sub_mch_id, bank_card_last4, last_open_trans_serial_no, raw_snapshot, created_at, updated_at
+RETURNING id, owner_type, owner_id, account_type, contract_no, sharing_mer_id, login_no, open_state, wechat_sub_mch_id, bank_card_last4, last_open_trans_serial_no, raw_snapshot, created_at, updated_at, opening_mode
 `
 
 type MarkBaofuAccountBindingActiveParams struct {
@@ -230,6 +235,7 @@ func (q *Queries) MarkBaofuAccountBindingActive(ctx context.Context, arg MarkBao
 		&i.RawSnapshot,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OpeningMode,
 	)
 	return i, err
 }
@@ -240,7 +246,7 @@ SET open_state = 'failed',
     raw_snapshot = $1,
     updated_at = now()
 WHERE id = $2
-RETURNING id, owner_type, owner_id, account_type, contract_no, sharing_mer_id, login_no, open_state, wechat_sub_mch_id, bank_card_last4, last_open_trans_serial_no, raw_snapshot, created_at, updated_at
+RETURNING id, owner_type, owner_id, account_type, contract_no, sharing_mer_id, login_no, open_state, wechat_sub_mch_id, bank_card_last4, last_open_trans_serial_no, raw_snapshot, created_at, updated_at, opening_mode
 `
 
 type MarkBaofuAccountBindingFailedParams struct {
@@ -266,6 +272,7 @@ func (q *Queries) MarkBaofuAccountBindingFailed(ctx context.Context, arg MarkBao
 		&i.RawSnapshot,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OpeningMode,
 	)
 	return i, err
 }
@@ -277,7 +284,7 @@ SET open_state = 'processing',
     raw_snapshot = $2,
     updated_at = now()
 WHERE id = $3
-RETURNING id, owner_type, owner_id, account_type, contract_no, sharing_mer_id, login_no, open_state, wechat_sub_mch_id, bank_card_last4, last_open_trans_serial_no, raw_snapshot, created_at, updated_at
+RETURNING id, owner_type, owner_id, account_type, contract_no, sharing_mer_id, login_no, open_state, wechat_sub_mch_id, bank_card_last4, last_open_trans_serial_no, raw_snapshot, created_at, updated_at, opening_mode
 `
 
 type MarkBaofuAccountBindingProcessingParams struct {
@@ -304,6 +311,7 @@ func (q *Queries) MarkBaofuAccountBindingProcessing(ctx context.Context, arg Mar
 		&i.RawSnapshot,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OpeningMode,
 	)
 	return i, err
 }
@@ -313,6 +321,7 @@ INSERT INTO baofu_account_bindings (
     owner_type,
     owner_id,
     account_type,
+    opening_mode,
     login_no,
     open_state,
     wechat_sub_mch_id,
@@ -326,24 +335,27 @@ INSERT INTO baofu_account_bindings (
     $5,
     $6,
     $7,
-    $8
+    $8,
+    $9
 )
 ON CONFLICT (owner_type, owner_id)
 DO UPDATE SET
     account_type = EXCLUDED.account_type,
+    opening_mode = EXCLUDED.opening_mode,
     login_no = EXCLUDED.login_no,
     open_state = EXCLUDED.open_state,
     wechat_sub_mch_id = EXCLUDED.wechat_sub_mch_id,
     last_open_trans_serial_no = EXCLUDED.last_open_trans_serial_no,
     raw_snapshot = EXCLUDED.raw_snapshot,
     updated_at = now()
-RETURNING id, owner_type, owner_id, account_type, contract_no, sharing_mer_id, login_no, open_state, wechat_sub_mch_id, bank_card_last4, last_open_trans_serial_no, raw_snapshot, created_at, updated_at
+RETURNING id, owner_type, owner_id, account_type, contract_no, sharing_mer_id, login_no, open_state, wechat_sub_mch_id, bank_card_last4, last_open_trans_serial_no, raw_snapshot, created_at, updated_at, opening_mode
 `
 
 type UpsertBaofuAccountBindingParams struct {
 	OwnerType             string      `json:"owner_type"`
 	OwnerID               int64       `json:"owner_id"`
 	AccountType           string      `json:"account_type"`
+	OpeningMode           string      `json:"opening_mode"`
 	LoginNo               pgtype.Text `json:"login_no"`
 	OpenState             string      `json:"open_state"`
 	WechatSubMchID        pgtype.Text `json:"wechat_sub_mch_id"`
@@ -356,6 +368,7 @@ func (q *Queries) UpsertBaofuAccountBinding(ctx context.Context, arg UpsertBaofu
 		arg.OwnerType,
 		arg.OwnerID,
 		arg.AccountType,
+		arg.OpeningMode,
 		arg.LoginNo,
 		arg.OpenState,
 		arg.WechatSubMchID,
@@ -378,6 +391,7 @@ func (q *Queries) UpsertBaofuAccountBinding(ctx context.Context, arg UpsertBaofu
 		&i.RawSnapshot,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OpeningMode,
 	)
 	return i, err
 }

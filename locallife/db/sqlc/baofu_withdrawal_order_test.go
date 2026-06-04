@@ -17,6 +17,7 @@ func createRandomBaofuWithdrawalOrder(t *testing.T) BaofuWithdrawalOrder {
 		OwnerType:   BaofuAccountOwnerTypeRider,
 		OwnerID:     ownerID,
 		AccountType: BaofuAccountTypePersonal,
+		OpeningMode: BaofuAccountOpeningModePersonal,
 		OpenState:   BaofuAccountOpenStateProcessing,
 		RawSnapshot: []byte(`{}`),
 	})

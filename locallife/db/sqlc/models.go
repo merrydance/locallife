@@ -106,6 +106,7 @@ type BaofuAccountBinding struct {
 	RawSnapshot           []byte      `json:"raw_snapshot"`
 	CreatedAt             time.Time   `json:"created_at"`
 	UpdatedAt             time.Time   `json:"updated_at"`
+	OpeningMode           string      `json:"opening_mode"`
 }
 
 type BaofuAccountOpeningFlow struct {
@@ -127,6 +128,7 @@ type BaofuAccountOpeningFlow struct {
 	RawSnapshot             []byte      `json:"raw_snapshot"`
 	CreatedAt               time.Time   `json:"created_at"`
 	UpdatedAt               time.Time   `json:"updated_at"`
+	OpeningMode             string      `json:"opening_mode"`
 }
 
 type BaofuAccountOpeningProfile struct {
@@ -165,6 +167,7 @@ type BaofuAccountOpeningProfile struct {
 	SourceSnapshot            []byte      `json:"source_snapshot"`
 	CreatedAt                 time.Time   `json:"created_at"`
 	UpdatedAt                 time.Time   `json:"updated_at"`
+	OpeningMode               string      `json:"opening_mode"`
 }
 
 type BaofuFeeLedger struct {

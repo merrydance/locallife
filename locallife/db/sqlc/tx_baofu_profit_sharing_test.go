@@ -574,19 +574,18 @@ func TestEnsureBaofuProfitSharingBillTxReturnsExistingIdenticalBill(t *testing.T
 	require.NoError(t, err)
 	require.Equal(t, first.ProfitSharingOrder.ID, second.ProfitSharingOrder.ID)
 
-	rows, err := testStore.ListProfitSharingOrdersByStatus(ctx, ListProfitSharingOrdersByStatusParams{
-		Status: ProfitSharingOrderStatusPending,
-		Limit:  1000,
-		Offset: 0,
-	})
+	current, err := testStore.GetProfitSharingOrderByPaymentOrder(ctx, paymentOrder.ID)
 	require.NoError(t, err)
-	var count int
-	for _, row := range rows {
-		if row.PaymentOrderID == paymentOrder.ID {
-			count++
-		}
-	}
-	require.Equal(t, 1, count)
+	require.Equal(t, first.ProfitSharingOrder.ID, current.ID)
+
+	var count int64
+	err = testStore.(*SQLStore).connPool.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM profit_sharing_orders
+		WHERE payment_order_id = $1
+	`, paymentOrder.ID).Scan(&count)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), count)
 }
 
 func TestEnsureBaofuProfitSharingBillTxReturnsExistingBillAfterRiderAssigned(t *testing.T) {

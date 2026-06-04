@@ -19,6 +19,7 @@ func TestBaofuAccountBindingLifecycle(t *testing.T) {
 		OwnerType:             BaofuAccountOwnerTypeRider,
 		OwnerID:               ownerID,
 		AccountType:           BaofuAccountTypePersonal,
+		OpeningMode:           BaofuAccountOpeningModePersonal,
 		LoginNo:               pgtype.Text{String: "rider-login", Valid: true},
 		OpenState:             BaofuAccountOpenStateProcessing,
 		LastOpenTransSerialNo: pgtype.Text{String: outRequestNo, Valid: true},
@@ -56,6 +57,7 @@ func TestMarkBaofuAccountBindingActiveRequiresReceiver(t *testing.T) {
 		OwnerType:   BaofuAccountOwnerTypeMerchant,
 		OwnerID:     time.Now().UnixNano(),
 		AccountType: BaofuAccountTypeBusiness,
+		OpeningMode: BaofuAccountOpeningModeBusinessPublic,
 		OpenState:   BaofuAccountOpenStateProcessing,
 		RawSnapshot: []byte(`{}`),
 	})
@@ -74,6 +76,7 @@ func TestMarkBaofuAccountBindingActiveRejectsContractOnlyReceiver(t *testing.T) 
 		OwnerType:   BaofuAccountOwnerTypeMerchant,
 		OwnerID:     time.Now().UnixNano(),
 		AccountType: BaofuAccountTypeBusiness,
+		OpeningMode: BaofuAccountOpeningModeBusinessPublic,
 		OpenState:   BaofuAccountOpenStateProcessing,
 		RawSnapshot: []byte(`{}`),
 	})

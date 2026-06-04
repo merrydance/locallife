@@ -569,7 +569,7 @@ func TestListBaofuProcessingProfitSharingOrdersForRecoveryUsesCommandStartedAt(t
 
 	rows, err = testStore.ListBaofuProcessingProfitSharingOrdersForRecovery(ctx, ListBaofuProcessingProfitSharingOrdersForRecoveryParams{
 		CreatedBefore: pgtype.Timestamptz{Time: startedAt.Add(time.Minute), Valid: true},
-		Limit:         200,
+		Limit:         countBaofuProcessingProfitSharingOrdersForRecovery(t, ctx, startedAt.Add(time.Minute)),
 	})
 	require.NoError(t, err)
 	matched := false
@@ -582,4 +582,27 @@ func TestListBaofuProcessingProfitSharingOrdersForRecoveryUsesCommandStartedAt(t
 		}
 	}
 	require.True(t, matched)
+}
+
+func countBaofuProcessingProfitSharingOrdersForRecovery(t *testing.T, ctx context.Context, createdBefore time.Time) int32 {
+	t.Helper()
+
+	store, ok := testStore.(*SQLStore)
+	require.True(t, ok)
+
+	var count int64
+	err := store.connPool.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM profit_sharing_orders
+		WHERE provider = 'baofu'
+		  AND channel = 'baofu_aggregate'
+		  AND status = 'processing'
+		  AND command_started_at IS NOT NULL
+		  AND command_started_at <= $1
+	`, createdBefore).Scan(&count)
+	require.NoError(t, err)
+	require.Positive(t, count)
+	require.Less(t, count, int64(1<<31))
+
+	return int32(count)
 }

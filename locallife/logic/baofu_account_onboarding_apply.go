@@ -225,7 +225,8 @@ func (s *BaofuAccountOnboardingService) ensureAccountOpenContractMatchesFlow(ctx
 	}
 	if strings.TrimSpace(binding.OwnerType) == strings.TrimSpace(flow.OwnerType) &&
 		binding.OwnerID == flow.OwnerID &&
-		(strings.TrimSpace(binding.AccountType) == "" || strings.TrimSpace(binding.AccountType) == strings.TrimSpace(flow.AccountType)) {
+		(strings.TrimSpace(binding.AccountType) == "" || strings.TrimSpace(binding.AccountType) == strings.TrimSpace(flow.AccountType)) &&
+		baofuAccountOpeningModeForBinding(binding) == baofuAccountOpeningModeForFlow(flow) {
 		return nil
 	}
 	s.persistAccountOpenContractMismatchAlert(ctx, flow, binding, result, "contract_owner_mismatch")
@@ -240,6 +241,7 @@ func (s *BaofuAccountOnboardingService) persistAccountOpenContractMismatchAlert(
 		"flow_owner_type":        strings.TrimSpace(flow.OwnerType),
 		"flow_owner_id":          flow.OwnerID,
 		"flow_account_type":      strings.TrimSpace(flow.AccountType),
+		"flow_opening_mode":      baofuAccountOpeningModeForFlow(flow),
 		"flow_state":             strings.TrimSpace(flow.State),
 		"open_trans_serial_no":   strings.TrimSpace(flow.OpenTransSerialNo.String),
 		"contract_no_mask":       contractNoMask,
@@ -249,6 +251,7 @@ func (s *BaofuAccountOnboardingService) persistAccountOpenContractMismatchAlert(
 		"binding_owner_type":     strings.TrimSpace(binding.OwnerType),
 		"binding_owner_id":       binding.OwnerID,
 		"binding_account_type":   strings.TrimSpace(binding.AccountType),
+		"binding_opening_mode":   baofuAccountOpeningModeForBinding(binding),
 		"binding_open_state":     strings.TrimSpace(binding.OpenState),
 		"provider_operation":     "baofu_account_open_result_apply",
 		"requires_manual_review": true,
@@ -293,6 +296,7 @@ func (s *BaofuAccountOnboardingService) persistAccountOpenResultMismatchAlert(ct
 		"flow_owner_type":           strings.TrimSpace(flow.OwnerType),
 		"flow_owner_id":             flow.OwnerID,
 		"flow_account_type":         strings.TrimSpace(flow.AccountType),
+		"flow_opening_mode":         baofuAccountOpeningModeForFlow(flow),
 		"flow_state":                strings.TrimSpace(flow.State),
 		"flow_open_trans_serial_no": strings.TrimSpace(flow.OpenTransSerialNo.String),
 		"result_out_request_no":     strings.TrimSpace(result.OutRequestNo),
@@ -347,6 +351,7 @@ func (s *BaofuAccountOnboardingService) applyAccountOpenActive(ctx context.Conte
 			OwnerType:             flow.OwnerType,
 			OwnerID:               flow.OwnerID,
 			AccountType:           flow.AccountType,
+			OpeningMode:           baofuAccountOpeningModeForFlow(flow),
 			LoginNo:               flow.LoginNo,
 			OpenState:             db.BaofuAccountOpenStateProcessing,
 			LastOpenTransSerialNo: flow.OpenTransSerialNo,
@@ -358,6 +363,9 @@ func (s *BaofuAccountOnboardingService) applyAccountOpenActive(ctx context.Conte
 	}
 	if strings.TrimSpace(binding.AccountType) != "" && strings.TrimSpace(binding.AccountType) != strings.TrimSpace(flow.AccountType) {
 		return db.BaofuAccountBinding{}, fmt.Errorf("baofu account binding account type mismatch for flow %d", flow.ID)
+	}
+	if bindingMode := baofuAccountOpeningModeForBinding(binding); bindingMode != "" && bindingMode != baofuAccountOpeningModeForFlow(flow) {
+		return db.BaofuAccountBinding{}, fmt.Errorf("baofu account binding opening mode mismatch for flow %d", flow.ID)
 	}
 	if strings.TrimSpace(binding.OpenState) == db.BaofuAccountOpenStateActive {
 		return binding, nil
@@ -411,6 +419,9 @@ func (s *BaofuAccountOnboardingService) recoverFailedFlowFromActiveBinding(ctx c
 	}
 	if strings.TrimSpace(binding.AccountType) != "" && strings.TrimSpace(binding.AccountType) != strings.TrimSpace(flow.AccountType) {
 		return BaofuAccountOpenApplyResult{}, fmt.Errorf("baofu account binding account type mismatch for flow %d", flow.ID)
+	}
+	if bindingMode := baofuAccountOpeningModeForBinding(binding); bindingMode != "" && bindingMode != baofuAccountOpeningModeForFlow(flow) {
+		return BaofuAccountOpenApplyResult{}, fmt.Errorf("baofu account binding opening mode mismatch for flow %d", flow.ID)
 	}
 	openTrans := strings.TrimSpace(flow.OpenTransSerialNo.String)
 	if openTrans == "" || strings.TrimSpace(binding.LastOpenTransSerialNo.String) != openTrans {

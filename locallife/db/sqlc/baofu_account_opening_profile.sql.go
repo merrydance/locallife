@@ -12,7 +12,7 @@ import (
 )
 
 const getBaofuAccountOpeningProfile = `-- name: GetBaofuAccountOpeningProfile :one
-SELECT id, owner_type, owner_id, account_type, profile_status, legal_name, certificate_type, certificate_no_ciphertext, certificate_no_mask, email_ciphertext, email_mask, customer_name, alias_name, corporate_name, corporate_cert_type, corporate_cert_id_ciphertext, corporate_cert_id_mask, corporate_mobile_ciphertext, corporate_mobile_mask, industry_id, contact_name, contact_mobile_ciphertext, contact_mobile_mask, bank_account_no_ciphertext, bank_account_no_mask, bank_mobile_ciphertext, bank_mobile_mask, bank_name, deposit_bank_province, deposit_bank_city, deposit_bank_name, card_user_name, source_snapshot, created_at, updated_at
+SELECT id, owner_type, owner_id, account_type, profile_status, legal_name, certificate_type, certificate_no_ciphertext, certificate_no_mask, email_ciphertext, email_mask, customer_name, alias_name, corporate_name, corporate_cert_type, corporate_cert_id_ciphertext, corporate_cert_id_mask, corporate_mobile_ciphertext, corporate_mobile_mask, industry_id, contact_name, contact_mobile_ciphertext, contact_mobile_mask, bank_account_no_ciphertext, bank_account_no_mask, bank_mobile_ciphertext, bank_mobile_mask, bank_name, deposit_bank_province, deposit_bank_city, deposit_bank_name, card_user_name, source_snapshot, created_at, updated_at, opening_mode
 FROM baofu_account_opening_profiles
 WHERE id = $1
 LIMIT 1
@@ -57,12 +57,13 @@ func (q *Queries) GetBaofuAccountOpeningProfile(ctx context.Context, id int64) (
 		&i.SourceSnapshot,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OpeningMode,
 	)
 	return i, err
 }
 
 const getBaofuAccountOpeningProfileByOwner = `-- name: GetBaofuAccountOpeningProfileByOwner :one
-SELECT id, owner_type, owner_id, account_type, profile_status, legal_name, certificate_type, certificate_no_ciphertext, certificate_no_mask, email_ciphertext, email_mask, customer_name, alias_name, corporate_name, corporate_cert_type, corporate_cert_id_ciphertext, corporate_cert_id_mask, corporate_mobile_ciphertext, corporate_mobile_mask, industry_id, contact_name, contact_mobile_ciphertext, contact_mobile_mask, bank_account_no_ciphertext, bank_account_no_mask, bank_mobile_ciphertext, bank_mobile_mask, bank_name, deposit_bank_province, deposit_bank_city, deposit_bank_name, card_user_name, source_snapshot, created_at, updated_at
+SELECT id, owner_type, owner_id, account_type, profile_status, legal_name, certificate_type, certificate_no_ciphertext, certificate_no_mask, email_ciphertext, email_mask, customer_name, alias_name, corporate_name, corporate_cert_type, corporate_cert_id_ciphertext, corporate_cert_id_mask, corporate_mobile_ciphertext, corporate_mobile_mask, industry_id, contact_name, contact_mobile_ciphertext, contact_mobile_mask, bank_account_no_ciphertext, bank_account_no_mask, bank_mobile_ciphertext, bank_mobile_mask, bank_name, deposit_bank_province, deposit_bank_city, deposit_bank_name, card_user_name, source_snapshot, created_at, updated_at, opening_mode
 FROM baofu_account_opening_profiles
 WHERE owner_type = $1 AND owner_id = $2
 LIMIT 1
@@ -112,6 +113,7 @@ func (q *Queries) GetBaofuAccountOpeningProfileByOwner(ctx context.Context, arg 
 		&i.SourceSnapshot,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OpeningMode,
 	)
 	return i, err
 }
@@ -121,6 +123,7 @@ INSERT INTO baofu_account_opening_profiles (
     owner_type,
     owner_id,
     account_type,
+    opening_mode,
     profile_status,
     legal_name,
     certificate_type,
@@ -182,11 +185,13 @@ INSERT INTO baofu_account_opening_profiles (
     $29,
     $30,
     $31,
-    $32
+    $32,
+    $33
 )
 ON CONFLICT (owner_type, owner_id)
 DO UPDATE SET
     account_type = EXCLUDED.account_type,
+    opening_mode = EXCLUDED.opening_mode,
     profile_status = EXCLUDED.profile_status,
     legal_name = EXCLUDED.legal_name,
     certificate_type = EXCLUDED.certificate_type,
@@ -217,13 +222,14 @@ DO UPDATE SET
     card_user_name = EXCLUDED.card_user_name,
     source_snapshot = EXCLUDED.source_snapshot,
     updated_at = now()
-RETURNING id, owner_type, owner_id, account_type, profile_status, legal_name, certificate_type, certificate_no_ciphertext, certificate_no_mask, email_ciphertext, email_mask, customer_name, alias_name, corporate_name, corporate_cert_type, corporate_cert_id_ciphertext, corporate_cert_id_mask, corporate_mobile_ciphertext, corporate_mobile_mask, industry_id, contact_name, contact_mobile_ciphertext, contact_mobile_mask, bank_account_no_ciphertext, bank_account_no_mask, bank_mobile_ciphertext, bank_mobile_mask, bank_name, deposit_bank_province, deposit_bank_city, deposit_bank_name, card_user_name, source_snapshot, created_at, updated_at
+RETURNING id, owner_type, owner_id, account_type, profile_status, legal_name, certificate_type, certificate_no_ciphertext, certificate_no_mask, email_ciphertext, email_mask, customer_name, alias_name, corporate_name, corporate_cert_type, corporate_cert_id_ciphertext, corporate_cert_id_mask, corporate_mobile_ciphertext, corporate_mobile_mask, industry_id, contact_name, contact_mobile_ciphertext, contact_mobile_mask, bank_account_no_ciphertext, bank_account_no_mask, bank_mobile_ciphertext, bank_mobile_mask, bank_name, deposit_bank_province, deposit_bank_city, deposit_bank_name, card_user_name, source_snapshot, created_at, updated_at, opening_mode
 `
 
 type UpsertBaofuAccountOpeningProfileParams struct {
 	OwnerType                 string      `json:"owner_type"`
 	OwnerID                   int64       `json:"owner_id"`
 	AccountType               string      `json:"account_type"`
+	OpeningMode               string      `json:"opening_mode"`
 	ProfileStatus             string      `json:"profile_status"`
 	LegalName                 pgtype.Text `json:"legal_name"`
 	CertificateType           pgtype.Text `json:"certificate_type"`
@@ -260,6 +266,7 @@ func (q *Queries) UpsertBaofuAccountOpeningProfile(ctx context.Context, arg Upse
 		arg.OwnerType,
 		arg.OwnerID,
 		arg.AccountType,
+		arg.OpeningMode,
 		arg.ProfileStatus,
 		arg.LegalName,
 		arg.CertificateType,
@@ -327,6 +334,7 @@ func (q *Queries) UpsertBaofuAccountOpeningProfile(ctx context.Context, arg Upse
 		&i.SourceSnapshot,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OpeningMode,
 	)
 	return i, err
 }

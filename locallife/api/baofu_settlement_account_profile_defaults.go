@@ -94,6 +94,7 @@ func (server *Server) baofuSettlementAccountProfileInputWithDefaults(ctx context
 	}
 	if strings.TrimSpace(scope.OwnerType) == db.BaofuAccountOwnerTypeMerchant && strings.TrimSpace(scope.AccountType) != db.BaofuAccountTypePersonal {
 		defaults.overrideMerchantIdentityIntoOpeningProfileInput(&merged)
+		baofuSettlementAccountNormalizeBusinessPrivateCardInput(&merged)
 	}
 	return &merged, nil
 }
@@ -182,13 +183,17 @@ func (server *Server) baofuSettlementAccountProfileDefaultsFromProfile(_ context
 
 	accountType := strings.TrimSpace(profile.AccountType)
 	selfEmployed := baofuSettlementAccountProfileUsesPrivateBusinessCard(profile)
+	cardUserName := strings.TrimSpace(profile.CardUserName.String)
+	if accountType == db.BaofuAccountTypeBusiness && !selfEmployed {
+		cardUserName = ""
+	}
 	defaults := baofuSettlementAccountProfileDefaultsWithSecrets{
 		defaults: baofuSettlementAccountProfileDefaults{
 			Source:                    "baofu_profile",
 			LegalName:                 strings.TrimSpace(profile.LegalName.String),
 			BusinessLicenseNumber:     businessLicenseNumberFromBaofuProfile(accountType, certificateNo),
 			LegalPersonName:           strings.TrimSpace(profile.CorporateName.String),
-			CardUserName:              strings.TrimSpace(profile.CardUserName.String),
+			CardUserName:              cardUserName,
 			SelfEmployed:              selfEmployed,
 			LegalPersonIDNumber:       strings.TrimSpace(legalPersonIDNumber),
 			LegalPersonIDNumberMask:   firstNonBlank(pgTextString(profile.CorporateCertIDMask), maskSensitiveTail(legalPersonIDNumber, 4)),
@@ -219,7 +224,7 @@ func (server *Server) baofuSettlementAccountProfileDefaultsFromProfile(_ context
 		certificateNo:         personalCertificateNoFromBaofuProfile(accountType, certificateNo),
 		legalPersonName:       strings.TrimSpace(profile.CorporateName.String),
 		legalPersonIDNumber:   strings.TrimSpace(legalPersonIDNumber),
-		cardUserName:          strings.TrimSpace(profile.CardUserName.String),
+		cardUserName:          cardUserName,
 		corporateMobile:       strings.TrimSpace(corporateMobile),
 		email:                 strings.TrimSpace(email),
 		bankAccountNo:         strings.TrimSpace(bankAccountNo),
@@ -256,13 +261,23 @@ func baofuSettlementAccountProfileUsesPrivateBusinessCard(profile db.BaofuAccoun
 	if strings.TrimSpace(profile.AccountType) != db.BaofuAccountTypeBusiness {
 		return false
 	}
-	if strings.TrimSpace(profile.CardUserName.String) == "" {
+	switch strings.TrimSpace(profile.OpeningMode) {
+	case db.BaofuAccountOpeningModeIndividualBusinessPrivate:
+		return true
+	case db.BaofuAccountOpeningModeBusinessPublic:
 		return false
 	}
 	var payload struct {
-		SelfEmployed bool `json:"self_employed"`
+		OpeningMode  string `json:"opening_mode"`
+		SelfEmployed bool   `json:"self_employed"`
 	}
 	if err := json.Unmarshal(profile.SourceSnapshot, &payload); err != nil {
+		return false
+	}
+	switch strings.TrimSpace(payload.OpeningMode) {
+	case db.BaofuAccountOpeningModeIndividualBusinessPrivate:
+		return true
+	case db.BaofuAccountOpeningModeBusinessPublic:
 		return false
 	}
 	return payload.SelfEmployed
@@ -430,13 +445,17 @@ func baofuProfileDefaultsFromMerchantApplication(app db.MerchantApplication) bao
 	legalPersonName := strings.TrimSpace(app.LegalPersonName)
 	legalPersonIDNumber := strings.TrimSpace(app.LegalPersonIDNumber)
 	allowedTypes, accountTypesAuthoritative := baofuSettlementAccountAllowedTypesFromMerchantBusinessLicenseOCR(app.BusinessLicenseOcr, legalName)
+	cardUserName := ""
+	if baofuSettlementAccountAllowsPrivate(allowedTypes) {
+		cardUserName = legalPersonName
+	}
 	return baofuSettlementAccountProfileDefaultsWithSecrets{
 		defaults: baofuSettlementAccountProfileDefaults{
 			Source:                        "merchant_application",
 			LegalName:                     legalName,
 			BusinessLicenseNumber:         businessLicenseNumber,
 			LegalPersonName:               legalPersonName,
-			CardUserName:                  legalPersonName,
+			CardUserName:                  cardUserName,
 			LegalPersonIDNumber:           legalPersonIDNumber,
 			LegalPersonIDNumberMask:       maskSensitiveTail(legalPersonIDNumber, 4),
 			SettlementAccountAllowedTypes: allowedTypes,
@@ -447,7 +466,7 @@ func baofuProfileDefaultsFromMerchantApplication(app db.MerchantApplication) bao
 		businessLicenseNumber:     businessLicenseNumber,
 		legalPersonName:           legalPersonName,
 		legalPersonIDNumber:       legalPersonIDNumber,
-		cardUserName:              legalPersonName,
+		cardUserName:              cardUserName,
 		accountTypesAuthoritative: accountTypesAuthoritative,
 	}
 }
@@ -542,13 +561,17 @@ func baofuProfileDefaultsFromMerchantApplicationSnapshot(merchant db.Merchant) (
 	legalPersonName := strings.TrimSpace(snapshot.LegalPersonName)
 	legalPersonIDNumber := strings.TrimSpace(snapshot.LegalPersonIDNumber)
 	allowedTypes, accountTypesAuthoritative := baofuSettlementAccountAllowedTypesFromMerchantBusinessLicenseOCR(snapshot.BusinessLicenseOCR, legalName)
+	cardUserName := ""
+	if baofuSettlementAccountAllowsPrivate(allowedTypes) {
+		cardUserName = legalPersonName
+	}
 	return baofuSettlementAccountProfileDefaultsWithSecrets{
 		defaults: baofuSettlementAccountProfileDefaults{
 			Source:                        "merchant_application_snapshot",
 			LegalName:                     legalName,
 			BusinessLicenseNumber:         businessLicenseNumber,
 			LegalPersonName:               legalPersonName,
-			CardUserName:                  legalPersonName,
+			CardUserName:                  cardUserName,
 			LegalPersonIDNumber:           legalPersonIDNumber,
 			LegalPersonIDNumberMask:       maskSensitiveTail(legalPersonIDNumber, 4),
 			SettlementAccountAllowedTypes: allowedTypes,
@@ -559,7 +582,7 @@ func baofuProfileDefaultsFromMerchantApplicationSnapshot(merchant db.Merchant) (
 		businessLicenseNumber:     businessLicenseNumber,
 		legalPersonName:           legalPersonName,
 		legalPersonIDNumber:       legalPersonIDNumber,
-		cardUserName:              legalPersonName,
+		cardUserName:              cardUserName,
 		accountTypesAuthoritative: accountTypesAuthoritative,
 	}, nil
 }

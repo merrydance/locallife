@@ -15,11 +15,11 @@ func TestBaofuAccountServiceValidateOwnerAccountRules(t *testing.T) {
 	service := NewBaofuAccountService(nil, nil)
 
 	require.NoError(t, service.ValidateOwnerAccount(db.BaofuAccountOwnerTypeMerchant, db.BaofuAccountTypeBusiness))
+	require.NoError(t, service.ValidateOwnerAccount(db.BaofuAccountOwnerTypeMerchant, db.BaofuAccountTypePersonal))
 	require.NoError(t, service.ValidateOwnerAccount(db.BaofuAccountOwnerTypeRider, db.BaofuAccountTypePersonal))
 	require.NoError(t, service.ValidateOwnerAccount(db.BaofuAccountOwnerTypeOperator, db.BaofuAccountTypePersonal))
 	require.NoError(t, service.ValidateOwnerAccount(db.BaofuAccountOwnerTypePlatform, db.BaofuAccountTypeBusiness))
 
-	require.ErrorIs(t, service.ValidateOwnerAccount(db.BaofuAccountOwnerTypeMerchant, db.BaofuAccountTypePersonal), ErrBaofuAccountInvalidOwnerAccount)
 	require.ErrorIs(t, service.ValidateOwnerAccount(db.BaofuAccountOwnerTypeRider, db.BaofuAccountTypeBusiness), ErrBaofuAccountInvalidOwnerAccount)
 	require.ErrorIs(t, service.ValidateOwnerAccount(db.BaofuAccountOwnerTypeOperator, db.BaofuAccountTypeBusiness), ErrBaofuAccountInvalidOwnerAccount)
 	require.ErrorIs(t, service.ValidateOwnerAccount(db.BaofuAccountOwnerTypePlatform, db.BaofuAccountTypePersonal), ErrBaofuAccountInvalidOwnerAccount)
@@ -169,7 +169,7 @@ type fakeBaofuAccountStore struct {
 
 func (s *fakeBaofuAccountStore) UpsertBaofuAccountBinding(ctx context.Context, arg db.UpsertBaofuAccountBindingParams) (db.BaofuAccountBinding, error) {
 	s.bindingUpserted = true
-	return db.BaofuAccountBinding{ID: 7, OwnerType: arg.OwnerType, OwnerID: arg.OwnerID, AccountType: arg.AccountType, OpenState: arg.OpenState}, nil
+	return db.BaofuAccountBinding{ID: 7, OwnerType: arg.OwnerType, OwnerID: arg.OwnerID, AccountType: arg.AccountType, OpeningMode: arg.OpeningMode, OpenState: arg.OpenState}, nil
 }
 
 func (s *fakeBaofuAccountStore) CreateExternalPaymentCommand(ctx context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {

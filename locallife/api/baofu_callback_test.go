@@ -216,7 +216,9 @@ func TestBaofuAccountOpenCallbackMerchantReportFailureStillAcksAccountCallback(t
 	store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
 		OwnerType: db.BaofuAccountOwnerTypeMerchant,
 		OwnerID:   88,
-	}).Return(binding, nil)
+	}).DoAndReturn(func(context.Context, db.GetBaofuAccountBindingByOwnerParams) (db.BaofuAccountBinding, error) {
+		return binding, nil
+	}).Times(2)
 	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.Any()).
 		Return(db.ExternalPaymentFact{ID: 91, DedupeKey: "baofu:callback:account:OPEN123:1"}, nil)
 	store.EXPECT().MarkBaofuAccountBindingActiveWithFeeLedgerTx(gomock.Any(), gomock.Any()).
@@ -234,6 +236,57 @@ func TestBaofuAccountOpenCallbackMerchantReportFailureStillAcksAccountCallback(t
 			flow.AccountBindingID = arg.AccountBindingID
 			flow.MerchantReportID = pgtype.Int8{Int64: 9106, Valid: true}
 			return flow, nil
+		})
+	store.EXPECT().GetBaofuMerchantReportByOwner(gomock.Any(), db.GetBaofuMerchantReportByOwnerParams{
+		OwnerType:  db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:    88,
+		ReportType: db.BaofuMerchantReportTypeWechat,
+	}).Return(db.BaofuMerchantReport{}, db.ErrRecordNotFound)
+	store.EXPECT().GetBaofuAccountOpeningProfile(gomock.Any(), int64(8106)).
+		Return(db.BaofuAccountOpeningProfile{
+			ID:                      8106,
+			OwnerType:               db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:                 88,
+			AccountType:             db.BaofuAccountTypeBusiness,
+			LegalName:               pgtype.Text{String: "测试餐饮有限公司", Valid: true},
+			CertificateNoCiphertext: pgtype.Text{String: "91330100MA000001", Valid: true},
+			BankAccountNoCiphertext: pgtype.Text{String: "6222020202020202", Valid: true},
+			DepositBankName:         pgtype.Text{String: "招商银行杭州支行", Valid: true},
+			ContactMobileCiphertext: pgtype.Text{String: "057112345678", Valid: true},
+			SourceSnapshot:          []byte(`{"self_employed":false}`),
+		}, nil)
+	store.EXPECT().GetMerchant(gomock.Any(), int64(88)).
+		Return(db.Merchant{ID: 88, Status: db.MerchantStatusApproved, Name: "测试餐饮", Phone: "057112345678", Address: "测试路 1 号", RegionID: 330106}, nil)
+	store.EXPECT().GetRegion(gomock.Any(), int64(330106)).
+		Return(db.Region{ID: 330106, Code: "330106", Level: 3, ParentID: pgtype.Int8{Int64: 330100, Valid: true}}, nil)
+	store.EXPECT().GetRegion(gomock.Any(), int64(330100)).
+		Return(db.Region{ID: 330100, Code: "330100", Level: 2, ParentID: pgtype.Int8{Int64: 330000, Valid: true}}, nil)
+	store.EXPECT().GetRegion(gomock.Any(), int64(330000)).
+		Return(db.Region{ID: 330000, Code: "330000", Level: 1}, nil)
+	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
+			require.Equal(t, db.ExternalPaymentCommandTypeBaofuMerchantReport, arg.CommandType)
+			require.Equal(t, "baofu_merchant_report", arg.ExternalObjectType)
+			return db.ExternalPaymentCommand{ID: 8106, CommandType: arg.CommandType}, nil
+		})
+	store.EXPECT().UpsertBaofuMerchantReportProcessing(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.UpsertBaofuMerchantReportProcessingParams) (db.BaofuMerchantReport, error) {
+			require.Equal(t, db.BaofuAccountOwnerTypeMerchant, arg.OwnerType)
+			require.Equal(t, int64(88), arg.OwnerID)
+			require.Equal(t, db.BaofuMerchantReportTypeWechat, arg.ReportType)
+			require.NotEmpty(t, arg.ReportNo)
+			require.Equal(t, "CM_BCT_123", arg.BctMerID)
+			return db.BaofuMerchantReport{
+				ID:              9106,
+				OwnerType:       arg.OwnerType,
+				OwnerID:         arg.OwnerID,
+				ReportType:      arg.ReportType,
+				ReportNo:        arg.ReportNo,
+				BctMerID:        arg.BctMerID,
+				ReportState:     db.BaofuMerchantReportStateProcessing,
+				AppletAuthState: db.BaofuMerchantReportAppletAuthStatePending,
+				RawSnapshot:     arg.RawSnapshot,
+			}, nil
 		})
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/v1/webhooks/baofu/account/open", bytes.NewBufferString(`{"encrypted":true}`))

@@ -31,6 +31,7 @@ func (s *BaofuAccountOnboardingService) resolveProfile(ctx context.Context, owne
 
 func (s *BaofuAccountOnboardingService) upsertProfile(ctx context.Context, ownerType string, ownerID int64, accountType string, input BaofuAccountOpeningProfileInput) (db.BaofuAccountOpeningProfile, error) {
 	input.AccountType = accountType
+	openingMode := baofuAccountOpeningModeForInput(ownerType, accountType, input)
 	completed := baofuProfileComplete(ownerType, input)
 	if completed {
 		if err := validateBaofuOpeningProfileInput(input); err != nil {
@@ -84,12 +85,14 @@ func (s *BaofuAccountOnboardingService) upsertProfile(ctx context.Context, owner
 	sourceSnapshot := baofuOpeningSnapshot(map[string]any{
 		"source":        "baofu_settlement_profile_api",
 		"status":        status,
+		"opening_mode":  openingMode,
 		"self_employed": input.SelfEmployed,
 	})
 	return s.store.UpsertBaofuAccountOpeningProfile(ctx, db.UpsertBaofuAccountOpeningProfileParams{
 		OwnerType:                 ownerType,
 		OwnerID:                   ownerID,
 		AccountType:               accountType,
+		OpeningMode:               openingMode,
 		ProfileStatus:             status,
 		LegalName:                 pgText(input.LegalName),
 		CertificateType:           pgText(certificateType),
@@ -177,7 +180,9 @@ func (s *BaofuAccountOnboardingService) getOrCreateFlowWithExisting(ctx context.
 	if !found {
 		return s.createBaofuAccountOpeningFlow(ctx, ownerType, ownerID, accountType, profile)
 	}
-	if strings.TrimSpace(flow.AccountType) != strings.TrimSpace(accountType) {
+	nextOpeningMode := baofuAccountOpeningModeForProfile(profile)
+	if strings.TrimSpace(flow.AccountType) != strings.TrimSpace(accountType) ||
+		baofuAccountOpeningModeForFlow(flow) != nextOpeningMode {
 		if strings.TrimSpace(flow.State) != db.BaofuAccountOpeningStateProfilePending {
 			return db.BaofuAccountOpeningFlow{}, baofuAccountOpeningModeConflictError()
 		}
@@ -185,7 +190,7 @@ func (s *BaofuAccountOnboardingService) getOrCreateFlowWithExisting(ctx context.
 			ID:             flow.ID,
 			FailureCode:    pgText("ACCOUNT_OPENING_MODE_CHANGED"),
 			FailureMessage: pgText("商户切换宝付开户方式，旧草稿已作废"),
-			RawSnapshot:    baofuOpeningSnapshot(map[string]any{"state": db.BaofuAccountOpeningStateVoided, "reason": "account_opening_mode_changed", "previous_account_type": flow.AccountType, "next_account_type": accountType}),
+			RawSnapshot:    baofuOpeningSnapshot(map[string]any{"state": db.BaofuAccountOpeningStateVoided, "reason": "account_opening_mode_changed", "previous_account_type": flow.AccountType, "previous_opening_mode": baofuAccountOpeningModeForFlow(flow), "next_account_type": accountType, "next_opening_mode": nextOpeningMode}),
 		}); err != nil {
 			return db.BaofuAccountOpeningFlow{}, err
 		}
@@ -195,15 +200,17 @@ func (s *BaofuAccountOnboardingService) getOrCreateFlowWithExisting(ctx context.
 }
 
 func (s *BaofuAccountOnboardingService) createBaofuAccountOpeningFlow(ctx context.Context, ownerType string, ownerID int64, accountType string, profile db.BaofuAccountOpeningProfile) (db.BaofuAccountOpeningFlow, error) {
+	openingMode := baofuAccountOpeningModeForProfile(profile)
 	return s.store.CreateBaofuAccountOpeningFlow(ctx, db.CreateBaofuAccountOpeningFlowParams{
 		OwnerType:               ownerType,
 		OwnerID:                 ownerID,
 		AccountType:             accountType,
+		OpeningMode:             openingMode,
 		ProfileID:               pgtype.Int8{Int64: profile.ID, Valid: profile.ID > 0},
 		State:                   db.BaofuAccountOpeningStateProfilePending,
 		VerifyFeeAmount:         0,
 		ProviderRequestSnapshot: []byte(`{}`),
-		RawSnapshot:             baofuOpeningSnapshot(map[string]any{"state": db.BaofuAccountOpeningStateProfilePending}),
+		RawSnapshot:             baofuOpeningSnapshot(map[string]any{"state": db.BaofuAccountOpeningStateProfilePending, "opening_mode": openingMode}),
 	})
 }
 

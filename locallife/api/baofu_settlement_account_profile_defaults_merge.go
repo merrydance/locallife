@@ -17,6 +17,8 @@ func (defaults baofuSettlementAccountProfileDefaultsWithSecrets) toOpeningProfil
 		defaults.mergeIntoPersonalOpeningProfileInput(&input)
 	} else {
 		defaults.mergeIntoOpeningProfileInput(&input)
+		defaults.applyIndividualBusinessPrivateCardDefault(&input)
+		baofuSettlementAccountNormalizeBusinessPrivateCardInput(&input)
 	}
 	return &input
 }
@@ -56,7 +58,9 @@ func (defaults *baofuSettlementAccountProfileDefaultsWithSecrets) overrideMercha
 		defaults.accountTypesAuthoritative = true
 		if !baofuSettlementAccountAllowsPrivate(source.defaults.SettlementAccountAllowedTypes) {
 			defaults.defaults.SelfEmployed = false
+			defaults.defaults.CardUserName = ""
 			defaults.selfEmployed = false
+			defaults.cardUserName = ""
 		}
 	}
 	if strings.TrimSpace(source.defaults.LegalPersonIDNumber) != "" {
@@ -321,6 +325,14 @@ func (defaults baofuSettlementAccountProfileDefaultsWithSecrets) mergeIntoOpenin
 	}
 }
 
+func baofuSettlementAccountNormalizeBusinessPrivateCardInput(input *logic.BaofuAccountOpeningProfileInput) {
+	if input == nil || input.SelfEmployed {
+		return
+	}
+	input.CardUserName = ""
+	input.CorporateMobile = ""
+}
+
 func (defaults baofuSettlementAccountProfileDefaultsWithSecrets) mergeIntoPersonalOpeningProfileInput(input *logic.BaofuAccountOpeningProfileInput) {
 	if input == nil {
 		return
@@ -372,7 +384,7 @@ func (defaults baofuSettlementAccountProfileDefaultsWithSecrets) overrideMerchan
 	if strings.TrimSpace(defaults.legalPersonIDNumber) != "" {
 		input.LegalPersonIDNumber = defaults.legalPersonIDNumber
 	}
-	if strings.TrimSpace(defaults.cardUserName) != "" {
+	if input.SelfEmployed && strings.TrimSpace(defaults.cardUserName) != "" {
 		input.CardUserName = defaults.cardUserName
 	}
 }

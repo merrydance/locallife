@@ -11,6 +11,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func baofuOpeningModeForTest(ownerType string, accountType string) string {
+	if accountType == BaofuAccountTypePersonal {
+		if ownerType == BaofuAccountOwnerTypeMerchant {
+			return BaofuAccountOpeningModeMerchantPersonalMicro
+		}
+		return BaofuAccountOpeningModePersonal
+	}
+	if accountType == BaofuAccountTypeBusiness {
+		return BaofuAccountOpeningModeBusinessPublic
+	}
+	return ""
+}
+
 func createBaofuOpeningProfileForTest(t *testing.T, ownerType string, ownerID int64, accountType string) BaofuAccountOpeningProfile {
 	t.Helper()
 
@@ -18,6 +31,7 @@ func createBaofuOpeningProfileForTest(t *testing.T, ownerType string, ownerID in
 		OwnerType:               ownerType,
 		OwnerID:                 ownerID,
 		AccountType:             accountType,
+		OpeningMode:             baofuOpeningModeForTest(ownerType, accountType),
 		ProfileStatus:           BaofuAccountOpeningProfileStatusComplete,
 		LegalName:               pgtype.Text{String: "测试主体", Valid: true},
 		CertificateType:         pgtype.Text{String: "ID", Valid: true},
@@ -42,6 +56,7 @@ func createBaofuOpeningFlowForTest(t *testing.T, ownerType string, ownerID int64
 		OwnerType:               ownerType,
 		OwnerID:                 ownerID,
 		AccountType:             accountType,
+		OpeningMode:             baofuOpeningModeForTest(ownerType, accountType),
 		ProfileID:               pgtype.Int8{Int64: profile.ID, Valid: true},
 		State:                   state,
 		VerifyFeeAmount:         200,
@@ -102,6 +117,7 @@ func TestBaofuAccountOpeningProfileConstraintsAndUpsert(t *testing.T) {
 		OwnerType:               BaofuAccountOwnerTypeRider,
 		OwnerID:                 ownerID,
 		AccountType:             BaofuAccountTypePersonal,
+		OpeningMode:             BaofuAccountOpeningModePersonal,
 		ProfileStatus:           BaofuAccountOpeningProfileStatusIncomplete,
 		CertificateNoCiphertext: pgtype.Text{String: "cipher-cert-updated", Valid: true},
 		CertificateNoMask:       pgtype.Text{String: "110***********999", Valid: true},
@@ -120,6 +136,7 @@ func TestBaofuAccountOpeningProfileConstraintsAndUpsert(t *testing.T) {
 		OwnerType:      "customer",
 		OwnerID:        time.Now().UnixNano(),
 		AccountType:    BaofuAccountTypePersonal,
+		OpeningMode:    BaofuAccountOpeningModePersonal,
 		ProfileStatus:  BaofuAccountOpeningProfileStatusComplete,
 		SourceSnapshot: []byte(`{}`),
 	})
@@ -144,6 +161,7 @@ func TestBaofuAccountOpeningFlowConstraints(t *testing.T) {
 		OwnerType:               "customer",
 		OwnerID:                 time.Now().UnixNano(),
 		AccountType:             BaofuAccountTypePersonal,
+		OpeningMode:             BaofuAccountOpeningModePersonal,
 		State:                   BaofuAccountOpeningStateProfilePending,
 		ProviderRequestSnapshot: []byte(`{}`),
 		RawSnapshot:             []byte(`{}`),
@@ -166,6 +184,7 @@ func TestBaofuAccountOpeningFlowConstraints(t *testing.T) {
 		OwnerType:               BaofuAccountOwnerTypeMerchant,
 		OwnerID:                 time.Now().UnixNano(),
 		AccountType:             BaofuAccountTypeBusiness,
+		OpeningMode:             BaofuAccountOpeningModeBusinessPublic,
 		State:                   BaofuAccountOpeningStateOpeningProcessing,
 		ProviderRequestSnapshot: []byte(`{}`),
 		RawSnapshot:             []byte(`{}`),
@@ -177,6 +196,7 @@ func TestBaofuAccountOpeningFlowConstraints(t *testing.T) {
 		OwnerType:               BaofuAccountOwnerTypeRider,
 		OwnerID:                 time.Now().UnixNano(),
 		AccountType:             BaofuAccountTypePersonal,
+		OpeningMode:             BaofuAccountOpeningModePersonal,
 		State:                   BaofuAccountOpeningStateOpeningProcessing,
 		LoginNo:                 pgtype.Text{String: "LLBFOR" + util.RandomString(12), Valid: true},
 		ProviderRequestSnapshot: []byte(`{}`),
@@ -202,6 +222,7 @@ func TestBaofuAccountOpeningFlowActiveUniquenessAndReplacement(t *testing.T) {
 		OwnerType:               BaofuAccountOwnerTypeMerchant,
 		OwnerID:                 ownerID,
 		AccountType:             BaofuAccountTypeBusiness,
+		OpeningMode:             BaofuAccountOpeningModeBusinessPublic,
 		State:                   BaofuAccountOpeningStateVerifyFeePending,
 		VerifyFeeAmount:         200,
 		ProviderRequestSnapshot: []byte(`{}`),
@@ -350,6 +371,7 @@ func TestRecoverFailedBaofuAccountOpeningFlowFromActiveBinding(t *testing.T) {
 		OwnerType:             BaofuAccountOwnerTypeRider,
 		OwnerID:               ownerID,
 		AccountType:           BaofuAccountTypePersonal,
+		OpeningMode:           BaofuAccountOpeningModePersonal,
 		LoginNo:               failed.LoginNo,
 		OpenState:             BaofuAccountOpenStateProcessing,
 		LastOpenTransSerialNo: failed.OpenTransSerialNo,
@@ -404,6 +426,7 @@ func TestRecoverFailedBaofuAccountOpeningFlowFromActiveBindingMerchantContinuesR
 		OwnerType:             BaofuAccountOwnerTypeMerchant,
 		OwnerID:               merchant.ID,
 		AccountType:           BaofuAccountTypeBusiness,
+		OpeningMode:           BaofuAccountOpeningModeBusinessPublic,
 		LoginNo:               failed.LoginNo,
 		OpenState:             BaofuAccountOpenStateProcessing,
 		LastOpenTransSerialNo: failed.OpenTransSerialNo,
@@ -458,6 +481,7 @@ func TestRecoverFailedBaofuAccountOpeningFlowFromActiveBindingRejectsMismatch(t 
 		OwnerType:             BaofuAccountOwnerTypeRider,
 		OwnerID:               ownerID,
 		AccountType:           BaofuAccountTypePersonal,
+		OpeningMode:           BaofuAccountOpeningModePersonal,
 		LoginNo:               failed.LoginNo,
 		OpenState:             BaofuAccountOpenStateProcessing,
 		LastOpenTransSerialNo: failed.OpenTransSerialNo,
@@ -549,7 +573,7 @@ func TestListRecoverableBaofuAccountOpeningFlowsIncludesLatestDuplicateFailure(t
 
 	flows, err := testStore.ListRecoverableBaofuAccountOpeningFlows(ctx, ListRecoverableBaofuAccountOpeningFlowsParams{
 		BeforeAt:   time.Now().Add(time.Minute),
-		LimitCount: 100,
+		LimitCount: 10_000,
 	})
 	require.NoError(t, err)
 

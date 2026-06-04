@@ -39,6 +39,95 @@ func baofuAccountOpeningModeConflictError() error {
 	return NewRequestError(http.StatusConflict, errors.New("该商户已有不同开户方式的宝付账户或开户流程，请在当前流程完成后再切换开户方式"))
 }
 
+func baofuAccountOpeningModeForInput(ownerType string, accountType string, input BaofuAccountOpeningProfileInput) string {
+	switch strings.TrimSpace(accountType) {
+	case db.BaofuAccountTypePersonal:
+		if strings.TrimSpace(ownerType) == db.BaofuAccountOwnerTypeMerchant {
+			return db.BaofuAccountOpeningModeMerchantPersonalMicro
+		}
+		return db.BaofuAccountOpeningModePersonal
+	case db.BaofuAccountTypeBusiness:
+		if strings.TrimSpace(ownerType) == db.BaofuAccountOwnerTypeMerchant && input.SelfEmployed {
+			return db.BaofuAccountOpeningModeIndividualBusinessPrivate
+		}
+		return db.BaofuAccountOpeningModeBusinessPublic
+	default:
+		return ""
+	}
+}
+
+func baofuAccountOpeningModeForOwnerAccount(ownerType string, accountType string) string {
+	return baofuAccountOpeningModeForInput(ownerType, accountType, BaofuAccountOpeningProfileInput{})
+}
+
+func baofuAccountOpeningModeForProfile(profile db.BaofuAccountOpeningProfile) string {
+	if mode := normalizeBaofuAccountOpeningMode(profile.OpeningMode); mode != "" {
+		return mode
+	}
+	if mode := baofuAccountOpeningModeFromSnapshot(profile.SourceSnapshot); mode != "" {
+		return mode
+	}
+	if strings.TrimSpace(profile.OwnerType) == db.BaofuAccountOwnerTypeMerchant &&
+		strings.TrimSpace(profile.AccountType) == db.BaofuAccountTypeBusiness &&
+		baofuAccountOpeningSnapshotSelfEmployed(profile.SourceSnapshot) {
+		return db.BaofuAccountOpeningModeIndividualBusinessPrivate
+	}
+	return baofuAccountOpeningModeForOwnerAccount(profile.OwnerType, profile.AccountType)
+}
+
+func baofuAccountOpeningModeForFlow(flow db.BaofuAccountOpeningFlow) string {
+	if mode := normalizeBaofuAccountOpeningMode(flow.OpeningMode); mode != "" {
+		return mode
+	}
+	return baofuAccountOpeningModeForOwnerAccount(flow.OwnerType, flow.AccountType)
+}
+
+func baofuAccountOpeningModeForBinding(binding db.BaofuAccountBinding) string {
+	if mode := normalizeBaofuAccountOpeningMode(binding.OpeningMode); mode != "" {
+		return mode
+	}
+	return baofuAccountOpeningModeForOwnerAccount(binding.OwnerType, binding.AccountType)
+}
+
+func baofuAccountOpeningModeFromSnapshot(raw []byte) string {
+	var payload struct {
+		OpeningMode  string `json:"opening_mode"`
+		SelfEmployed bool   `json:"self_employed"`
+	}
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return ""
+	}
+	if mode := normalizeBaofuAccountOpeningMode(payload.OpeningMode); mode != "" {
+		return mode
+	}
+	return ""
+}
+
+func baofuAccountOpeningSnapshotSelfEmployed(raw []byte) bool {
+	var payload struct {
+		SelfEmployed bool `json:"self_employed"`
+	}
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return false
+	}
+	return payload.SelfEmployed
+}
+
+func normalizeBaofuAccountOpeningMode(mode string) string {
+	switch strings.TrimSpace(mode) {
+	case db.BaofuAccountOpeningModePersonal:
+		return db.BaofuAccountOpeningModePersonal
+	case db.BaofuAccountOpeningModeMerchantPersonalMicro:
+		return db.BaofuAccountOpeningModeMerchantPersonalMicro
+	case db.BaofuAccountOpeningModeBusinessPublic:
+		return db.BaofuAccountOpeningModeBusinessPublic
+	case db.BaofuAccountOpeningModeIndividualBusinessPrivate:
+		return db.BaofuAccountOpeningModeIndividualBusinessPrivate
+	default:
+		return ""
+	}
+}
+
 func baofuOpeningRequiresUserFee(ownerType string) bool {
 	return strings.TrimSpace(ownerType) == db.BaofuAccountOwnerTypeRider || strings.TrimSpace(ownerType) == db.BaofuAccountOwnerTypeOperator
 }
@@ -116,8 +205,11 @@ func BaofuAccountOpeningInputMissingFields(ownerType string, input BaofuAccountO
 		if !baofuDepositBankLocationLooksConsistent(input.DepositBankProvince, input.DepositBankCity, input.DepositBankName) {
 			fields = append(fields, baofuAccountOpeningProfileField{code: "deposit_bank_city", value: ""})
 		}
-		if input.SelfEmployed && strings.TrimSpace(input.CardUserName) != "" {
-			fields = append(fields, baofuAccountOpeningProfileField{code: "corporate_mobile", value: input.CorporateMobile})
+		if baofuAccountOpeningModeForInput(ownerType, input.AccountType, input) == db.BaofuAccountOpeningModeIndividualBusinessPrivate {
+			fields = append(fields,
+				baofuAccountOpeningProfileField{code: "card_user_name", value: input.CardUserName},
+				baofuAccountOpeningProfileField{code: "corporate_mobile", value: input.CorporateMobile},
+			)
 		}
 	case db.BaofuAccountOwnerTypePlatform:
 		fields = append(fields,
@@ -133,8 +225,11 @@ func BaofuAccountOpeningInputMissingFields(ownerType string, input BaofuAccountO
 		if !baofuDepositBankLocationLooksConsistent(input.DepositBankProvince, input.DepositBankCity, input.DepositBankName) {
 			fields = append(fields, baofuAccountOpeningProfileField{code: "deposit_bank_city", value: ""})
 		}
-		if input.SelfEmployed && strings.TrimSpace(input.CardUserName) != "" {
-			fields = append(fields, baofuAccountOpeningProfileField{code: "corporate_mobile", value: input.CorporateMobile})
+		if baofuAccountOpeningModeForInput(ownerType, input.AccountType, input) == db.BaofuAccountOpeningModeIndividualBusinessPrivate {
+			fields = append(fields,
+				baofuAccountOpeningProfileField{code: "card_user_name", value: input.CardUserName},
+				baofuAccountOpeningProfileField{code: "corporate_mobile", value: input.CorporateMobile},
+			)
 		}
 	case db.BaofuAccountOwnerTypeRider, db.BaofuAccountOwnerTypeOperator:
 		fields = append(fields,
@@ -174,8 +269,11 @@ func BaofuAccountOpeningProfileMissingFields(profile db.BaofuAccountOpeningProfi
 		if !baofuDepositBankLocationLooksConsistent(profile.DepositBankProvince.String, profile.DepositBankCity.String, profile.DepositBankName.String) {
 			fields = append(fields, baofuAccountOpeningProfileField{code: "deposit_bank_city", value: ""})
 		}
-		if baofuProfileUsesPrivateBusinessCard(profile) {
-			fields = append(fields, baofuAccountOpeningProfileField{code: "corporate_mobile", value: profile.CorporateMobileCiphertext.String})
+		if baofuAccountOpeningModeForProfile(profile) == db.BaofuAccountOpeningModeIndividualBusinessPrivate {
+			fields = append(fields,
+				baofuAccountOpeningProfileField{code: "card_user_name", value: profile.CardUserName.String},
+				baofuAccountOpeningProfileField{code: "corporate_mobile", value: profile.CorporateMobileCiphertext.String},
+			)
 		}
 	case db.BaofuAccountOwnerTypePlatform:
 		fields = append(fields,
@@ -191,8 +289,11 @@ func BaofuAccountOpeningProfileMissingFields(profile db.BaofuAccountOpeningProfi
 		if !baofuDepositBankLocationLooksConsistent(profile.DepositBankProvince.String, profile.DepositBankCity.String, profile.DepositBankName.String) {
 			fields = append(fields, baofuAccountOpeningProfileField{code: "deposit_bank_city", value: ""})
 		}
-		if baofuProfileUsesPrivateBusinessCard(profile) {
-			fields = append(fields, baofuAccountOpeningProfileField{code: "corporate_mobile", value: profile.CorporateMobileCiphertext.String})
+		if baofuAccountOpeningModeForProfile(profile) == db.BaofuAccountOpeningModeIndividualBusinessPrivate {
+			fields = append(fields,
+				baofuAccountOpeningProfileField{code: "card_user_name", value: profile.CardUserName.String},
+				baofuAccountOpeningProfileField{code: "corporate_mobile", value: profile.CorporateMobileCiphertext.String},
+			)
 		}
 	case db.BaofuAccountOwnerTypeRider, db.BaofuAccountOwnerTypeOperator:
 		fields = append(fields,
@@ -223,16 +324,7 @@ func baofuProfileUsesPrivateBusinessCard(profile db.BaofuAccountOpeningProfile) 
 	if strings.TrimSpace(profile.AccountType) != db.BaofuAccountTypeBusiness {
 		return false
 	}
-	if strings.TrimSpace(profile.CardUserName.String) == "" {
-		return false
-	}
-	var payload struct {
-		SelfEmployed bool `json:"self_employed"`
-	}
-	if err := json.Unmarshal(profile.SourceSnapshot, &payload); err != nil {
-		return false
-	}
-	return payload.SelfEmployed
+	return baofuAccountOpeningModeForProfile(profile) == db.BaofuAccountOpeningModeIndividualBusinessPrivate
 }
 
 func missingBaofuProfileFieldCodes(fields []baofuAccountOpeningProfileField) []string {
@@ -277,6 +369,8 @@ func baofuAccountOpeningProfileFieldLabel(field string) string {
 		return "联系邮箱"
 	case "bank_account_no":
 		return "银行卡/对公账号"
+	case "card_user_name":
+		return "法人银行卡户名"
 	case "bank_name":
 		return "开户银行"
 	case "deposit_bank_province":
