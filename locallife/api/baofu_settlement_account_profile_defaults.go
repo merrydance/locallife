@@ -90,6 +90,7 @@ func (server *Server) baofuSettlementAccountProfileInputWithDefaults(ctx context
 		defaults.mergeIntoPersonalOpeningProfileInput(&merged)
 	} else {
 		defaults.mergeIntoOpeningProfileInput(&merged)
+		defaults.applyIndividualBusinessPrivateCardDefault(&merged)
 	}
 	if strings.TrimSpace(scope.OwnerType) == db.BaofuAccountOwnerTypeMerchant && strings.TrimSpace(scope.AccountType) != db.BaofuAccountTypePersonal {
 		defaults.overrideMerchantIdentityIntoOpeningProfileInput(&merged)
@@ -428,7 +429,7 @@ func baofuProfileDefaultsFromMerchantApplication(app db.MerchantApplication) bao
 	businessLicenseNumber := strings.TrimSpace(app.BusinessLicenseNumber)
 	legalPersonName := strings.TrimSpace(app.LegalPersonName)
 	legalPersonIDNumber := strings.TrimSpace(app.LegalPersonIDNumber)
-	allowedTypes, accountTypesAuthoritative := baofuSettlementAccountAllowedTypesFromMerchantBusinessLicenseOCR(app.BusinessLicenseOcr)
+	allowedTypes, accountTypesAuthoritative := baofuSettlementAccountAllowedTypesFromMerchantBusinessLicenseOCR(app.BusinessLicenseOcr, legalName)
 	return baofuSettlementAccountProfileDefaultsWithSecrets{
 		defaults: baofuSettlementAccountProfileDefaults{
 			Source:                        "merchant_application",
@@ -451,15 +452,22 @@ func baofuProfileDefaultsFromMerchantApplication(app db.MerchantApplication) bao
 	}
 }
 
-func baofuSettlementAccountAllowedTypesFromMerchantBusinessLicenseOCR(raw []byte) ([]string, bool) {
+func baofuSettlementAccountAllowedTypesFromMerchantBusinessLicenseOCR(raw []byte, names ...string) ([]string, bool) {
+	if baofuMerchantBusinessSubjectTypeFromNames(names...) == "individual_business" {
+		return []string{baofuSettlementAccountTypeBusiness, baofuSettlementAccountTypePrivate}, true
+	}
 	if len(raw) == 0 {
 		return []string{baofuSettlementAccountTypeBusiness}, true
 	}
 	var payload struct {
 		TypeOfEnterprise string `json:"type_of_enterprise"`
+		EnterpriseName   string `json:"enterprise_name"`
 	}
 	if err := json.Unmarshal(raw, &payload); err != nil {
 		return []string{baofuSettlementAccountTypeBusiness}, true
+	}
+	if baofuMerchantBusinessSubjectTypeFromNames(payload.EnterpriseName) == "individual_business" {
+		return []string{baofuSettlementAccountTypeBusiness, baofuSettlementAccountTypePrivate}, true
 	}
 	subjectType := baofuMerchantBusinessSubjectTypeFromEnterpriseType(payload.TypeOfEnterprise)
 	switch subjectType {
@@ -477,6 +485,32 @@ func baofuSettlementAccountAllowsPrivate(values []string) bool {
 		}
 	}
 	return false
+}
+
+func baofuMerchantBusinessSubjectTypeFromNames(values ...string) string {
+	for _, value := range values {
+		if strings.Contains(strings.TrimSpace(value), "个体工商户") {
+			return "individual_business"
+		}
+	}
+	return "unknown"
+}
+
+func (defaults baofuSettlementAccountProfileDefaultsWithSecrets) applyIndividualBusinessPrivateCardDefault(input *logic.BaofuAccountOpeningProfileInput) {
+	if input == nil || input.SelfEmployedSet || input.SelfEmployed {
+		return
+	}
+	if defaults.accountTypesAuthoritative && !baofuSettlementAccountAllowsPrivate(defaults.defaults.SettlementAccountAllowedTypes) {
+		return
+	}
+	if !baofuSettlementAccountAllowsPrivate(defaults.defaults.SettlementAccountAllowedTypes) {
+		return
+	}
+	if strings.TrimSpace(input.CardUserName) == "" || strings.TrimSpace(input.CorporateMobile) == "" {
+		return
+	}
+	input.SelfEmployed = true
+	input.SelfEmployedSet = true
 }
 
 func baofuMerchantBusinessSubjectTypeFromEnterpriseType(value string) string {
@@ -507,7 +541,7 @@ func baofuProfileDefaultsFromMerchantApplicationSnapshot(merchant db.Merchant) (
 	businessLicenseNumber := strings.TrimSpace(snapshot.BusinessLicenseNumber)
 	legalPersonName := strings.TrimSpace(snapshot.LegalPersonName)
 	legalPersonIDNumber := strings.TrimSpace(snapshot.LegalPersonIDNumber)
-	allowedTypes, accountTypesAuthoritative := baofuSettlementAccountAllowedTypesFromMerchantBusinessLicenseOCR(snapshot.BusinessLicenseOCR)
+	allowedTypes, accountTypesAuthoritative := baofuSettlementAccountAllowedTypesFromMerchantBusinessLicenseOCR(snapshot.BusinessLicenseOCR, legalName)
 	return baofuSettlementAccountProfileDefaultsWithSecrets{
 		defaults: baofuSettlementAccountProfileDefaults{
 			Source:                        "merchant_application_snapshot",

@@ -214,6 +214,47 @@ func TestCheckMerchantApplicationApproval_UsesFoodPermitProviderFailure(t *testi
 	require.Equal(t, "食品经营许可证OCR处理失败，请重新上传清晰完整的食品经营许可证照片", apiErr.Message)
 }
 
+func TestCheckMerchantApplicationApproval_BlocksFoodPermitOfficialCreditCodeMismatch(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	server := &Server{
+		store: store,
+		foodPermitOfficialVerifier: stubFoodPermitOfficialVerifier{
+			result: logic.MerchantFoodPermitOfficialVerification{
+				CompanyName:  "测试餐饮有限公司",
+				OperatorName: "张三",
+				PermitNo:     "JY11105000000001",
+				CreditCode:   "91110000MA87654321",
+				ValidTo:      "2030年12月31日",
+			},
+		},
+	}
+	app := randomMerchantAppDraftWithData(1)
+	ocrJobID := int64(501)
+	app.FoodPermitOcr = []byte(`{"ocr_job_id":501,"company_name":"","valid_to":"2030年12月31日","raw_text":"主体名称：食品小作坊小餐饮登记证2130528020270"}`)
+	store.EXPECT().
+		GetOCRJob(gomock.Any(), ocrJobID).
+		Return(db.OcrJob{
+			ID:               ocrJobID,
+			Provider:         "aliyun",
+			Status:           "succeeded",
+			NormalizedResult: []byte(`{}`),
+			RawResult:        []byte(`{"Data":"{\"codes\":[{\"data\":\"http://121.28.87.7:8081/OrcodeXcyXzf.jsp?flowId=86&zsId=655926252\",\"type\":\"QRcode\"}]}"}`),
+		}, nil)
+
+	err := server.checkMerchantApplicationApproval(nil, app)
+
+	require.Error(t, err)
+	apiErr, ok := err.(*APIError)
+	require.True(t, ok)
+	require.Equal(t, ErrMerchantFoodPermitSubjectMismatch.Code, apiErr.Code)
+	require.Contains(t, apiErr.Message, "食品经营许可证主体信息与营业执照不一致")
+	require.Contains(t, apiErr.Message, "营业执照统一社会信用代码")
+	require.Contains(t, apiErr.Message, "食品经营许可证统一社会信用代码")
+}
+
 // ==================== 获取或创建草稿测试 ====================
 
 func TestGetOrCreateMerchantApplicationDraft(t *testing.T) {

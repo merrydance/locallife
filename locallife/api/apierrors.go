@@ -233,6 +233,7 @@ var (
 	ErrMerchantFoodPermitNameUnreadable      = apierr(40058, "未能从食品经营许可证中识别出主体名称，请上传完整清晰的食品经营许可证后重试")
 	ErrMerchantBusinessLicenseNameUnreadable = apierr(40059, "未能从营业执照中识别出企业名称，请上传完整清晰的营业执照后重试")
 	ErrMerchantFoodPermitNameMismatch        = apierr(40061, "食品经营许可证主体名称与营业执照企业名称不一致，请核对证照信息后重试")
+	ErrMerchantFoodPermitSubjectMismatch     = apierr(40106, "食品经营许可证主体信息与营业执照不一致，请核对后重试")
 	ErrClaimAmountExceedsOrder               = apierr(40060, "claim amount cannot exceed the order total")
 	ErrClaimAmountBelowPayoutMinimum         = apierr(40105, "索赔金额最低为0.30元")
 	ErrFoodSafetyClaimUnsupported            = apierr(40063, "food safety claims are handled by the dedicated food safety workflow")

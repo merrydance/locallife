@@ -1103,6 +1103,7 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 						Int64("ocr_job_id", job.ID).
 						Str("ocr_provider", job.Provider).
 						Msg("submit merchant application: food permit official verification credit code mismatch")
+					return merchantFoodPermitOfficialVerificationMismatchError(app, payloadResult.Input.BusinessLicense, verification)
 				} else {
 					repairedFoodPermitJSON, changed, repairErr := logic.RepairMerchantFoodPermitFromOfficialVerification(&payloadResult.Input.FoodPermit, verification)
 					if repairErr != nil {
@@ -1414,6 +1415,25 @@ func merchantFoodPermitOfficialVerificationMatchesLicense(app db.MerchantApplica
 		}
 	}
 	return false
+}
+
+func merchantFoodPermitOfficialVerificationMismatchError(app db.MerchantApplication, businessLicense logic.MerchantReviewBusinessLicenseOCRData, verification logic.MerchantFoodPermitOfficialVerification) error {
+	licenseCreditCode := merchantFirstNormalizedBusinessCreditCode(businessLicense.CreditCode, businessLicense.RegNum, app.BusinessLicenseNumber)
+	officialCreditCode := merchantNormalizeBusinessCreditCode(verification.CreditCode)
+	message := ErrMerchantFoodPermitSubjectMismatch.Message
+	if licenseCreditCode != "" && officialCreditCode != "" {
+		message = "食品经营许可证主体信息与营业执照不一致，请核对后重试。营业执照统一社会信用代码：" + licenseCreditCode + "；食品经营许可证统一社会信用代码：" + officialCreditCode + "。"
+	}
+	return apierr(ErrMerchantFoodPermitSubjectMismatch.Code, message)
+}
+
+func merchantFirstNormalizedBusinessCreditCode(values ...string) string {
+	for _, value := range values {
+		if normalized := merchantNormalizeBusinessCreditCode(value); normalized != "" {
+			return normalized
+		}
+	}
+	return ""
 }
 
 func merchantNormalizeBusinessCreditCode(value string) string {
