@@ -428,6 +428,7 @@ function main() {
   assert(/accountOpeningMode\s*===\s*['"]personal['"]/.test(submitFormSource), 'merchant submit page should branch personal opening form')
   assert(submitFormSource.includes('useBusinessName: false'), 'merchant personal opening form must not backfill business license name')
   assert(submitFormSource.includes('businessAllowedAccountTypes: []'), 'business-license opening should keep both public and private settlement account choices available from page data')
+  assert(/businessAllowedAccountTypes:\s*profileDefaults\?\.settlement_account_allowed_types\s*\|\|\s*\[\]/.test(submitFormSource), 'merchant business-license opening must pass backend settlement account allowed types into page data')
   assert(submitFormSource.includes('allowedAccountTypes="{{businessAllowedAccountTypes}}"'), 'business-license opening must not pass WXML array literals to child components')
   assert(!submitFormSource.includes('allowedAccountTypes="{{[]}}"'), 'business-license opening must avoid WXML array literals because Mini Program runtime can pass unstable values')
   assert(!submitFormSource.includes('allowedAccountTypes.length') && !submitFormSource.includes('allowedAccountTypes.indexOf'), 'business-license opening must not call array methods in WXML for allowed account types')

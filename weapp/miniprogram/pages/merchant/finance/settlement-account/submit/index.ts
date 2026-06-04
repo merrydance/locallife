@@ -105,6 +105,7 @@ Page({
       form: buildBaofuEnterpriseFormFromDefaults(profileDefaults),
       personalForm: buildBaofuPersonalFormFromDefaults(this.data.personalForm as BaofuPersonalProfileForm, profileDefaults, { useBusinessName: false }),
       bankDraft: buildBaofuEnterpriseBankDraftFromDefaults(profileDefaults),
+      businessAllowedAccountTypes: profileDefaults?.settlement_account_allowed_types || [],
       canSubmitProfile: pageView.statusView.canSubmitProfile,
       initialLoading: false,
       initialError: false,
