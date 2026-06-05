@@ -31,16 +31,19 @@ type authorizeScannedYilianyunPrinterRequest struct {
 	MachineCode string `json:"machine_code" binding:"required,max=100"`
 	QRKey       string `json:"qr_key" binding:"omitempty,max=255"`
 	MSign       string `json:"msign" binding:"omitempty,max=255"`
+	PrinterName string `json:"printer_name" binding:"omitempty,max=100"`
+	PrinterRole string `json:"printer_role" binding:"omitempty,oneof=front kitchen"`
 }
 
 type yilianyunAuthorizationResponse struct {
-	AuthorizationID  int64     `json:"authorization_id"`
-	MerchantID       int64     `json:"merchant_id"`
-	ProviderType     string    `json:"provider_type"`
-	MachineCode      string    `json:"machine_code"`
-	Status           string    `json:"status"`
-	AccessExpiresAt  time.Time `json:"access_expires_at"`
-	RefreshExpiresAt time.Time `json:"refresh_expires_at"`
+	AuthorizationID  int64            `json:"authorization_id"`
+	MerchantID       int64            `json:"merchant_id"`
+	ProviderType     string           `json:"provider_type"`
+	MachineCode      string           `json:"machine_code"`
+	Status           string           `json:"status"`
+	AccessExpiresAt  time.Time        `json:"access_expires_at"`
+	RefreshExpiresAt time.Time        `json:"refresh_expires_at"`
+	Printer          *printerResponse `json:"printer,omitempty"`
 }
 
 func (server *Server) cloudPrinterAuthorizationService() *logic.CloudPrinterAuthorizationService {
@@ -165,6 +168,8 @@ func (server *Server) authorizeScannedYilianyunPrinter(ctx *gin.Context) {
 		MachineCode: req.MachineCode,
 		QRKey:       req.QRKey,
 		MSign:       req.MSign,
+		PrinterName: req.PrinterName,
+		PrinterRole: req.PrinterRole,
 	})
 	if err != nil {
 		if writeLogicRequestError(ctx, err) {
@@ -177,7 +182,7 @@ func (server *Server) authorizeScannedYilianyunPrinter(ctx *gin.Context) {
 }
 
 func newYilianyunAuthorizationResponse(result logic.YilianyunAuthorizationResult) yilianyunAuthorizationResponse {
-	return yilianyunAuthorizationResponse{
+	resp := yilianyunAuthorizationResponse{
 		AuthorizationID:  result.AuthorizationID,
 		MerchantID:       result.MerchantID,
 		ProviderType:     result.ProviderType,
@@ -186,4 +191,23 @@ func newYilianyunAuthorizationResponse(result logic.YilianyunAuthorizationResult
 		AccessExpiresAt:  result.AccessExpiresAt,
 		RefreshExpiresAt: result.RefreshExpiresAt,
 	}
+	if result.Printer.ID > 0 {
+		resp.Printer = &printerResponse{
+			ID:               result.Printer.ID,
+			MerchantID:       result.Printer.MerchantID,
+			PrinterName:      result.Printer.PrinterName,
+			PrinterSN:        result.Printer.PrinterSN,
+			PrinterType:      result.Printer.PrinterType,
+			PrinterRole:      result.Printer.PrinterRole,
+			PrintTakeout:     result.Printer.PrintTakeout,
+			PrintDineIn:      result.Printer.PrintDineIn,
+			PrintReservation: result.Printer.PrintReservation,
+			IsActive:         result.Printer.IsActive,
+			CreatedAt:        result.Printer.CreatedAt.Format(time.RFC3339),
+		}
+		if result.Printer.UpdatedAt.Valid {
+			resp.Printer.UpdatedAt = result.Printer.UpdatedAt.Time.Format(time.RFC3339)
+		}
+	}
+	return resp
 }

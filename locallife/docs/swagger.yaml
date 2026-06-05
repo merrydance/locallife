@@ -795,6 +795,14 @@ definitions:
       msign:
         maxLength: 255
         type: string
+      printer_name:
+        maxLength: 100
+        type: string
+      printer_role:
+        enum:
+        - front
+        - kitchen
+        type: string
       qr_key:
         maxLength: 255
         type: string
@@ -10536,6 +10544,8 @@ definitions:
         type: string
       merchant_id:
         type: integer
+      printer:
+        $ref: '#/definitions/api.printerResponse'
       provider_type:
         type: string
       refresh_expires_at:

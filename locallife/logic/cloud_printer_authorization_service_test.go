@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/cloudprint"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/util"
@@ -84,11 +85,12 @@ func TestCloudPrinterAuthorizationServiceCompletesAuthorizationCodeWithEncrypted
 			ExpiresInSeconds: 3600,
 		}, nil
 	}
-	store.authorizeTx = func(_ context.Context, arg db.AuthorizeYilianyunCloudPrinterTxParams) (db.AuthorizeYilianyunCloudPrinterTxResult, error) {
+	store.authorizeWithDeviceTx = func(_ context.Context, arg db.AuthorizeYilianyunCloudPrinterWithDeviceTxParams) (db.AuthorizeYilianyunCloudPrinterWithDeviceTxResult, error) {
 		require.Equal(t, "state-ok", arg.State)
 		require.Equal(t, int64(11), arg.Authorization.MerchantID)
 		require.Equal(t, db.CloudPrinterProviderYilianyun, arg.Authorization.ProviderType)
 		require.Equal(t, "YL-MACHINE-001", arg.Authorization.MachineCode)
+		require.False(t, arg.Authorization.AuthorizedCloudPrinterID.Valid)
 		require.NotEqual(t, "access-token-secret", arg.Authorization.AccessTokenCiphertext)
 		require.NotEqual(t, "refresh-token-secret", arg.Authorization.RefreshTokenCiphertext)
 		require.WithinDuration(t, now.Add(3600*time.Second), arg.Authorization.AccessTokenExpiresAt, time.Second)
@@ -100,14 +102,35 @@ func TestCloudPrinterAuthorizationServiceCompletesAuthorizationCodeWithEncrypted
 		require.NoError(t, err)
 		require.Equal(t, "access-token-secret", decryptedAccess)
 		require.Equal(t, "refresh-token-secret", decryptedRefresh)
-		return db.AuthorizeYilianyunCloudPrinterTxResult{
+		require.Equal(t, int64(11), arg.Printer.MerchantID)
+		require.Equal(t, "YL-MACHINE-001", arg.Printer.PrinterSn)
+		require.Equal(t, db.CloudPrinterProviderYilianyun, arg.Printer.PrinterType)
+		require.Empty(t, arg.Printer.PrinterKey)
+		return db.AuthorizeYilianyunCloudPrinterWithDeviceTxResult{
 			Session: session,
+			Printer: db.CloudPrinter{
+				ID:               301,
+				MerchantID:       11,
+				PrinterName:      "易联云 YL-MACHINE-001",
+				PrinterSn:        "YL-MACHINE-001",
+				PrinterType:      db.CloudPrinterProviderYilianyun,
+				PrinterRole:      "front",
+				PrintTakeout:     true,
+				PrintDineIn:      true,
+				PrintReservation: true,
+				IsActive:         true,
+				CreatedAt:        now,
+			},
 			Authorization: db.CloudPrinterProviderAuthorization{
-				ID:                    101,
-				MerchantID:            11,
-				ProviderType:          db.CloudPrinterProviderYilianyun,
-				MachineCode:           "YL-MACHINE-001",
-				Status:                db.CloudPrinterAuthorizationStatusActive,
+				ID:           101,
+				MerchantID:   11,
+				ProviderType: db.CloudPrinterProviderYilianyun,
+				MachineCode:  "YL-MACHINE-001",
+				Status:       db.CloudPrinterAuthorizationStatusActive,
+				AuthorizedCloudPrinterID: pgtype.Int8{
+					Int64: 301,
+					Valid: true,
+				},
 				CreatedAt:             now,
 				UpdatedAt:             now,
 				AccessTokenExpiresAt:  now.Add(3600 * time.Second),
@@ -128,6 +151,8 @@ func TestCloudPrinterAuthorizationServiceCompletesAuthorizationCodeWithEncrypted
 	require.Equal(t, int64(101), result.AuthorizationID)
 	require.Equal(t, "YL-MACHINE-001", result.MachineCode)
 	require.Equal(t, db.CloudPrinterAuthorizationStatusActive, result.Status)
+	require.Equal(t, int64(301), result.Printer.ID)
+	require.Empty(t, result.Printer.PrinterKey)
 }
 
 func TestCloudPrinterAuthorizationServiceProviderErrorUsesSafePublicMessage(t *testing.T) {
@@ -180,20 +205,46 @@ func TestCloudPrinterAuthorizationServiceAuthorizesScannedPrinterWithExactlyOneC
 			ExpiresInSeconds: 7200,
 		}, nil
 	}
-	store.upsertAuthorization = func(_ context.Context, arg db.UpsertCloudPrinterProviderAuthorizationParams) (db.CloudPrinterProviderAuthorization, error) {
-		require.Equal(t, int64(11), arg.MerchantID)
-		require.Equal(t, "YL-MACHINE-002", arg.MachineCode)
-		decryptedAccess, err := encryptor.Decrypt(arg.AccessTokenCiphertext)
+	store.createAuthorizedPrinterTx = func(_ context.Context, arg db.CreateAuthorizedYilianyunCloudPrinterTxParams) (db.CreateAuthorizedYilianyunCloudPrinterTxResult, error) {
+		require.Equal(t, int64(11), arg.Authorization.MerchantID)
+		require.Equal(t, db.CloudPrinterProviderYilianyun, arg.Authorization.ProviderType)
+		require.Equal(t, "YL-MACHINE-002", arg.Authorization.MachineCode)
+		require.False(t, arg.Authorization.AuthorizedCloudPrinterID.Valid)
+		decryptedAccess, err := encryptor.Decrypt(arg.Authorization.AccessTokenCiphertext)
+		require.NoError(t, err)
+		decryptedRefresh, err := encryptor.Decrypt(arg.Authorization.RefreshTokenCiphertext)
 		require.NoError(t, err)
 		require.Equal(t, "scan-access-secret", decryptedAccess)
-		return db.CloudPrinterProviderAuthorization{
-			ID:                    102,
-			MerchantID:            11,
-			ProviderType:          db.CloudPrinterProviderYilianyun,
-			MachineCode:           "YL-MACHINE-002",
-			Status:                db.CloudPrinterAuthorizationStatusActive,
-			AccessTokenExpiresAt:  arg.AccessTokenExpiresAt,
-			RefreshTokenExpiresAt: arg.RefreshTokenExpiresAt,
+		require.Equal(t, "scan-refresh-secret", decryptedRefresh)
+		require.Equal(t, int64(11), arg.Printer.MerchantID)
+		require.Equal(t, "YL-MACHINE-002", arg.Printer.PrinterSn)
+		require.Equal(t, "YL-MACHINE-002", arg.Authorization.MachineCode)
+		require.Equal(t, db.CloudPrinterProviderYilianyun, arg.Printer.PrinterType)
+		require.Empty(t, arg.Printer.PrinterKey)
+		return db.CreateAuthorizedYilianyunCloudPrinterTxResult{
+			Printer: db.CloudPrinter{
+				ID:          201,
+				MerchantID:  11,
+				PrinterName: "易联云 YL-MACHINE-002",
+				PrinterSn:   "YL-MACHINE-002",
+				PrinterType: db.CloudPrinterProviderYilianyun,
+				PrinterRole: "front",
+				IsActive:    true,
+				CreatedAt:   now,
+			},
+			Authorization: db.CloudPrinterProviderAuthorization{
+				ID:           102,
+				MerchantID:   11,
+				ProviderType: db.CloudPrinterProviderYilianyun,
+				MachineCode:  "YL-MACHINE-002",
+				Status:       db.CloudPrinterAuthorizationStatusActive,
+				AuthorizedCloudPrinterID: pgtype.Int8{
+					Int64: 201,
+					Valid: true,
+				},
+				AccessTokenExpiresAt:  now.Add(7200 * time.Second),
+				RefreshTokenExpiresAt: now.Add(35 * 24 * time.Hour),
+			},
 		}, nil
 	}
 	service := NewCloudPrinterAuthorizationService(store, oauth, encryptor, CloudPrinterAuthorizationServiceConfig{
@@ -204,11 +255,16 @@ func TestCloudPrinterAuthorizationServiceAuthorizesScannedPrinterWithExactlyOneC
 		MerchantID:  11,
 		MachineCode: "YL-MACHINE-002",
 		QRKey:       "qr-secret",
+		PrinterName: " 易联云 YL-MACHINE-002 ",
+		PrinterRole: "front",
 	})
 
 	require.NoError(t, err)
 	require.Equal(t, int64(102), result.AuthorizationID)
 	require.Equal(t, "YL-MACHINE-002", result.MachineCode)
+	require.Equal(t, int64(201), result.Printer.ID)
+	require.Equal(t, "YL-MACHINE-002", result.Printer.PrinterSN)
+	require.Empty(t, result.Printer.PrinterKey)
 
 	_, err = service.AuthorizeScannedYilianyunPrinter(context.Background(), AuthorizeScannedYilianyunPrinterInput{
 		MerchantID:  11,
@@ -222,10 +278,10 @@ func TestCloudPrinterAuthorizationServiceAuthorizesScannedPrinterWithExactlyOneC
 }
 
 type fakeCloudPrinterAuthorizationStore struct {
-	createSession       func(context.Context, db.CreateCloudPrinterAuthorizationSessionParams) (db.CloudPrinterAuthorizationSession, error)
-	getSession          func(context.Context, string) (db.CloudPrinterAuthorizationSession, error)
-	authorizeTx         func(context.Context, db.AuthorizeYilianyunCloudPrinterTxParams) (db.AuthorizeYilianyunCloudPrinterTxResult, error)
-	upsertAuthorization func(context.Context, db.UpsertCloudPrinterProviderAuthorizationParams) (db.CloudPrinterProviderAuthorization, error)
+	createSession             func(context.Context, db.CreateCloudPrinterAuthorizationSessionParams) (db.CloudPrinterAuthorizationSession, error)
+	getSession                func(context.Context, string) (db.CloudPrinterAuthorizationSession, error)
+	authorizeWithDeviceTx     func(context.Context, db.AuthorizeYilianyunCloudPrinterWithDeviceTxParams) (db.AuthorizeYilianyunCloudPrinterWithDeviceTxResult, error)
+	createAuthorizedPrinterTx func(context.Context, db.CreateAuthorizedYilianyunCloudPrinterTxParams) (db.CreateAuthorizedYilianyunCloudPrinterTxResult, error)
 }
 
 func (s *fakeCloudPrinterAuthorizationStore) CreateCloudPrinterAuthorizationSession(ctx context.Context, arg db.CreateCloudPrinterAuthorizationSessionParams) (db.CloudPrinterAuthorizationSession, error) {
@@ -242,18 +298,18 @@ func (s *fakeCloudPrinterAuthorizationStore) GetActiveCloudPrinterAuthorizationS
 	return s.getSession(ctx, state)
 }
 
-func (s *fakeCloudPrinterAuthorizationStore) AuthorizeYilianyunCloudPrinterTx(ctx context.Context, arg db.AuthorizeYilianyunCloudPrinterTxParams) (db.AuthorizeYilianyunCloudPrinterTxResult, error) {
-	if s.authorizeTx == nil {
-		return db.AuthorizeYilianyunCloudPrinterTxResult{}, errors.New("unexpected AuthorizeYilianyunCloudPrinterTx")
+func (s *fakeCloudPrinterAuthorizationStore) AuthorizeYilianyunCloudPrinterWithDeviceTx(ctx context.Context, arg db.AuthorizeYilianyunCloudPrinterWithDeviceTxParams) (db.AuthorizeYilianyunCloudPrinterWithDeviceTxResult, error) {
+	if s.authorizeWithDeviceTx == nil {
+		return db.AuthorizeYilianyunCloudPrinterWithDeviceTxResult{}, errors.New("unexpected AuthorizeYilianyunCloudPrinterWithDeviceTx")
 	}
-	return s.authorizeTx(ctx, arg)
+	return s.authorizeWithDeviceTx(ctx, arg)
 }
 
-func (s *fakeCloudPrinterAuthorizationStore) UpsertCloudPrinterProviderAuthorization(ctx context.Context, arg db.UpsertCloudPrinterProviderAuthorizationParams) (db.CloudPrinterProviderAuthorization, error) {
-	if s.upsertAuthorization == nil {
-		return db.CloudPrinterProviderAuthorization{}, errors.New("unexpected UpsertCloudPrinterProviderAuthorization")
+func (s *fakeCloudPrinterAuthorizationStore) CreateAuthorizedYilianyunCloudPrinterTx(ctx context.Context, arg db.CreateAuthorizedYilianyunCloudPrinterTxParams) (db.CreateAuthorizedYilianyunCloudPrinterTxResult, error) {
+	if s.createAuthorizedPrinterTx == nil {
+		return db.CreateAuthorizedYilianyunCloudPrinterTxResult{}, errors.New("unexpected CreateAuthorizedYilianyunCloudPrinterTx")
 	}
-	return s.upsertAuthorization(ctx, arg)
+	return s.createAuthorizedPrinterTx(ctx, arg)
 }
 
 type fakeYilianyunAuthorizationOAuthClient struct {

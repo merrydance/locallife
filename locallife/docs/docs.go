@@ -32978,6 +32978,17 @@ const docTemplate = `{
                     "type": "string",
                     "maxLength": 255
                 },
+                "printer_name": {
+                    "type": "string",
+                    "maxLength": 100
+                },
+                "printer_role": {
+                    "type": "string",
+                    "enum": [
+                        "front",
+                        "kitchen"
+                    ]
+                },
                 "qr_key": {
                     "type": "string",
                     "maxLength": 255
@@ -47299,6 +47310,9 @@ const docTemplate = `{
                 },
                 "merchant_id": {
                     "type": "integer"
+                },
+                "printer": {
+                    "$ref": "#/definitions/api.printerResponse"
                 },
                 "provider_type": {
                     "type": "string"

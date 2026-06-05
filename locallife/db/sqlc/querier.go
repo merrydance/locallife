@@ -57,6 +57,7 @@ type Querier interface {
 	// 审核通过骑手申请
 	ApproveRiderApplication(ctx context.Context, arg ApproveRiderApplicationParams) (RiderApplication, error)
 	AssignDelivery(ctx context.Context, arg AssignDeliveryParams) (Delivery, error)
+	AttachCloudPrinterProviderAuthorizationToPrinter(ctx context.Context, arg AttachCloudPrinterProviderAuthorizationToPrinterParams) (CloudPrinterProviderAuthorization, error)
 	AttachMerchantToGroupIfUnassigned(ctx context.Context, arg AttachMerchantToGroupIfUnassignedParams) (int64, error)
 	// 自动打烊（用于定时任务）
 	AutoCloseMerchants(ctx context.Context) ([]int64, error)

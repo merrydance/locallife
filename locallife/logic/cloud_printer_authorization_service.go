@@ -24,8 +24,8 @@ const (
 type cloudPrinterAuthorizationStore interface {
 	CreateCloudPrinterAuthorizationSession(context.Context, db.CreateCloudPrinterAuthorizationSessionParams) (db.CloudPrinterAuthorizationSession, error)
 	GetActiveCloudPrinterAuthorizationSessionForUpdate(context.Context, string) (db.CloudPrinterAuthorizationSession, error)
-	AuthorizeYilianyunCloudPrinterTx(context.Context, db.AuthorizeYilianyunCloudPrinterTxParams) (db.AuthorizeYilianyunCloudPrinterTxResult, error)
-	UpsertCloudPrinterProviderAuthorization(context.Context, db.UpsertCloudPrinterProviderAuthorizationParams) (db.CloudPrinterProviderAuthorization, error)
+	AuthorizeYilianyunCloudPrinterWithDeviceTx(context.Context, db.AuthorizeYilianyunCloudPrinterWithDeviceTxParams) (db.AuthorizeYilianyunCloudPrinterWithDeviceTxResult, error)
+	CreateAuthorizedYilianyunCloudPrinterTx(context.Context, db.CreateAuthorizedYilianyunCloudPrinterTxParams) (db.CreateAuthorizedYilianyunCloudPrinterTxResult, error)
 }
 
 type YilianyunAuthorizationOAuthClient interface {
@@ -71,6 +71,8 @@ type AuthorizeScannedYilianyunPrinterInput struct {
 	MachineCode string
 	QRKey       string
 	MSign       string
+	PrinterName string
+	PrinterRole string
 }
 
 type YilianyunAuthorizationResult struct {
@@ -81,6 +83,23 @@ type YilianyunAuthorizationResult struct {
 	Status           string
 	AccessExpiresAt  time.Time
 	RefreshExpiresAt time.Time
+	Printer          CloudPrinterDeviceResult
+}
+
+type CloudPrinterDeviceResult struct {
+	ID               int64
+	MerchantID       int64
+	PrinterName      string
+	PrinterSN        string
+	PrinterKey       string
+	PrinterType      string
+	PrinterRole      string
+	PrintTakeout     bool
+	PrintDineIn      bool
+	PrintReservation bool
+	IsActive         bool
+	CreatedAt        time.Time
+	UpdatedAt        pgtype.Timestamptz
 }
 
 func NewCloudPrinterAuthorizationService(store cloudPrinterAuthorizationStore, oauth YilianyunAuthorizationOAuthClient, encryptor util.DataEncryptor, config CloudPrinterAuthorizationServiceConfig) *CloudPrinterAuthorizationService {
@@ -190,9 +209,10 @@ func (s *CloudPrinterAuthorizationService) CompleteYilianyunAuthorizationCode(ct
 	if err != nil {
 		return YilianyunAuthorizationResult{}, err
 	}
-	result, err := s.store.AuthorizeYilianyunCloudPrinterTx(ctx, db.AuthorizeYilianyunCloudPrinterTxParams{
+	result, err := s.store.AuthorizeYilianyunCloudPrinterWithDeviceTx(ctx, db.AuthorizeYilianyunCloudPrinterWithDeviceTxParams{
 		State:         state,
 		Authorization: params,
+		Printer:       s.buildYilianyunPrinterParams(params, session.PrinterName.String, session.PrinterRole.String),
 		ConsumedAt:    s.config.Now().UTC(),
 	})
 	if err != nil {
@@ -201,7 +221,7 @@ func (s *CloudPrinterAuthorizationService) CompleteYilianyunAuthorizationCode(ct
 		}
 		return YilianyunAuthorizationResult{}, fmt.Errorf("persist yilianyun authorization: %w", err)
 	}
-	return newYilianyunAuthorizationResult(result.Authorization), nil
+	return newYilianyunAuthorizationResultWithPrinter(result.Authorization, result.Printer), nil
 }
 
 func (s *CloudPrinterAuthorizationService) AuthorizeScannedYilianyunPrinter(ctx context.Context, input AuthorizeScannedYilianyunPrinterInput) (YilianyunAuthorizationResult, error) {
@@ -239,14 +259,17 @@ func (s *CloudPrinterAuthorizationService) AuthorizeScannedYilianyunPrinter(ctx 
 	if err != nil {
 		return YilianyunAuthorizationResult{}, err
 	}
-	authorization, err := s.store.UpsertCloudPrinterProviderAuthorization(ctx, params)
+	result, err := s.store.CreateAuthorizedYilianyunCloudPrinterTx(ctx, db.CreateAuthorizedYilianyunCloudPrinterTxParams{
+		Authorization: params,
+		Printer:       s.buildYilianyunPrinterParams(params, input.PrinterName, input.PrinterRole),
+	})
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
 			return YilianyunAuthorizationResult{}, NewRequestError(http.StatusConflict, errors.New("该易联云打印机已绑定其他商户或目标设备无效"))
 		}
-		return YilianyunAuthorizationResult{}, fmt.Errorf("persist scanned yilianyun authorization: %w", err)
+		return YilianyunAuthorizationResult{}, fmt.Errorf("persist scanned yilianyun authorization and printer: %w", err)
 	}
-	return newYilianyunAuthorizationResult(authorization), nil
+	return newYilianyunAuthorizationResultWithPrinter(result.Authorization, result.Printer), nil
 }
 
 func (s *CloudPrinterAuthorizationService) buildAuthorizationParams(merchantID int64, token cloudprint.YilianyunAuthorizationToken) (db.UpsertCloudPrinterProviderAuthorizationParams, error) {
@@ -298,6 +321,53 @@ func newYilianyunAuthorizationResult(authorization db.CloudPrinterProviderAuthor
 		Status:           authorization.Status,
 		AccessExpiresAt:  authorization.AccessTokenExpiresAt,
 		RefreshExpiresAt: authorization.RefreshTokenExpiresAt,
+	}
+}
+
+func (s *CloudPrinterAuthorizationService) buildYilianyunPrinterParams(authorization db.UpsertCloudPrinterProviderAuthorizationParams, printerName string, printerRole string) db.CreateCloudPrinterParams {
+	role := normalizeCloudPrinterRole(printerRole)
+	if role == "" {
+		role = "front"
+	}
+	name := strings.TrimSpace(printerName)
+	if name == "" {
+		name = "易联云 " + authorization.MachineCode
+	}
+
+	return db.CreateCloudPrinterParams{
+		MerchantID:       authorization.MerchantID,
+		PrinterName:      name,
+		PrinterSn:        authorization.MachineCode,
+		PrinterKey:       "",
+		PrinterType:      db.CloudPrinterProviderYilianyun,
+		PrinterRole:      role,
+		PrintTakeout:     true,
+		PrintDineIn:      true,
+		PrintReservation: true,
+	}
+}
+
+func newYilianyunAuthorizationResultWithPrinter(authorization db.CloudPrinterProviderAuthorization, printer db.CloudPrinter) YilianyunAuthorizationResult {
+	result := newYilianyunAuthorizationResult(authorization)
+	result.Printer = newCloudPrinterDeviceResult(printer)
+	return result
+}
+
+func newCloudPrinterDeviceResult(printer db.CloudPrinter) CloudPrinterDeviceResult {
+	return CloudPrinterDeviceResult{
+		ID:               printer.ID,
+		MerchantID:       printer.MerchantID,
+		PrinterName:      printer.PrinterName,
+		PrinterSN:        printer.PrinterSn,
+		PrinterKey:       printer.PrinterKey,
+		PrinterType:      printer.PrinterType,
+		PrinterRole:      printer.PrinterRole,
+		PrintTakeout:     printer.PrintTakeout,
+		PrintDineIn:      printer.PrintDineIn,
+		PrintReservation: printer.PrintReservation,
+		IsActive:         printer.IsActive,
+		CreatedAt:        printer.CreatedAt,
+		UpdatedAt:        printer.UpdatedAt,
 	}
 }
 

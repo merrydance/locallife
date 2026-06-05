@@ -68,7 +68,7 @@ WHERE sqlc.narg(authorized_cloud_printer_id)::bigint IS NULL
 ON CONFLICT (provider_type, machine_code) DO UPDATE
 SET
     merchant_id = EXCLUDED.merchant_id,
-    authorized_cloud_printer_id = EXCLUDED.authorized_cloud_printer_id,
+    authorized_cloud_printer_id = COALESCE(EXCLUDED.authorized_cloud_printer_id, cloud_printer_provider_authorizations.authorized_cloud_printer_id),
     access_token_ciphertext = EXCLUDED.access_token_ciphertext,
     refresh_token_ciphertext = EXCLUDED.refresh_token_ciphertext,
     access_token_expires_at = EXCLUDED.access_token_expires_at,
@@ -104,3 +104,26 @@ FROM cloud_printer_provider_authorizations
 WHERE merchant_id = $1
   AND provider_type = $2
 ORDER BY created_at DESC, id DESC;
+
+-- name: AttachCloudPrinterProviderAuthorizationToPrinter :one
+UPDATE cloud_printer_provider_authorizations
+SET
+    authorized_cloud_printer_id = $4,
+    updated_at = now()
+WHERE cloud_printer_provider_authorizations.merchant_id = $1
+  AND cloud_printer_provider_authorizations.provider_type = $2
+  AND cloud_printer_provider_authorizations.machine_code = $3
+  AND EXISTS (
+      SELECT 1
+      FROM cloud_printers
+      WHERE cloud_printers.id = $4
+        AND cloud_printers.merchant_id = $1
+        AND cloud_printers.printer_type = $2
+        AND cloud_printers.printer_sn = $3
+        AND ($2 <> 'yilianyun' OR cloud_printers.printer_key = '')
+  )
+  AND (
+      cloud_printer_provider_authorizations.authorized_cloud_printer_id IS NULL
+      OR cloud_printer_provider_authorizations.authorized_cloud_printer_id = $4
+  )
+RETURNING id, merchant_id, provider_type, machine_code, authorized_cloud_printer_id, access_token_ciphertext, refresh_token_ciphertext, access_token_expires_at, refresh_token_expires_at, status, refresh_failure_count, refresh_last_attempted_at, last_provider_error, created_at, updated_at;

@@ -119,6 +119,8 @@ type Store interface {
 	UpdateMerchantAppDeviceHeartbeatTx(ctx context.Context, arg UpdateMerchantAppDeviceHeartbeatParams) (MerchantAppDevice, error)
 	// Cloud printer authorization transactions
 	AuthorizeYilianyunCloudPrinterTx(ctx context.Context, arg AuthorizeYilianyunCloudPrinterTxParams) (AuthorizeYilianyunCloudPrinterTxResult, error)
+	AuthorizeYilianyunCloudPrinterWithDeviceTx(ctx context.Context, arg AuthorizeYilianyunCloudPrinterWithDeviceTxParams) (AuthorizeYilianyunCloudPrinterWithDeviceTxResult, error)
+	CreateAuthorizedYilianyunCloudPrinterTx(ctx context.Context, arg CreateAuthorizedYilianyunCloudPrinterTxParams) (CreateAuthorizedYilianyunCloudPrinterTxResult, error)
 	// Order replacement transaction
 	ReplaceOrderTx(ctx context.Context, arg ReplaceOrderTxParams) (ReplaceOrderTxResult, error)
 	ReplaceOrderWithRefundOrdersTx(ctx context.Context, arg ReplaceOrderWithRefundOrdersTxParams) (ReplaceOrderWithRefundOrdersTxResult, error)

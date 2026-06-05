@@ -507,6 +507,21 @@ func (mr *MockStoreMockRecorder) AssignDelivery(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AssignDelivery", reflect.TypeOf((*MockStore)(nil).AssignDelivery), ctx, arg)
 }
 
+// AttachCloudPrinterProviderAuthorizationToPrinter mocks base method.
+func (m *MockStore) AttachCloudPrinterProviderAuthorizationToPrinter(ctx context.Context, arg db.AttachCloudPrinterProviderAuthorizationToPrinterParams) (db.CloudPrinterProviderAuthorization, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AttachCloudPrinterProviderAuthorizationToPrinter", ctx, arg)
+	ret0, _ := ret[0].(db.CloudPrinterProviderAuthorization)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AttachCloudPrinterProviderAuthorizationToPrinter indicates an expected call of AttachCloudPrinterProviderAuthorizationToPrinter.
+func (mr *MockStoreMockRecorder) AttachCloudPrinterProviderAuthorizationToPrinter(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AttachCloudPrinterProviderAuthorizationToPrinter", reflect.TypeOf((*MockStore)(nil).AttachCloudPrinterProviderAuthorizationToPrinter), ctx, arg)
+}
+
 // AttachMerchantToGroupIfUnassigned mocks base method.
 func (m *MockStore) AttachMerchantToGroupIfUnassigned(ctx context.Context, arg db.AttachMerchantToGroupIfUnassignedParams) (int64, error) {
 	m.ctrl.T.Helper()
@@ -535,6 +550,21 @@ func (m *MockStore) AuthorizeYilianyunCloudPrinterTx(ctx context.Context, arg db
 func (mr *MockStoreMockRecorder) AuthorizeYilianyunCloudPrinterTx(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AuthorizeYilianyunCloudPrinterTx", reflect.TypeOf((*MockStore)(nil).AuthorizeYilianyunCloudPrinterTx), ctx, arg)
+}
+
+// AuthorizeYilianyunCloudPrinterWithDeviceTx mocks base method.
+func (m *MockStore) AuthorizeYilianyunCloudPrinterWithDeviceTx(ctx context.Context, arg db.AuthorizeYilianyunCloudPrinterWithDeviceTxParams) (db.AuthorizeYilianyunCloudPrinterWithDeviceTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AuthorizeYilianyunCloudPrinterWithDeviceTx", ctx, arg)
+	ret0, _ := ret[0].(db.AuthorizeYilianyunCloudPrinterWithDeviceTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AuthorizeYilianyunCloudPrinterWithDeviceTx indicates an expected call of AuthorizeYilianyunCloudPrinterWithDeviceTx.
+func (mr *MockStoreMockRecorder) AuthorizeYilianyunCloudPrinterWithDeviceTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AuthorizeYilianyunCloudPrinterWithDeviceTx", reflect.TypeOf((*MockStore)(nil).AuthorizeYilianyunCloudPrinterWithDeviceTx), ctx, arg)
 }
 
 // AutoCloseMerchants mocks base method.
@@ -3181,6 +3211,21 @@ func (m *MockStore) CreateAuditLog(ctx context.Context, arg db.CreateAuditLogPar
 func (mr *MockStoreMockRecorder) CreateAuditLog(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateAuditLog", reflect.TypeOf((*MockStore)(nil).CreateAuditLog), ctx, arg)
+}
+
+// CreateAuthorizedYilianyunCloudPrinterTx mocks base method.
+func (m *MockStore) CreateAuthorizedYilianyunCloudPrinterTx(ctx context.Context, arg db.CreateAuthorizedYilianyunCloudPrinterTxParams) (db.CreateAuthorizedYilianyunCloudPrinterTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateAuthorizedYilianyunCloudPrinterTx", ctx, arg)
+	ret0, _ := ret[0].(db.CreateAuthorizedYilianyunCloudPrinterTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateAuthorizedYilianyunCloudPrinterTx indicates an expected call of CreateAuthorizedYilianyunCloudPrinterTx.
+func (mr *MockStoreMockRecorder) CreateAuthorizedYilianyunCloudPrinterTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateAuthorizedYilianyunCloudPrinterTx", reflect.TypeOf((*MockStore)(nil).CreateAuthorizedYilianyunCloudPrinterTx), ctx, arg)
 }
 
 // CreateBaofuAccountOpeningFlow mocks base method.

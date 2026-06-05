@@ -332,3 +332,154 @@ func TestUpsertCloudPrinterProviderAuthorizationRejectsPrinterFromOtherMerchant(
 	})
 	require.ErrorIs(t, err, ErrRecordNotFound)
 }
+
+func TestCreateAuthorizedYilianyunCloudPrinterTxCreatesPrinterAndAttachesAuthorization(t *testing.T) {
+	merchant := createRandomMerchantForTest(t)
+	machineCode := "YL-TX-DEVICE-" + util.RandomString(8)
+	authorizationParams := UpsertCloudPrinterProviderAuthorizationParams{
+		MerchantID:               merchant.ID,
+		ProviderType:             CloudPrinterProviderYilianyun,
+		MachineCode:              machineCode,
+		AccessTokenCiphertext:    "ciphertext-access",
+		RefreshTokenCiphertext:   "ciphertext-refresh",
+		AccessTokenExpiresAt:     time.Now().Add(30 * 24 * time.Hour).UTC(),
+		RefreshTokenExpiresAt:    time.Now().Add(35 * 24 * time.Hour).UTC(),
+		Status:                   CloudPrinterAuthorizationStatusActive,
+		RefreshFailureCount:      0,
+		RefreshLastAttemptedAt:   pgtype.Timestamptz{Valid: false},
+		LastProviderError:        pgtype.Text{Valid: false},
+		AuthorizedCloudPrinterID: pgtype.Int8{Valid: false},
+	}
+
+	result, err := testStore.CreateAuthorizedYilianyunCloudPrinterTx(context.Background(), CreateAuthorizedYilianyunCloudPrinterTxParams{
+		Authorization: authorizationParams,
+		Printer: CreateCloudPrinterParams{
+			MerchantID:       merchant.ID,
+			PrinterName:      "易联云前台",
+			PrinterSn:        machineCode,
+			PrinterKey:       "",
+			PrinterType:      CloudPrinterProviderYilianyun,
+			PrinterRole:      "front",
+			PrintTakeout:     true,
+			PrintDineIn:      true,
+			PrintReservation: true,
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, merchant.ID, result.Printer.MerchantID)
+	require.Equal(t, machineCode, result.Printer.PrinterSn)
+	require.Empty(t, result.Printer.PrinterKey)
+	require.Equal(t, CloudPrinterProviderYilianyun, result.Printer.PrinterType)
+	require.True(t, result.Authorization.AuthorizedCloudPrinterID.Valid)
+	require.Equal(t, result.Printer.ID, result.Authorization.AuthorizedCloudPrinterID.Int64)
+
+	loaded, err := testStore.GetCloudPrinterProviderAuthorizationByMerchantAndMachineCode(context.Background(), GetCloudPrinterProviderAuthorizationByMerchantAndMachineCodeParams{
+		MerchantID:   merchant.ID,
+		ProviderType: CloudPrinterProviderYilianyun,
+		MachineCode:  machineCode,
+	})
+	require.NoError(t, err)
+	require.True(t, loaded.AuthorizedCloudPrinterID.Valid)
+	require.Equal(t, result.Printer.ID, loaded.AuthorizedCloudPrinterID.Int64)
+
+	rotated, err := testStore.UpsertCloudPrinterProviderAuthorization(context.Background(), UpsertCloudPrinterProviderAuthorizationParams{
+		MerchantID:               merchant.ID,
+		ProviderType:             CloudPrinterProviderYilianyun,
+		MachineCode:              machineCode,
+		AccessTokenCiphertext:    "ciphertext-access-rotated",
+		RefreshTokenCiphertext:   "ciphertext-refresh-rotated",
+		AccessTokenExpiresAt:     time.Now().Add(31 * 24 * time.Hour).UTC(),
+		RefreshTokenExpiresAt:    time.Now().Add(35 * 24 * time.Hour).UTC(),
+		Status:                   CloudPrinterAuthorizationStatusActive,
+		RefreshFailureCount:      0,
+		RefreshLastAttemptedAt:   pgtype.Timestamptz{Valid: false},
+		LastProviderError:        pgtype.Text{Valid: false},
+		AuthorizedCloudPrinterID: pgtype.Int8{Valid: false},
+	})
+	require.NoError(t, err)
+	require.True(t, rotated.AuthorizedCloudPrinterID.Valid)
+	require.Equal(t, result.Printer.ID, rotated.AuthorizedCloudPrinterID.Int64)
+}
+
+func TestCreateAuthorizedYilianyunCloudPrinterTxReusesExistingYilianyunPrinter(t *testing.T) {
+	merchant := createRandomMerchantForTest(t)
+	machineCode := "YL-TX-EXISTING-" + util.RandomString(8)
+	existingPrinter, err := testStore.CreateCloudPrinter(context.Background(), CreateCloudPrinterParams{
+		MerchantID:       merchant.ID,
+		PrinterName:      "已有易联云",
+		PrinterSn:        machineCode,
+		PrinterKey:       "",
+		PrinterType:      CloudPrinterProviderYilianyun,
+		PrinterRole:      "front",
+		PrintTakeout:     true,
+		PrintDineIn:      true,
+		PrintReservation: true,
+	})
+	require.NoError(t, err)
+
+	result, err := testStore.CreateAuthorizedYilianyunCloudPrinterTx(context.Background(), CreateAuthorizedYilianyunCloudPrinterTxParams{
+		Authorization: UpsertCloudPrinterProviderAuthorizationParams{
+			MerchantID:               merchant.ID,
+			ProviderType:             CloudPrinterProviderYilianyun,
+			MachineCode:              machineCode,
+			AccessTokenCiphertext:    "ciphertext-access",
+			RefreshTokenCiphertext:   "ciphertext-refresh",
+			AccessTokenExpiresAt:     time.Now().Add(30 * 24 * time.Hour).UTC(),
+			RefreshTokenExpiresAt:    time.Now().Add(35 * 24 * time.Hour).UTC(),
+			Status:                   CloudPrinterAuthorizationStatusActive,
+			RefreshFailureCount:      0,
+			RefreshLastAttemptedAt:   pgtype.Timestamptz{Valid: false},
+			LastProviderError:        pgtype.Text{Valid: false},
+			AuthorizedCloudPrinterID: pgtype.Int8{Valid: false},
+		},
+		Printer: CreateCloudPrinterParams{
+			MerchantID:       merchant.ID,
+			PrinterName:      "新授权易联云",
+			PrinterSn:        machineCode,
+			PrinterKey:       "",
+			PrinterType:      CloudPrinterProviderYilianyun,
+			PrinterRole:      "front",
+			PrintTakeout:     true,
+			PrintDineIn:      true,
+			PrintReservation: true,
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, existingPrinter.ID, result.Printer.ID)
+	require.True(t, result.Authorization.AuthorizedCloudPrinterID.Valid)
+	require.Equal(t, existingPrinter.ID, result.Authorization.AuthorizedCloudPrinterID.Int64)
+}
+
+func TestCreateAuthorizedYilianyunCloudPrinterTxRejectsPrinterKey(t *testing.T) {
+	merchant := createRandomMerchantForTest(t)
+	machineCode := "YL-TX-KEY-" + util.RandomString(8)
+
+	_, err := testStore.CreateAuthorizedYilianyunCloudPrinterTx(context.Background(), CreateAuthorizedYilianyunCloudPrinterTxParams{
+		Authorization: UpsertCloudPrinterProviderAuthorizationParams{
+			MerchantID:               merchant.ID,
+			ProviderType:             CloudPrinterProviderYilianyun,
+			MachineCode:              machineCode,
+			AccessTokenCiphertext:    "ciphertext-access",
+			RefreshTokenCiphertext:   "ciphertext-refresh",
+			AccessTokenExpiresAt:     time.Now().Add(30 * 24 * time.Hour).UTC(),
+			RefreshTokenExpiresAt:    time.Now().Add(35 * 24 * time.Hour).UTC(),
+			Status:                   CloudPrinterAuthorizationStatusActive,
+			RefreshFailureCount:      0,
+			RefreshLastAttemptedAt:   pgtype.Timestamptz{Valid: false},
+			LastProviderError:        pgtype.Text{Valid: false},
+			AuthorizedCloudPrinterID: pgtype.Int8{Valid: false},
+		},
+		Printer: CreateCloudPrinterParams{
+			MerchantID:       merchant.ID,
+			PrinterName:      "易联云前台",
+			PrinterSn:        machineCode,
+			PrinterKey:       "must-not-store-token-here",
+			PrinterType:      CloudPrinterProviderYilianyun,
+			PrinterRole:      "front",
+			PrintTakeout:     true,
+			PrintDineIn:      true,
+			PrintReservation: true,
+		},
+	})
+	require.ErrorIs(t, err, ErrRecordNotFound)
+}

@@ -213,6 +213,24 @@ func TestCreatePrinterAPI(t *testing.T) {
 			},
 		},
 		{
+			name: "YilianyunRequiresAuthorizationFlow",
+			body: map[string]interface{}{
+				"printer_name": "易联云前台",
+				"printer_sn":   "YL-SN-001",
+				"printer_key":  "should-not-be-used",
+				"printer_type": "yilianyun",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
 			name: "NoAuthorization",
 			body: map[string]interface{}{
 				"printer_name": "测试打印机",
@@ -1348,6 +1366,25 @@ func TestGetPrinterLiveStatusAPI(t *testing.T) {
 			buildClient: func() *printerClientStub { return &printerClientStub{} },
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder, client *printerClientStub) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
+				require.Empty(t, client.queryPrinterSN)
+			},
+		},
+		{
+			name:      "YilianyunLiveStatusNotEnabled",
+			printerID: printer.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+				yilianyunPrinter := printer
+				yilianyunPrinter.PrinterType = string(cloudprint.ProviderYilianyun)
+				yilianyunPrinter.PrinterSn = "YL-SN-001"
+				store.EXPECT().GetCloudPrinter(gomock.Any(), gomock.Eq(printer.ID)).Times(1).Return(yilianyunPrinter, nil)
+			},
+			buildClient: func() *printerClientStub { return &printerClientStub{} },
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder, client *printerClientStub) {
+				require.Equal(t, http.StatusNotImplemented, recorder.Code)
 				require.Empty(t, client.queryPrinterSN)
 			},
 		},
