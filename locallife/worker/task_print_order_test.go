@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -60,6 +61,122 @@ func (r *printClientRecorder) QueryPrinterStatus(ctx context.Context, sn string)
 
 func (r *printClientRecorder) GetPrinterInfo(ctx context.Context, sn string) (cloudprint.PrinterInfo, error) {
 	return cloudprint.PrinterInfo{Model: "FEIE-80"}, nil
+}
+
+type printProviderManagerStub struct {
+	providers map[string]cloudprint.Client
+}
+
+func (m printProviderManagerStub) Provider(providerType string) (cloudprint.Client, bool) {
+	provider, ok := m.providers[providerType]
+	return provider, ok
+}
+
+func (m printProviderManagerStub) Supported(providerType string) bool {
+	_, ok := m.Provider(providerType)
+	return ok
+}
+
+func (m printProviderManagerStub) Configured() bool {
+	for _, provider := range m.providers {
+		if provider != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func TestBuildFeieReceipt_PreservesCurrentFullReceiptFormat(t *testing.T) {
+	order := db.GetOrderWithDetailsRow{
+		ID:                  100,
+		UserID:              200,
+		MerchantID:          300,
+		OrderNo:             "ABC123",
+		OrderType:           db.OrderTypeTakeout,
+		Subtotal:            2800,
+		DiscountAmount:      100,
+		VoucherAmount:       50,
+		Notes:               pgText("少辣"),
+		PickupCode:          pgText("105"),
+		CreatedAt:           time.Date(2026, 4, 1, 9, 30, 0, 0, time.Local),
+		DeliveryContactName: "张三",
+		DeliveryAddress:     "测试路 88 号",
+	}
+	items := []db.ListOrderItemsWithDishByOrderRow{
+		{Name: "牛肉面", Quantity: 2, Subtotal: 2800},
+	}
+
+	content := buildFeieReceipt(order, items, db.User{ID: order.UserID, FullName: "张三"}, printSlipFull, nil)
+
+	require.Equal(t,
+		"<CB><B>105# 乐客来福</B></CB><BR>"+
+			"<C>前台出单</C><BR>"+
+			"订单号：ABC123<BR>"+
+			"下单时间：2026-04-01 09:30:00<BR>"+
+			"类型：外卖<BR>"+
+			"--------------------------------<BR>"+
+			"牛肉面 x2  28.00<BR>"+
+			"--------------------------------<BR>"+
+			"菜品小计：28.00<BR>"+
+			"优惠：-1.00<BR>"+
+			"券抵扣：-0.50<BR>"+
+			"备注：少辣<BR>"+
+			"顾客：张三<BR>"+
+			"地址：测试路 88 号<BR>"+
+			"<BR><BC128_A>ABC123</BC128_A><BR>"+
+			"<CUT>",
+		content,
+	)
+}
+
+func TestProcessTaskPrintOrder_SkipsBeforeStoreWhenNoProviderConfigured(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	processor := NewTestTaskProcessor(store, NewNoopTaskDistributor(), nil, nil)
+	processor.SetCloudPrinterManagerForTest(printProviderManagerStub{providers: map[string]cloudprint.Client{}})
+
+	payload, err := json.Marshal(PrintOrderPayload{OrderID: 1009, Trigger: "accepted", TaskKey: "order:1009:accepted"})
+	require.NoError(t, err)
+
+	err = processor.ProcessTaskPrintOrder(context.Background(), asynq.NewTask(TaskPrintOrder, payload))
+	require.NoError(t, err)
+}
+
+func TestExecutePrintAttempt_KeepsPendingWhenStatusQueryProviderAccepts(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	processor := NewTestTaskProcessor(store, NewNoopTaskDistributor(), nil, nil)
+	shangpengClient := &printClientRecorder{printOrderID: "sp-order-1"}
+	processor.SetCloudPrinterManagerForTest(printProviderManagerStub{providers: map[string]cloudprint.Client{
+		string(cloudprint.ProviderShangpeng): shangpengClient,
+	}})
+	printer := db.CloudPrinter{ID: 21, PrinterSn: "sp-sn", PrinterType: string(cloudprint.ProviderShangpeng), IsActive: true}
+
+	store.EXPECT().CreatePrintLog(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(func(_ context.Context, arg db.CreatePrintLogParams) (db.PrintLog, error) {
+		require.Equal(t, int64(2001), arg.OrderID)
+		require.Equal(t, printer.ID, arg.PrinterID)
+		require.Equal(t, "pending", arg.Status)
+		require.True(t, arg.ProviderOriginID.Valid)
+		require.Regexp(t, regexp.MustCompile(`^[A-Za-z0-9_-]{1,32}$`), arg.ProviderOriginID.String)
+		return db.PrintLog{ID: 903, OrderID: arg.OrderID, PrinterID: arg.PrinterID, Status: arg.Status, ProviderOriginID: arg.ProviderOriginID}, nil
+	})
+	store.EXPECT().UpdatePrintLogStatus(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(func(_ context.Context, arg db.UpdatePrintLogStatusParams) (db.PrintLog, error) {
+		require.Equal(t, int64(903), arg.ID)
+		require.Equal(t, "pending", arg.Status)
+		require.True(t, arg.VendorOrderID.Valid)
+		require.Equal(t, "sp-order-1", arg.VendorOrderID.String)
+		require.False(t, arg.ErrorMessage.Valid)
+		return db.PrintLog{}, nil
+	})
+
+	processor.executePrintAttempt(context.Background(), 2001, printer, "商鹏测试\n订单号：SP001\n", "full", "")
+
+	require.Len(t, shangpengClient.inputs, 1)
+	require.Equal(t, printer.PrinterSn, shangpengClient.inputs[0].SN)
 }
 
 func TestExecutePrintAttempt_KeepsPendingWhenPrintResultCallbackEnabled(t *testing.T) {
@@ -485,6 +602,113 @@ func TestProcessTaskPrintOrder_SkipsUnsupportedPrinterType(t *testing.T) {
 	require.Equal(t, supportedPrinter.PrinterSn, printerClient.inputs[0].SN)
 }
 
+func TestProcessTaskPrintOrder_PrintsShangpengReceiptWithoutFeieTagsAndKeepsPending(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	processor := NewTestTaskProcessor(store, NewNoopTaskDistributor(), nil, nil)
+	shangpengClient := &printClientRecorder{printOrderID: "sp-vendor-100"}
+	processor.SetCloudPrinterManagerForTest(printProviderManagerStub{providers: map[string]cloudprint.Client{
+		string(cloudprint.ProviderShangpeng): shangpengClient,
+	}})
+
+	order := db.GetOrderWithDetailsRow{
+		ID:                  106,
+		UserID:              206,
+		MerchantID:          306,
+		OrderNo:             "20260401123000SP",
+		OrderType:           db.OrderTypeTakeout,
+		Status:              db.OrderStatusPreparing,
+		Subtotal:            3600,
+		DiscountAmount:      100,
+		TotalAmount:         3500,
+		Notes:               pgText("不要香菜"),
+		PickupCode:          pgText("208"),
+		CreatedAt:           time.Date(2026, 4, 1, 12, 30, 0, 0, time.Local),
+		DeliveryContactName: "李四",
+		DeliveryAddress:     "测试路 99 号",
+	}
+	config := db.OrderDisplayConfig{
+		MerchantID:        order.MerchantID,
+		EnablePrint:       true,
+		PrintTakeout:      true,
+		PrintDineIn:       true,
+		PrintReservation:  true,
+		PrintDispatchMode: "single_full",
+		PrintTriggerMode:  "accepted",
+	}
+	printer := db.CloudPrinter{
+		ID:           8,
+		MerchantID:   order.MerchantID,
+		PrinterName:  "商鹏前台",
+		PrinterSn:    "sp-front-sn",
+		PrinterType:  string(cloudprint.ProviderShangpeng),
+		PrinterRole:  "front",
+		PrintTakeout: true,
+		IsActive:     true,
+	}
+
+	store.EXPECT().GetOrderWithDetails(gomock.Any(), order.ID).Return(order, nil)
+	store.EXPECT().GetOrderDisplayConfigByMerchant(gomock.Any(), order.MerchantID).Return(config, nil)
+	store.EXPECT().ListActiveCloudPrintersByMerchant(gomock.Any(), order.MerchantID).Return([]db.CloudPrinter{printer}, nil)
+	store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Return([]db.ListOrderItemsWithDishByOrderRow{{Name: "鸡肉饭", Quantity: 1, Subtotal: 3600}}, nil)
+	store.EXPECT().GetUser(gomock.Any(), order.UserID).Return(db.User{ID: order.UserID, FullName: "李四"}, nil)
+	store.EXPECT().
+		GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+			OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
+			BusinessType: db.ExternalPaymentBusinessOwnerOrder,
+		}).
+		Return(db.PaymentOrder{}, db.ErrRecordNotFound)
+	store.EXPECT().GetPrintLogByTaskKeyAndPrinter(gomock.Any(), gomock.Any()).Times(1).Return(db.PrintLog{}, db.ErrRecordNotFound)
+	store.EXPECT().CreatePrintLog(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(func(_ context.Context, arg db.CreatePrintLogParams) (db.PrintLog, error) {
+		require.Equal(t, printer.ID, arg.PrinterID)
+		require.Equal(t, "pending", arg.Status)
+		require.True(t, arg.ProviderOriginID.Valid)
+		require.NotContains(t, arg.PrintContent, "<CB>")
+		require.NotContains(t, arg.PrintContent, "<BR>")
+		require.NotContains(t, arg.PrintContent, "<CUT>")
+		require.NotContains(t, arg.PrintContent, "<QR>")
+		require.NotContains(t, arg.PrintContent, "<BC128_A>")
+		return db.PrintLog{
+			ID:               904,
+			OrderID:          arg.OrderID,
+			PrinterID:        arg.PrinterID,
+			PrintContent:     arg.PrintContent,
+			Status:           arg.Status,
+			ProviderOriginID: arg.ProviderOriginID,
+		}, nil
+	})
+	store.EXPECT().UpdatePrintLogStatus(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(func(_ context.Context, arg db.UpdatePrintLogStatusParams) (db.PrintLog, error) {
+		require.Equal(t, int64(904), arg.ID)
+		require.Equal(t, "pending", arg.Status)
+		require.True(t, arg.VendorOrderID.Valid)
+		require.Equal(t, "sp-vendor-100", arg.VendorOrderID.String)
+		return db.PrintLog{}, nil
+	})
+
+	payload, err := json.Marshal(PrintOrderPayload{OrderID: order.ID, Trigger: "accepted", TaskKey: "order:106:accepted"})
+	require.NoError(t, err)
+
+	err = processor.ProcessTaskPrintOrder(context.Background(), asynq.NewTask(TaskPrintOrder, payload))
+	require.NoError(t, err)
+	require.Len(t, shangpengClient.inputs, 1)
+	require.Equal(t, printer.PrinterSn, shangpengClient.inputs[0].SN)
+
+	content := shangpengClient.inputs[0].Content
+	require.Contains(t, content, "208# 乐客来福")
+	require.Contains(t, content, "前台出单")
+	require.Contains(t, content, "订单号：20260401123000SP")
+	require.Contains(t, content, "鸡肉饭 x1  36.00")
+	require.Contains(t, content, "优惠：-1.00")
+	require.Contains(t, content, "备注：不要香菜")
+	require.Contains(t, content, "顾客：李四")
+	require.Contains(t, content, "地址：测试路 99 号")
+	for _, unsupported := range []string{"<CB>", "<B>", "<BR>", "<CUT>", "<QR>", "<BC128_A>", "<BOLD>"} {
+		require.NotContains(t, content, unsupported)
+	}
+}
+
 func TestProcessTaskPrintOrder_RetryPrintLogReplaysOriginalContent(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -514,13 +738,16 @@ func TestProcessTaskPrintOrder_RetryPrintLogReplaysOriginalContent(t *testing.T)
 	store.EXPECT().GetPrintLog(gomock.Any(), originalPrintLog.ID).Times(1).Return(originalPrintLog, nil)
 	store.EXPECT().GetCloudPrinter(gomock.Any(), printer.ID).Times(1).Return(printer, nil)
 	store.EXPECT().GetPrintLogByTaskKeyAndPrinter(gomock.Any(), gomock.Any()).Times(1).Return(db.PrintLog{}, db.ErrRecordNotFound)
-	store.EXPECT().CreatePrintLog(gomock.Any(), gomock.Eq(db.CreatePrintLogParams{
-		OrderID:      originalPrintLog.OrderID,
-		PrinterID:    printer.ID,
-		PrintContent: originalPrintLog.PrintContent,
-		Status:       "pending",
-		TaskKey:      pgtype.Text{String: "retry:401:301", Valid: true},
-	})).Times(1).Return(db.PrintLog{ID: 302, OrderID: originalPrintLog.OrderID, PrinterID: printer.ID, Status: "pending"}, nil)
+	store.EXPECT().CreatePrintLog(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(func(_ context.Context, arg db.CreatePrintLogParams) (db.PrintLog, error) {
+		require.Equal(t, originalPrintLog.OrderID, arg.OrderID)
+		require.Equal(t, printer.ID, arg.PrinterID)
+		require.Equal(t, originalPrintLog.PrintContent, arg.PrintContent)
+		require.Equal(t, "pending", arg.Status)
+		require.Equal(t, pgtype.Text{String: "retry:401:301", Valid: true}, arg.TaskKey)
+		require.True(t, arg.ProviderOriginID.Valid)
+		require.Regexp(t, regexp.MustCompile(`^[A-Za-z0-9_-]{1,32}$`), arg.ProviderOriginID.String)
+		return db.PrintLog{ID: 302, OrderID: originalPrintLog.OrderID, PrinterID: printer.ID, Status: "pending", ProviderOriginID: arg.ProviderOriginID}, nil
+	})
 	store.EXPECT().UpdatePrintLogStatus(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(func(_ context.Context, arg db.UpdatePrintLogStatusParams) (db.PrintLog, error) {
 		require.Equal(t, int64(302), arg.ID)
 		require.Equal(t, "success", arg.Status)

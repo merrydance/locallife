@@ -54,3 +54,7 @@ func (m *providerManager) Supported(providerType string) bool {
 	_, ok := m.Provider(providerType)
 	return ok
 }
+
+func (m *providerManager) Configured() bool {
+	return m != nil && len(m.providers) > 0
+}

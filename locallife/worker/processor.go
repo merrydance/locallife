@@ -66,6 +66,7 @@ type RedisTaskProcessor struct {
 	credentialGovSvc          *logic.CredentialGovernanceService
 	merchantReviewSvc         *logic.MerchantOnboardingReviewService
 	riderReviewSvc            *logic.RiderOnboardingReviewService
+	cloudPrinterManager       cloudprint.Manager
 	printerClient             cloudprint.Client
 	config                    util.Config
 	baofuProfitSharingConfig  BaofuProfitSharingWorkerConfig
@@ -155,6 +156,7 @@ func NewRedisTaskProcessor(
 		credentialGovSvc:    credentialGovSvc,
 		merchantReviewSvc:   logic.NewMerchantOnboardingReviewService(store, onboardingReviewSvc, credentialGovSvc),
 		riderReviewSvc:      logic.NewRiderOnboardingReviewService(store, onboardingReviewSvc, credentialGovSvc),
+		cloudPrinterManager: cloudPrinterManager,
 		printerClient:       printerClient,
 		config:              config,
 		roleCache:           make(map[int64]cachedUserRoles),
@@ -190,6 +192,18 @@ func (processor *RedisTaskProcessor) SetBaofuAggregateClientForTest(client aggre
 
 func (processor *RedisTaskProcessor) SetPrinterClientForTest(client cloudprint.Client) {
 	processor.printerClient = client
+	processor.cloudPrinterManager = staticCloudPrinterManager{providers: map[string]cloudprint.Client{
+		string(cloudprint.ProviderFeieyun): client,
+	}}
+}
+
+func (processor *RedisTaskProcessor) SetCloudPrinterManagerForTest(manager cloudprint.Manager) {
+	processor.cloudPrinterManager = manager
+	if manager == nil {
+		processor.printerClient = nil
+		return
+	}
+	processor.printerClient, _ = manager.Provider(string(cloudprint.ProviderFeieyun))
 }
 
 // NewTestTaskProcessor 创建用于测试的处理器实例（不需要Redis连接）
@@ -226,6 +240,29 @@ func NewTestTaskProcessor(
 		}
 	}
 	return p
+}
+
+type staticCloudPrinterManager struct {
+	providers map[string]cloudprint.Client
+}
+
+func (m staticCloudPrinterManager) Provider(providerType string) (cloudprint.Client, bool) {
+	provider, ok := m.providers[providerType]
+	return provider, ok && provider != nil
+}
+
+func (m staticCloudPrinterManager) Supported(providerType string) bool {
+	_, ok := m.Provider(providerType)
+	return ok
+}
+
+func (m staticCloudPrinterManager) Configured() bool {
+	for _, provider := range m.providers {
+		if provider != nil {
+			return true
+		}
+	}
+	return false
 }
 
 func newMerchantApplicationOCRService(store db.Store, reader ocr.BinaryReader, wechatClient wechat.WechatClient, config util.Config) (*ocr.Service, error) {
