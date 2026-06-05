@@ -263,6 +263,8 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 	if auditWriter == nil {
 		auditWriter = NewDBAuditWriter(store)
 	}
+	cloudPrinterManager := cloudprint.NewManagerFromConfig(config)
+	printerClient, _ := cloudPrinterManager.Provider(string(cloudprint.ProviderFeieyun))
 
 	server := &Server{
 		config:               config,
@@ -286,7 +288,7 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		mapClient:                 mapClient,
 		weatherCache:              weatherCache,
 		taskDistributor:           taskDistributor,
-		printerClient:             cloudprint.NewFeieyunClientFromConfig(config),
+		printerClient:             printerClient,
 		wsHub:                     wsHub,
 		wsPubSub:                  wsPubSub,
 		merchantStatusChangePublisher: func() websocket.MerchantStatusChangePublisher {

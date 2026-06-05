@@ -138,6 +138,8 @@ func NewRedisTaskProcessor(
 	}
 	onboardingReviewSvc := logic.NewOnboardingReviewService(store)
 	credentialGovSvc := logic.NewCredentialGovernanceService(store)
+	cloudPrinterManager := cloudprint.NewManagerFromConfig(config)
+	printerClient, _ := cloudPrinterManager.Provider(string(cloudprint.ProviderFeieyun))
 
 	return &RedisTaskProcessor{
 		server:              server,
@@ -153,7 +155,7 @@ func NewRedisTaskProcessor(
 		credentialGovSvc:    credentialGovSvc,
 		merchantReviewSvc:   logic.NewMerchantOnboardingReviewService(store, onboardingReviewSvc, credentialGovSvc),
 		riderReviewSvc:      logic.NewRiderOnboardingReviewService(store, onboardingReviewSvc, credentialGovSvc),
-		printerClient:       cloudprint.NewFeieyunClientFromConfig(config),
+		printerClient:       printerClient,
 		config:              config,
 		roleCache:           make(map[int64]cachedUserRoles),
 		roleCacheTTL:        1 * time.Minute,

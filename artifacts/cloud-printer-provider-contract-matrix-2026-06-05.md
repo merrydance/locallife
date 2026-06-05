@@ -1,0 +1,99 @@
+# Cloud Printer Provider Contract Matrix
+
+**Scope:** Feieyun current runtime contract plus first-release Yilianyun and Shangpeng contract targets for the multi-provider cloud-printer rollout.
+
+**Rule:** official provider documentation and provider-confirmed samples are the source of truth. Do not infer request fields, response fields, callback fields, status values, or error codes from another provider.
+
+## Contract Matrix
+
+| Provider | Capability | Method/Path | Direction | Provider field/path | Type/unit | Requiredness | Enum/error values | Local owner | Source |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Feieyun | text print | `POST /Api/Open/printMsg` | request | `user` | string | required | account user | `cloudprint.FeieyunClient.call` | current `locallife/cloudprint/feieyun.go`; Feieyun open API |
+| Feieyun | text print | `POST /Api/Open/printMsg` | request | `stime` | unix seconds string | required | current request timestamp | `cloudprint.FeieyunClient.call` | current `locallife/cloudprint/feieyun.go`; Feieyun open API |
+| Feieyun | text print | `POST /Api/Open/printMsg` | request | `sig` | SHA1 hex string | required | `sha1(user + ukey + stime)` | `cloudprint.FeieyunClient.sign` | current `locallife/cloudprint/feieyun.go`; Feieyun open API |
+| Feieyun | text print | `POST /Api/Open/printMsg` | request | `apiname` | string | required | `Open_printMsg` | `cloudprint.FeieyunClient.Print` | current `locallife/cloudprint/feieyun.go`; Feieyun open API |
+| Feieyun | text print | `POST /Api/Open/printMsg` | request | `sn` | string | required | printer SN | `cloudprint.PrintInput.SN` | current `locallife/cloudprint/feieyun.go`; Feieyun open API |
+| Feieyun | text print | `POST /Api/Open/printMsg` | request | `content` | string | required | Feieyun receipt markup | `cloudprint.PrintInput.Content` | current `locallife/cloudprint/feieyun.go`; Feieyun open API |
+| Feieyun | text print | `POST /Api/Open/printMsg` | request | `times` | integer string | optional, defaults local to `1` | copies | `cloudprint.PrintInput.Copies` | current `locallife/cloudprint/feieyun.go`; Feieyun open API |
+| Feieyun | text print | `POST /Api/Open/printMsg` | request | `expired` | unix seconds string | optional | print expiration | `cloudprint.PrintInput.ExpiredAt` | current `locallife/cloudprint/feieyun.go`; Feieyun open API |
+| Feieyun | text print callback | `POST /Api/Open/printMsg` | request | `backurl` | URL string | conditional, only when callback URL and public key configured | LocalLife webhook URL | `cloudprint.FeieyunClient.Print` | current `locallife/cloudprint/feieyun.go`; Feieyun open API |
+| Feieyun | text print | `POST /Api/Open/printMsg` | response | `ret` | integer | required | `0` success, non-zero error | `cloudprint.feieyunResponse` | current `locallife/cloudprint/feieyun.go`; Feieyun open API |
+| Feieyun | text print | `POST /Api/Open/printMsg` | response | `msg` | string | required | provider message | `cloudprint.feieyunResponse` | current `locallife/cloudprint/feieyun.go`; Feieyun open API |
+| Feieyun | text print | `POST /Api/Open/printMsg` | response | `data` | JSON string | provider-generated | provider print order id | `cloudprint.FeieyunClient.Print` | current `locallife/cloudprint/feieyun.go`; Feieyun open API |
+| Feieyun | add printer | `POST /Api/Open/printerAddlist` | request | `printerContent` | string | required | `sn#key#name##1` | `cloudprint.FeieyunClient.AddPrinter` | current `locallife/cloudprint/feieyun.go`; Feieyun open API |
+| Feieyun | delete printer | `POST /Api/Open/printerDelList` | request | `snlist` | string | required | printer SN list | `cloudprint.FeieyunClient.RemovePrinter` | current `locallife/cloudprint/feieyun.go`; Feieyun open API |
+| Feieyun | delete printer | `POST /Api/Open/printerDelList` | response | `data.ok` | string array | provider-generated | successfully deleted SNs | `cloudprint.feieyunDeletePrinterData` | current `locallife/cloudprint/feieyun.go`; Feieyun open API |
+| Feieyun | delete printer | `POST /Api/Open/printerDelList` | response | `data.no` | string array | provider-generated | failed delete messages | `cloudprint.feieyunDeletePrinterData` | current `locallife/cloudprint/feieyun.go`; Feieyun open API |
+| Feieyun | query print order | `POST /Api/Open/queryOrderState` | request | `orderid` | string | required | provider print order id | `cloudprint.FeieyunClient.QueryOrderState` | current `locallife/cloudprint/feieyun.go`; Feieyun open API |
+| Feieyun | query print order | `POST /Api/Open/queryOrderState` | response | `data` | JSON boolean | provider-generated | `true` printed, `false` not printed | `cloudprint.FeieyunClient.QueryOrderState` | current `locallife/cloudprint/feieyun.go`; Feieyun open API |
+| Feieyun | query printer status | `POST /Api/Open/queryPrinterStatus` | request | `sn` | string | required | printer SN | `cloudprint.FeieyunClient.QueryPrinterStatus` | current `locallife/cloudprint/feieyun.go`; Feieyun open API |
+| Feieyun | query printer status | `POST /Api/Open/queryPrinterStatus` | response | `data` | JSON string | provider-generated | provider status text | `cloudprint.FeieyunClient.QueryPrinterStatus` | current `locallife/cloudprint/feieyun.go`; Feieyun open API |
+| Feieyun | printer info | `POST /Api/Open/printerInfo` | request | `sn` | string | required | printer SN | `cloudprint.FeieyunClient.GetPrinterInfo` | current `locallife/cloudprint/feieyun.go`; Feieyun open API |
+| Feieyun | printer info | `POST /Api/Open/printerInfo` | response | `data.model` | string/number | optional | printer model | `cloudprint.PrinterInfo.Model` | current `locallife/cloudprint/feieyun.go`; Feieyun open API |
+| Feieyun | printer info | `POST /Api/Open/printerInfo` | response | `data.status` | string/number | optional | provider status | `cloudprint.PrinterInfo.Status` | current `locallife/cloudprint/feieyun.go`; Feieyun open API |
+| Feieyun | printer info | `POST /Api/Open/printerInfo` | response | `data.printlogo` | boolean/string/number | optional | print logo enabled | `cloudprint.PrinterInfo.PrintLogo` | current `locallife/cloudprint/feieyun.go`; Feieyun open API |
+| Feieyun | printer info | `POST /Api/Open/printerInfo` | response | `data.scanSwitch` | boolean/string/number | optional | scan switch enabled | `cloudprint.PrinterInfo.ScanSwitch` | current `locallife/cloudprint/feieyun.go`; Feieyun open API |
+| Feieyun | print callback | `/v1/webhooks/feieyun/print-result` | callback | `orderId` | form string | required | provider print order id | `api.handleFeieyunPrintResultNotify` | current `locallife/api/feieyun_callback.go`; Feieyun callback docs |
+| Feieyun | print callback | `/v1/webhooks/feieyun/print-result` | callback | `status` | form string | required | `1` success currently handled | `api.handleFeieyunPrintResultNotify` | current `locallife/api/feieyun_callback.go`; Feieyun callback docs |
+| Feieyun | print callback | `/v1/webhooks/feieyun/print-result` | callback | `stime` | form unix seconds string | required | callback timestamp | `cloudprint.BuildFeieyunCallbackCanonicalString` | current `locallife/cloudprint/feieyun_callback.go`; Feieyun callback docs |
+| Feieyun | print callback | `/v1/webhooks/feieyun/print-result` | callback | `sign` | RSA signature, base64 | required | signature over canonical form fields | `cloudprint.VerifyFeieyunCallbackSignature` | current `locallife/cloudprint/feieyun_callback.go`; Feieyun callback docs |
+| Yilianyun | common protocol | all own-app endpoints | request | `client_id` | string | required | LocalLife app client id | future `cloudprint.YilianyunClient` | official docs listed in unified design |
+| Yilianyun | common protocol | all own-app endpoints | request | `access_token` | string | required | app-level token | future `cloudprint.YilianyunClient` | official docs listed in unified design |
+| Yilianyun | common protocol | all own-app endpoints | request | `timestamp` | unix seconds/string | required | request timestamp | future `cloudprint.YilianyunClient` | official docs listed in unified design |
+| Yilianyun | common protocol | all own-app endpoints | request | `id` | UUID4 string | required | request id | future `cloudprint.YilianyunClient` | official docs listed in unified design |
+| Yilianyun | common protocol | all own-app endpoints | request | `sign` | lowercase MD5 hex | required | `md5(client_id + timestamp + client_secret)` | future `cloudprint.YilianyunClient` | official docs listed in unified design |
+| Yilianyun | text print | `POST /print/index` | request | `machine_code` | string | required | printer code | future `cloudprint.YilianyunClient.Print` | https://www.kancloud.cn/elind-dev/openapi/372519 |
+| Yilianyun | text print | `POST /print/index` | request | `content` | string | required | Yilianyun-supported receipt content | future `cloudprint.YilianyunClient.Print` | https://www.kancloud.cn/elind-dev/openapi/372519 |
+| Yilianyun | text print | `POST /print/index` | request | `origin_id` | alphanumeric string, <= 32 chars | required for LocalLife idempotent print | unique per `client_id` | future `cloudprint.YilianyunClient.Print` | https://www.kancloud.cn/elind-dev/openapi/372519 |
+| Yilianyun | text print | `POST /print/index` | request | `idempotence` | integer/string | required for idempotency | `1` | future `cloudprint.YilianyunClient.Print` | https://www.kancloud.cn/elind-dev/openapi/372519 |
+| Yilianyun | text print | `POST /print/index` | response | `error` | string | required | `"0"` success, non-zero provider error | future `cloudprint.YilianyunClient` error mapper | https://www.kancloud.cn/elind-dev/openapi/372519 |
+| Yilianyun | text print | `POST /print/index` | response | `body.id` | string/integer | provider-generated | provider print order id | future `cloudprint.PrintResult.ProviderOrderID` | https://www.kancloud.cn/elind-dev/openapi/372519 |
+| Yilianyun | add printer | `POST /printer/addprinter` | request | `machine_code` | string | required | device identity | future `cloudprint.YilianyunClient.AddPrinter` | https://www.kancloud.cn/elind-dev/openapi/371770 |
+| Yilianyun | add printer | `POST /printer/addprinter` | request | `msign` | string | required | device secret | future `cloudprint.YilianyunClient.AddPrinter` | https://www.kancloud.cn/elind-dev/openapi/371770 |
+| Yilianyun | delete printer | `POST /printer/deleteprinter` | request | `machine_code` | string | required | device identity | future `cloudprint.YilianyunClient.RemovePrinter` | https://www.kancloud.cn/elind-dev/openapi/372520 |
+| Yilianyun | set push URL | `POST /oauth/setpushurl` | request | `cmd` | string | required | callback command such as print finish | future operator push URL command | https://www.kancloud.cn/elind-dev/openapi/736520 |
+| Yilianyun | set push URL | `POST /oauth/setpushurl` | request | `url` | URL string | required | `YILIANYUN_PRINT_CALLBACK_URL` | future operator push URL command | https://www.kancloud.cn/elind-dev/openapi/736520 |
+| Yilianyun | print callback health | `GET /v1/webhooks/yilianyun/print-result` | response | `data` | JSON string | required | `"OK"` | future `api.handleYilianyunPrintResultHealth` | https://www.kancloud.cn/elind-dev/openapi/736520 |
+| Yilianyun | print callback | `/v1/webhooks/yilianyun/print-result` | callback | `push_time` | unix seconds/string | required | callback freshness window | future `api.handleYilianyunPrintResultNotify` | https://www.kancloud.cn/elind-dev/openapi/372533 |
+| Yilianyun | print callback | `/v1/webhooks/yilianyun/print-result` | callback | `sign` | lowercase MD5 hex | required | `md5(client_id + push_time + client_secret)` | future `api.handleYilianyunPrintResultNotify` | https://www.kancloud.cn/elind-dev/openapi/372533 |
+| Yilianyun | print callback | `/v1/webhooks/yilianyun/print-result` | callback | `order_id` | string/integer | required | provider print order id | future callback update helper | https://www.kancloud.cn/elind-dev/openapi/372534 |
+| Yilianyun | print callback | `/v1/webhooks/yilianyun/print-result` | callback | `origin_id` | string | required for LocalLife lookup | LocalLife provider origin id | future callback update helper | https://www.kancloud.cn/elind-dev/openapi/372534 |
+| Yilianyun | print callback | `/v1/webhooks/yilianyun/print-result` | callback | `machine_code` | string | required | printer code | future callback update helper | https://www.kancloud.cn/elind-dev/openapi/372534 |
+| Yilianyun | print callback | `/v1/webhooks/yilianyun/print-result` | callback | `state` | integer/string | required | `1` printed, `2` cancelled | future callback update helper | https://www.kancloud.cn/elind-dev/openapi/372534 |
+| Yilianyun | query print order | `POST /printer/printstatus` or official query endpoint | request | `order_id` | string/integer | required | provider print order id | future status query client | https://www.kancloud.cn/elind-dev/openapi/736521 |
+| Yilianyun | query print order | official query endpoint | response | `state` | integer/string | required | `0` unprinted, `1` printed, `2` cancelled | future status mapper | https://www.kancloud.cn/elind-dev/openapi/736521 |
+| Yilianyun | query terminal status | official query endpoint | request | `machine_code` | string | required | device identity | future terminal status client | https://www.kancloud.cn/elind-dev/openapi/751625 |
+| Yilianyun | query terminal status | official query endpoint | response | `state` | integer/string | required | `0` offline, `1` online, `2` out of paper | future terminal status mapper | https://www.kancloud.cn/elind-dev/openapi/751625 |
+| Shangpeng | common protocol | all endpoints | request | `appid` | string | required | LocalLife Shangpeng app id | future `cloudprint.ShangpengClient` | https://spyun.net/open/index.html |
+| Shangpeng | common protocol | all endpoints | request | `timestamp` | string/integer | required | request timestamp | future `cloudprint.ShangpengClient` | https://spyun.net/open/index.html |
+| Shangpeng | common protocol | all endpoints | request | `sign` | uppercase MD5 hex | required | sorted non-empty params plus `appsecret` | future `cloudprint.ShangpengClient` | https://spyun.net/open/index.html |
+| Shangpeng | add printer | `POST /v1/printer/add` | request | `business` | string | required | business grouping | future `cloudprint.ShangpengClient.AddPrinter` | https://spyun.net/open/index.html |
+| Shangpeng | add printer | `POST /v1/printer/add` | request | `sn` | string | required | printer SN | future `cloudprint.ShangpengClient.AddPrinter` | https://spyun.net/open/index.html |
+| Shangpeng | add printer | `POST /v1/printer/add` | request | `pkey` | string | required | printer key | future `cloudprint.ShangpengClient.AddPrinter` | https://spyun.net/open/index.html |
+| Shangpeng | add printer | `POST /v1/printer/add` | request | `name` | string | required | printer display name | future `cloudprint.ShangpengClient.AddPrinter` | https://spyun.net/open/index.html |
+| Shangpeng | delete printer | `DELETE /v1/printer/delete` | request | `sn` | string | required | printer SN | future `cloudprint.ShangpengClient.RemovePrinter` | https://spyun.net/open/index.html |
+| Shangpeng | delete printer | `DELETE /v1/printer/delete` | request | `business` | string | optional | business grouping | future `cloudprint.ShangpengClient.RemovePrinter` | https://spyun.net/open/index.html |
+| Shangpeng | printer info | `GET /v1/printer/info` | request | `sn` | string | required | printer SN | future `cloudprint.ShangpengClient.QueryPrinterStatus` | https://spyun.net/open/index.html |
+| Shangpeng | printer info | `GET /v1/printer/info` | response | `online` | integer/boolean | required | `1` online, `0` offline | future printer status mapper | https://spyun.net/open/index.html |
+| Shangpeng | printer info | `GET /v1/printer/info` | response | `status` | integer | required | `0` normal, `1` abnormal | future printer status mapper | https://spyun.net/open/index.html |
+| Shangpeng | printer info | `GET /v1/printer/info` | response | `sqsnum` | integer | optional | queued jobs count | future printer status mapper | https://spyun.net/open/index.html |
+| Shangpeng | text print | `POST /v1/printer/print` | request | `sn` | string | required | printer SN | future `cloudprint.ShangpengClient.Print` | https://spyun.net/open/index.html |
+| Shangpeng | text print | `POST /v1/printer/print` | request | `content` | string | required | Shangpeng receipt markup | future `cloudprint.ShangpengClient.Print` | https://spyun.net/open/index.html |
+| Shangpeng | text print | `POST /v1/printer/print` | request | `times` | integer/string | optional | copies | future `cloudprint.ShangpengClient.Print` | https://spyun.net/open/index.html |
+| Shangpeng | text print | `POST /v1/printer/print` | response | `id` | string/integer | provider-generated | provider print order id | future `cloudprint.PrintResult.ProviderOrderID` | https://spyun.net/open/index.html |
+| Shangpeng | text print | `POST /v1/printer/print` | response | `create_time` | timestamp string | provider-generated | accepted time | future `cloudprint.PrintResult.AcceptedAt` | https://spyun.net/open/index.html |
+| Shangpeng | query print order | `GET /v1/printer/order/status` | request | `id` | string/integer | required | provider print order id | future `cloudprint.ShangpengClient.QueryOrderState` | https://spyun.net/open/index.html |
+| Shangpeng | query print order | `GET /v1/printer/order/status` | response | `status` | boolean | required | `true` printed, `false` not yet printed | future print state mapper | https://spyun.net/open/index.html |
+| Shangpeng | query print order | `GET /v1/printer/order/status` | response | `print_time` | timestamp string | optional | printed time | future print state mapper | https://spyun.net/open/index.html |
+| Shangpeng | clear pending queue | `DELETE /v1/printer/cleansqs` | request | `sn` | string | required | printer SN | future maintenance command, not merchant default | https://spyun.net/open/index.html |
+| Shangpeng | query device model | `POST /v1/printer/getModel` | request | `sn` | string | required | printer SN | future device info client | https://spyun.net/open/index.html |
+| Shangpeng | query device model | `POST /v1/printer/getModel` | request | `key` | string | required | printer key | future device info client | https://spyun.net/open/index.html |
+| Shangpeng | error model | all endpoints | error | `errorcode` | integer | required | `0` success; global `-1` appid empty, `-2` appid not found, `-3` timestamp empty, `-4` signature error; endpoint positive errors vary | future Shangpeng error mapper | https://spyun.net/open/index.html |
+
+## Open Verification Items Before Provider Runtime Enablement
+
+- Confirm the exact Yilianyun query print order method/path and field names against the official page before implementing `QueryOrderState`.
+- Confirm the exact Yilianyun push URL `cmd` value used for print completion callbacks.
+- Confirm whether Yilianyun callback ACK behavior differs for invalid signature, stale callback, unknown order, or duplicate delivery.
+- Confirm Shangpeng endpoint-specific positive error-code meanings with official examples or provider support before mapping them to stable LocalLife errors.
+- Replace any `future ...` local owner entry with the concrete Go type/function in the implementation change that introduces that endpoint.
