@@ -159,6 +159,12 @@ const (
 	CloudPrinterReconciliationStatusPending  = "pending"
 	CloudPrinterReconciliationStatusResolved = "resolved"
 
+	CloudPrinterProviderYilianyun = "yilianyun"
+
+	CloudPrinterAuthorizationStatusActive        = "active"
+	CloudPrinterAuthorizationStatusRefreshFailed = "refresh_failed"
+	CloudPrinterAuthorizationStatusRevoked       = "revoked"
+
 	MerchantCapabilityStatusUnknown = "unknown"
 	MerchantCapabilityStatusYes     = "yes"
 	MerchantCapabilityStatusNo      = "no"

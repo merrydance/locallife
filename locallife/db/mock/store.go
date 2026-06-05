@@ -1518,6 +1518,21 @@ func (mr *MockStoreMockRecorder) ConfirmWebLoginSession(ctx, arg any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConfirmWebLoginSession", reflect.TypeOf((*MockStore)(nil).ConfirmWebLoginSession), ctx, arg)
 }
 
+// ConsumeCloudPrinterAuthorizationSession mocks base method.
+func (m *MockStore) ConsumeCloudPrinterAuthorizationSession(ctx context.Context, arg db.ConsumeCloudPrinterAuthorizationSessionParams) (db.CloudPrinterAuthorizationSession, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ConsumeCloudPrinterAuthorizationSession", ctx, arg)
+	ret0, _ := ret[0].(db.CloudPrinterAuthorizationSession)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ConsumeCloudPrinterAuthorizationSession indicates an expected call of ConsumeCloudPrinterAuthorizationSession.
+func (mr *MockStoreMockRecorder) ConsumeCloudPrinterAuthorizationSession(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConsumeCloudPrinterAuthorizationSession", reflect.TypeOf((*MockStore)(nil).ConsumeCloudPrinterAuthorizationSession), ctx, arg)
+}
+
 // ConsumeRiderDepositCredit mocks base method.
 func (m *MockStore) ConsumeRiderDepositCredit(ctx context.Context, arg db.ConsumeRiderDepositCreditParams) (db.RiderDepositCredit, error) {
 	m.ctrl.T.Helper()
@@ -3481,6 +3496,21 @@ func (m *MockStore) CreateCloudPrinter(ctx context.Context, arg db.CreateCloudPr
 func (mr *MockStoreMockRecorder) CreateCloudPrinter(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateCloudPrinter", reflect.TypeOf((*MockStore)(nil).CreateCloudPrinter), ctx, arg)
+}
+
+// CreateCloudPrinterAuthorizationSession mocks base method.
+func (m *MockStore) CreateCloudPrinterAuthorizationSession(ctx context.Context, arg db.CreateCloudPrinterAuthorizationSessionParams) (db.CloudPrinterAuthorizationSession, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateCloudPrinterAuthorizationSession", ctx, arg)
+	ret0, _ := ret[0].(db.CloudPrinterAuthorizationSession)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateCloudPrinterAuthorizationSession indicates an expected call of CreateCloudPrinterAuthorizationSession.
+func (mr *MockStoreMockRecorder) CreateCloudPrinterAuthorizationSession(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateCloudPrinterAuthorizationSession", reflect.TypeOf((*MockStore)(nil).CreateCloudPrinterAuthorizationSession), ctx, arg)
 }
 
 // CreateCombinedPaymentOrder mocks base method.
@@ -6462,6 +6492,21 @@ func (mr *MockStoreMockRecorder) GetActiveCategoriesByRegion(ctx, regionID any) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActiveCategoriesByRegion", reflect.TypeOf((*MockStore)(nil).GetActiveCategoriesByRegion), ctx, regionID)
 }
 
+// GetActiveCloudPrinterAuthorizationSessionForUpdate mocks base method.
+func (m *MockStore) GetActiveCloudPrinterAuthorizationSessionForUpdate(ctx context.Context, state string) (db.CloudPrinterAuthorizationSession, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetActiveCloudPrinterAuthorizationSessionForUpdate", ctx, state)
+	ret0, _ := ret[0].(db.CloudPrinterAuthorizationSession)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetActiveCloudPrinterAuthorizationSessionForUpdate indicates an expected call of GetActiveCloudPrinterAuthorizationSessionForUpdate.
+func (mr *MockStoreMockRecorder) GetActiveCloudPrinterAuthorizationSessionForUpdate(ctx, state any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActiveCloudPrinterAuthorizationSessionForUpdate", reflect.TypeOf((*MockStore)(nil).GetActiveCloudPrinterAuthorizationSessionForUpdate), ctx, state)
+}
+
 // GetActiveDeliveryFeeConfigByRegion mocks base method.
 func (m *MockStore) GetActiveDeliveryFeeConfigByRegion(ctx context.Context, regionID int64) (db.DeliveryFeeConfig, error) {
 	m.ctrl.T.Helper()
@@ -7390,6 +7435,21 @@ func (m *MockStore) GetCloudPrinterBySN(ctx context.Context, printerSn string) (
 func (mr *MockStoreMockRecorder) GetCloudPrinterBySN(ctx, printerSn any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCloudPrinterBySN", reflect.TypeOf((*MockStore)(nil).GetCloudPrinterBySN), ctx, printerSn)
+}
+
+// GetCloudPrinterProviderAuthorizationByMerchantAndMachineCode mocks base method.
+func (m *MockStore) GetCloudPrinterProviderAuthorizationByMerchantAndMachineCode(ctx context.Context, arg db.GetCloudPrinterProviderAuthorizationByMerchantAndMachineCodeParams) (db.CloudPrinterProviderAuthorization, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCloudPrinterProviderAuthorizationByMerchantAndMachineCode", ctx, arg)
+	ret0, _ := ret[0].(db.CloudPrinterProviderAuthorization)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetCloudPrinterProviderAuthorizationByMerchantAndMachineCode indicates an expected call of GetCloudPrinterProviderAuthorizationByMerchantAndMachineCode.
+func (mr *MockStoreMockRecorder) GetCloudPrinterProviderAuthorizationByMerchantAndMachineCode(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCloudPrinterProviderAuthorizationByMerchantAndMachineCode", reflect.TypeOf((*MockStore)(nil).GetCloudPrinterProviderAuthorizationByMerchantAndMachineCode), ctx, arg)
 }
 
 // GetCloudPrinterReconciliationJob mocks base method.
@@ -13519,6 +13579,21 @@ func (m *MockStore) ListClaimsByTimeWindow(ctx context.Context, arg db.ListClaim
 func (mr *MockStoreMockRecorder) ListClaimsByTimeWindow(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListClaimsByTimeWindow", reflect.TypeOf((*MockStore)(nil).ListClaimsByTimeWindow), ctx, arg)
+}
+
+// ListCloudPrinterProviderAuthorizationsByMerchant mocks base method.
+func (m *MockStore) ListCloudPrinterProviderAuthorizationsByMerchant(ctx context.Context, arg db.ListCloudPrinterProviderAuthorizationsByMerchantParams) ([]db.CloudPrinterProviderAuthorization, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListCloudPrinterProviderAuthorizationsByMerchant", ctx, arg)
+	ret0, _ := ret[0].([]db.CloudPrinterProviderAuthorization)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListCloudPrinterProviderAuthorizationsByMerchant indicates an expected call of ListCloudPrinterProviderAuthorizationsByMerchant.
+func (mr *MockStoreMockRecorder) ListCloudPrinterProviderAuthorizationsByMerchant(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListCloudPrinterProviderAuthorizationsByMerchant", reflect.TypeOf((*MockStore)(nil).ListCloudPrinterProviderAuthorizationsByMerchant), ctx, arg)
 }
 
 // ListCloudPrinterReconciliationJobsByMerchant mocks base method.
@@ -22726,6 +22801,21 @@ func (m *MockStore) UpsertBaofuMerchantReportProcessing(ctx context.Context, arg
 func (mr *MockStoreMockRecorder) UpsertBaofuMerchantReportProcessing(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertBaofuMerchantReportProcessing", reflect.TypeOf((*MockStore)(nil).UpsertBaofuMerchantReportProcessing), ctx, arg)
+}
+
+// UpsertCloudPrinterProviderAuthorization mocks base method.
+func (m *MockStore) UpsertCloudPrinterProviderAuthorization(ctx context.Context, arg db.UpsertCloudPrinterProviderAuthorizationParams) (db.CloudPrinterProviderAuthorization, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpsertCloudPrinterProviderAuthorization", ctx, arg)
+	ret0, _ := ret[0].(db.CloudPrinterProviderAuthorization)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpsertCloudPrinterProviderAuthorization indicates an expected call of UpsertCloudPrinterProviderAuthorization.
+func (mr *MockStoreMockRecorder) UpsertCloudPrinterProviderAuthorization(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertCloudPrinterProviderAuthorization", reflect.TypeOf((*MockStore)(nil).UpsertCloudPrinterProviderAuthorization), ctx, arg)
 }
 
 // UpsertCloudPrinterReconciliationJob mocks base method.

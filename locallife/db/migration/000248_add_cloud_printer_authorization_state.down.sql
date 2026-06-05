@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS cloud_printer_provider_authorizations;
+DROP TABLE IF EXISTS cloud_printer_authorization_sessions;

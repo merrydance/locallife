@@ -474,6 +474,38 @@ type CloudPrinter struct {
 	PrinterRole      string             `json:"printer_role"`
 }
 
+type CloudPrinterAuthorizationSession struct {
+	ID           int64              `json:"id"`
+	State        string             `json:"state"`
+	MerchantID   int64              `json:"merchant_id"`
+	ProviderType string             `json:"provider_type"`
+	PrinterName  pgtype.Text        `json:"printer_name"`
+	PrinterRole  pgtype.Text        `json:"printer_role"`
+	CreatedBy    pgtype.Int8        `json:"created_by"`
+	ExpiresAt    time.Time          `json:"expires_at"`
+	ConsumedAt   pgtype.Timestamptz `json:"consumed_at"`
+	CreatedAt    time.Time          `json:"created_at"`
+	UpdatedAt    time.Time          `json:"updated_at"`
+}
+
+type CloudPrinterProviderAuthorization struct {
+	ID                       int64              `json:"id"`
+	MerchantID               int64              `json:"merchant_id"`
+	ProviderType             string             `json:"provider_type"`
+	MachineCode              string             `json:"machine_code"`
+	AuthorizedCloudPrinterID pgtype.Int8        `json:"authorized_cloud_printer_id"`
+	AccessTokenCiphertext    string             `json:"access_token_ciphertext"`
+	RefreshTokenCiphertext   string             `json:"refresh_token_ciphertext"`
+	AccessTokenExpiresAt     time.Time          `json:"access_token_expires_at"`
+	RefreshTokenExpiresAt    time.Time          `json:"refresh_token_expires_at"`
+	Status                   string             `json:"status"`
+	RefreshFailureCount      int32              `json:"refresh_failure_count"`
+	RefreshLastAttemptedAt   pgtype.Timestamptz `json:"refresh_last_attempted_at"`
+	LastProviderError        pgtype.Text        `json:"last_provider_error"`
+	CreatedAt                time.Time          `json:"created_at"`
+	UpdatedAt                time.Time          `json:"updated_at"`
+}
+
 type CloudPrinterReconciliationJob struct {
 	ID            int64              `json:"id"`
 	MerchantID    int64              `json:"merchant_id"`

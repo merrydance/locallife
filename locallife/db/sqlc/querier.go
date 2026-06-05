@@ -141,6 +141,7 @@ type Querier interface {
 	// 确认提现完成（冻结余额转为已提现）
 	ConfirmUserWithdraw(ctx context.Context, arg ConfirmUserWithdrawParams) (UserBalance, error)
 	ConfirmWebLoginSession(ctx context.Context, arg ConfirmWebLoginSessionParams) (WebLoginSession, error)
+	ConsumeCloudPrinterAuthorizationSession(ctx context.Context, arg ConsumeCloudPrinterAuthorizationSessionParams) (CloudPrinterAuthorizationSession, error)
 	ConsumeRiderDepositCredit(ctx context.Context, arg ConsumeRiderDepositCreditParams) (RiderDepositCredit, error)
 	ConsumeWebLoginSession(ctx context.Context, id int64) (WebLoginSession, error)
 	CountActiveDiscountRules(ctx context.Context, merchantID int64) (int64, error)
@@ -337,6 +338,7 @@ type Querier interface {
 	CreateClaimRecovery(ctx context.Context, arg CreateClaimRecoveryParams) (ClaimRecovery, error)
 	CreateClaimRecoveryEvent(ctx context.Context, arg CreateClaimRecoveryEventParams) (ClaimRecoveryEvent, error)
 	CreateCloudPrinter(ctx context.Context, arg CreateCloudPrinterParams) (CloudPrinter, error)
+	CreateCloudPrinterAuthorizationSession(ctx context.Context, arg CreateCloudPrinterAuthorizationSessionParams) (CloudPrinterAuthorizationSession, error)
 	// ==================== 合单支付主表查询 ====================
 	CreateCombinedPaymentOrder(ctx context.Context, arg CreateCombinedPaymentOrderParams) (CombinedPaymentOrder, error)
 	// ==================== 合单支付子订单查询 ====================
@@ -618,6 +620,7 @@ type Querier interface {
 	GetActiveBillingGroupMember(ctx context.Context, arg GetActiveBillingGroupMemberParams) (BillingGroupMember, error)
 	// 返回指定区域内有商户覆盖的品类标签，按商户数量降序
 	GetActiveCategoriesByRegion(ctx context.Context, regionID int64) ([]GetActiveCategoriesByRegionRow, error)
+	GetActiveCloudPrinterAuthorizationSessionForUpdate(ctx context.Context, state string) (CloudPrinterAuthorizationSession, error)
 	GetActiveDeliveryFeeConfigByRegion(ctx context.Context, regionID int64) (DeliveryFeeConfig, error)
 	GetActiveDiningSessionByReservation(ctx context.Context, reservationID pgtype.Int8) (DiningSession, error)
 	GetActiveDiningSessionByTable(ctx context.Context, tableID int64) (DiningSession, error)
@@ -691,6 +694,7 @@ type Querier interface {
 	GetClosestRegion(ctx context.Context, arg GetClosestRegionParams) (Region, error)
 	GetCloudPrinter(ctx context.Context, id int64) (CloudPrinter, error)
 	GetCloudPrinterBySN(ctx context.Context, printerSn string) (CloudPrinter, error)
+	GetCloudPrinterProviderAuthorizationByMerchantAndMachineCode(ctx context.Context, arg GetCloudPrinterProviderAuthorizationByMerchantAndMachineCodeParams) (CloudPrinterProviderAuthorization, error)
 	GetCloudPrinterReconciliationJob(ctx context.Context, id int64) (CloudPrinterReconciliationJob, error)
 	GetCombinedPaymentOrder(ctx context.Context, id int64) (CombinedPaymentOrder, error)
 	GetCombinedPaymentOrderByOutTradeNo(ctx context.Context, combineOutTradeNo string) (CombinedPaymentOrder, error)
@@ -1261,6 +1265,7 @@ type Querier interface {
 	// ==========================================
 	// 查询指定时间窗口内的索赔（用于协同欺诈检测）
 	ListClaimsByTimeWindow(ctx context.Context, arg ListClaimsByTimeWindowParams) ([]ListClaimsByTimeWindowRow, error)
+	ListCloudPrinterProviderAuthorizationsByMerchant(ctx context.Context, arg ListCloudPrinterProviderAuthorizationsByMerchantParams) ([]CloudPrinterProviderAuthorization, error)
 	ListCloudPrinterReconciliationJobsByMerchant(ctx context.Context, arg ListCloudPrinterReconciliationJobsByMerchantParams) ([]CloudPrinterReconciliationJob, error)
 	ListCloudPrintersByMerchant(ctx context.Context, merchantID int64) ([]CloudPrinter, error)
 	// 获取指定日期范围内所有合单（收付通）支付订单（用于每日对账）
@@ -1971,6 +1976,7 @@ type Querier interface {
 	UpsertBaofuAccountBinding(ctx context.Context, arg UpsertBaofuAccountBindingParams) (BaofuAccountBinding, error)
 	UpsertBaofuAccountOpeningProfile(ctx context.Context, arg UpsertBaofuAccountOpeningProfileParams) (BaofuAccountOpeningProfile, error)
 	UpsertBaofuMerchantReportProcessing(ctx context.Context, arg UpsertBaofuMerchantReportProcessingParams) (BaofuMerchantReport, error)
+	UpsertCloudPrinterProviderAuthorization(ctx context.Context, arg UpsertCloudPrinterProviderAuthorizationParams) (CloudPrinterProviderAuthorization, error)
 	UpsertCloudPrinterReconciliationJob(ctx context.Context, arg UpsertCloudPrinterReconciliationJobParams) (CloudPrinterReconciliationJob, error)
 	// 添加或更新菜品标签关联
 	UpsertDishTag(ctx context.Context, arg UpsertDishTagParams) error
