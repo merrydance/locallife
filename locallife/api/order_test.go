@@ -3727,6 +3727,49 @@ func TestListMerchantPrintAnomaliesAPI(t *testing.T) {
 			},
 		},
 		{
+			name:  "YilianyunFailedPrintIsRetryableWhenRuntimeConfigured",
+			query: "?status=failed&page_size=10",
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+				store.EXPECT().ListMerchantPrintAnomalies(gomock.Any(), gomock.Eq(db.ListMerchantPrintAnomaliesParams{
+					MerchantID: merchant.ID,
+					Limit:      10,
+					Offset:     0,
+					Status:     pgtype.Text{String: db.PrintLogStatusFailed, Valid: true},
+				})).Times(1).Return([]db.ListMerchantPrintAnomaliesRow{{
+					ID:          14,
+					OrderID:     104,
+					OrderNo:     "ORD-104",
+					OrderType:   db.OrderTypeTakeout,
+					PrinterID:   204,
+					PrinterName: "易联云打印机",
+					PrinterType: printerTypeYilianyun,
+					IsActive:    true,
+					Status:      db.PrintLogStatusFailed,
+					CreatedAt:   now,
+				}}, nil)
+				store.EXPECT().CountMerchantPrintAnomalies(gomock.Any(), gomock.Eq(db.CountMerchantPrintAnomaliesParams{
+					MerchantID: merchant.ID,
+					Status:     pgtype.Text{String: db.PrintLogStatusFailed, Valid: true},
+				})).Times(1).Return(int64(1), nil)
+			},
+			setupServer: func(server *Server) {
+				server.config.YilianyunEnabled = true
+				server.config.YilianyunAPIBaseURL = "https://open-api.10ss.net/v2"
+				server.config.YilianyunAppID = "client-001"
+				server.config.YilianyunAppSecret = "secret-001"
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp listMerchantPrintAnomaliesResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Len(t, resp.Items, 1)
+				require.Equal(t, printerTypeYilianyun, resp.Items[0].PrinterType)
+				require.True(t, resp.Items[0].CanRetry)
+				require.Empty(t, resp.Items[0].RetryHint)
+			},
+		},
+		{
 			name:  "StatusFilter",
 			query: "?status=pending&page_size=10",
 			buildStubs: func(store *mockdb.MockStore) {

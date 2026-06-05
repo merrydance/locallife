@@ -227,12 +227,25 @@ func normalizeCloudPrinterStatusPollConfig(config util.Config) cloudPrinterStatu
 }
 
 func sanitizeProviderStatusPollError(message string) string {
+	return sanitizePrintProviderErrorWithDefault(message, "provider_status_query_failed")
+}
+
+func sanitizePrintProviderError(message string) string {
+	return sanitizePrintProviderErrorWithDefault(message, "provider_print_failed")
+}
+
+func sanitizePrintProviderErrorWithDefault(message string, defaultMessage string) string {
 	message = strings.TrimSpace(message)
 	if message == "" {
-		return "provider_status_query_failed"
+		return defaultMessage
 	}
-	message = maskDelimitedSecrets(message, []string{"appsecret", "client_secret", "access_token", "refresh_token", "pkey", "printer_key", "sign"})
+	message = maskDelimitedSecrets(message, sensitiveProviderErrorKeys())
+	message = maskJSONLikeSecrets(message, sensitiveProviderErrorKeys())
 	return truncatePrintError(message)
+}
+
+func sensitiveProviderErrorKeys() []string {
+	return []string{"appsecret", "client_secret", "access_token", "refresh_token", "pkey", "printer_key", "sign"}
 }
 
 func maskDelimitedSecrets(message string, keys []string) string {
@@ -267,6 +280,63 @@ func maskSecretToken(token string, keys []string) string {
 		}
 	}
 	return token
+}
+
+func maskJSONLikeSecrets(message string, keys []string) string {
+	if message == "" {
+		return message
+	}
+	var out strings.Builder
+	for i := 0; i < len(message); {
+		matched := false
+		for _, key := range keys {
+			prefix := `"` + key + `"`
+			if !strings.HasPrefix(strings.ToLower(message[i:]), prefix) {
+				continue
+			}
+			j := i + len(prefix)
+			for j < len(message) && (message[j] == ' ' || message[j] == '\t' || message[j] == '\n' || message[j] == '\r') {
+				j++
+			}
+			if j >= len(message) || message[j] != ':' {
+				continue
+			}
+			j++
+			for j < len(message) && (message[j] == ' ' || message[j] == '\t' || message[j] == '\n' || message[j] == '\r') {
+				j++
+			}
+			out.WriteString(message[i:j])
+			if j < len(message) && message[j] == '"' {
+				out.WriteString(`"[redacted]"`)
+				j++
+				for j < len(message) {
+					if message[j] == '"' {
+						j++
+						break
+					}
+					if message[j] == '\\' && j+1 < len(message) {
+						j += 2
+						continue
+					}
+					j++
+				}
+			} else {
+				out.WriteString("[redacted]")
+				for j < len(message) && message[j] != ',' && message[j] != '}' && message[j] != ']' && message[j] != ' ' && message[j] != ';' {
+					j++
+				}
+			}
+			i = j
+			matched = true
+			break
+		}
+		if matched {
+			continue
+		}
+		out.WriteByte(message[i])
+		i++
+	}
+	return out.String()
 }
 
 func isProviderErrorDelimiter(ch byte) bool {

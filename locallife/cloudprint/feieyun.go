@@ -39,6 +39,8 @@ type RemovePrinterInput struct {
 }
 
 type PrintInput struct {
+	PrinterID        int64
+	MerchantID       int64
 	SN               string
 	Content          string
 	Copies           int

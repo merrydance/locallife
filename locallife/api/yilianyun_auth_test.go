@@ -66,7 +66,7 @@ func TestCreateYilianyunAuthorizationSessionAPI(t *testing.T) {
 			},
 			oauth: &fakeYilianyunOAuthClient{
 				buildAuthorizeURL: func(state string) (string, error) {
-					return "https://open-api.10ss.net/oauth/authorize?state=" + state, nil
+					return "https://open-api.10ss.net/v2/oauth/authorize?state=" + state, nil
 				},
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -266,7 +266,7 @@ func TestAuthorizeScannedYilianyunPrinterAPI(t *testing.T) {
 	}{
 		{
 			name: "OKWithQRKey",
-			body: `{"machine_code":"YL-SCAN-001","qr_key":"qr-secret","printer_name":"前台易联云","printer_role":"front"}`,
+			body: `{"machine_code":"YL-SCAN-001","qr_key":"qr-secret","printer_name":"前台易联云","printer_role":"front","print_takeout":false,"print_dine_in":true,"print_reservation":false}`,
 			buildStubs: func(store *mockdb.MockStore) {
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 				store.EXPECT().CreateAuthorizedYilianyunCloudPrinterTx(gomock.Any(), gomock.Any()).
@@ -283,6 +283,9 @@ func TestAuthorizeScannedYilianyunPrinterAPI(t *testing.T) {
 						require.Empty(t, arg.Printer.PrinterKey)
 						require.Equal(t, db.CloudPrinterProviderYilianyun, arg.Printer.PrinterType)
 						require.Equal(t, "front", arg.Printer.PrinterRole)
+						require.False(t, arg.Printer.PrintTakeout)
+						require.True(t, arg.Printer.PrintDineIn)
+						require.False(t, arg.Printer.PrintReservation)
 						return db.CreateAuthorizedYilianyunCloudPrinterTxResult{
 							Printer: db.CloudPrinter{
 								ID:               654,
@@ -291,9 +294,9 @@ func TestAuthorizeScannedYilianyunPrinterAPI(t *testing.T) {
 								PrinterSn:        "YL-SCAN-001",
 								PrinterType:      db.CloudPrinterProviderYilianyun,
 								PrinterRole:      "front",
-								PrintTakeout:     true,
+								PrintTakeout:     false,
 								PrintDineIn:      true,
-								PrintReservation: true,
+								PrintReservation: false,
 								IsActive:         true,
 								CreatedAt:        now,
 							},

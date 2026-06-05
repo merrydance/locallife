@@ -182,6 +182,30 @@ export interface PrinterResponse {
     updated_at: string
 }
 
+/** 易联云机器码授权请求 - 对齐 api.authorizeScannedYilianyunPrinterRequest */
+export interface AuthorizeScannedYilianyunPrinterRequest extends Record<string, unknown> {
+    machine_code: string
+    qr_key?: string
+    msign?: string
+    printer_name?: string
+    printer_role?: PrinterRole
+    print_takeout?: boolean
+    print_dine_in?: boolean
+    print_reservation?: boolean
+}
+
+/** 易联云授权响应 - 对齐 api.yilianyunAuthorizationResponse */
+export interface YilianyunAuthorizationResponse {
+    authorization_id: number
+    merchant_id: number
+    provider_type: 'yilianyun' | string
+    machine_code: string
+    status: string
+    access_expires_at: string
+    refresh_expires_at: string
+    printer?: PrinterResponse
+}
+
 /** 打印机实时状态响应 - 对齐 api.printerLiveStatusResponse */
 export interface PrinterLiveStatusResponse {
     printer_id: number
@@ -546,6 +570,20 @@ export class DeviceManagementService {
             url: '/v1/merchant/devices',
             method: 'POST',
             data: printerData
+        })
+    }
+
+    /**
+     * 易联云机器码授权绑定打印机
+     * @param authorizationData 机器码授权数据
+     */
+    async authorizeScannedYilianyunPrinter(
+        authorizationData: AuthorizeScannedYilianyunPrinterRequest
+    ): Promise<YilianyunAuthorizationResponse> {
+        return request({
+            url: '/v1/merchant/devices/yilianyun/scan-authorizations',
+            method: 'POST',
+            data: authorizationData
         })
     }
 

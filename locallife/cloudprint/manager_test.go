@@ -95,13 +95,13 @@ func TestManagerRejectsUnknownProvider(t *testing.T) {
 	require.Nil(t, provider)
 }
 
-func TestManagerDoesNotRegisterYilianyunBeforeAuthorizationRuntimeImplementation(t *testing.T) {
+func TestManagerDoesNotRegisterYilianyunBecauseRuntimeNeedsPrinterAuthorization(t *testing.T) {
 	manager := NewManagerFromConfig(util.Config{
 		YilianyunEnabled:         true,
-		YilianyunAPIBaseURL:      "https://open-api.10ss.net",
+		YilianyunAPIBaseURL:      "https://open-api.10ss.net/v2",
 		YilianyunAppID:           "app",
 		YilianyunAppSecret:       "secret",
-		YilianyunAuthCallbackURL: "https://api.example.com/v1/cloud-printer/yilianyun/auth/callback",
+		YilianyunAuthCallbackURL: "https://api.example.com/v1/merchant/devices/yilianyun/auth/callback",
 	})
 
 	require.False(t, manager.Supported(string(ProviderYilianyun)))

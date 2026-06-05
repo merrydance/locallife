@@ -6567,6 +6567,21 @@ func (mr *MockStoreMockRecorder) GetActiveCloudPrinterAuthorizationSessionForUpd
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActiveCloudPrinterAuthorizationSessionForUpdate", reflect.TypeOf((*MockStore)(nil).GetActiveCloudPrinterAuthorizationSessionForUpdate), ctx, state)
 }
 
+// GetActiveCloudPrinterProviderAuthorizationByPrinter mocks base method.
+func (m *MockStore) GetActiveCloudPrinterProviderAuthorizationByPrinter(ctx context.Context, arg db.GetActiveCloudPrinterProviderAuthorizationByPrinterParams) (db.CloudPrinterProviderAuthorization, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetActiveCloudPrinterProviderAuthorizationByPrinter", ctx, arg)
+	ret0, _ := ret[0].(db.CloudPrinterProviderAuthorization)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetActiveCloudPrinterProviderAuthorizationByPrinter indicates an expected call of GetActiveCloudPrinterProviderAuthorizationByPrinter.
+func (mr *MockStoreMockRecorder) GetActiveCloudPrinterProviderAuthorizationByPrinter(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActiveCloudPrinterProviderAuthorizationByPrinter", reflect.TypeOf((*MockStore)(nil).GetActiveCloudPrinterProviderAuthorizationByPrinter), ctx, arg)
+}
+
 // GetActiveDeliveryFeeConfigByRegion mocks base method.
 func (m *MockStore) GetActiveDeliveryFeeConfigByRegion(ctx context.Context, regionID int64) (db.DeliveryFeeConfig, error) {
 	m.ctrl.T.Helper()

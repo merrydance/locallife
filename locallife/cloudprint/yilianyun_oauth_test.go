@@ -24,11 +24,11 @@ func TestBuildYilianyunSignUsesOfficialLowercaseMD5Rule(t *testing.T) {
 func TestYilianyunAuthorizeURLUsesOfficialOpenAppFields(t *testing.T) {
 	client := newYilianyunOAuthClientFromConfig(util.Config{
 		YilianyunEnabled:          true,
-		YilianyunAPIBaseURL:       "https://open-api.10ss.net/",
+		YilianyunAPIBaseURL:       "https://open-api.10ss.net/v2/",
 		YilianyunAppID:            "client-001",
 		YilianyunAppSecret:        "secret-001",
 		YilianyunHTTPTimeout:      time.Second,
-		YilianyunAuthCallbackURL:  "https://api.example.com/v1/cloud-printer/yilianyun/auth/callback?source=merchant",
+		YilianyunAuthCallbackURL:  "https://api.example.com/v1/merchant/devices/yilianyun/auth/callback?source=merchant",
 		YilianyunPrintCallbackURL: "https://api.example.com/v1/webhooks/yilianyun/print-result",
 	}, nil, nil)
 
@@ -39,10 +39,10 @@ func TestYilianyunAuthorizeURLUsesOfficialOpenAppFields(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "https", parsed.Scheme)
 	require.Equal(t, "open-api.10ss.net", parsed.Host)
-	require.Equal(t, "/oauth/authorize", parsed.Path)
+	require.Equal(t, "/v2/oauth/authorize", parsed.Path)
 	require.Equal(t, "code", parsed.Query().Get("response_type"))
 	require.Equal(t, "client-001", parsed.Query().Get("client_id"))
-	require.Equal(t, "https://api.example.com/v1/cloud-printer/yilianyun/auth/callback?source=merchant", parsed.Query().Get("redirect_uri"))
+	require.Equal(t, "https://api.example.com/v1/merchant/devices/yilianyun/auth/callback?source=merchant", parsed.Query().Get("redirect_uri"))
 	require.Equal(t, "state-opaque-001", parsed.Query().Get("state"))
 }
 
@@ -97,7 +97,7 @@ func TestYilianyunExchangeAuthorizationCodePostsOfficialFields(t *testing.T) {
 func TestYilianyunAuthorizeScannedPrinterRequiresExactlyOneCredential(t *testing.T) {
 	client := newYilianyunOAuthClientFromConfig(util.Config{
 		YilianyunEnabled:     true,
-		YilianyunAPIBaseURL:  "https://open-api.10ss.net",
+		YilianyunAPIBaseURL:  "https://open-api.10ss.net/v2",
 		YilianyunAppID:       "client-001",
 		YilianyunAppSecret:   "secret-001",
 		YilianyunHTTPTimeout: time.Second,

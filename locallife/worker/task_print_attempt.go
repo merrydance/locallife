@@ -52,6 +52,8 @@ func (processor *RedisTaskProcessor) executePrintAttemptWithProvider(ctx context
 	}
 
 	vendorOrderID, printErr := printerProvider.Print(ctx, cloudprint.PrintInput{
+		PrinterID:        printer.ID,
+		MerchantID:       printer.MerchantID,
 		SN:               printer.PrinterSn,
 		Content:          content,
 		Copies:           1,
@@ -68,7 +70,7 @@ func (processor *RedisTaskProcessor) executePrintAttemptWithProvider(ctx context
 	}
 	if printErr != nil {
 		updateParams.Status = printLogStatusFailed
-		updateParams.ErrorMessage = pgtype.Text{String: truncatePrintError(printErr.Error()), Valid: true}
+		updateParams.ErrorMessage = pgtype.Text{String: sanitizePrintProviderError(printErr.Error()), Valid: true}
 		log.Error().Err(printErr).
 			Int64("order_id", orderID).
 			Int64("printer_id", printer.ID).

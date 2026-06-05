@@ -20,7 +20,7 @@ func TestCloudPrinterAuthorizationServiceCreatesYilianyunAuthorizationSession(t 
 	oauth := &fakeYilianyunAuthorizationOAuthClient{}
 	oauth.buildAuthorizeURL = func(state string) (string, error) {
 		require.Equal(t, "state-fixed", state)
-		return "https://open-api.10ss.net/oauth/authorize?state=" + state, nil
+		return "https://open-api.10ss.net/v2/oauth/authorize?state=" + state, nil
 	}
 	store.createSession = func(_ context.Context, arg db.CreateCloudPrinterAuthorizationSessionParams) (db.CloudPrinterAuthorizationSession, error) {
 		require.Equal(t, "state-fixed", arg.State)
@@ -55,7 +55,7 @@ func TestCloudPrinterAuthorizationServiceCreatesYilianyunAuthorizationSession(t 
 
 	require.NoError(t, err)
 	require.Equal(t, "state-fixed", result.State)
-	require.Equal(t, "https://open-api.10ss.net/oauth/authorize?state=state-fixed", result.AuthorizeURL)
+	require.Equal(t, "https://open-api.10ss.net/v2/oauth/authorize?state=state-fixed", result.AuthorizeURL)
 	require.WithinDuration(t, now.Add(10*time.Minute), result.ExpiresAt, time.Second)
 }
 
@@ -221,16 +221,22 @@ func TestCloudPrinterAuthorizationServiceAuthorizesScannedPrinterWithExactlyOneC
 		require.Equal(t, "YL-MACHINE-002", arg.Authorization.MachineCode)
 		require.Equal(t, db.CloudPrinterProviderYilianyun, arg.Printer.PrinterType)
 		require.Empty(t, arg.Printer.PrinterKey)
+		require.False(t, arg.Printer.PrintTakeout)
+		require.True(t, arg.Printer.PrintDineIn)
+		require.False(t, arg.Printer.PrintReservation)
 		return db.CreateAuthorizedYilianyunCloudPrinterTxResult{
 			Printer: db.CloudPrinter{
-				ID:          201,
-				MerchantID:  11,
-				PrinterName: "易联云 YL-MACHINE-002",
-				PrinterSn:   "YL-MACHINE-002",
-				PrinterType: db.CloudPrinterProviderYilianyun,
-				PrinterRole: "front",
-				IsActive:    true,
-				CreatedAt:   now,
+				ID:               201,
+				MerchantID:       11,
+				PrinterName:      "易联云 YL-MACHINE-002",
+				PrinterSn:        "YL-MACHINE-002",
+				PrinterType:      db.CloudPrinterProviderYilianyun,
+				PrinterRole:      "front",
+				PrintTakeout:     false,
+				PrintDineIn:      true,
+				PrintReservation: false,
+				IsActive:         true,
+				CreatedAt:        now,
 			},
 			Authorization: db.CloudPrinterProviderAuthorization{
 				ID:           102,
@@ -250,13 +256,19 @@ func TestCloudPrinterAuthorizationServiceAuthorizesScannedPrinterWithExactlyOneC
 	service := NewCloudPrinterAuthorizationService(store, oauth, encryptor, CloudPrinterAuthorizationServiceConfig{
 		Now: func() time.Time { return now },
 	})
+	printTakeout := false
+	printDineIn := true
+	printReservation := false
 
 	result, err := service.AuthorizeScannedYilianyunPrinter(context.Background(), AuthorizeScannedYilianyunPrinterInput{
-		MerchantID:  11,
-		MachineCode: "YL-MACHINE-002",
-		QRKey:       "qr-secret",
-		PrinterName: " 易联云 YL-MACHINE-002 ",
-		PrinterRole: "front",
+		MerchantID:       11,
+		MachineCode:      "YL-MACHINE-002",
+		QRKey:            "qr-secret",
+		PrinterName:      " 易联云 YL-MACHINE-002 ",
+		PrinterRole:      "front",
+		PrintTakeout:     &printTakeout,
+		PrintDineIn:      &printDineIn,
+		PrintReservation: &printReservation,
 	})
 
 	require.NoError(t, err)
@@ -265,6 +277,9 @@ func TestCloudPrinterAuthorizationServiceAuthorizesScannedPrinterWithExactlyOneC
 	require.Equal(t, int64(201), result.Printer.ID)
 	require.Equal(t, "YL-MACHINE-002", result.Printer.PrinterSN)
 	require.Empty(t, result.Printer.PrinterKey)
+	require.False(t, result.Printer.PrintTakeout)
+	require.True(t, result.Printer.PrintDineIn)
+	require.False(t, result.Printer.PrintReservation)
 
 	_, err = service.AuthorizeScannedYilianyunPrinter(context.Background(), AuthorizeScannedYilianyunPrinterInput{
 		MerchantID:  11,

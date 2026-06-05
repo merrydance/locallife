@@ -205,7 +205,7 @@ func TestYilianyunSetPrintCallbackURLPostsOfficialFields(t *testing.T) {
 func TestYilianyunSetPrintCallbackURLValidatesInputBeforeProviderCall(t *testing.T) {
 	client := newYilianyunClientFromConfig(util.Config{
 		YilianyunEnabled:     true,
-		YilianyunAPIBaseURL:  "https://open-api.10ss.net",
+		YilianyunAPIBaseURL:  "https://open-api.10ss.net/v2",
 		YilianyunAppID:       "client-001",
 		YilianyunAppSecret:   "secret-001",
 		YilianyunHTTPTimeout: time.Second,
@@ -241,7 +241,7 @@ func TestYilianyunPrintResultCallbackEnabledRequiresConfiguredClient(t *testing.
 
 	client := newYilianyunClientFromConfig(util.Config{
 		YilianyunEnabled:     true,
-		YilianyunAPIBaseURL:  "https://open-api.10ss.net",
+		YilianyunAPIBaseURL:  "https://open-api.10ss.net/v2",
 		YilianyunAppID:       "client-001",
 		YilianyunAppSecret:   "secret-001",
 		YilianyunHTTPTimeout: time.Second,

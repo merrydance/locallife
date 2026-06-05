@@ -98,6 +98,30 @@ WHERE merchant_id = $1
   AND machine_code = $3
 LIMIT 1;
 
+-- name: GetActiveCloudPrinterProviderAuthorizationByPrinter :one
+SELECT
+    id,
+    merchant_id,
+    provider_type,
+    machine_code,
+    authorized_cloud_printer_id,
+    access_token_ciphertext,
+    refresh_token_ciphertext,
+    access_token_expires_at,
+    refresh_token_expires_at,
+    status,
+    refresh_failure_count,
+    refresh_last_attempted_at,
+    last_provider_error,
+    created_at,
+    updated_at
+FROM cloud_printer_provider_authorizations
+WHERE authorized_cloud_printer_id = $1
+  AND provider_type = $2
+  AND machine_code = $3
+  AND status = 'active'
+LIMIT 1;
+
 -- name: ListCloudPrinterProviderAuthorizationsByMerchant :many
 SELECT id, merchant_id, provider_type, machine_code, authorized_cloud_printer_id, access_token_ciphertext, refresh_token_ciphertext, access_token_expires_at, refresh_token_expires_at, status, refresh_failure_count, refresh_last_attempted_at, last_provider_error, created_at, updated_at
 FROM cloud_printer_provider_authorizations

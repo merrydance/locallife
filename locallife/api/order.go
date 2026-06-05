@@ -1762,7 +1762,7 @@ func (server *Server) toMerchantPrintAnomalyResponse(item db.ListMerchantPrintAn
 		responseItem.RetryHint = "print job is still pending"
 		return responseItem
 	}
-	if _, ok := server.cloudPrinterProvider(item.PrinterType); !ok {
+	if !server.cloudPrinterPrintRetryAvailable(item.PrinterType) {
 		responseItem.RetryHint = "cloud printer provider is not configured"
 		return responseItem
 	}
@@ -1778,6 +1778,18 @@ func isPrintLogStatusRetryable(status string) bool {
 	default:
 		return false
 	}
+}
+
+func (server *Server) cloudPrinterPrintRetryAvailable(providerType string) bool {
+	if providerType == printerTypeYilianyun {
+		return server != nil &&
+			server.config.YilianyunEnabled &&
+			strings.TrimSpace(server.config.YilianyunAPIBaseURL) != "" &&
+			strings.TrimSpace(server.config.YilianyunAppID) != "" &&
+			strings.TrimSpace(server.config.YilianyunAppSecret) != ""
+	}
+	_, ok := server.cloudPrinterProvider(providerType)
+	return ok
 }
 
 // completeOrder godoc
@@ -2217,7 +2229,7 @@ func (server *Server) retryMerchantOrderPrintJob(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("printer is inactive")))
 		return
 	}
-	if _, ok := server.cloudPrinterProvider(printer.PrinterType); !ok {
+	if !server.cloudPrinterPrintRetryAvailable(printer.PrinterType) {
 		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("cloud printer provider is not configured")))
 		return
 	}

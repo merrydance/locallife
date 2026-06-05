@@ -499,7 +499,7 @@ func LoadConfig(path string) (config Config, err error) {
 	v.SetDefault("FEIEYUN_API_BASE_URL", "https://api.feieyun.cn")
 	v.SetDefault("FEIEYUN_HTTP_TIMEOUT", "5s")
 	v.SetDefault("YILIANYUN_ENABLED", false)
-	v.SetDefault("YILIANYUN_API_BASE_URL", "https://open-api.10ss.net")
+	v.SetDefault("YILIANYUN_API_BASE_URL", "https://open-api.10ss.net/v2")
 	v.SetDefault("YILIANYUN_HTTP_TIMEOUT", "5s")
 	v.SetDefault("YILIANYUN_PRINT_CALLBACK_FRESHNESS_WINDOW", "10m")
 	v.SetDefault("SHANGPENG_ENABLED", false)

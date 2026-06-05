@@ -27,8 +27,29 @@
     <view class="page-content">
       <view class="section-panel">
         <view class="section-top-main">
-          <text class="section-title">1. 基础信息</text>
-          <text class="section-caption">名称、序列号和密钥与云打印机平台保持一致。编辑时只有填写新密钥才会覆盖旧值。</text>
+          <text class="section-title">1. 设备类型</text>
+          <text class="section-caption">{{isEdit ? '设备类型由绑定记录决定，编辑时不切换云平台。' : '选择设备所在的云打印平台。'}}</text>
+        </view>
+
+        <view wx:if="{{!isEdit}}" class="option-group">
+          <t-radio-group value="{{formData.printer_type}}" bind:change="onPrinterTypeChange">
+            <view wx:for="{{printerTypeOptions}}" wx:key="value" class="option-card">
+              <t-radio value="{{item.value}}" label="{{item.label}}" />
+              <text class="option-card__desc">{{item.desc}}</text>
+            </view>
+          </t-radio-group>
+        </view>
+
+        <view wx:else class="readonly-provider">
+          <text class="readonly-provider__name">{{formData.printer_type === 'feieyun' ? '飞鹅云' : (formData.printer_type === 'shangpeng' ? '商鹏云' : (formData.printer_type === 'yilianyun' ? '易联云' : '其他设备'))}}</text>
+          <text class="readonly-provider__desc">设备编号 {{formData.printer_sn}}</text>
+        </view>
+      </view>
+
+      <view class="section-panel">
+        <view class="section-top-main">
+          <text class="section-title">2. 绑定信息</text>
+          <text class="section-caption">{{formData.printer_type === 'yilianyun' && !isEdit ? '填写机器码和终端密钥，系统会完成易联云开放应用授权。' : '名称、序列号和密钥与云打印机平台保持一致。'}}</text>
         </view>
 
         <t-cell-group theme="card">
@@ -41,35 +62,21 @@
           />
           <t-input
             wx:if="{{!isEdit}}"
-            label="序列号"
+            label="{{formData.printer_type === 'yilianyun' ? '机器码' : '序列号'}}"
             value="{{formData.printer_sn}}"
             data-field="printer_sn"
+            placeholder="{{formData.printer_type === 'yilianyun' ? '机身或自检页上的终端号' : ''}}"
             bind:change="onFormInputChange"
           />
           <t-input
-            label="打印机密钥"
+            wx:if="{{formData.printer_type !== 'yilianyun' || !isEdit}}"
+            label="{{formData.printer_type === 'yilianyun' ? '终端密钥' : '打印机密钥'}}"
             value="{{formData.printer_key}}"
             data-field="printer_key"
-            placeholder="{{isEdit ? '编辑时留空则不修改' : ''}}"
+            placeholder="{{isEdit ? '编辑时留空则不修改' : (formData.printer_type === 'yilianyun' ? '机身或自检页上的终端密钥' : '')}}"
             bind:change="onFormInputChange"
           />
         </t-cell-group>
-      </view>
-
-      <view class="section-panel">
-        <view class="section-top-main">
-          <text class="section-title">2. 设备类型</text>
-          <text class="section-caption">与套餐编辑页一致，采用摘要说明 + 聚焦选择，不把长说明塞进一行表单里。</text>
-        </view>
-
-        <view class="option-group">
-          <t-radio-group value="{{formData.printer_type}}" bind:change="onPrinterTypeChange">
-            <view wx:for="{{printerTypeOptions}}" wx:key="value" class="option-card">
-              <t-radio value="{{item.value}}" label="{{item.label}}" />
-              <text class="option-card__desc">{{item.desc}}</text>
-            </view>
-          </t-radio-group>
-        </view>
       </view>
 
       <view class="section-panel">
@@ -131,7 +138,7 @@
 
       <view class="form-actions">
         <t-button theme="primary" loading="{{submitting}}" bind:tap="onSubmit">
-          {{isEdit ? '保存打印机' : '新增打印机'}}
+          {{isEdit ? '保存打印机' : (formData.printer_type === 'yilianyun' ? '授权绑定' : '新增打印机')}}
         </t-button>
       </view>
     </view>

@@ -28,11 +28,14 @@ type yilianyunAuthorizationCallbackRequest struct {
 }
 
 type authorizeScannedYilianyunPrinterRequest struct {
-	MachineCode string `json:"machine_code" binding:"required,max=100"`
-	QRKey       string `json:"qr_key" binding:"omitempty,max=255"`
-	MSign       string `json:"msign" binding:"omitempty,max=255"`
-	PrinterName string `json:"printer_name" binding:"omitempty,max=100"`
-	PrinterRole string `json:"printer_role" binding:"omitempty,oneof=front kitchen"`
+	MachineCode      string `json:"machine_code" binding:"required,max=100"`
+	QRKey            string `json:"qr_key" binding:"omitempty,max=255"`
+	MSign            string `json:"msign" binding:"omitempty,max=255"`
+	PrinterName      string `json:"printer_name" binding:"omitempty,max=100"`
+	PrinterRole      string `json:"printer_role" binding:"omitempty,oneof=front kitchen"`
+	PrintTakeout     *bool  `json:"print_takeout"`
+	PrintDineIn      *bool  `json:"print_dine_in"`
+	PrintReservation *bool  `json:"print_reservation"`
 }
 
 type yilianyunAuthorizationResponse struct {
@@ -137,14 +140,14 @@ func (server *Server) handleYilianyunAuthorizationCallback(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, newYilianyunAuthorizationResponse(result))
 }
 
-// authorizeScannedYilianyunPrinter 易联云扫码/快速授权
-// @Summary 易联云扫码授权
-// @Description 商户提交扫码得到的 machine_code 和 qr_key/msign，完成易联云打印机授权
+// authorizeScannedYilianyunPrinter 易联云机器码/快速授权
+// @Summary 易联云机器码授权
+// @Description 商户提交机器码 machine_code 和终端密钥 msign；后续有真实二维码样本后也可提交 qr_key，完成易联云打印机授权
 // @Tags 商户设备管理
 // @Accept json
 // @Produce json
 // @Security Bearer
-// @Param request body authorizeScannedYilianyunPrinterRequest true "扫码授权参数"
+// @Param request body authorizeScannedYilianyunPrinterRequest true "机器码授权参数"
 // @Success 200 {object} yilianyunAuthorizationResponse "授权完成"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 401 {object} ErrorResponse "未授权"
@@ -164,12 +167,15 @@ func (server *Server) authorizeScannedYilianyunPrinter(ctx *gin.Context) {
 		return
 	}
 	result, err := server.cloudPrinterAuthorizationService().AuthorizeScannedYilianyunPrinter(ctx, logic.AuthorizeScannedYilianyunPrinterInput{
-		MerchantID:  merchant.ID,
-		MachineCode: req.MachineCode,
-		QRKey:       req.QRKey,
-		MSign:       req.MSign,
-		PrinterName: req.PrinterName,
-		PrinterRole: req.PrinterRole,
+		MerchantID:       merchant.ID,
+		MachineCode:      req.MachineCode,
+		QRKey:            req.QRKey,
+		MSign:            req.MSign,
+		PrinterName:      req.PrinterName,
+		PrinterRole:      req.PrinterRole,
+		PrintTakeout:     req.PrintTakeout,
+		PrintDineIn:      req.PrintDineIn,
+		PrintReservation: req.PrintReservation,
 	})
 	if err != nil {
 		if writeLogicRequestError(ctx, err) {

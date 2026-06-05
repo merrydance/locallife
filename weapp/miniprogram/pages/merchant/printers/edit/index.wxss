@@ -68,6 +68,28 @@
   color: var(--td-text-color-secondary);
 }
 
+.readonly-provider {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  padding: 20rpx 24rpx;
+  border-radius: 20rpx;
+  background: var(--td-bg-color-page);
+}
+
+.readonly-provider__name {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.readonly-provider__desc {
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
+  word-break: break-all;
+}
+
 .switch-row {
   display: flex;
   align-items: center;

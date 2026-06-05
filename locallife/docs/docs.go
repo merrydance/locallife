@@ -10482,7 +10482,7 @@ const docTemplate = `{
                         "Bearer": []
                     }
                 ],
-                "description": "商户提交扫码得到的 machine_code 和 qr_key/msign，完成易联云打印机授权",
+                "description": "商户提交机器码 machine_code 和终端密钥 msign；后续有真实二维码样本后也可提交 qr_key，完成易联云打印机授权",
                 "consumes": [
                     "application/json"
                 ],
@@ -10492,10 +10492,10 @@ const docTemplate = `{
                 "tags": [
                     "商户设备管理"
                 ],
-                "summary": "易联云扫码授权",
+                "summary": "易联云机器码授权",
                 "parameters": [
                     {
-                        "description": "扫码授权参数",
+                        "description": "机器码授权参数",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -32978,6 +32978,15 @@ const docTemplate = `{
                 "msign": {
                     "type": "string",
                     "maxLength": 255
+                },
+                "print_dine_in": {
+                    "type": "boolean"
+                },
+                "print_reservation": {
+                    "type": "boolean"
+                },
+                "print_takeout": {
+                    "type": "boolean"
                 },
                 "printer_name": {
                     "type": "string",

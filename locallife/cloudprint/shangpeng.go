@@ -25,6 +25,8 @@ type ShangpengClient struct {
 	now        func() string
 }
 
+const shangpengReceiptPrinterBusiness = "1"
+
 type shangpengResponse struct {
 	ErrorCode *int           `json:"errorcode"`
 	ErrorMsg  string         `json:"errormsg"`
@@ -72,12 +74,12 @@ func (c *ShangpengClient) PrintResultCallbackEnabled() bool {
 }
 
 func (c *ShangpengClient) AddPrinter(ctx context.Context, input AddPrinterInput) error {
-	if strings.TrimSpace(input.SN) == "" || strings.TrimSpace(input.Key) == "" || strings.TrimSpace(input.Business) == "" {
-		return fmt.Errorf("printer sn, key and business are required")
+	if strings.TrimSpace(input.SN) == "" || strings.TrimSpace(input.Key) == "" {
+		return fmt.Errorf("printer sn and key are required")
 	}
 
 	_, err := c.call(ctx, http.MethodPost, "/v1/printer/add", url.Values{
-		"business": []string{input.Business},
+		"business": []string{shangpengReceiptPrinterBusiness},
 		"sn":       []string{input.SN},
 		"pkey":     []string{input.Key},
 		"name":     []string{input.Name},
@@ -90,9 +92,9 @@ func (c *ShangpengClient) RemovePrinter(ctx context.Context, input RemovePrinter
 		return fmt.Errorf("printer sn is required")
 	}
 
-	params := url.Values{"sn": []string{input.SN}}
-	if strings.TrimSpace(input.Business) != "" {
-		params.Set("business", input.Business)
+	params := url.Values{
+		"sn":       []string{input.SN},
+		"business": []string{shangpengReceiptPrinterBusiness},
 	}
 	_, err := c.call(ctx, http.MethodDelete, "/v1/printer/delete", params)
 	return err
@@ -213,7 +215,7 @@ func (c *ShangpengClient) call(ctx context.Context, method string, path string, 
 		return shangpengResponse{}, fmt.Errorf("read shangpeng response: %w", err)
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return shangpengResponse{}, fmt.Errorf("shangpeng http status %d: %s", resp.StatusCode, strings.TrimSpace(string(rawBody)))
+		return shangpengResponse{}, fmt.Errorf("shangpeng http status %d", resp.StatusCode)
 	}
 
 	var response shangpengResponse

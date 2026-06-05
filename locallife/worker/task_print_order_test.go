@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"regexp"
 	"strings"
 	"testing"
@@ -14,6 +16,7 @@ import (
 	"github.com/merrydance/locallife/cloudprint"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/util"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -202,6 +205,126 @@ func TestExecutePrintAttempt_KeepsPendingWhenStatusQueryProviderAccepts(t *testi
 	require.Equal(t, createdProviderOriginID, shangpengClient.inputs[0].ProviderOriginID)
 }
 
+func TestExecutePrintAttempt_KeepsPendingWhenYilianyunAuthorizationPrintIsAccepted(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	var receivedAccessToken string
+	var receivedMachineCode string
+	var receivedOriginID string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/print/index", r.URL.Path)
+		require.NoError(t, r.ParseForm())
+		receivedAccessToken = r.PostForm.Get("access_token")
+		receivedMachineCode = r.PostForm.Get("machine_code")
+		receivedOriginID = r.PostForm.Get("origin_id")
+		_, _ = w.Write([]byte(`{"error":"0","body":{"id":"yl-order-1"}}`))
+	}))
+	defer server.Close()
+
+	encryptor, err := util.NewAESEncryptor("12345678901234567890123456789012")
+	require.NoError(t, err)
+	accessTokenCiphertext, err := util.EncryptSensitiveField(encryptor, "access-token-plain")
+	require.NoError(t, err)
+
+	store := mockdb.NewMockStore(ctrl)
+	processor := NewTestTaskProcessor(store, NewNoopTaskDistributor(), nil, nil)
+	processor.config = util.Config{
+		YilianyunEnabled:     true,
+		YilianyunAPIBaseURL:  server.URL,
+		YilianyunAppID:       "client-001",
+		YilianyunAppSecret:   "secret-001",
+		YilianyunHTTPTimeout: time.Second,
+	}
+	processor.dataEncryptor = encryptor
+	printer := db.CloudPrinter{
+		ID:          71,
+		MerchantID:  300,
+		PrinterSn:   "YL-SN-001",
+		PrinterType: string(cloudprint.ProviderYilianyun),
+		IsActive:    true,
+	}
+	var createdProviderOriginID string
+
+	store.EXPECT().CreatePrintLog(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(func(_ context.Context, arg db.CreatePrintLogParams) (db.PrintLog, error) {
+		require.Equal(t, int64(3001), arg.OrderID)
+		require.Equal(t, printer.ID, arg.PrinterID)
+		require.Equal(t, printLogStatusPending, arg.Status)
+		require.True(t, arg.ProviderOriginID.Valid)
+		createdProviderOriginID = arg.ProviderOriginID.String
+		return db.PrintLog{ID: 917, OrderID: arg.OrderID, PrinterID: arg.PrinterID, Status: arg.Status, ProviderOriginID: arg.ProviderOriginID}, nil
+	})
+	store.EXPECT().GetActiveCloudPrinterProviderAuthorizationByPrinter(gomock.Any(), db.GetActiveCloudPrinterProviderAuthorizationByPrinterParams{
+		AuthorizedCloudPrinterID: pgtype.Int8{Int64: printer.ID, Valid: true},
+		ProviderType:             db.CloudPrinterProviderYilianyun,
+		MachineCode:              printer.PrinterSn,
+	}).Times(1).Return(db.CloudPrinterProviderAuthorization{
+		ID:                       801,
+		MerchantID:               printer.MerchantID,
+		ProviderType:             db.CloudPrinterProviderYilianyun,
+		MachineCode:              printer.PrinterSn,
+		AuthorizedCloudPrinterID: pgtype.Int8{Int64: printer.ID, Valid: true},
+		AccessTokenCiphertext:    accessTokenCiphertext,
+		AccessTokenExpiresAt:     time.Now().Add(time.Hour),
+		Status:                   db.CloudPrinterAuthorizationStatusActive,
+	}, nil)
+	store.EXPECT().UpdatePrintLogStatus(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(func(_ context.Context, arg db.UpdatePrintLogStatusParams) (db.PrintLog, error) {
+		require.Equal(t, int64(917), arg.ID)
+		require.Equal(t, printLogStatusPending, arg.Status)
+		require.True(t, arg.VendorOrderID.Valid)
+		require.Equal(t, "yl-order-1", arg.VendorOrderID.String)
+		require.False(t, arg.ErrorMessage.Valid)
+		return db.PrintLog{}, nil
+	})
+
+	processor.executePrintAttempt(context.Background(), 3001, printer, "<CB>易联云测试</CB>", "full", "")
+
+	require.Equal(t, "access-token-plain", receivedAccessToken)
+	require.Equal(t, printer.PrinterSn, receivedMachineCode)
+	require.Equal(t, createdProviderOriginID, receivedOriginID)
+}
+
+func TestExecutePrintAttempt_FailsYilianyunSafelyWhenAuthorizationIsMissing(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	processor := NewTestTaskProcessor(store, NewNoopTaskDistributor(), nil, nil)
+	processor.config = util.Config{
+		YilianyunEnabled:     true,
+		YilianyunAPIBaseURL:  "https://open-api.10ss.net/v2",
+		YilianyunAppID:       "client-001",
+		YilianyunAppSecret:   "secret-001",
+		YilianyunHTTPTimeout: time.Second,
+	}
+	printer := db.CloudPrinter{
+		ID:          72,
+		MerchantID:  300,
+		PrinterSn:   "YL-SN-002",
+		PrinterType: string(cloudprint.ProviderYilianyun),
+		IsActive:    true,
+	}
+
+	store.EXPECT().CreatePrintLog(gomock.Any(), gomock.Any()).Times(1).Return(db.PrintLog{ID: 918, OrderID: 3002, PrinterID: printer.ID, Status: printLogStatusPending}, nil)
+	store.EXPECT().GetActiveCloudPrinterProviderAuthorizationByPrinter(gomock.Any(), db.GetActiveCloudPrinterProviderAuthorizationByPrinterParams{
+		AuthorizedCloudPrinterID: pgtype.Int8{Int64: printer.ID, Valid: true},
+		ProviderType:             db.CloudPrinterProviderYilianyun,
+		MachineCode:              printer.PrinterSn,
+	}).Times(1).Return(db.CloudPrinterProviderAuthorization{}, db.ErrRecordNotFound)
+	store.EXPECT().UpdatePrintLogStatus(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(func(_ context.Context, arg db.UpdatePrintLogStatusParams) (db.PrintLog, error) {
+		require.Equal(t, int64(918), arg.ID)
+		require.Equal(t, printLogStatusFailed, arg.Status)
+		require.True(t, arg.ErrorMessage.Valid)
+		require.Contains(t, arg.ErrorMessage.String, "yilianyun")
+		require.Contains(t, arg.ErrorMessage.String, "authorization")
+		require.NotContains(t, arg.ErrorMessage.String, "access_token")
+		require.NotContains(t, arg.ErrorMessage.String, "refresh_token")
+		return db.PrintLog{}, nil
+	})
+
+	processor.executePrintAttempt(context.Background(), 3002, printer, "<CB>易联云测试</CB>", "full", "")
+}
+
 func TestExecutePrintAttempt_KeepsPendingWhenPrintResultCallbackEnabled(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -230,6 +353,30 @@ func TestExecutePrintAttempt_KeepsPendingWhenPrintResultCallbackEnabled(t *testi
 	processor.executePrintAttempt(context.Background(), 1001, printer, "<CB>测试</CB>", "full", "")
 
 	require.Len(t, printerClient.inputs, 1)
+}
+
+func TestExecutePrintAttempt_SanitizesFailedProviderErrorBeforePersistence(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	processor := NewTestTaskProcessor(store, NewNoopTaskDistributor(), nil, nil)
+	printerClient := &printClientRecorder{printErr: errors.New(`provider failed access_token=token-secret {"appsecret":"secret-001"}`)}
+	processor.SetPrinterClientForTest(printerClient)
+	printer := db.CloudPrinter{ID: 13, PrinterSn: "front-sn", PrinterType: "feieyun", IsActive: true}
+
+	store.EXPECT().CreatePrintLog(gomock.Any(), gomock.Any()).Times(1).Return(db.PrintLog{ID: 904, OrderID: 1003, PrinterID: printer.ID, Status: printLogStatusPending}, nil)
+	store.EXPECT().UpdatePrintLogStatus(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(func(_ context.Context, arg db.UpdatePrintLogStatusParams) (db.PrintLog, error) {
+		require.Equal(t, int64(904), arg.ID)
+		require.Equal(t, printLogStatusFailed, arg.Status)
+		require.True(t, arg.ErrorMessage.Valid)
+		require.NotContains(t, arg.ErrorMessage.String, "token-secret")
+		require.NotContains(t, arg.ErrorMessage.String, "secret-001")
+		require.Contains(t, arg.ErrorMessage.String, "[redacted]")
+		return db.PrintLog{}, nil
+	})
+
+	processor.executePrintAttempt(context.Background(), 1003, printer, "<CB>测试</CB>", "full", "")
 }
 
 func TestExecutePrintAttempt_FailsWhenCallbackEnabledWithoutVendorOrderID(t *testing.T) {

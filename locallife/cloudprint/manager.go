@@ -32,8 +32,8 @@ type providerManager struct {
 
 // NewManagerFromConfig builds the configured provider registry.
 //
-// Yilianyun is intentionally not registered yet because open-app authorization
-// token persistence is still pending.
+// Yilianyun open-app printers require per-printer authorization tokens and are
+// adapted at the caller runtime boundary instead of this provider-only manager.
 func NewManagerFromConfig(config util.Config) Manager {
 	manager := &providerManager{providers: make(map[string]Client)}
 

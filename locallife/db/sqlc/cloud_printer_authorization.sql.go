@@ -186,6 +186,60 @@ func (q *Queries) GetActiveCloudPrinterAuthorizationSessionForUpdate(ctx context
 	return i, err
 }
 
+const getActiveCloudPrinterProviderAuthorizationByPrinter = `-- name: GetActiveCloudPrinterProviderAuthorizationByPrinter :one
+SELECT
+    id,
+    merchant_id,
+    provider_type,
+    machine_code,
+    authorized_cloud_printer_id,
+    access_token_ciphertext,
+    refresh_token_ciphertext,
+    access_token_expires_at,
+    refresh_token_expires_at,
+    status,
+    refresh_failure_count,
+    refresh_last_attempted_at,
+    last_provider_error,
+    created_at,
+    updated_at
+FROM cloud_printer_provider_authorizations
+WHERE authorized_cloud_printer_id = $1
+  AND provider_type = $2
+  AND machine_code = $3
+  AND status = 'active'
+LIMIT 1
+`
+
+type GetActiveCloudPrinterProviderAuthorizationByPrinterParams struct {
+	AuthorizedCloudPrinterID pgtype.Int8 `json:"authorized_cloud_printer_id"`
+	ProviderType             string      `json:"provider_type"`
+	MachineCode              string      `json:"machine_code"`
+}
+
+func (q *Queries) GetActiveCloudPrinterProviderAuthorizationByPrinter(ctx context.Context, arg GetActiveCloudPrinterProviderAuthorizationByPrinterParams) (CloudPrinterProviderAuthorization, error) {
+	row := q.db.QueryRow(ctx, getActiveCloudPrinterProviderAuthorizationByPrinter, arg.AuthorizedCloudPrinterID, arg.ProviderType, arg.MachineCode)
+	var i CloudPrinterProviderAuthorization
+	err := row.Scan(
+		&i.ID,
+		&i.MerchantID,
+		&i.ProviderType,
+		&i.MachineCode,
+		&i.AuthorizedCloudPrinterID,
+		&i.AccessTokenCiphertext,
+		&i.RefreshTokenCiphertext,
+		&i.AccessTokenExpiresAt,
+		&i.RefreshTokenExpiresAt,
+		&i.Status,
+		&i.RefreshFailureCount,
+		&i.RefreshLastAttemptedAt,
+		&i.LastProviderError,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getCloudPrinterProviderAuthorizationByMerchantAndMachineCode = `-- name: GetCloudPrinterProviderAuthorizationByMerchantAndMachineCode :one
 SELECT id, merchant_id, provider_type, machine_code, authorized_cloud_printer_id, access_token_ciphertext, refresh_token_ciphertext, access_token_expires_at, refresh_token_expires_at, status, refresh_failure_count, refresh_last_attempted_at, last_provider_error, created_at, updated_at
 FROM cloud_printer_provider_authorizations

@@ -93,7 +93,7 @@ func TestBuildShangpengSignSkipsEmptyValuesAndExistingSign(t *testing.T) {
 	)
 }
 
-func TestShangpengAddAndRemovePrinterUseOfficialFields(t *testing.T) {
+func TestShangpengAddAndRemovePrinterUseReceiptBusinessType(t *testing.T) {
 	seen := make([]url.Values, 0, 2)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.NoError(t, r.ParseForm())
@@ -132,11 +132,11 @@ func TestShangpengAddAndRemovePrinterUseOfficialFields(t *testing.T) {
 	}))
 
 	require.Len(t, seen, 2)
-	require.Equal(t, "merchant-100", seen[0].Get("business"))
+	require.Equal(t, "1", seen[0].Get("business"))
 	require.Equal(t, "SP-SN-001", seen[0].Get("sn"))
 	require.Equal(t, "printer-key", seen[0].Get("pkey"))
 	require.Equal(t, "front desk", seen[0].Get("name"))
-	require.Equal(t, "merchant-100", seen[1].Get("business"))
+	require.Equal(t, "1", seen[1].Get("business"))
 	require.Equal(t, "SP-SN-001", seen[1].Get("sn"))
 }
 
@@ -212,6 +212,30 @@ func TestShangpengProviderErrorsAreMapped(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "shangpeng api error -4")
 	require.Contains(t, err.Error(), "signature error")
+}
+
+func TestShangpengHTTPErrorDoesNotExposeResponseBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte(`{"errorcode":-1,"errormsg":"signature failed appsecret=secret-001 access_token=token-001"}`))
+	}))
+	defer server.Close()
+
+	client := newShangpengClientFromConfig(util.Config{
+		ShangpengEnabled:     true,
+		ShangpengAPIBaseURL:  server.URL,
+		ShangpengAppID:       "appid-001",
+		ShangpengAppSecret:   "secret-001",
+		ShangpengHTTPTimeout: time.Second,
+	}, fixedClock("1717555200"))
+
+	_, err := client.Print(context.Background(), PrintInput{SN: "SP-SN-001", Content: "hello"})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "shangpeng http status 502")
+	require.NotContains(t, err.Error(), "appsecret")
+	require.NotContains(t, err.Error(), "secret-001")
+	require.NotContains(t, err.Error(), "token-001")
 }
 
 func TestShangpengMalformedRequiredFieldsFailClosed(t *testing.T) {

@@ -1,6 +1,7 @@
 import { getStableBarHeights } from '../../../../utils/responsive'
 import {
   deviceManagementService,
+  type AuthorizeScannedYilianyunPrinterRequest,
   type CreatePrinterRequest,
   type PrinterResponse,
   type PrinterRole,
@@ -38,16 +39,23 @@ interface PrinterOption<T extends string> {
   desc: string
 }
 
+type DirectCreatePrinterType = 'feieyun' | 'shangpeng'
+
 const PRINTER_TYPE_OPTIONS: Array<PrinterOption<PrinterType>> = [
   {
     label: '飞鹅云',
     value: 'feieyun',
-    desc: '适合已在飞鹅云后台完成设备配置的打印机。'
+    desc: '输入设备序列号和密钥，系统会远程添加到飞鹅云应用。'
   },
   {
     label: '商鹏云',
     value: 'shangpeng',
-    desc: '适合已在商鹏云后台完成设备配置的打印机。'
+    desc: '输入设备序列号和密钥，系统会远程添加到商鹏云应用。'
+  },
+  {
+    label: '易联云',
+    value: 'yilianyun',
+    desc: '输入机器码和终端密钥，授权成功后自动创建打印机。'
   }
 ]
 
@@ -212,7 +220,12 @@ Page({
   },
 
   onPrinterTypeChange(e: WechatMiniprogram.CustomEvent<{ value: PrinterType }>) {
-    this.setData({ 'formData.printer_type': e.detail.value })
+    const printerType = e.detail.value
+    this.setData({
+      'formData.printer_type': printerType,
+      'formData.printer_sn': '',
+      'formData.printer_key': ''
+    })
   },
 
   onPrinterRoleChange(e: WechatMiniprogram.CustomEvent<{ value: PrinterRole }>) {
@@ -233,17 +246,18 @@ Page({
       wx.showToast({ title: '请填写打印机名称', icon: 'none' })
       return
     }
+    const isYilianyunAuthorization = !isEdit && formData.printer_type === 'yilianyun'
     if (!isEdit && !formData.printer_sn.trim()) {
-      wx.showToast({ title: '请填写打印机序列号', icon: 'none' })
+      wx.showToast({ title: isYilianyunAuthorization ? '请填写机器码' : '请填写打印机序列号', icon: 'none' })
       return
     }
     if (!isEdit && !formData.printer_key.trim()) {
-      wx.showToast({ title: '请填写打印机密钥', icon: 'none' })
+      wx.showToast({ title: isYilianyunAuthorization ? '请填写终端密钥' : '请填写打印机密钥', icon: 'none' })
       return
     }
 
     this.setData({ submitting: true })
-    wx.showLoading({ title: '保存中...' })
+    wx.showLoading({ title: isYilianyunAuthorization ? '授权中...' : '保存中...' })
 
     try {
       if (isEdit) {
@@ -259,12 +273,27 @@ Page({
           updateParams.printer_key = formData.printer_key.trim()
         }
         await deviceManagementService.updatePrinter(printerId, updateParams)
+      } else if (isYilianyunAuthorization) {
+        const authorizeParams: AuthorizeScannedYilianyunPrinterRequest = {
+          machine_code: formData.printer_sn.trim(),
+          printer_name: formData.printer_name.trim(),
+          printer_role: formData.printer_role,
+          print_takeout: formData.print_takeout,
+          print_dine_in: formData.print_dine_in,
+          print_reservation: formData.print_reservation,
+          msign: formData.printer_key.trim()
+        }
+        await deviceManagementService.authorizeScannedYilianyunPrinter(authorizeParams)
       } else {
+        if (formData.printer_type !== 'feieyun' && formData.printer_type !== 'shangpeng') {
+          wx.showToast({ title: '当前设备类型需要通过授权绑定', icon: 'none' })
+          return
+        }
         const createParams: CreatePrinterRequest = {
           printer_name: formData.printer_name.trim(),
           printer_sn: formData.printer_sn.trim(),
           printer_key: formData.printer_key.trim(),
-          printer_type: formData.printer_type,
+          printer_type: formData.printer_type as DirectCreatePrinterType,
           printer_role: formData.printer_role,
           print_takeout: formData.print_takeout,
           print_dine_in: formData.print_dine_in,
@@ -274,7 +303,7 @@ Page({
       }
 
       wx.showToast({
-        title: isEdit ? '打印机已更新' : '打印机已添加',
+        title: isEdit ? '打印机已更新' : (isYilianyunAuthorization ? '授权已完成' : '打印机已添加'),
         icon: 'success'
       })
       wx.navigateBack()

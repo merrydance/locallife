@@ -622,6 +622,7 @@ type Querier interface {
 	// 返回指定区域内有商户覆盖的品类标签，按商户数量降序
 	GetActiveCategoriesByRegion(ctx context.Context, regionID int64) ([]GetActiveCategoriesByRegionRow, error)
 	GetActiveCloudPrinterAuthorizationSessionForUpdate(ctx context.Context, state string) (CloudPrinterAuthorizationSession, error)
+	GetActiveCloudPrinterProviderAuthorizationByPrinter(ctx context.Context, arg GetActiveCloudPrinterProviderAuthorizationByPrinterParams) (CloudPrinterProviderAuthorization, error)
 	GetActiveDeliveryFeeConfigByRegion(ctx context.Context, regionID int64) (DeliveryFeeConfig, error)
 	GetActiveDiningSessionByReservation(ctx context.Context, reservationID pgtype.Int8) (DiningSession, error)
 	GetActiveDiningSessionByTable(ctx context.Context, tableID int64) (DiningSession, error)

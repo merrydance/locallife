@@ -19,6 +19,7 @@ const (
 	TaskPrintOrder = "order:print"
 
 	printerTypeFeieyun   = string(cloudprint.ProviderFeieyun)
+	printerTypeYilianyun = string(cloudprint.ProviderYilianyun)
 	printerTypeShangpeng = string(cloudprint.ProviderShangpeng)
 
 	printerRoleFront   = "front"
@@ -177,6 +178,10 @@ func (processor *RedisTaskProcessor) retryPrintLog(ctx context.Context, printLog
 }
 
 func (processor *RedisTaskProcessor) cloudPrinterProvider(providerType string) (cloudprint.Client, bool) {
+	if providerType == printerTypeYilianyun {
+		provider := newYilianyunRuntimeClient(processor.config, processor.store, processor.dataEncryptor)
+		return provider, provider != nil
+	}
 	if processor.cloudPrinterManager != nil {
 		if provider, ok := processor.cloudPrinterManager.Provider(providerType); ok && provider != nil {
 			return provider, true
@@ -189,6 +194,9 @@ func (processor *RedisTaskProcessor) cloudPrinterProvider(providerType string) (
 }
 
 func (processor *RedisTaskProcessor) hasAnyCloudPrinterProvider() bool {
+	if newYilianyunRuntimeClient(processor.config, processor.store, processor.dataEncryptor) != nil {
+		return true
+	}
 	if checker, ok := processor.cloudPrinterManager.(interface{ Configured() bool }); ok {
 		return checker.Configured()
 	}

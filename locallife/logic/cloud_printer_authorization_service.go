@@ -67,12 +67,15 @@ type CompleteYilianyunAuthorizationCodeInput struct {
 }
 
 type AuthorizeScannedYilianyunPrinterInput struct {
-	MerchantID  int64
-	MachineCode string
-	QRKey       string
-	MSign       string
-	PrinterName string
-	PrinterRole string
+	MerchantID       int64
+	MachineCode      string
+	QRKey            string
+	MSign            string
+	PrinterName      string
+	PrinterRole      string
+	PrintTakeout     *bool
+	PrintDineIn      *bool
+	PrintReservation *bool
 }
 
 type YilianyunAuthorizationResult struct {
@@ -212,8 +215,11 @@ func (s *CloudPrinterAuthorizationService) CompleteYilianyunAuthorizationCode(ct
 	result, err := s.store.AuthorizeYilianyunCloudPrinterWithDeviceTx(ctx, db.AuthorizeYilianyunCloudPrinterWithDeviceTxParams{
 		State:         state,
 		Authorization: params,
-		Printer:       s.buildYilianyunPrinterParams(params, session.PrinterName.String, session.PrinterRole.String),
-		ConsumedAt:    s.config.Now().UTC(),
+		Printer: s.buildYilianyunPrinterParams(params, yilianyunPrinterOptions{
+			Name: session.PrinterName.String,
+			Role: session.PrinterRole.String,
+		}),
+		ConsumedAt: s.config.Now().UTC(),
 	})
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
@@ -261,7 +267,13 @@ func (s *CloudPrinterAuthorizationService) AuthorizeScannedYilianyunPrinter(ctx 
 	}
 	result, err := s.store.CreateAuthorizedYilianyunCloudPrinterTx(ctx, db.CreateAuthorizedYilianyunCloudPrinterTxParams{
 		Authorization: params,
-		Printer:       s.buildYilianyunPrinterParams(params, input.PrinterName, input.PrinterRole),
+		Printer: s.buildYilianyunPrinterParams(params, yilianyunPrinterOptions{
+			Name:             input.PrinterName,
+			Role:             input.PrinterRole,
+			PrintTakeout:     input.PrintTakeout,
+			PrintDineIn:      input.PrintDineIn,
+			PrintReservation: input.PrintReservation,
+		}),
 	})
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
@@ -324,14 +336,34 @@ func newYilianyunAuthorizationResult(authorization db.CloudPrinterProviderAuthor
 	}
 }
 
-func (s *CloudPrinterAuthorizationService) buildYilianyunPrinterParams(authorization db.UpsertCloudPrinterProviderAuthorizationParams, printerName string, printerRole string) db.CreateCloudPrinterParams {
-	role := normalizeCloudPrinterRole(printerRole)
+type yilianyunPrinterOptions struct {
+	Name             string
+	Role             string
+	PrintTakeout     *bool
+	PrintDineIn      *bool
+	PrintReservation *bool
+}
+
+func (s *CloudPrinterAuthorizationService) buildYilianyunPrinterParams(authorization db.UpsertCloudPrinterProviderAuthorizationParams, options yilianyunPrinterOptions) db.CreateCloudPrinterParams {
+	role := normalizeCloudPrinterRole(options.Role)
 	if role == "" {
 		role = "front"
 	}
-	name := strings.TrimSpace(printerName)
+	name := strings.TrimSpace(options.Name)
 	if name == "" {
 		name = "易联云 " + authorization.MachineCode
+	}
+	printTakeout := true
+	if options.PrintTakeout != nil {
+		printTakeout = *options.PrintTakeout
+	}
+	printDineIn := true
+	if options.PrintDineIn != nil {
+		printDineIn = *options.PrintDineIn
+	}
+	printReservation := true
+	if options.PrintReservation != nil {
+		printReservation = *options.PrintReservation
 	}
 
 	return db.CreateCloudPrinterParams{
@@ -341,9 +373,9 @@ func (s *CloudPrinterAuthorizationService) buildYilianyunPrinterParams(authoriza
 		PrinterKey:       "",
 		PrinterType:      db.CloudPrinterProviderYilianyun,
 		PrinterRole:      role,
-		PrintTakeout:     true,
-		PrintDineIn:      true,
-		PrintReservation: true,
+		PrintTakeout:     printTakeout,
+		PrintDineIn:      printDineIn,
+		PrintReservation: printReservation,
 	}
 }
 
