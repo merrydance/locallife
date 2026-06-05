@@ -279,6 +279,7 @@ func TestLoadConfig_ReadsCloudPrinterProviderConfig(t *testing.T) {
 		"YILIANYUN_ACCESS_TOKEN=yly-token",
 		"YILIANYUN_REFRESH_TOKEN=yly-refresh",
 		"YILIANYUN_HTTP_TIMEOUT=7s",
+		"YILIANYUN_AUTH_CALLBACK_URL=https://api.example.com/v1/cloud-printer/yilianyun/auth/callback",
 		"YILIANYUN_PRINT_CALLBACK_URL=https://api.example.com/v1/webhooks/yilianyun/print-result",
 		"SHANGPENG_ENABLED=true",
 		"SHANGPENG_API_BASE_URL=https://open.spyun.net",
@@ -302,6 +303,7 @@ func TestLoadConfig_ReadsCloudPrinterProviderConfig(t *testing.T) {
 	require.Equal(t, "yly-token", config.YilianyunAccessToken)
 	require.Equal(t, "yly-refresh", config.YilianyunRefreshToken)
 	require.Equal(t, 7*time.Second, config.YilianyunHTTPTimeout)
+	require.Equal(t, "https://api.example.com/v1/cloud-printer/yilianyun/auth/callback", config.YilianyunAuthCallbackURL)
 	require.Equal(t, "https://api.example.com/v1/webhooks/yilianyun/print-result", config.YilianyunPrintCallbackURL)
 	require.True(t, config.ShangpengEnabled)
 	require.Equal(t, "https://open.spyun.net", config.ShangpengAPIBaseURL)
@@ -323,7 +325,22 @@ func TestValidateCloudPrinterProviderConfig(t *testing.T) {
 	}{
 		{name: "disabled skips validation", config: Config{}},
 		{
-			name: "yilianyun requires credentials",
+			name: "yilianyun open app does not require global access token",
+			config: Config{
+				YilianyunEnabled:                   true,
+				YilianyunAPIBaseURL:                "https://open-api.10ss.net",
+				YilianyunClientID:                  "client",
+				YilianyunClientSecret:              "secret",
+				YilianyunHTTPTimeout:               time.Second,
+				YilianyunAuthCallbackURL:           "https://api.example.com/v1/cloud-printer/yilianyun/auth/callback",
+				CloudPrinterStatusPollInterval:     time.Minute,
+				CloudPrinterStatusPollBatchSize:    50,
+				CloudPrinterStatusPollInitialDelay: time.Second,
+				CloudPrinterStatusPollMaxAge:       time.Hour,
+			},
+		},
+		{
+			name: "yilianyun requires open app auth callback url",
 			config: Config{
 				YilianyunEnabled:      true,
 				YilianyunAPIBaseURL:   "https://open-api.10ss.net",
@@ -331,7 +348,19 @@ func TestValidateCloudPrinterProviderConfig(t *testing.T) {
 				YilianyunClientSecret: "secret",
 				YilianyunHTTPTimeout:  time.Second,
 			},
-			want: "YILIANYUN_ACCESS_TOKEN",
+			want: "YILIANYUN_AUTH_CALLBACK_URL",
+		},
+		{
+			name: "yilianyun auth callback url must be absolute",
+			config: Config{
+				YilianyunEnabled:         true,
+				YilianyunAPIBaseURL:      "https://open-api.10ss.net",
+				YilianyunClientID:        "client",
+				YilianyunClientSecret:    "secret",
+				YilianyunHTTPTimeout:     time.Second,
+				YilianyunAuthCallbackURL: "/v1/cloud-printer/yilianyun/auth/callback",
+			},
+			want: "YILIANYUN_AUTH_CALLBACK_URL must be a valid absolute URL",
 		},
 		{
 			name: "yilianyun callback url must be absolute",
@@ -340,8 +369,8 @@ func TestValidateCloudPrinterProviderConfig(t *testing.T) {
 				YilianyunAPIBaseURL:       "https://open-api.10ss.net",
 				YilianyunClientID:         "client",
 				YilianyunClientSecret:     "secret",
-				YilianyunAccessToken:      "token",
 				YilianyunHTTPTimeout:      time.Second,
+				YilianyunAuthCallbackURL:  "https://api.example.com/v1/cloud-printer/yilianyun/auth/callback",
 				YilianyunPrintCallbackURL: "/webhooks/yilianyun/print-result",
 			},
 			want: "YILIANYUN_PRINT_CALLBACK_URL must be a valid absolute URL",
@@ -349,12 +378,12 @@ func TestValidateCloudPrinterProviderConfig(t *testing.T) {
 		{
 			name: "yilianyun api base url must be absolute",
 			config: Config{
-				YilianyunEnabled:      true,
-				YilianyunAPIBaseURL:   "open-api.10ss.net",
-				YilianyunClientID:     "client",
-				YilianyunClientSecret: "secret",
-				YilianyunAccessToken:  "token",
-				YilianyunHTTPTimeout:  time.Second,
+				YilianyunEnabled:         true,
+				YilianyunAPIBaseURL:      "open-api.10ss.net",
+				YilianyunClientID:        "client",
+				YilianyunClientSecret:    "secret",
+				YilianyunHTTPTimeout:     time.Second,
+				YilianyunAuthCallbackURL: "https://api.example.com/v1/cloud-printer/yilianyun/auth/callback",
 			},
 			want: "YILIANYUN_API_BASE_URL must be a valid absolute URL",
 		},
@@ -382,12 +411,12 @@ func TestValidateCloudPrinterProviderConfig(t *testing.T) {
 		{
 			name: "enabled provider requires positive polling config",
 			config: Config{
-				YilianyunEnabled:      true,
-				YilianyunAPIBaseURL:   "https://open-api.10ss.net",
-				YilianyunClientID:     "client",
-				YilianyunClientSecret: "secret",
-				YilianyunAccessToken:  "token",
-				YilianyunHTTPTimeout:  time.Second,
+				YilianyunEnabled:         true,
+				YilianyunAPIBaseURL:      "https://open-api.10ss.net",
+				YilianyunClientID:        "client",
+				YilianyunClientSecret:    "secret",
+				YilianyunHTTPTimeout:     time.Second,
+				YilianyunAuthCallbackURL: "https://api.example.com/v1/cloud-printer/yilianyun/auth/callback",
 			},
 			want: "CLOUD_PRINTER_STATUS_POLL_INTERVAL must be > 0",
 		},
@@ -398,8 +427,8 @@ func TestValidateCloudPrinterProviderConfig(t *testing.T) {
 				YilianyunAPIBaseURL:                "https://open-api.10ss.net",
 				YilianyunClientID:                  "client",
 				YilianyunClientSecret:              "secret",
-				YilianyunAccessToken:               "token",
 				YilianyunHTTPTimeout:               time.Second,
+				YilianyunAuthCallbackURL:           "https://api.example.com/v1/cloud-printer/yilianyun/auth/callback",
 				ShangpengEnabled:                   true,
 				ShangpengAPIBaseURL:                "https://open.spyun.net",
 				ShangpengAppID:                     "appid",

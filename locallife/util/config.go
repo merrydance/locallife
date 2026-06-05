@@ -105,7 +105,7 @@ type Config struct {
 	FeieyunCallbackPublicKeyPEM  string        `mapstructure:"FEIEYUN_CALLBACK_PUBLIC_KEY_PEM"`
 	FeieyunCallbackPublicKeyPath string        `mapstructure:"FEIEYUN_CALLBACK_PUBLIC_KEY_PATH"`
 
-	// 多厂商云打印配置。当前运行时仍只注册飞鹅；易联云/商鹏字段先作为后续 provider runtime 的配置基础。
+	// 多厂商云打印配置。当前运行时仍只注册飞鹅；易联云为开放型应用，商户/设备授权 token 不应作为全局静态配置。
 	YilianyunEnabled          bool          `mapstructure:"YILIANYUN_ENABLED"`
 	YilianyunAPIBaseURL       string        `mapstructure:"YILIANYUN_API_BASE_URL"`
 	YilianyunClientID         string        `mapstructure:"YILIANYUN_CLIENT_ID"`
@@ -113,6 +113,7 @@ type Config struct {
 	YilianyunAccessToken      string        `mapstructure:"YILIANYUN_ACCESS_TOKEN"`
 	YilianyunRefreshToken     string        `mapstructure:"YILIANYUN_REFRESH_TOKEN"`
 	YilianyunHTTPTimeout      time.Duration `mapstructure:"YILIANYUN_HTTP_TIMEOUT"`
+	YilianyunAuthCallbackURL  string        `mapstructure:"YILIANYUN_AUTH_CALLBACK_URL"`
 	YilianyunPrintCallbackURL string        `mapstructure:"YILIANYUN_PRINT_CALLBACK_URL"`
 	ShangpengEnabled          bool          `mapstructure:"SHANGPENG_ENABLED"`
 	ShangpengAPIBaseURL       string        `mapstructure:"SHANGPENG_API_BASE_URL"`
@@ -333,10 +334,13 @@ func (c Config) ValidateCloudPrinterProviderConfig() error {
 		if strings.TrimSpace(c.YilianyunAPIBaseURL) == "" ||
 			strings.TrimSpace(c.YilianyunClientID) == "" ||
 			strings.TrimSpace(c.YilianyunClientSecret) == "" ||
-			strings.TrimSpace(c.YilianyunAccessToken) == "" {
-			return fmt.Errorf("YILIANYUN_API_BASE_URL, YILIANYUN_CLIENT_ID, YILIANYUN_CLIENT_SECRET and YILIANYUN_ACCESS_TOKEN are required when YILIANYUN_ENABLED=true")
+			strings.TrimSpace(c.YilianyunAuthCallbackURL) == "" {
+			return fmt.Errorf("YILIANYUN_API_BASE_URL, YILIANYUN_CLIENT_ID, YILIANYUN_CLIENT_SECRET and YILIANYUN_AUTH_CALLBACK_URL are required when YILIANYUN_ENABLED=true")
 		}
 		if err := validateRequiredAbsoluteConfigURL("YILIANYUN_API_BASE_URL", c.YilianyunAPIBaseURL, "YILIANYUN_ENABLED=true"); err != nil {
+			return err
+		}
+		if err := validateRequiredAbsoluteConfigURL("YILIANYUN_AUTH_CALLBACK_URL", c.YilianyunAuthCallbackURL, "YILIANYUN_ENABLED=true"); err != nil {
 			return err
 		}
 		if c.YilianyunHTTPTimeout <= 0 {

@@ -35,7 +35,8 @@ Official docs used for the Yilianyun assessment:
 
 - Platform overview: https://www.kancloud.cn/elind-dev/openapi/331992
 - API protocol and request signing: https://www.kancloud.cn/elind-dev/openapi/332000
-- Own application service mode: https://www.kancloud.cn/elind-dev/openapi/371770
+- Open application service mode: https://www.kancloud.cn/elind-dev/openapi/371769
+- Self-owned application service mode, contrast only and not the LocalLife rollout target: https://www.kancloud.cn/elind-dev/openapi/371770
 - Text print: https://www.kancloud.cn/elind-dev/openapi/372519
 - Delete printer authorization: https://www.kancloud.cn/elind-dev/openapi/372520
 - Printer model and print width: https://www.kancloud.cn/elind-dev/openapi/372524
@@ -95,10 +96,10 @@ Important Feieyun coupling points:
 | --- | --- | --- | --- | --- |
 | Local provider key | `printer_type` value | `feieyun` | `yilianyun` | `shangpeng` |
 | Device identity | Stable `printer_sn` equivalent | `sn` | `machine_code` | `sn` |
-| Device secret | `printer_key` equivalent | device key | `msign` | `pkey` for add, `key` in getModel |
+| Device secret | `printer_key` equivalent | device key | not used by the open-app authorization flow; do not store access tokens in `printer_key` | `pkey` for add, `key` in getModel |
 | App credential | Platform-level credential | `user`, `ukey` | `client_id`, `client_secret` | `appid`, `appsecret` |
-| Access token | Token lifetime and storage owner | none | Own-app app-level token; fetch/refresh limited, do not fetch often | none documented |
-| Bind device | Remote registration endpoint | `/Api/Open/printerAddlist` | `POST /printer/addprinter` | `POST /v1/printer/add` |
+| Access token | Token lifetime and storage owner | none | open-app per-printer token from merchant `code` exchange; encrypted DB storage owned by authorization flow | none documented |
+| Bind device | Remote registration endpoint | `/Api/Open/printerAddlist` | `GET /oauth/authorize` then `POST /oauth/oauth` with authorization `code` | `POST /v1/printer/add` |
 | Unbind device | Remote deregistration endpoint | `/Api/Open/printerDelList` | `POST /printer/deleteprinter` | `DELETE /v1/printer/delete` |
 | Text receipt print | Endpoint and content format | `/Api/Open/printMsg` | `POST /print/index` | `POST /v1/printer/print` |
 | Print idempotency | Provider duplicate guard | no explicit local origin id | `origin_id`, <= 32 chars, alnum only, unique per `client_id`; `idempotence=1` | no native idempotency field documented; use local idempotency and provider status query |
@@ -115,30 +116,32 @@ Important Feieyun coupling points:
 
 ### Yilianyun
 
-Yilianyun should use own application mode for LocalLife:
+Yilianyun must use open application service mode for LocalLife. Do not implement the self-owned application mode unless the application type is changed by product/ops and this document is revised first.
 
-- Printers are authorized to the LocalLife app.
-- Merchants do not need to manage devices directly in Yilianyun.
-- Access token is app-level, not device-level.
-- Token fetch or refresh is limited to 20 times per day per `client_id`, so the implementation must not fetch token on every startup or every print call.
-- First-release token mode is manually rotated configuration. Do not implement automatic refresh in the first slice unless ops explicitly requests it before implementation starts.
+Open-app authorization flow:
+
+- Merchant/operator starts Yilianyun authorization with `GET /oauth/authorize`, `response_type=code`, `client_id`, URL-encoded `redirect_uri`, and an unguessable `state`.
+- Yilianyun redirects to `YILIANYUN_AUTH_CALLBACK_URL` with `code` and `state`. The code is valid for 600 seconds, so the callback handler must exchange it immediately.
+- The backend exchanges `code` through `POST /oauth/oauth` with `grant_type=authorization_code`, `scope=all`, request signature, timestamp, and UUID request id.
+- The response returns `access_token`, `refresh_token`, `machine_code`, and `expires_in`; official docs state that every printer has a unique `access_token`.
+- Store access/refresh tokens encrypted in a DB-backed authorization table scoped to merchant/store/printer/provider. Do not store tokens in `cloud_printers.printer_key`, and do not use global `YILIANYUN_ACCESS_TOKEN` / `YILIANYUN_REFRESH_TOKEN` config as runtime credentials.
+- Refresh uses `grant_type=refresh_token` and is limited to 20 times per day per terminal, so refresh must be scheduler/command owned with a durable lock and must not run in constructors, startup loops, or every print call.
 
 Request protocol:
 
 - HTTP POST, `application/x-www-form-urlencoded`.
-- Common fields: `client_id`, `access_token`, `sign`, `timestamp`, `id` as UUID4.
+- Authorized API calls use common fields `client_id`, `access_token`, `sign`, `timestamp`, `id` as UUID4. OAuth code exchange and refresh use `grant_type` and do not already have an `access_token`.
 - Signature: `lower(md5(client_id + timestamp + client_secret))`.
 - Domestic host: `https://open-api.10ss.net`.
 - Overseas host exists, but default LocalLife config should use domestic host unless product/ops explicitly needs overseas routing.
 
-Initial token recommendation:
+Initial authorization recommendation:
 
-- Require configured `YILIANYUN_ACCESS_TOKEN` and optional `YILIANYUN_REFRESH_TOKEN` for the first backend slice.
-- Do not auto-fetch token in constructors.
-- Add a DB-backed token store and refresh command/scheduler only in a later slice when ops wants automatic token lifecycle management.
-- When `YILIANYUN_ENABLED=true`, missing `client_id`, `client_secret`, or `access_token` disables only Yilianyun registration by default and emits a loud structured error. Feieyun and other enabled providers must still start. Add an explicit `CLOUD_PRINTER_FAIL_ON_PROVIDER_CONFIG_ERROR=true` override only if ops wants whole-service fail-fast behavior for provider config mistakes.
-- Because the first release does not persist token expiry, production enablement requires an ops runbook for token rotation every 25 days or earlier if provider documentation gives a shorter lifetime, a monitoring alert for token-related provider errors, and a stable merchant/operator-facing error that says the cloud-printer provider credential needs attention.
-- Token-related provider errors should disable only Yilianyun operations at runtime; Feieyun and Shangpeng must remain available.
+- Require `YILIANYUN_CLIENT_ID`, `YILIANYUN_CLIENT_SECRET`, `YILIANYUN_API_BASE_URL`, and `YILIANYUN_AUTH_CALLBACK_URL` before Yilianyun can be registered.
+- Keep `YILIANYUN_ACCESS_TOKEN` and `YILIANYUN_REFRESH_TOKEN` as temporary compatibility placeholders only. They are not required, and the open-app runtime must not read them as global provider credentials.
+- Add the DB-backed authorization table, callback handler, CSRF `state` persistence, encrypted token storage, refresh ownership, and operator/merchant error states before enabling Yilianyun print runtime.
+- When `YILIANYUN_ENABLED=true`, missing app credentials or auth callback URL disables only Yilianyun registration by default and emits a loud structured error. Feieyun and other enabled providers must still start. Add an explicit `CLOUD_PRINTER_FAIL_ON_PROVIDER_CONFIG_ERROR=true` override only if ops wants whole-service fail-fast behavior for provider config mistakes.
+- Token-related provider errors should disable only the affected Yilianyun authorization/printer at runtime; Feieyun and Shangpeng must remain available.
 
 ### Shangpeng
 
@@ -467,10 +470,10 @@ Config candidates:
 - `YILIANYUN_API_BASE_URL`
 - `YILIANYUN_CLIENT_ID`
 - `YILIANYUN_CLIENT_SECRET`
-- `YILIANYUN_ACCESS_TOKEN`
-- `YILIANYUN_REFRESH_TOKEN`
 - `YILIANYUN_HTTP_TIMEOUT`
+- `YILIANYUN_AUTH_CALLBACK_URL`
 - `YILIANYUN_PRINT_CALLBACK_URL`
+- `YILIANYUN_ACCESS_TOKEN` and `YILIANYUN_REFRESH_TOKEN` may remain as compatibility placeholders during rollout, but open-app runtime code must not treat them as global credentials.
 - `SHANGPENG_ENABLED`
 - `SHANGPENG_API_BASE_URL`
 - `SHANGPENG_APPID`
@@ -486,20 +489,60 @@ Validation:
 - `cd locallife && make sqlc`
 - `cd locallife && go test ./util ./cloudprint`
 
-### Phase 3: Provider Clients
+### Phase 3A: Shangpeng Provider Client
 
 Files:
 
-- Create `locallife/cloudprint/yilianyun.go`
-- Create `locallife/cloudprint/yilianyun_test.go`
 - Create `locallife/cloudprint/shangpeng.go`
 - Create `locallife/cloudprint/shangpeng_test.go`
 
 Tasks:
 
-- Implement Yilianyun own-app token-backed client without auto-fetching tokens in constructor.
 - Implement Shangpeng appid/appsecret signed client.
 - Keep provider DTOs, request builders, response parsers, status mappers, and error classifiers inside provider files.
+- Return normalized `PrintResult`, `PrintState`, `PrinterStatus`, and `PrinterInfo`.
+- Return typed unsupported-capability errors before remote calls for unsupported optional operations.
+- Classify missing required provider fields, malformed payloads, unknown enums, signature failures, timeout, and provider error codes as stable LocalLife errors with safe structured log context.
+
+Validation:
+
+- `cd locallife && go test ./cloudprint`
+
+### Phase 3B: Yilianyun Open-App Authorization Foundation
+
+Files:
+
+- Add a DB migration and sqlc queries for Yilianyun authorization state and encrypted token storage.
+- Create backend authorization start/callback handlers, for example under `locallife/api/yilianyun_auth.go`.
+- Add token encryption/decryption tests using the existing LocalLife encryption helper.
+- Add focused sqlc/store tests when the repository pattern for similar authorization state has examples.
+
+Tasks:
+
+- Create a durable authorization session with merchant/store/printer intent, provider type, nonce/state, expiry, and one-time consumption.
+- Generate Yilianyun authorize URL with `response_type=code`, `client_id`, URL-encoded `redirect_uri=YILIANYUN_AUTH_CALLBACK_URL`, and opaque `state`.
+- Handle the Yilianyun redirect callback by validating `state`, expiry, one-time use, tenant ownership, and provider.
+- Exchange `code` for `access_token`, `refresh_token`, `machine_code`, and `expires_in` immediately; code is valid for 600 seconds.
+- Store tokens encrypted and scoped to the resulting printer/provider authorization. Do not write tokens to `cloud_printers.printer_key`.
+- Design refresh as a durable scheduler or operator command with rate-limit protection. Do not refresh in constructors, startup, request handlers, or every print call.
+- Surface stable merchant/operator errors for unbound, expired, refresh-failed, and provider-denied authorizations without leaking token values or raw provider payloads.
+
+Validation:
+
+- `cd locallife && make sqlc`
+- `cd locallife && go test ./util ./api ./cloudprint`
+
+### Phase 3C: Yilianyun Authorized Provider Client
+
+Files:
+
+- Create `locallife/cloudprint/yilianyun.go`
+- Create `locallife/cloudprint/yilianyun_test.go`
+
+Tasks:
+
+- Implement the Yilianyun request signer and authorized API client using the per-printer access token loaded from the authorization store, not static config.
+- Keep OAuth exchange/refresh DTOs separate from authorized print/status DTOs.
 - Return normalized `PrintResult`, `PrintState`, `PrinterStatus`, and `PrinterInfo`.
 - Return typed unsupported-capability errors before remote calls for unsupported optional operations.
 - Classify missing required provider fields, malformed payloads, unknown enums, signature failures, timeout, and provider error codes as stable LocalLife errors with safe structured log context.
@@ -520,7 +563,7 @@ Files:
 Tasks:
 
 - Allow `printer_type` values supported by provider manager.
-- For Yilianyun, map `printer_sn` to `machine_code`, `printer_key` to `msign`.
+- For Yilianyun, device identity comes from the open-app authorization result `machine_code`; do not map `printer_key` to `msign` or require a device secret in the merchant setup flow.
 - For Shangpeng, map `printer_sn` to `sn`, `printer_key` to `pkey`.
 - Call provider manager on create/delete.
 - Preserve reconciliation job behavior for remote-local drift and record the actual provider type.
@@ -653,13 +696,15 @@ Build in this sequence:
 
 1. Provider manager with Feieyun only, no behavior change.
 2. Shared schema/config for provider origin id, `cancelled` status, polling metadata, and `shangpeng` provider type.
-3. Yilianyun and Shangpeng clients with contract tests.
-4. Device create/delete for both providers.
-5. Provider-aware receipt rendering and worker print path.
-6. Yilianyun callback and generic callback update helper.
-7. Shangpeng pending-job status polling with scheduler-owned reconciliation.
-8. Merchant device status, anomaly retry, and frontend provider labels.
-9. Real-device probe and evidence.
+3. Shangpeng client with contract tests.
+4. Shangpeng device create/delete support.
+5. Provider-aware receipt rendering and worker print path for Feieyun plus Shangpeng.
+6. Shangpeng pending-job status polling with scheduler-owned reconciliation.
+7. Yilianyun open-app authorization foundation, including auth callback, encrypted token storage, and refresh ownership.
+8. Yilianyun authorized provider client and device/print support using stored per-printer tokens.
+9. Yilianyun print callback and generic callback update helper.
+10. Merchant device status, anomaly retry, and frontend provider labels.
+11. Real-device probe and evidence.
 
 Do not start by adding `if printer.PrinterType == "yilianyun"` and `if printer.PrinterType == "shangpeng"` next to every existing Feieyun branch. That will make each future provider pay the same integration tax again.
 
@@ -669,7 +714,7 @@ First-release decisions:
 
 - Local Shangpeng provider key: `shangpeng`.
 - Callbackless provider acceptance must not mark local print success. Use `pending` plus status query or scheduler polling unless product explicitly accepts weaker observability in a separate decision record.
-- Yilianyun token lifecycle: manually rotated config for first release; no automatic refresh in constructors or print calls.
+- Yilianyun application type: open application service mode. Token lifecycle must be DB-backed per printer authorization; no global config token runtime and no automatic refresh in constructors or print calls.
 - Yilianyun push URL: register and verify through an operator-only command or admin-only startup check before enabling Yilianyun printing.
 - Merchant daily surfaces should show normalized human labels and statuses. Raw provider names are shown only during setup, troubleshooting, and operator diagnostics.
 - Provider probes should start as local/operator commands, not public merchant APIs.
