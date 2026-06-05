@@ -27,13 +27,15 @@ type Client interface {
 }
 
 type AddPrinterInput struct {
-	SN   string
-	Key  string
-	Name string
+	SN       string
+	Key      string
+	Name     string
+	Business string
 }
 
 type RemovePrinterInput struct {
-	SN string
+	SN       string
+	Business string
 }
 
 type PrintInput struct {

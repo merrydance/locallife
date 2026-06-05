@@ -76,27 +76,27 @@
 | Yilianyun | query print order | official query endpoint | response | `state` | integer/string | required | `0` unprinted, `1` printed, `2` cancelled | future status mapper | https://www.kancloud.cn/elind-dev/openapi/736521 |
 | Yilianyun | query terminal status | official query endpoint | request | `machine_code` | string | required | device identity | future terminal status client | https://www.kancloud.cn/elind-dev/openapi/751625 |
 | Yilianyun | query terminal status | official query endpoint | response | `state` | integer/string | required | `0` offline, `1` online, `2` out of paper | future terminal status mapper | https://www.kancloud.cn/elind-dev/openapi/751625 |
-| Shangpeng | common protocol | all endpoints | request | `appid` | string | required | LocalLife Shangpeng app id | future `cloudprint.ShangpengClient` | https://spyun.net/open/index.html |
-| Shangpeng | common protocol | all endpoints | request | `timestamp` | string/integer | required | request timestamp | future `cloudprint.ShangpengClient` | https://spyun.net/open/index.html |
-| Shangpeng | common protocol | all endpoints | request | `sign` | uppercase MD5 hex | required | sorted non-empty params plus `appsecret` | future `cloudprint.ShangpengClient` | https://spyun.net/open/index.html |
-| Shangpeng | add printer | `POST /v1/printer/add` | request | `business` | string | required | business grouping | future `cloudprint.ShangpengClient.AddPrinter` | https://spyun.net/open/index.html |
-| Shangpeng | add printer | `POST /v1/printer/add` | request | `sn` | string | required | printer SN | future `cloudprint.ShangpengClient.AddPrinter` | https://spyun.net/open/index.html |
-| Shangpeng | add printer | `POST /v1/printer/add` | request | `pkey` | string | required | printer key | future `cloudprint.ShangpengClient.AddPrinter` | https://spyun.net/open/index.html |
-| Shangpeng | add printer | `POST /v1/printer/add` | request | `name` | string | required | printer display name | future `cloudprint.ShangpengClient.AddPrinter` | https://spyun.net/open/index.html |
-| Shangpeng | delete printer | `DELETE /v1/printer/delete` | request | `sn` | string | required | printer SN | future `cloudprint.ShangpengClient.RemovePrinter` | https://spyun.net/open/index.html |
-| Shangpeng | delete printer | `DELETE /v1/printer/delete` | request | `business` | string | optional | business grouping | future `cloudprint.ShangpengClient.RemovePrinter` | https://spyun.net/open/index.html |
-| Shangpeng | printer info | `GET /v1/printer/info` | request | `sn` | string | required | printer SN | future `cloudprint.ShangpengClient.QueryPrinterStatus` | https://spyun.net/open/index.html |
-| Shangpeng | printer info | `GET /v1/printer/info` | response | `online` | integer/boolean | required | `1` online, `0` offline | future printer status mapper | https://spyun.net/open/index.html |
-| Shangpeng | printer info | `GET /v1/printer/info` | response | `status` | integer | required | `0` normal, `1` abnormal | future printer status mapper | https://spyun.net/open/index.html |
-| Shangpeng | printer info | `GET /v1/printer/info` | response | `sqsnum` | integer | optional | queued jobs count | future printer status mapper | https://spyun.net/open/index.html |
-| Shangpeng | text print | `POST /v1/printer/print` | request | `sn` | string | required | printer SN | future `cloudprint.ShangpengClient.Print` | https://spyun.net/open/index.html |
-| Shangpeng | text print | `POST /v1/printer/print` | request | `content` | string | required | Shangpeng receipt markup | future `cloudprint.ShangpengClient.Print` | https://spyun.net/open/index.html |
-| Shangpeng | text print | `POST /v1/printer/print` | request | `times` | integer/string | optional | copies | future `cloudprint.ShangpengClient.Print` | https://spyun.net/open/index.html |
-| Shangpeng | text print | `POST /v1/printer/print` | response | `id` | string/integer | provider-generated | provider print order id | future `cloudprint.PrintResult.ProviderOrderID` | https://spyun.net/open/index.html |
-| Shangpeng | text print | `POST /v1/printer/print` | response | `create_time` | timestamp string | provider-generated | accepted time | future `cloudprint.PrintResult.AcceptedAt` | https://spyun.net/open/index.html |
-| Shangpeng | query print order | `GET /v1/printer/order/status` | request | `id` | string/integer | required | provider print order id | future `cloudprint.ShangpengClient.QueryOrderState` | https://spyun.net/open/index.html |
-| Shangpeng | query print order | `GET /v1/printer/order/status` | response | `status` | boolean | required | `true` printed, `false` not yet printed | future print state mapper | https://spyun.net/open/index.html |
-| Shangpeng | query print order | `GET /v1/printer/order/status` | response | `print_time` | timestamp string | optional | printed time | future print state mapper | https://spyun.net/open/index.html |
+| Shangpeng | common protocol | all endpoints | request | `appid` | string | required | LocalLife Shangpeng app id | `cloudprint.ShangpengClient.call` | https://spyun.net/open/index.html |
+| Shangpeng | common protocol | all endpoints | request | `timestamp` | string/integer | required | request timestamp | `cloudprint.ShangpengClient.call` | https://spyun.net/open/index.html |
+| Shangpeng | common protocol | all endpoints | request | `sign` | uppercase MD5 hex | required | sorted non-empty params plus `appsecret` | `cloudprint.BuildShangpengSign` | https://spyun.net/open/index.html |
+| Shangpeng | add printer | `POST /v1/printer/add` | request | `business` | string | required | business grouping | `cloudprint.ShangpengClient.AddPrinter` | https://spyun.net/open/index.html |
+| Shangpeng | add printer | `POST /v1/printer/add` | request | `sn` | string | required | printer SN | `cloudprint.ShangpengClient.AddPrinter` | https://spyun.net/open/index.html |
+| Shangpeng | add printer | `POST /v1/printer/add` | request | `pkey` | string | required | printer key | `cloudprint.ShangpengClient.AddPrinter` | https://spyun.net/open/index.html |
+| Shangpeng | add printer | `POST /v1/printer/add` | request | `name` | string | required | printer display name | `cloudprint.ShangpengClient.AddPrinter` | https://spyun.net/open/index.html |
+| Shangpeng | delete printer | `DELETE /v1/printer/delete` | request | `sn` | string | required | printer SN | `cloudprint.ShangpengClient.RemovePrinter` | https://spyun.net/open/index.html |
+| Shangpeng | delete printer | `DELETE /v1/printer/delete` | request | `business` | string | optional | business grouping | `cloudprint.ShangpengClient.RemovePrinter` | https://spyun.net/open/index.html |
+| Shangpeng | printer info | `GET /v1/printer/info` | request | `sn` | string | required | printer SN | `cloudprint.ShangpengClient.GetPrinterInfo` | https://spyun.net/open/index.html |
+| Shangpeng | printer info | `GET /v1/printer/info` | response | `online` | integer/boolean | required | `1` online, `0` offline | `cloudprint.mapShangpengPrinterStatus` | https://spyun.net/open/index.html |
+| Shangpeng | printer info | `GET /v1/printer/info` | response | `status` | integer | required | `0` normal, `1` abnormal | `cloudprint.mapShangpengPrinterStatus` | https://spyun.net/open/index.html |
+| Shangpeng | printer info | `GET /v1/printer/info` | response | `sqsnum` | integer | optional | queued jobs count | not persisted in Phase 3A | https://spyun.net/open/index.html |
+| Shangpeng | text print | `POST /v1/printer/print` | request | `sn` | string | required | printer SN | `cloudprint.ShangpengClient.Print` | https://spyun.net/open/index.html |
+| Shangpeng | text print | `POST /v1/printer/print` | request | `content` | string | required | Shangpeng receipt markup | `cloudprint.ShangpengClient.Print` | https://spyun.net/open/index.html |
+| Shangpeng | text print | `POST /v1/printer/print` | request | `times` | integer/string | optional | copies | `cloudprint.ShangpengClient.Print` | https://spyun.net/open/index.html |
+| Shangpeng | text print | `POST /v1/printer/print` | response | `id` | string/integer | provider-generated | provider print order id | `cloudprint.ShangpengClient.Print` | https://spyun.net/open/index.html |
+| Shangpeng | text print | `POST /v1/printer/print` | response | `create_time` | timestamp string | provider-generated | accepted time | parsed only in future status metadata, not returned by Phase 3A client | https://spyun.net/open/index.html |
+| Shangpeng | query print order | `GET /v1/printer/order/status` | request | `id` | string/integer | required | provider print order id | `cloudprint.ShangpengClient.QueryOrderState` | https://spyun.net/open/index.html |
+| Shangpeng | query print order | `GET /v1/printer/order/status` | response | `status` | boolean | required | `true` printed, `false` not yet printed | `cloudprint.ShangpengClient.QueryOrderState` | https://spyun.net/open/index.html |
+| Shangpeng | query print order | `GET /v1/printer/order/status` | response | `print_time` | timestamp string | optional | printed time | not persisted in Phase 3A | https://spyun.net/open/index.html |
 | Shangpeng | clear pending queue | `DELETE /v1/printer/cleansqs` | request | `sn` | string | required | printer SN | future maintenance command, not merchant default | https://spyun.net/open/index.html |
 | Shangpeng | query device model | `POST /v1/printer/getModel` | request | `sn` | string | required | printer SN | future device info client | https://spyun.net/open/index.html |
 | Shangpeng | query device model | `POST /v1/printer/getModel` | request | `key` | string | required | printer key | future device info client | https://spyun.net/open/index.html |
