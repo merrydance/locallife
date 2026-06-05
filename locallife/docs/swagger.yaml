@@ -787,6 +787,20 @@ definitions:
       brand_id:
         type: integer
     type: object
+  api.authorizeScannedYilianyunPrinterRequest:
+    properties:
+      machine_code:
+        maxLength: 100
+        type: string
+      msign:
+        maxLength: 255
+        type: string
+      qr_key:
+        maxLength: 255
+        type: string
+    required:
+    - machine_code
+    type: object
   api.baofuSettlementAccountPaymentResponse:
     properties:
       amount:
@@ -2678,6 +2692,17 @@ definitions:
     required:
     - name
     - region_id
+    type: object
+  api.createYilianyunAuthorizationSessionRequest:
+    properties:
+      printer_name:
+        maxLength: 100
+        type: string
+      printer_role:
+        enum:
+        - front
+        - kitchen
+        type: string
     type: object
   api.currentRegionByLocationResponse:
     properties:
@@ -10501,6 +10526,34 @@ definitions:
     required:
     - amount
     type: object
+  api.yilianyunAuthorizationResponse:
+    properties:
+      access_expires_at:
+        type: string
+      authorization_id:
+        type: integer
+      machine_code:
+        type: string
+      merchant_id:
+        type: integer
+      provider_type:
+        type: string
+      refresh_expires_at:
+        type: string
+      status:
+        type: string
+    type: object
+  api.yilianyunAuthorizationSessionResponse:
+    properties:
+      authorize_url:
+        type: string
+      expires_at:
+        type: string
+      session_id:
+        type: integer
+      state:
+        type: string
+    type: object
   db.Agreement:
     properties:
       content:
@@ -17665,6 +17718,132 @@ paths:
       security:
       - Bearer: []
       summary: 重试打印机异常对账任务
+      tags:
+      - 商户设备管理
+  /v1/merchant/devices/yilianyun/auth/callback:
+    get:
+      consumes:
+      - application/json
+      description: 易联云开放平台 redirect_uri 回调；仅依赖一次性 state，不要求 Bearer
+      parameters:
+      - description: 授权码
+        in: query
+        name: code
+        required: true
+        type: string
+      - description: LocalLife 一次性授权 state
+        in: query
+        name: state
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 授权完成
+          schema:
+            $ref: '#/definitions/api.yilianyunAuthorizationResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 授权会话不存在或过期
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: 授权会话已处理
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "502":
+          description: 易联云授权失败
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: 易联云授权回调
+      tags:
+      - 商户设备管理
+  /v1/merchant/devices/yilianyun/authorization-sessions:
+    post:
+      consumes:
+      - application/json
+      description: 商户创建一次性易联云开放应用授权 state，并返回 provider authorize_url
+      parameters:
+      - description: 授权会话参数
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.createYilianyunAuthorizationSessionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: 成功创建授权会话
+          schema:
+            $ref: '#/definitions/api.yilianyunAuthorizationSessionResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无商户设备管理权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: 授权服务不可用
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - Bearer: []
+      summary: 创建易联云授权会话
+      tags:
+      - 商户设备管理
+  /v1/merchant/devices/yilianyun/scan-authorizations:
+    post:
+      consumes:
+      - application/json
+      description: 商户提交扫码得到的 machine_code 和 qr_key/msign，完成易联云打印机授权
+      parameters:
+      - description: 扫码授权参数
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.authorizeScannedYilianyunPrinterRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 授权完成
+          schema:
+            $ref: '#/definitions/api.yilianyunAuthorizationResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无商户设备管理权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: 设备已被其他商户绑定
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "502":
+          description: 易联云授权失败
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - Bearer: []
+      summary: 易联云扫码授权
       tags:
       - 商户设备管理
   /v1/merchant/display-config:

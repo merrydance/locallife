@@ -102,6 +102,7 @@ type Server struct {
 	mediaStorage                   media.ObjectStorage
 	cloudPrinterManager            cloudprint.Manager
 	printerClient                  cloudprint.Client
+	yilianyunOAuthClient           logic.YilianyunAuthorizationOAuthClient
 	router                         *gin.Engine
 	redisClient                    *redis.Client // Redis 客户端（绑定码等功能使用）
 }
@@ -272,6 +273,10 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		log.Warn().Err(err).Msg("cloud printer provider config invalid, using validated runtime provider set")
 	}
 	printerClient, _ := cloudPrinterManager.Provider(string(cloudprint.ProviderFeieyun))
+	var yilianyunOAuthClient logic.YilianyunAuthorizationOAuthClient
+	if client := cloudprint.NewYilianyunOAuthClientFromConfig(config); client != nil {
+		yilianyunOAuthClient = client
+	}
 
 	server := &Server{
 		config:               config,
@@ -297,6 +302,7 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		taskDistributor:           taskDistributor,
 		cloudPrinterManager:       cloudPrinterManager,
 		printerClient:             printerClient,
+		yilianyunOAuthClient:      yilianyunOAuthClient,
 		wsHub:                     wsHub,
 		wsPubSub:                  wsPubSub,
 		merchantStatusChangePublisher: func() websocket.MerchantStatusChangePublisher {
@@ -529,6 +535,9 @@ func (server *Server) setupRouter() {
 	authPublicGroup.GET("/web-login/sessions/:code", server.getWebLoginSessionStatus)
 	authPublicGroup.POST("/web-login/consume", server.consumeWebLoginSession)
 	authPublicGroup.POST("/app-bind/verify", server.verifyAppBindCode) // App 绑定码验证（公开端点）
+
+	// 易联云开放应用授权回调（provider redirect，无 Bearer；state 负责绑定本地授权会话）
+	v1.GET("/merchant/devices/yilianyun/auth/callback", server.handleYilianyunAuthorizationCallback)
 
 	// 微信支付回调路由（无需认证，微信服务器调用）
 	webhooksGroup := v1.Group("/webhooks")
@@ -1313,6 +1322,8 @@ func (server *Server) setupRouter() {
 	{
 		merchantDevicesGroup.POST("", server.createPrinter)
 		merchantDevicesGroup.GET("", server.listPrinters)
+		merchantDevicesGroup.POST("/yilianyun/authorization-sessions", server.createYilianyunAuthorizationSession)
+		merchantDevicesGroup.POST("/yilianyun/scan-authorizations", server.authorizeScannedYilianyunPrinter)
 		merchantDevicesGroup.GET("/reconciliation-jobs", server.listPrinterReconciliationJobs)
 		merchantDevicesGroup.POST("/reconciliation-jobs/:id/retry", server.retryPrinterReconciliationJob)
 		merchantDevicesGroup.GET("/:id", server.getPrinter)

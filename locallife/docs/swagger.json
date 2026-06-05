@@ -10343,6 +10343,201 @@
                 }
             }
         },
+        "/v1/merchant/devices/yilianyun/auth/callback": {
+            "get": {
+                "description": "易联云开放平台 redirect_uri 回调；仅依赖一次性 state，不要求 Bearer",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户设备管理"
+                ],
+                "summary": "易联云授权回调",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "授权码",
+                        "name": "code",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "LocalLife 一次性授权 state",
+                        "name": "state",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "授权完成",
+                        "schema": {
+                            "$ref": "#/definitions/api.yilianyunAuthorizationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "授权会话不存在或过期",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "授权会话已处理",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "易联云授权失败",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchant/devices/yilianyun/authorization-sessions": {
+            "post": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "商户创建一次性易联云开放应用授权 state，并返回 provider authorize_url",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户设备管理"
+                ],
+                "summary": "创建易联云授权会话",
+                "parameters": [
+                    {
+                        "description": "授权会话参数",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.createYilianyunAuthorizationSessionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "成功创建授权会话",
+                        "schema": {
+                            "$ref": "#/definitions/api.yilianyunAuthorizationSessionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无商户设备管理权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "授权服务不可用",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchant/devices/yilianyun/scan-authorizations": {
+            "post": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "商户提交扫码得到的 machine_code 和 qr_key/msign，完成易联云打印机授权",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户设备管理"
+                ],
+                "summary": "易联云扫码授权",
+                "parameters": [
+                    {
+                        "description": "扫码授权参数",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.authorizeScannedYilianyunPrinterRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "授权完成",
+                        "schema": {
+                            "$ref": "#/definitions/api.yilianyunAuthorizationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无商户设备管理权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "设备已被其他商户绑定",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "易联云授权失败",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/merchant/devices/{id}": {
             "get": {
                 "security": [
@@ -32763,6 +32958,26 @@
                 }
             }
         },
+        "api.authorizeScannedYilianyunPrinterRequest": {
+            "type": "object",
+            "required": [
+                "machine_code"
+            ],
+            "properties": {
+                "machine_code": {
+                    "type": "string",
+                    "maxLength": 100
+                },
+                "msign": {
+                    "type": "string",
+                    "maxLength": 255
+                },
+                "qr_key": {
+                    "type": "string",
+                    "maxLength": 255
+                }
+            }
+        },
         "api.baofuSettlementAccountPaymentResponse": {
             "type": "object",
             "properties": {
@@ -35462,6 +35677,22 @@
                     "enum": [
                         "manual",
                         "map"
+                    ]
+                }
+            }
+        },
+        "api.createYilianyunAuthorizationSessionRequest": {
+            "type": "object",
+            "properties": {
+                "printer_name": {
+                    "type": "string",
+                    "maxLength": 100
+                },
+                "printer_role": {
+                    "type": "string",
+                    "enum": [
+                        "front",
+                        "kitchen"
                     ]
                 }
             }
@@ -47045,6 +47276,49 @@
                 "remark": {
                     "type": "string",
                     "maxLength": 200
+                }
+            }
+        },
+        "api.yilianyunAuthorizationResponse": {
+            "type": "object",
+            "properties": {
+                "access_expires_at": {
+                    "type": "string"
+                },
+                "authorization_id": {
+                    "type": "integer"
+                },
+                "machine_code": {
+                    "type": "string"
+                },
+                "merchant_id": {
+                    "type": "integer"
+                },
+                "provider_type": {
+                    "type": "string"
+                },
+                "refresh_expires_at": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.yilianyunAuthorizationSessionResponse": {
+            "type": "object",
+            "properties": {
+                "authorize_url": {
+                    "type": "string"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "session_id": {
+                    "type": "integer"
+                },
+                "state": {
+                    "type": "string"
                 }
             }
         },

@@ -73,6 +73,67 @@ func TestCloudPrinterAuthorizationSessionCannotConsumeExpiredState(t *testing.T)
 	require.ErrorIs(t, err, ErrRecordNotFound)
 }
 
+func TestAuthorizeYilianyunCloudPrinterTxConsumesStateAndUpsertsAuthorization(t *testing.T) {
+	merchant := createRandomMerchantForTest(t)
+	state := "yly-state-tx-" + util.RandomString(24)
+	session, err := testStore.CreateCloudPrinterAuthorizationSession(context.Background(), CreateCloudPrinterAuthorizationSessionParams{
+		State:        state,
+		MerchantID:   merchant.ID,
+		ProviderType: CloudPrinterProviderYilianyun,
+		PrinterName:  pgtype.Text{String: "事务易联云", Valid: true},
+		PrinterRole:  pgtype.Text{String: "front", Valid: true},
+		CreatedBy:    pgtype.Int8{Int64: merchant.OwnerUserID, Valid: true},
+		ExpiresAt:    time.Now().Add(10 * time.Minute).UTC(),
+	})
+	require.NoError(t, err)
+
+	consumedAt := time.Now().UTC()
+	result, err := testStore.AuthorizeYilianyunCloudPrinterTx(context.Background(), AuthorizeYilianyunCloudPrinterTxParams{
+		State: state,
+		Authorization: UpsertCloudPrinterProviderAuthorizationParams{
+			MerchantID:               merchant.ID,
+			ProviderType:             CloudPrinterProviderYilianyun,
+			MachineCode:              "YL-TX-" + util.RandomString(12),
+			AccessTokenCiphertext:    "ciphertext-access",
+			RefreshTokenCiphertext:   "ciphertext-refresh",
+			AccessTokenExpiresAt:     time.Now().Add(30 * 24 * time.Hour).UTC(),
+			RefreshTokenExpiresAt:    time.Now().Add(35 * 24 * time.Hour).UTC(),
+			Status:                   CloudPrinterAuthorizationStatusActive,
+			RefreshFailureCount:      0,
+			RefreshLastAttemptedAt:   pgtype.Timestamptz{Valid: false},
+			LastProviderError:        pgtype.Text{Valid: false},
+			AuthorizedCloudPrinterID: pgtype.Int8{Valid: false},
+		},
+		ConsumedAt: consumedAt,
+	})
+	require.NoError(t, err)
+	require.Equal(t, session.ID, result.Session.ID)
+	require.True(t, result.Session.ConsumedAt.Valid)
+	require.WithinDuration(t, consumedAt, result.Session.ConsumedAt.Time, time.Second)
+	require.Equal(t, merchant.ID, result.Authorization.MerchantID)
+	require.Equal(t, CloudPrinterAuthorizationStatusActive, result.Authorization.Status)
+
+	_, err = testStore.AuthorizeYilianyunCloudPrinterTx(context.Background(), AuthorizeYilianyunCloudPrinterTxParams{
+		State: state,
+		Authorization: UpsertCloudPrinterProviderAuthorizationParams{
+			MerchantID:               merchant.ID,
+			ProviderType:             CloudPrinterProviderYilianyun,
+			MachineCode:              result.Authorization.MachineCode,
+			AccessTokenCiphertext:    "ciphertext-access-rotated",
+			RefreshTokenCiphertext:   "ciphertext-refresh-rotated",
+			AccessTokenExpiresAt:     time.Now().Add(30 * 24 * time.Hour).UTC(),
+			RefreshTokenExpiresAt:    time.Now().Add(35 * 24 * time.Hour).UTC(),
+			Status:                   CloudPrinterAuthorizationStatusActive,
+			RefreshFailureCount:      0,
+			RefreshLastAttemptedAt:   pgtype.Timestamptz{Valid: false},
+			LastProviderError:        pgtype.Text{Valid: false},
+			AuthorizedCloudPrinterID: pgtype.Int8{Valid: false},
+		},
+		ConsumedAt: time.Now().UTC(),
+	})
+	require.ErrorIs(t, err, ErrRecordNotFound)
+}
+
 func TestUpsertCloudPrinterProviderAuthorizationStoresEncryptedTokens(t *testing.T) {
 	merchant := createRandomMerchantForTest(t)
 	encryptor, err := util.NewAESEncryptor("12345678901234567890123456789012")

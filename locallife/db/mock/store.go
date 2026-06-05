@@ -522,6 +522,21 @@ func (mr *MockStoreMockRecorder) AttachMerchantToGroupIfUnassigned(ctx, arg any)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AttachMerchantToGroupIfUnassigned", reflect.TypeOf((*MockStore)(nil).AttachMerchantToGroupIfUnassigned), ctx, arg)
 }
 
+// AuthorizeYilianyunCloudPrinterTx mocks base method.
+func (m *MockStore) AuthorizeYilianyunCloudPrinterTx(ctx context.Context, arg db.AuthorizeYilianyunCloudPrinterTxParams) (db.AuthorizeYilianyunCloudPrinterTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AuthorizeYilianyunCloudPrinterTx", ctx, arg)
+	ret0, _ := ret[0].(db.AuthorizeYilianyunCloudPrinterTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AuthorizeYilianyunCloudPrinterTx indicates an expected call of AuthorizeYilianyunCloudPrinterTx.
+func (mr *MockStoreMockRecorder) AuthorizeYilianyunCloudPrinterTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AuthorizeYilianyunCloudPrinterTx", reflect.TypeOf((*MockStore)(nil).AuthorizeYilianyunCloudPrinterTx), ctx, arg)
+}
+
 // AutoCloseMerchants mocks base method.
 func (m *MockStore) AutoCloseMerchants(ctx context.Context) ([]int64, error) {
 	m.ctrl.T.Helper()
