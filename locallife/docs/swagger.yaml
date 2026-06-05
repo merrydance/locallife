@@ -2330,6 +2330,7 @@ definitions:
       printer_type:
         enum:
         - feieyun
+        - shangpeng
         type: string
     required:
     - printer_key
@@ -17239,7 +17240,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: 商户注册新的云打印机设备，当前仅支持飞鹅云
+      description: 商户注册新的云打印机设备，支持飞鹅云和商鹏云；易联云需通过授权流程绑定
       parameters:
       - description: 打印机信息
         in: body

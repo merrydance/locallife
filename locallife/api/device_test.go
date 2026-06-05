@@ -123,6 +123,20 @@ func (s *printerClientStub) GetPrinterInfo(ctx context.Context, sn string) (clou
 	return s.queryPrinterInfo, s.queryPrinterInfoErr
 }
 
+type printerProviderManagerStub struct {
+	providers map[string]cloudprint.Client
+}
+
+func (s printerProviderManagerStub) Provider(providerType string) (cloudprint.Client, bool) {
+	provider, ok := s.providers[providerType]
+	return provider, ok
+}
+
+func (s printerProviderManagerStub) Supported(providerType string) bool {
+	_, ok := s.Provider(providerType)
+	return ok
+}
+
 // ==================== 创建打印机测试 ====================
 
 func TestCreatePrinterAPI(t *testing.T) {
@@ -393,6 +407,96 @@ func TestCreatePrinterAPIRecordsReconciliationOnStoreFailureAfterRemoteRegistrat
 	require.Equal(t, http.StatusInternalServerError, recorder.Code)
 	require.Len(t, printerClient.addInputs, 1)
 	require.Empty(t, printerClient.removeInputs)
+}
+
+func TestCreatePrinterAPIRegistersShangpengRemotePrinter(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	shangpengClient := &printerClientStub{}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetCloudPrinterBySN(gomock.Any(), gomock.Eq("SP-SN-001")).
+		Times(1).
+		Return(db.CloudPrinter{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		CreateCloudPrinter(gomock.Any(), gomock.Any()).
+		Times(1).
+		DoAndReturn(func(ctx context.Context, arg db.CreateCloudPrinterParams) (db.CloudPrinter, error) {
+			require.Equal(t, merchant.ID, arg.MerchantID)
+			require.Equal(t, "商鹏前台", arg.PrinterName)
+			require.Equal(t, "SP-SN-001", arg.PrinterSn)
+			require.Equal(t, "SP-KEY-001", arg.PrinterKey)
+			require.Equal(t, string(cloudprint.ProviderShangpeng), arg.PrinterType)
+			return db.CloudPrinter{
+				ID:               1,
+				MerchantID:       merchant.ID,
+				PrinterName:      arg.PrinterName,
+				PrinterSn:        arg.PrinterSn,
+				PrinterKey:       arg.PrinterKey,
+				PrinterType:      arg.PrinterType,
+				PrinterRole:      arg.PrinterRole,
+				PrintTakeout:     arg.PrintTakeout,
+				PrintDineIn:      arg.PrintDineIn,
+				PrintReservation: arg.PrintReservation,
+				IsActive:         true,
+				CreatedAt:        time.Now(),
+			}, nil
+		})
+
+	server := newTestServer(t, store)
+	server.SetCloudPrinterManagerForTest(printerProviderManagerStub{providers: map[string]cloudprint.Client{
+		string(cloudprint.ProviderShangpeng): shangpengClient,
+	}})
+	recorder := httptest.NewRecorder()
+
+	body := []byte(`{"printer_name":"商鹏前台","printer_sn":"SP-SN-001","printer_key":"SP-KEY-001","printer_type":"shangpeng"}`)
+	request, err := http.NewRequest(http.MethodPost, "/v1/merchant/devices", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusCreated, recorder.Code)
+	require.Len(t, shangpengClient.addInputs, 1)
+	require.Equal(t, "SP-SN-001", shangpengClient.addInputs[0].SN)
+	require.Equal(t, "SP-KEY-001", shangpengClient.addInputs[0].Key)
+	require.Equal(t, "商鹏前台", shangpengClient.addInputs[0].Name)
+	require.Equal(t, fmt.Sprintf("%d", merchant.ID), shangpengClient.addInputs[0].Business)
+}
+
+func TestCreatePrinterAPIRejectsShangpengWhenProviderNotConfigured(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetCloudPrinterBySN(gomock.Any(), gomock.Eq("SP-SN-001")).
+		Times(1).
+		Return(db.CloudPrinter{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		CreateCloudPrinter(gomock.Any(), gomock.Any()).
+		Times(0)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	body := []byte(`{"printer_name":"商鹏前台","printer_sn":"SP-SN-001","printer_key":"SP-KEY-001","printer_type":"shangpeng"}`)
+	request, err := http.NewRequest(http.MethodPost, "/v1/merchant/devices", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusNotImplemented, recorder.Code)
 }
 
 // ==================== 获取打印机列表测试 ====================
@@ -999,6 +1103,76 @@ func TestDeletePrinterAPIRecordsReconciliationOnStoreFailureAfterRemoteDeletion(
 	require.Equal(t, http.StatusInternalServerError, recorder.Code)
 	require.Len(t, printerClient.removeInputs, 1)
 	require.Empty(t, printerClient.addInputs)
+}
+
+func TestDeletePrinterAPIRemovesShangpengRemotePrinter(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	printer := randomCloudPrinter(merchant.ID)
+	printer.PrinterType = string(cloudprint.ProviderShangpeng)
+	printer.PrinterSn = "SP-SN-001"
+	shangpengClient := &printerClientStub{}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetCloudPrinter(gomock.Any(), gomock.Eq(printer.ID)).
+		Times(1).
+		Return(printer, nil)
+	store.EXPECT().
+		DeleteCloudPrinter(gomock.Any(), gomock.Eq(printer.ID)).
+		Times(1).
+		Return(nil)
+
+	server := newTestServer(t, store)
+	server.SetCloudPrinterManagerForTest(printerProviderManagerStub{providers: map[string]cloudprint.Client{
+		string(cloudprint.ProviderShangpeng): shangpengClient,
+	}})
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("/v1/merchant/devices/%d", printer.ID), nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Len(t, shangpengClient.removeInputs, 1)
+	require.Equal(t, "SP-SN-001", shangpengClient.removeInputs[0].SN)
+	require.Equal(t, fmt.Sprintf("%d", merchant.ID), shangpengClient.removeInputs[0].Business)
+}
+
+func TestDeletePrinterAPIRejectsShangpengWhenProviderNotConfigured(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	printer := randomCloudPrinter(merchant.ID)
+	printer.PrinterType = string(cloudprint.ProviderShangpeng)
+	printer.PrinterSn = "SP-SN-001"
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetCloudPrinter(gomock.Any(), gomock.Eq(printer.ID)).
+		Times(1).
+		Return(printer, nil)
+	store.EXPECT().
+		DeleteCloudPrinter(gomock.Any(), gomock.Any()).
+		Times(0)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("/v1/merchant/devices/%d", printer.ID), nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusNotImplemented, recorder.Code)
 }
 
 // ==================== 测试打印机测试 ====================

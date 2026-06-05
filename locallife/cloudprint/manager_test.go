@@ -24,6 +24,22 @@ func TestNewManagerFromConfigRegistersFeieyunWhenEnabled(t *testing.T) {
 	require.False(t, provider.PrintResultCallbackEnabled())
 }
 
+func TestNewManagerFromConfigRegistersShangpengWhenEnabled(t *testing.T) {
+	manager := NewManagerFromConfig(util.Config{
+		ShangpengEnabled:   true,
+		ShangpengAppID:     "appid",
+		ShangpengAppSecret: "secret",
+	})
+
+	require.True(t, manager.Supported(string(ProviderShangpeng)))
+	require.False(t, manager.Supported(string(ProviderYilianyun)))
+
+	provider, ok := manager.Provider(string(ProviderShangpeng))
+	require.True(t, ok)
+	require.NotNil(t, provider)
+	require.False(t, provider.PrintResultCallbackEnabled())
+}
+
 func TestNewManagerFromConfigOmitsFeieyunWhenDisabledOrIncomplete(t *testing.T) {
 	testCases := []struct {
 		name   string
@@ -78,19 +94,14 @@ func TestManagerRejectsUnknownProvider(t *testing.T) {
 	require.Nil(t, provider)
 }
 
-func TestManagerDoesNotRegisterPlannedProvidersBeforeRuntimeImplementation(t *testing.T) {
+func TestManagerDoesNotRegisterYilianyunBeforeAuthorizationRuntimeImplementation(t *testing.T) {
 	manager := NewManagerFromConfig(util.Config{
 		YilianyunEnabled:         true,
 		YilianyunAPIBaseURL:      "https://open-api.10ss.net",
 		YilianyunAppID:           "app",
 		YilianyunAppSecret:       "secret",
 		YilianyunAuthCallbackURL: "https://api.example.com/v1/cloud-printer/yilianyun/auth/callback",
-		ShangpengEnabled:         true,
-		ShangpengAPIBaseURL:      "https://open.spyun.net",
-		ShangpengAppID:           "appid",
-		ShangpengAppSecret:       "secret",
 	})
 
 	require.False(t, manager.Supported(string(ProviderYilianyun)))
-	require.False(t, manager.Supported(string(ProviderShangpeng)))
 }

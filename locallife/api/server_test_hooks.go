@@ -78,4 +78,31 @@ func (server *Server) SetBaofuWithdrawServiceForTest(service *logic.BaofuWithdra
 
 func (server *Server) SetPrinterClientForTest(client cloudprint.Client) {
 	server.printerClient = client
+	server.cloudPrinterManager = testCloudPrinterManager{providers: map[string]cloudprint.Client{
+		string(cloudprint.ProviderFeieyun): client,
+	}}
+}
+
+func (server *Server) SetCloudPrinterManagerForTest(manager cloudprint.Manager) {
+	server.cloudPrinterManager = manager
+	if manager == nil {
+		server.printerClient = nil
+		return
+	}
+	printerClient, _ := manager.Provider(string(cloudprint.ProviderFeieyun))
+	server.printerClient = printerClient
+}
+
+type testCloudPrinterManager struct {
+	providers map[string]cloudprint.Client
+}
+
+func (m testCloudPrinterManager) Provider(providerType string) (cloudprint.Client, bool) {
+	provider, ok := m.providers[providerType]
+	return provider, ok
+}
+
+func (m testCloudPrinterManager) Supported(providerType string) bool {
+	_, ok := m.Provider(providerType)
+	return ok
 }

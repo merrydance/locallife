@@ -10090,7 +10090,7 @@ const docTemplate = `{
                         "Bearer": []
                     }
                 ],
-                "description": "商户注册新的云打印机设备，当前仅支持飞鹅云",
+                "description": "商户注册新的云打印机设备，支持飞鹅云和商鹏云；易联云需通过授权流程绑定",
                 "consumes": [
                     "application/json"
                 ],
@@ -35001,7 +35001,8 @@ const docTemplate = `{
                 "printer_type": {
                     "type": "string",
                     "enum": [
-                        "feieyun"
+                        "feieyun",
+                        "shangpeng"
                     ]
                 }
             }

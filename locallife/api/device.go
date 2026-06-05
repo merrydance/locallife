@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,7 +15,10 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const printerTypeFeieyun = "feieyun"
+const (
+	printerTypeFeieyun   = string(cloudprint.ProviderFeieyun)
+	printerTypeShangpeng = string(cloudprint.ProviderShangpeng)
+)
 
 // ==================== 注册打印机 ====================
 
@@ -22,7 +26,7 @@ type createPrinterRequest struct {
 	PrinterName      string `json:"printer_name" binding:"required,max=100"`
 	PrinterSN        string `json:"printer_sn" binding:"required,max=100"`
 	PrinterKey       string `json:"printer_key" binding:"required,max=100"`
-	PrinterType      string `json:"printer_type" binding:"required,oneof=feieyun"`
+	PrinterType      string `json:"printer_type" binding:"required,oneof=feieyun shangpeng"`
 	PrinterRole      string `json:"printer_role" binding:"omitempty,oneof=front kitchen"`
 	PrintTakeout     *bool  `json:"print_takeout"`
 	PrintDineIn      *bool  `json:"print_dine_in"`
@@ -73,7 +77,7 @@ type printerLiveStatusResponse struct {
 
 // createPrinter 注册打印机设备
 // @Summary 注册打印机
-// @Description 商户注册新的云打印机设备，当前仅支持飞鹅云
+// @Description 商户注册新的云打印机设备，支持飞鹅云和商鹏云；易联云需通过授权流程绑定
 // @Tags 商户设备管理
 // @Accept json
 // @Produce json
@@ -90,6 +94,10 @@ func (server *Server) createPrinter(ctx *gin.Context) {
 	var req createPrinterRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+	if !isSupportedCloudPrinterProviderType(req.PrinterType) {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("unsupported printer type")))
 		return
 	}
 
@@ -136,12 +144,17 @@ func (server *Server) createPrinter(ctx *gin.Context) {
 		printerRole = "front"
 	}
 
-	registeredRemotely := req.PrinterType == printerTypeFeieyun && server.printerClient != nil
+	printerProvider, registeredRemotely := server.cloudPrinterProvider(req.PrinterType)
+	if req.PrinterType != printerTypeFeieyun && !registeredRemotely {
+		ctx.JSON(http.StatusNotImplemented, errorResponse(errors.New("current printer type or environment does not support remote registration")))
+		return
+	}
 	if registeredRemotely {
-		if err := server.printerClient.AddPrinter(ctx, cloudprint.AddPrinterInput{
-			SN:   req.PrinterSN,
-			Key:  req.PrinterKey,
-			Name: req.PrinterName,
+		if err := printerProvider.AddPrinter(ctx, cloudprint.AddPrinterInput{
+			SN:       req.PrinterSN,
+			Key:      req.PrinterKey,
+			Name:     req.PrinterName,
+			Business: cloudPrinterProviderBusinessKey(merchant.ID),
 		}); err != nil {
 			ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, err, "cloud printer provider unavailable", "cloud printer add failed"))
 			return
@@ -556,9 +569,16 @@ func (server *Server) deletePrinter(ctx *gin.Context) {
 		return
 	}
 
-	removedRemotely := printer.PrinterType == printerTypeFeieyun && server.printerClient != nil
+	printerProvider, removedRemotely := server.cloudPrinterProvider(printer.PrinterType)
+	if printer.PrinterType != printerTypeFeieyun && !removedRemotely {
+		ctx.JSON(http.StatusNotImplemented, errorResponse(errors.New("current printer type or environment does not support remote deletion")))
+		return
+	}
 	if removedRemotely {
-		if err := server.printerClient.RemovePrinter(ctx, cloudprint.RemovePrinterInput{SN: printer.PrinterSn}); err != nil {
+		if err := printerProvider.RemovePrinter(ctx, cloudprint.RemovePrinterInput{
+			SN:       printer.PrinterSn,
+			Business: cloudPrinterProviderBusinessKey(merchant.ID),
+		}); err != nil {
 			ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, err, "cloud printer provider unavailable", "cloud printer remove failed"))
 			return
 		}
@@ -683,6 +703,31 @@ func interpretFeieyunPrinterStatus(status string) (bool, bool) {
 	online := strings.Contains(normalized, "在线")
 	working := online && strings.Contains(normalized, "正常") && !strings.Contains(normalized, "不正常")
 	return online, working
+}
+
+func isSupportedCloudPrinterProviderType(providerType string) bool {
+	switch strings.TrimSpace(providerType) {
+	case printerTypeFeieyun, printerTypeShangpeng:
+		return true
+	default:
+		return false
+	}
+}
+
+func cloudPrinterProviderBusinessKey(merchantID int64) string {
+	return strconv.FormatInt(merchantID, 10)
+}
+
+func (server *Server) cloudPrinterProvider(providerType string) (cloudprint.Client, bool) {
+	if server.cloudPrinterManager != nil {
+		if provider, ok := server.cloudPrinterManager.Provider(providerType); ok && provider != nil {
+			return provider, true
+		}
+	}
+	if providerType == printerTypeFeieyun && server.printerClient != nil {
+		return server.printerClient, true
+	}
+	return nil, false
 }
 
 // ==================== 订单展示配置 ====================

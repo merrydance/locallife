@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/merrydance/locallife/cloudprint"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
@@ -179,7 +180,7 @@ func TestRetryPrinterReconciliationJobAPI(t *testing.T) {
 				require.Equal(t, http.StatusBadGateway, recorder.Code)
 				require.Len(t, client.addInputs, 1)
 				var resp struct {
-					Error ErrorResponse                   `json:"error"`
+					Error ErrorResponse                    `json:"error"`
 					Job   printerReconciliationJobResponse `json:"job"`
 				}
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
@@ -239,6 +240,80 @@ func TestRetryPrinterReconciliationJobAPI(t *testing.T) {
 
 			server.router.ServeHTTP(recorder, request)
 			tc.checkResponse(t, recorder, client)
+		})
+	}
+}
+
+func TestRetryPrinterReconciliationJobAPIRetriesShangpengProvider(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	job := randomPrinterReconciliationJob(merchant.ID)
+	job.PrinterType = string(cloudprint.ProviderShangpeng)
+	job.PrinterSn = "SP-SN-001"
+	job.PrinterKey = pgtype.Text{String: "SP-KEY-001", Valid: true}
+
+	testCases := []struct {
+		name          string
+		desiredAction string
+		checkClient   func(t *testing.T, client *printerClientStub)
+	}{
+		{
+			name:          "Register",
+			desiredAction: db.CloudPrinterReconciliationActionRegister,
+			checkClient: func(t *testing.T, client *printerClientStub) {
+				require.Len(t, client.addInputs, 1)
+				require.Equal(t, "SP-SN-001", client.addInputs[0].SN)
+				require.Equal(t, "SP-KEY-001", client.addInputs[0].Key)
+				require.Equal(t, job.PrinterName, client.addInputs[0].Name)
+				require.Equal(t, fmt.Sprintf("%d", merchant.ID), client.addInputs[0].Business)
+				require.Empty(t, client.removeInputs)
+			},
+		},
+		{
+			name:          "Remove",
+			desiredAction: db.CloudPrinterReconciliationActionRemove,
+			checkClient: func(t *testing.T, client *printerClientStub) {
+				require.Len(t, client.removeInputs, 1)
+				require.Equal(t, "SP-SN-001", client.removeInputs[0].SN)
+				require.Equal(t, fmt.Sprintf("%d", merchant.ID), client.removeInputs[0].Business)
+				require.Empty(t, client.addInputs)
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+		t.Run(tc.name, func(t *testing.T) {
+			tcJob := job
+			tcJob.DesiredAction = tc.desiredAction
+			resolvedJob := tcJob
+			resolvedJob.Status = db.CloudPrinterReconciliationStatusResolved
+			resolvedJob.RetryCount = tcJob.RetryCount + 1
+			resolvedJob.ResolvedAt = pgtype.Timestamptz{Time: time.Now(), Valid: true}
+
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+			store.EXPECT().GetCloudPrinterReconciliationJob(gomock.Any(), gomock.Eq(tcJob.ID)).Times(1).Return(tcJob, nil)
+			store.EXPECT().ResolveCloudPrinterReconciliationJob(gomock.Any(), gomock.Eq(tcJob.ID)).Times(1).Return(resolvedJob, nil)
+
+			server := newTestServer(t, store)
+			client := &printerClientStub{}
+			server.SetCloudPrinterManagerForTest(printerProviderManagerStub{providers: map[string]cloudprint.Client{
+				string(cloudprint.ProviderShangpeng): client,
+			}})
+			recorder := httptest.NewRecorder()
+
+			request, err := http.NewRequest(http.MethodPost, fmt.Sprintf("/v1/merchant/devices/reconciliation-jobs/%d/retry", tcJob.ID), nil)
+			require.NoError(t, err)
+			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+			server.router.ServeHTTP(recorder, request)
+
+			require.Equal(t, http.StatusOK, recorder.Code)
+			tc.checkClient(t, client)
 		})
 	}
 }

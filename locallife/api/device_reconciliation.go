@@ -210,23 +210,28 @@ func (server *Server) retryPrinterReconciliationJob(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, toPrinterReconciliationJobResponse(job))
 		return
 	}
-	if job.PrinterType != printerTypeFeieyun || server.printerClient == nil {
+	printerProvider, ok := server.cloudPrinterProvider(job.PrinterType)
+	if !ok {
 		ctx.JSON(http.StatusNotImplemented, errorResponse(errors.New("current printer type or environment does not support reconciliation retry")))
 		return
 	}
 
 	switch job.DesiredAction {
 	case db.CloudPrinterReconciliationActionRemove:
-		err = server.printerClient.RemovePrinter(ctx, cloudprint.RemovePrinterInput{SN: job.PrinterSn})
+		err = printerProvider.RemovePrinter(ctx, cloudprint.RemovePrinterInput{
+			SN:       job.PrinterSn,
+			Business: cloudPrinterProviderBusinessKey(merchant.ID),
+		})
 	case db.CloudPrinterReconciliationActionRegister:
 		if !job.PrinterKey.Valid || job.PrinterKey.String == "" {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, errors.New("printer key missing for register reconciliation")))
 			return
 		}
-		err = server.printerClient.AddPrinter(ctx, cloudprint.AddPrinterInput{
-			SN:   job.PrinterSn,
-			Key:  job.PrinterKey.String,
-			Name: job.PrinterName,
+		err = printerProvider.AddPrinter(ctx, cloudprint.AddPrinterInput{
+			SN:       job.PrinterSn,
+			Key:      job.PrinterKey.String,
+			Name:     job.PrinterName,
+			Business: cloudPrinterProviderBusinessKey(merchant.ID),
 		})
 	default:
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, errors.New("unsupported reconciliation action")))

@@ -35,6 +35,9 @@ func NewManagerFromConfig(config util.Config) Manager {
 	if feieyun := NewFeieyunClientFromConfig(config); feieyun != nil {
 		manager.providers[string(ProviderFeieyun)] = feieyun
 	}
+	if shangpeng := NewShangpengClientFromConfig(config); shangpeng != nil {
+		manager.providers[string(ProviderShangpeng)] = shangpeng
+	}
 
 	return manager
 }

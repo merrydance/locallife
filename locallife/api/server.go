@@ -100,6 +100,7 @@ type Server struct {
 	baofuAccountNotificationParser baofuAccountNotificationParser
 	baofuPaymentNotificationParser baofuAggregatePaymentNotificationParser
 	mediaStorage                   media.ObjectStorage
+	cloudPrinterManager            cloudprint.Manager
 	printerClient                  cloudprint.Client
 	router                         *gin.Engine
 	redisClient                    *redis.Client // Redis 客户端（绑定码等功能使用）
@@ -288,6 +289,7 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		mapClient:                 mapClient,
 		weatherCache:              weatherCache,
 		taskDistributor:           taskDistributor,
+		cloudPrinterManager:       cloudPrinterManager,
 		printerClient:             printerClient,
 		wsHub:                     wsHub,
 		wsPubSub:                  wsPubSub,
