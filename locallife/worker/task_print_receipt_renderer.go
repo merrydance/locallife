@@ -2,7 +2,7 @@ package worker
 
 import (
 	"crypto/rand"
-	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"time"
@@ -241,9 +241,9 @@ func canUseFeieBarcode(value string) bool {
 }
 
 func newPrintProviderOriginID() string {
-	var raw [18]byte
+	var raw [16]byte
 	if _, err := rand.Read(raw[:]); err == nil {
-		return base64.RawURLEncoding.EncodeToString(raw[:])
+		return hex.EncodeToString(raw[:])
 	}
-	return fmt.Sprintf("po%d", time.Now().UnixNano())
+	return fmt.Sprintf("po%030x", time.Now().UnixNano())
 }

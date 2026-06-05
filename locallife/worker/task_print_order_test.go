@@ -29,9 +29,10 @@ type printClientRecorder struct {
 }
 
 type printInputSnapshot struct {
-	SN      string
-	Content string
-	Copies  int
+	SN               string
+	Content          string
+	Copies           int
+	ProviderOriginID string
 }
 
 func (r *printClientRecorder) AddPrinter(ctx context.Context, input cloudprint.AddPrinterInput) error {
@@ -43,7 +44,12 @@ func (r *printClientRecorder) RemovePrinter(ctx context.Context, input cloudprin
 }
 
 func (r *printClientRecorder) Print(ctx context.Context, input cloudprint.PrintInput) (string, error) {
-	r.inputs = append(r.inputs, printInputSnapshot{SN: input.SN, Content: input.Content, Copies: input.Copies})
+	r.inputs = append(r.inputs, printInputSnapshot{
+		SN:               input.SN,
+		Content:          input.Content,
+		Copies:           input.Copies,
+		ProviderOriginID: input.ProviderOriginID,
+	})
 	if r.printOrderID == "" && r.printErr == nil {
 		r.printOrderID = "vendor-order-id"
 	}
@@ -133,6 +139,16 @@ func TestBuildFeieReceipt_PreservesCurrentFullReceiptFormat(t *testing.T) {
 	)
 }
 
+func TestNewPrintProviderOriginID_IsProviderSafe(t *testing.T) {
+	seen := make(map[string]struct{})
+	for i := 0; i < 20; i++ {
+		originID := newPrintProviderOriginID()
+		require.Regexp(t, regexp.MustCompile(`^[A-Za-z0-9]{32}$`), originID)
+		require.NotContains(t, seen, originID)
+		seen[originID] = struct{}{}
+	}
+}
+
 func TestProcessTaskPrintOrder_SkipsBeforeStoreWhenNoProviderConfigured(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -159,13 +175,15 @@ func TestExecutePrintAttempt_KeepsPendingWhenStatusQueryProviderAccepts(t *testi
 		string(cloudprint.ProviderShangpeng): shangpengClient,
 	}})
 	printer := db.CloudPrinter{ID: 21, PrinterSn: "sp-sn", PrinterType: string(cloudprint.ProviderShangpeng), IsActive: true}
+	var createdProviderOriginID string
 
 	store.EXPECT().CreatePrintLog(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(func(_ context.Context, arg db.CreatePrintLogParams) (db.PrintLog, error) {
 		require.Equal(t, int64(2001), arg.OrderID)
 		require.Equal(t, printer.ID, arg.PrinterID)
 		require.Equal(t, "pending", arg.Status)
 		require.True(t, arg.ProviderOriginID.Valid)
-		require.Regexp(t, regexp.MustCompile(`^[A-Za-z0-9_-]{1,32}$`), arg.ProviderOriginID.String)
+		require.Regexp(t, regexp.MustCompile(`^[A-Za-z0-9]{32}$`), arg.ProviderOriginID.String)
+		createdProviderOriginID = arg.ProviderOriginID.String
 		return db.PrintLog{ID: 903, OrderID: arg.OrderID, PrinterID: arg.PrinterID, Status: arg.Status, ProviderOriginID: arg.ProviderOriginID}, nil
 	})
 	store.EXPECT().UpdatePrintLogStatus(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(func(_ context.Context, arg db.UpdatePrintLogStatusParams) (db.PrintLog, error) {
@@ -181,6 +199,7 @@ func TestExecutePrintAttempt_KeepsPendingWhenStatusQueryProviderAccepts(t *testi
 
 	require.Len(t, shangpengClient.inputs, 1)
 	require.Equal(t, printer.PrinterSn, shangpengClient.inputs[0].SN)
+	require.Equal(t, createdProviderOriginID, shangpengClient.inputs[0].ProviderOriginID)
 }
 
 func TestExecutePrintAttempt_KeepsPendingWhenPrintResultCallbackEnabled(t *testing.T) {
@@ -749,7 +768,7 @@ func TestProcessTaskPrintOrder_RetryPrintLogReplaysOriginalContent(t *testing.T)
 		require.Equal(t, "pending", arg.Status)
 		require.Equal(t, pgtype.Text{String: "retry:401:301", Valid: true}, arg.TaskKey)
 		require.True(t, arg.ProviderOriginID.Valid)
-		require.Regexp(t, regexp.MustCompile(`^[A-Za-z0-9_-]{1,32}$`), arg.ProviderOriginID.String)
+		require.Regexp(t, regexp.MustCompile(`^[A-Za-z0-9]{32}$`), arg.ProviderOriginID.String)
 		return db.PrintLog{ID: 302, OrderID: originalPrintLog.OrderID, PrinterID: printer.ID, Status: "pending", ProviderOriginID: arg.ProviderOriginID}, nil
 	})
 	store.EXPECT().UpdatePrintLogStatus(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(func(_ context.Context, arg db.UpdatePrintLogStatusParams) (db.PrintLog, error) {

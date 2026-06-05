@@ -52,9 +52,10 @@ func (processor *RedisTaskProcessor) executePrintAttemptWithProvider(ctx context
 	}
 
 	vendorOrderID, printErr := printerProvider.Print(ctx, cloudprint.PrintInput{
-		SN:      printer.PrinterSn,
-		Content: content,
-		Copies:  1,
+		SN:               printer.PrinterSn,
+		Content:          content,
+		Copies:           1,
+		ProviderOriginID: providerOriginID,
 	})
 
 	updateParams := db.UpdatePrintLogStatusParams{

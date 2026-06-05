@@ -39,10 +39,11 @@ type RemovePrinterInput struct {
 }
 
 type PrintInput struct {
-	SN        string
-	Content   string
-	Copies    int
-	ExpiredAt *time.Time
+	SN               string
+	Content          string
+	Copies           int
+	ExpiredAt        *time.Time
+	ProviderOriginID string
 }
 
 type PrinterInfo struct {
