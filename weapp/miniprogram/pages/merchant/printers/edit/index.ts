@@ -42,7 +42,12 @@ const PRINTER_TYPE_OPTIONS: Array<PrinterOption<PrinterType>> = [
   {
     label: '飞鹅云',
     value: 'feieyun',
-    desc: '当前商户新增接入仅支持飞鹅云打印机。'
+    desc: '适合已在飞鹅云后台完成设备配置的打印机。'
+  },
+  {
+    label: '商鹏云',
+    value: 'shangpeng',
+    desc: '适合已在商鹏云后台完成设备配置的打印机。'
   }
 ]
 

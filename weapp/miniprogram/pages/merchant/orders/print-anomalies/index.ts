@@ -16,11 +16,12 @@ import dayjs from '../../_main_shared/miniprogram_npm/dayjs/index'
 
 const PRINT_ANOMALIES_AUTO_REFRESH_WINDOW_MS = 60 * 1000
 
-type PrintAnomalyFilter = 'all' | 'failed' | 'pending'
+type PrintAnomalyFilter = 'all' | 'failed' | 'pending' | 'cancelled'
 interface PrintAnomalyView extends MerchantPrintAnomalyItem {
   status_label: string
   status_theme: PrintAnomalyTheme
   order_type_label: string
+  printer_type_label: string
   last_attempt_label: string
   summary: string
   retry_hint_label: string
@@ -31,7 +32,8 @@ interface PrintAnomalyView extends MerchantPrintAnomalyItem {
 const FILTER_OPTIONS: Array<{ key: PrintAnomalyFilter, label: string }> = [
   { key: 'all', label: '全部异常' },
   { key: 'failed', label: '打印失败' },
-  { key: 'pending', label: '待回执' }
+  { key: 'pending', label: '待回执' },
+  { key: 'cancelled', label: '已取消' }
 ]
 
 function getPrintAnomalyFilterLabel(filter: PrintAnomalyFilter) {
@@ -50,12 +52,22 @@ function buildPrintAnomalyView(item: MerchantPrintAnomalyItem): PrintAnomalyView
     status_label: statusView.label,
     status_theme: statusView.theme,
     order_type_label: OrderManagementAdapter.formatOrderType(item.order_type),
+    printer_type_label: formatPrinterType(item.printer_type),
     last_attempt_label: dayjs(item.last_attempt_at).format('MM-DD HH:mm'),
     summary: statusView.summary,
     retry_hint_label: formatPrintAnomalyRetryHint(item.retry_hint),
     error_message_label: item.error_message || '',
     vendor_order_id_label: item.vendor_order_id || ''
   }
+}
+
+function formatPrinterType(type?: string) {
+  const typeMap: Record<string, string> = {
+    feieyun: '飞鹅云',
+    shangpeng: '商鹏云',
+    yilianyun: '易联云'
+  }
+  return typeMap[String(type || '').trim()] || '云打印'
 }
 
 const getErrorMessage = getErrorUserMessage

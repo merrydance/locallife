@@ -17,6 +17,7 @@ import (
 
 const (
 	printerTypeFeieyun   = string(cloudprint.ProviderFeieyun)
+	printerTypeYilianyun = string(cloudprint.ProviderYilianyun)
 	printerTypeShangpeng = string(cloudprint.ProviderShangpeng)
 )
 
@@ -320,7 +321,7 @@ func (server *Server) getPrinter(ctx *gin.Context) {
 
 // getPrinterLiveStatus 获取打印机实时状态
 // @Summary 获取打印机实时状态
-// @Description 向飞鹅云查询打印机在线状态与基础能力信息
+// @Description 向云打印平台查询打印机在线状态与基础能力信息；易联云授权型打印机暂不支持此实时查询
 // @Tags 商户设备管理
 // @Accept json
 // @Produce json
@@ -365,23 +366,35 @@ func (server *Server) getPrinterLiveStatus(ctx *gin.Context) {
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("printer does not belong to this merchant")))
 		return
 	}
-	if printer.PrinterType != printerTypeFeieyun || server.printerClient == nil {
+	printerProvider, ok := server.cloudPrinterProvider(printer.PrinterType)
+	if !ok {
 		ctx.JSON(http.StatusNotImplemented, errorResponse(errors.New("current printer type or environment does not support live status query")))
 		return
 	}
 
-	providerStatus, err := server.printerClient.QueryPrinterStatus(ctx, printer.PrinterSn)
-	if err != nil {
-		ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, err, "cloud printer status unavailable", "cloud printer status query failed"))
-		return
-	}
-	info, err := server.printerClient.GetPrinterInfo(ctx, printer.PrinterSn)
-	if err != nil {
-		ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, err, "cloud printer status unavailable", "cloud printer info query failed"))
-		return
+	var providerStatus string
+	var info cloudprint.PrinterInfo
+	if printer.PrinterType == printerTypeShangpeng {
+		info, err = printerProvider.GetPrinterInfo(ctx, printer.PrinterSn)
+		if err != nil {
+			ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, err, "cloud printer status unavailable", "cloud printer info query failed"))
+			return
+		}
+		providerStatus = info.Status
+	} else {
+		providerStatus, err = printerProvider.QueryPrinterStatus(ctx, printer.PrinterSn)
+		if err != nil {
+			ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, err, "cloud printer status unavailable", "cloud printer status query failed"))
+			return
+		}
+		info, err = printerProvider.GetPrinterInfo(ctx, printer.PrinterSn)
+		if err != nil {
+			ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, err, "cloud printer status unavailable", "cloud printer info query failed"))
+			return
+		}
 	}
 
-	online, working := interpretFeieyunPrinterStatus(providerStatus)
+	online, working := interpretCloudPrinterStatus(printer.PrinterType, providerStatus)
 	resp := printerLiveStatusResponse{
 		PrinterID:      printer.ID,
 		PrinterName:    printer.PrinterName,
@@ -703,6 +716,28 @@ func interpretFeieyunPrinterStatus(status string) (bool, bool) {
 	online := strings.Contains(normalized, "在线")
 	working := online && strings.Contains(normalized, "正常") && !strings.Contains(normalized, "不正常")
 	return online, working
+}
+
+func interpretCloudPrinterStatus(providerType string, status string) (bool, bool) {
+	switch providerType {
+	case printerTypeFeieyun:
+		return interpretFeieyunPrinterStatus(status)
+	case printerTypeShangpeng:
+		return interpretNormalizedCloudPrinterStatus(status)
+	default:
+		return false, false
+	}
+}
+
+func interpretNormalizedCloudPrinterStatus(status string) (bool, bool) {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "online":
+		return true, true
+	case "abnormal", "busy":
+		return true, false
+	default:
+		return false, false
+	}
 }
 
 func isSupportedCloudPrinterProviderType(providerType string) bool {

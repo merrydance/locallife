@@ -13,17 +13,12 @@ import { getErrorUserMessage } from '../../../../utils/user-facing'
 import { waitForRefundTerminalResult } from '../../_main_shared/services/refund-workflow'
 import { wsManager, WSMessageType } from '../../_main_shared/utils/websocket'
 import {
+  buildMerchantOrderDetailView,
   buildPaymentView,
-  buildMerchantOrderFeeBreakdownView,
-  buildMerchantOrderTimeline,
   buildPrintJobView,
   buildRefundView,
-  canMerchantOrderManualPrint,
   createDefaultRefundForm,
   getCloudStatusLabel,
-  getMerchantOrderFallbackStatusHint,
-  getMerchantOrderStatusDesc,
-  getMerchantOrderStatusIcon,
   type MerchantOrderDetailOptions,
   type MerchantOrderDetailView,
   type MerchantOrderPaymentView,
@@ -195,7 +190,7 @@ Page({
       }
 
       const nextState: Record<string, unknown> = {
-        order: this.formatDetail(orderResult.value),
+        order: buildMerchantOrderDetailView(orderResult.value, OrderManagementAdapter),
         initialError: false,
         initialErrorMessage: '',
         refreshErrorMessage: ''
@@ -307,94 +302,6 @@ Page({
       this.setData({ loading: false })
       wx.stopPullDownRefresh()
     }
-  },
-
-  formatDetail(order: OrderResponse): MerchantOrderDetailView {
-    const timeline = this.buildTimeline(order)
-    const scene = this.buildSceneInfo(order)
-    const pickupCodeDisplay = this.formatPickupCodeDisplay(order)
-
-    return {
-      ...order,
-      status_label: OrderManagementAdapter.formatOrderStatus(order.status),
-      status_color: OrderManagementAdapter.getStatusColor(order.status),
-      status_icon: getMerchantOrderStatusIcon(order.status),
-      status_desc: getMerchantOrderStatusDesc(order),
-      order_type_label: OrderManagementAdapter.formatOrderType(order.order_type),
-      payment_method_label: OrderManagementAdapter.formatPaymentMethod(order.payment_method || 'wechat'),
-      created_at_fmt: dayjs(order.created_at).format('YYYY-MM-DD HH:mm'),
-      paid_at_fmt: this.formatTime(order.paid_at),
-      completed_at_fmt: this.formatTime(order.completed_at),
-      status_hint_label: order.status_hint || getMerchantOrderFallbackStatusHint(order),
-      step_current: timeline.current,
-      timeline_steps: timeline.steps,
-      location_label: scene.label,
-      location_primary: scene.primary,
-      location_secondary: scene.secondary,
-      pickup_code_display: pickupCodeDisplay,
-      contact_name: order.delivery_contact_name || '',
-      contact_phone: order.delivery_contact_phone || '',
-      fee_breakdown_view: buildMerchantOrderFeeBreakdownView(order),
-      can_accept: OrderManagementAdapter.canAcceptOrder(order),
-      can_reject: OrderManagementAdapter.canRejectOrder(order),
-      can_mark_ready: OrderManagementAdapter.canMarkReady(order),
-      can_complete: OrderManagementAdapter.canCompleteOrder(order),
-      can_manual_print: canMerchantOrderManualPrint(order)
-    }
-  },
-
-  buildSceneInfo(order: OrderResponse) {
-    const pickupCodeDisplay = this.formatPickupCodeDisplay(order)
-
-    if (order.order_type === 'takeout') {
-      return {
-        label: '代取地址',
-        primary: order.delivery_address || '待同步代取地址',
-        secondary: [order.delivery_contact_name, order.delivery_contact_phone].filter(Boolean).join(' ')
-      }
-    }
-
-    if (order.order_type === 'dine_in') {
-      return {
-        label: '就餐位置',
-        primary: order.table_id ? `${order.table_id} 号桌` : '堂食就餐',
-        secondary: `取餐码 ${pickupCodeDisplay}`
-      }
-    }
-
-    if (order.order_type === 'takeaway') {
-      return {
-        label: '取餐方式',
-        primary: `取餐码 ${pickupCodeDisplay}`,
-        secondary: '顾客到店后核销'
-      }
-    }
-
-    return {
-      label: '预订信息',
-      primary: order.reservation_id ? `预订 #${order.reservation_id}` : '预订点菜',
-      secondary: order.table_id ? `${order.table_id} 号桌` : '到店后履约'
-    }
-  },
-
-  formatPickupCodeDisplay(order: Pick<OrderResponse, 'pickup_code' | 'pickup_code_masked'>) {
-    const pickupCode = String(order.pickup_code || '').trim()
-    if (/^\d{4}$/.test(pickupCode)) {
-      return pickupCode
-    }
-    return String(order.pickup_code_masked || '').trim() || '----'
-  },
-
-  buildTimeline(order: OrderResponse) {
-    return buildMerchantOrderTimeline(order)
-  },
-
-  formatTime(value?: string, pattern = 'HH:mm') {
-    return value ? dayjs(value).format(pattern) : '--'
-  },
-
-  formatTimelineValue(value?: string, fallback = '--') {
-    return value ? this.formatTime(value) : fallback
   },
 
   async onAccept() {
@@ -635,7 +542,7 @@ Page({
       const response = await request() as OrderResponse | { order: OrderResponse, message?: string }
       const updatedOrder = 'order' in response ? response.order : response
       this.setData({
-        order: this.formatDetail(updatedOrder),
+        order: buildMerchantOrderDetailView(updatedOrder, OrderManagementAdapter),
         refreshErrorMessage: ''
       })
       await this.loadDetail(false)

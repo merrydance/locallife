@@ -55,6 +55,7 @@ export interface MerchantOrderPrintJobView extends MerchantOrderPrintJobResponse
   created_at_fmt: string
   printed_at_fmt: string
   can_retry: boolean
+  printer_type_label: string
   error_message_label: string
   vendor_order_id_label: string
   cloud_status_label: string
@@ -111,6 +112,17 @@ export interface MerchantOrderFeeBreakdownView {
   merchant_receivable_text: string
   summary_rows: MerchantOrderFeeBreakdownRow[]
   settlement_groups: MerchantOrderFeeSettlementGroup[]
+}
+
+export interface MerchantOrderDetailAdapter {
+  formatOrderStatus(status: string): string
+  getStatusColor(status: string): string
+  formatOrderType(type: string): string
+  formatPaymentMethod(method: string): string
+  canAcceptOrder(order: OrderResponse): boolean
+  canRejectOrder(order: OrderResponse): boolean
+  canMarkReady(order: OrderResponse): boolean
+  canCompleteOrder(order: OrderResponse): boolean
 }
 
 export function createDefaultRefundForm(): RefundFormData {
@@ -324,6 +336,86 @@ export function canMerchantOrderManualPrint(order: Pick<OrderResponse, 'status'>
   return !['pending', 'cancelled'].includes(order.status)
 }
 
+function formatOrderDetailTime(value?: string, pattern = 'HH:mm') {
+  return value ? dayjs(value).format(pattern) : '--'
+}
+
+function formatPickupCodeDisplay(order: Pick<OrderResponse, 'pickup_code' | 'pickup_code_masked'>) {
+  const pickupCode = String(order.pickup_code || '').trim()
+  if (/^\d{4}$/.test(pickupCode)) {
+    return pickupCode
+  }
+  return String(order.pickup_code_masked || '').trim() || '----'
+}
+
+function buildMerchantOrderSceneInfo(order: OrderResponse) {
+  const pickupCodeDisplay = formatPickupCodeDisplay(order)
+
+  if (order.order_type === 'takeout') {
+    return {
+      label: '代取地址',
+      primary: order.delivery_address || '待同步代取地址',
+      secondary: [order.delivery_contact_name, order.delivery_contact_phone].filter(Boolean).join(' ')
+    }
+  }
+
+  if (order.order_type === 'dine_in') {
+    return {
+      label: '就餐位置',
+      primary: order.table_id ? `${order.table_id} 号桌` : '堂食就餐',
+      secondary: `取餐码 ${pickupCodeDisplay}`
+    }
+  }
+
+  if (order.order_type === 'takeaway') {
+    return {
+      label: '取餐方式',
+      primary: `取餐码 ${pickupCodeDisplay}`,
+      secondary: '顾客到店后核销'
+    }
+  }
+
+  return {
+    label: '预订信息',
+    primary: order.reservation_id ? `预订 #${order.reservation_id}` : '预订点菜',
+    secondary: order.table_id ? `${order.table_id} 号桌` : '到店后履约'
+  }
+}
+
+export function buildMerchantOrderDetailView(order: OrderResponse, adapter: MerchantOrderDetailAdapter): MerchantOrderDetailView {
+  const timeline = buildMerchantOrderTimeline(order)
+  const scene = buildMerchantOrderSceneInfo(order)
+  const pickupCodeDisplay = formatPickupCodeDisplay(order)
+
+  return {
+    ...order,
+    status_label: adapter.formatOrderStatus(order.status),
+    status_color: adapter.getStatusColor(order.status),
+    status_icon: getMerchantOrderStatusIcon(order.status),
+    status_desc: getMerchantOrderStatusDesc(order),
+    order_type_label: adapter.formatOrderType(order.order_type),
+    payment_method_label: adapter.formatPaymentMethod(order.payment_method || 'wechat'),
+    created_at_fmt: dayjs(order.created_at).format('YYYY-MM-DD HH:mm'),
+    paid_at_fmt: formatOrderDetailTime(order.paid_at),
+    completed_at_fmt: formatOrderDetailTime(order.completed_at),
+    status_hint_label: order.status_hint || getMerchantOrderFallbackStatusHint(order),
+    step_current: timeline.current,
+    timeline_steps: timeline.steps,
+    location_label: scene.label,
+    location_primary: scene.primary,
+    location_secondary: scene.secondary,
+    pickup_code_display: pickupCodeDisplay,
+    contact_name: order.delivery_contact_name || '',
+    contact_phone: order.delivery_contact_phone || '',
+    fee_breakdown_view: buildMerchantOrderFeeBreakdownView(order),
+    can_accept: adapter.canAcceptOrder(order),
+    can_reject: adapter.canRejectOrder(order),
+    can_mark_ready: adapter.canMarkReady(order),
+    can_complete: adapter.canCompleteOrder(order),
+    can_manual_print: canMerchantOrderManualPrint(order)
+  }
+}
+
 export function buildMerchantOrderTimeline(order: OrderResponse) {
   if (order.order_type === 'takeout') {
     const steps = [
@@ -378,14 +470,15 @@ function formatPrintJobStatus(status: string): string {
     success: '已打印',
     pending: '待回执',
     processing: '处理中',
-    failed: '打印失败'
+    failed: '打印失败',
+    cancelled: '已取消'
   }
   return statusMap[status] || '状态同步中'
 }
 
 function getPrintJobStatusTheme(status: string): PrintJobStatusTheme {
   if (status === 'success') return 'success'
-  if (status === 'failed') return 'danger'
+  if (status === 'failed' || status === 'cancelled') return 'danger'
   if (status === 'pending' || status === 'processing') return 'warning'
   return 'default'
 }
@@ -393,8 +486,18 @@ function getPrintJobStatusTheme(status: string): PrintJobStatusTheme {
 function getPrintJobSummary(job: MerchantOrderPrintJobResponse): string {
   if (job.status === 'success') return '打印任务已完成，可联系门店确认纸单是否正常出单。'
   if (job.status === 'failed') return job.error_message ? '打印任务未成功下发，请先根据失败原因排查后再重试。' : '打印任务未成功下发，建议重试以恢复门店打印。'
+  if (job.status === 'cancelled') return '云打印平台回执显示本次打印已取消，可按需重新补打。'
   if (job.status === 'pending' || job.status === 'processing') return '打印任务已提交，正在等待云打印平台返回结果。'
   return '打印任务状态正在同步，请稍后查看。'
+}
+
+function formatPrinterType(type?: string): string {
+  const typeMap: Record<string, string> = {
+    feieyun: '飞鹅云',
+    shangpeng: '商鹏云',
+    yilianyun: '易联云'
+  }
+  return typeMap[String(type || '').trim()] || '云打印'
 }
 
 export function buildPrintJobView(job: MerchantOrderPrintJobResponse): MerchantOrderPrintJobView {
@@ -405,7 +508,8 @@ export function buildPrintJobView(job: MerchantOrderPrintJobResponse): MerchantO
     summary: getPrintJobSummary(job),
     created_at_fmt: dayjs(job.created_at).format('YYYY-MM-DD HH:mm'),
     printed_at_fmt: job.printed_at ? dayjs(job.printed_at).format('YYYY-MM-DD HH:mm') : '--',
-    can_retry: job.status === 'failed',
+    can_retry: job.status === 'failed' || job.status === 'cancelled',
+    printer_type_label: formatPrinterType(job.printer_type),
     error_message_label: job.error_message || '',
     vendor_order_id_label: job.vendor_order_id || '',
     cloud_status_label: '',

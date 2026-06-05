@@ -1635,6 +1635,7 @@ type merchantOrderPrintJobResponse struct {
 	OrderID       int64      `json:"order_id"`
 	PrinterID     int64      `json:"printer_id"`
 	PrinterName   string     `json:"printer_name"`
+	PrinterType   string     `json:"printer_type"`
 	Status        string     `json:"status"`
 	VendorOrderID *string    `json:"vendor_order_id,omitempty"`
 	ErrorMessage  *string    `json:"error_message,omitempty"`
@@ -1652,6 +1653,7 @@ type merchantOrderPrintJobStatusResponse struct {
 	OrderID             int64     `json:"order_id"`
 	PrinterID           int64     `json:"printer_id"`
 	PrinterName         string    `json:"printer_name"`
+	PrinterType         string    `json:"printer_type"`
 	LocalStatus         string    `json:"local_status"`
 	VendorOrderID       *string   `json:"vendor_order_id,omitempty"`
 	CloudQueryAvailable bool      `json:"cloud_query_available"`
@@ -1662,7 +1664,7 @@ type merchantOrderPrintJobStatusResponse struct {
 type listMerchantPrintAnomaliesRequest struct {
 	PageID   int32  `form:"page_id" binding:"omitempty,min=1" example:"1"`
 	PageSize int32  `form:"page_size" binding:"omitempty,min=5,max=50" example:"20"`
-	Status   string `form:"status" binding:"omitempty,oneof=failed pending" example:"failed"`
+	Status   string `form:"status" binding:"omitempty,oneof=failed pending cancelled" example:"failed"`
 }
 
 type merchantPrintAnomalyResponse struct {
@@ -1672,6 +1674,7 @@ type merchantPrintAnomalyResponse struct {
 	OrderType     string    `json:"order_type"`
 	PrinterID     int64     `json:"printer_id"`
 	PrinterName   string    `json:"printer_name"`
+	PrinterType   string    `json:"printer_type"`
 	LocalStatus   string    `json:"local_status"`
 	ErrorMessage  *string   `json:"error_message,omitempty"`
 	VendorOrderID *string   `json:"vendor_order_id,omitempty"`
@@ -1705,6 +1708,7 @@ func toMerchantOrderPrintJobResponse(item db.ListPrintLogsByOrderRow) merchantOr
 		OrderID:     item.OrderID,
 		PrinterID:   item.PrinterID,
 		PrinterName: item.PrinterName,
+		PrinterType: item.PrinterType,
 		Status:      item.Status,
 		CreatedAt:   item.CreatedAt,
 	}
@@ -1731,9 +1735,9 @@ func toMerchantPrintAnomalyResponse(item db.ListMerchantPrintAnomaliesRow) merch
 		OrderType:     item.OrderType,
 		PrinterID:     item.PrinterID,
 		PrinterName:   item.PrinterName,
+		PrinterType:   item.PrinterType,
 		LocalStatus:   item.Status,
 		LastAttemptAt: item.CreatedAt,
-		CanRetry:      item.PrinterType == printerTypeFeieyun && item.IsActive,
 	}
 	if item.ErrorMessage.Valid {
 		errorMessage := item.ErrorMessage.String
@@ -1745,10 +1749,35 @@ func toMerchantPrintAnomalyResponse(item db.ListMerchantPrintAnomaliesRow) merch
 	}
 	if !item.IsActive {
 		responseItem.RetryHint = "printer is inactive"
-	} else if item.PrinterType != printerTypeFeieyun {
-		responseItem.RetryHint = "printer type is not supported for retry"
 	}
 	return responseItem
+}
+
+func (server *Server) toMerchantPrintAnomalyResponse(item db.ListMerchantPrintAnomaliesRow) merchantPrintAnomalyResponse {
+	responseItem := toMerchantPrintAnomalyResponse(item)
+	if !item.IsActive {
+		return responseItem
+	}
+	if !isPrintLogStatusRetryable(item.Status) {
+		responseItem.RetryHint = "print job is still pending"
+		return responseItem
+	}
+	if _, ok := server.cloudPrinterProvider(item.PrinterType); !ok {
+		responseItem.RetryHint = "cloud printer provider is not configured"
+		return responseItem
+	}
+	responseItem.CanRetry = true
+	responseItem.RetryHint = ""
+	return responseItem
+}
+
+func isPrintLogStatusRetryable(status string) bool {
+	switch status {
+	case db.PrintLogStatusFailed, db.PrintLogStatusCancelled:
+		return true
+	default:
+		return false
+	}
 }
 
 // completeOrder godoc
@@ -1908,7 +1937,7 @@ func (server *Server) listMerchantOrderPrintJobs(ctx *gin.Context) {
 
 // getMerchantOrderPrintJobStatus godoc
 // @Summary 查询打印任务云端状态
-// @Description 查询指定订单打印任务在飞鹅云侧的执行状态
+// @Description 查询指定订单打印任务在云打印平台侧的执行状态；易联云授权型打印机暂不支持此实时查询
 // @Tags 商户订单管理
 // @Accept json
 // @Produce json
@@ -1982,7 +2011,8 @@ func (server *Server) getMerchantOrderPrintJobStatus(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	if printer.PrinterType != printerTypeFeieyun || server.printerClient == nil {
+	printerProvider, ok := server.cloudPrinterProvider(printer.PrinterType)
+	if !ok {
 		ctx.JSON(http.StatusNotImplemented, errorResponse(errors.New("current printer type or environment does not support cloud print status query")))
 		return
 	}
@@ -1992,6 +2022,7 @@ func (server *Server) getMerchantOrderPrintJobStatus(ctx *gin.Context) {
 		OrderID:             printLog.OrderID,
 		PrinterID:           printLog.PrinterID,
 		PrinterName:         printer.PrinterName,
+		PrinterType:         printer.PrinterType,
 		LocalStatus:         printLog.Status,
 		CloudQueryAvailable: printLog.VendorOrderID.Valid,
 		CheckedAt:           time.Now(),
@@ -1999,7 +2030,7 @@ func (server *Server) getMerchantOrderPrintJobStatus(ctx *gin.Context) {
 	if printLog.VendorOrderID.Valid {
 		vendorOrderID := printLog.VendorOrderID.String
 		resp.VendorOrderID = &vendorOrderID
-		cloudPrinted, err := server.printerClient.QueryOrderState(ctx, vendorOrderID)
+		cloudPrinted, err := printerProvider.QueryOrderState(ctx, vendorOrderID)
 		if err != nil {
 			ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, err, "cloud print status unavailable", "cloud print order state query failed"))
 			return
@@ -2018,7 +2049,7 @@ func (server *Server) getMerchantOrderPrintJobStatus(ctx *gin.Context) {
 // @Produce json
 // @Param page_id query int false "页码(从1开始)" minimum(1)
 // @Param page_size query int false "每页条数" minimum(5) maximum(50)
-// @Param status query string false "异常状态过滤" Enums(failed,pending)
+// @Param status query string false "异常状态过滤" Enums(failed,pending,cancelled)
 // @Success 200 {object} listMerchantPrintAnomaliesResponse "打印异常列表"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 401 {object} ErrorResponse "未授权"
@@ -2071,7 +2102,7 @@ func (server *Server) listMerchantPrintAnomalies(ctx *gin.Context) {
 
 	responseItems := make([]merchantPrintAnomalyResponse, 0, len(items))
 	for _, item := range items {
-		responseItems = append(responseItems, toMerchantPrintAnomalyResponse(item))
+		responseItems = append(responseItems, server.toMerchantPrintAnomalyResponse(item))
 	}
 
 	ctx.JSON(http.StatusOK, listMerchantPrintAnomaliesResponse{
@@ -2147,8 +2178,8 @@ func (server *Server) retryMerchantOrderPrintJob(ctx *gin.Context) {
 		ctx.JSON(http.StatusNotFound, errorResponse(errors.New("print log not found")))
 		return
 	}
-	if printLog.Status != "failed" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("only failed print logs can be retried")))
+	if !isPrintLogStatusRetryable(printLog.Status) {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("only failed or cancelled print logs can be retried")))
 		return
 	}
 
@@ -2165,7 +2196,7 @@ func (server *Server) retryMerchantOrderPrintJob(ctx *gin.Context) {
 		return
 	}
 	if latestPrintLog.ID != printLog.ID {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("only the latest failed print log can be retried")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("only the latest failed or cancelled print log can be retried")))
 		return
 	}
 
@@ -2186,8 +2217,8 @@ func (server *Server) retryMerchantOrderPrintJob(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("printer is inactive")))
 		return
 	}
-	if printer.PrinterType != printerTypeFeieyun {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("current printer type does not support retry")))
+	if _, ok := server.cloudPrinterProvider(printer.PrinterType); !ok {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("cloud printer provider is not configured")))
 		return
 	}
 	if server.taskDistributor == nil {

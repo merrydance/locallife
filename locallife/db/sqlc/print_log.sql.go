@@ -610,7 +610,8 @@ func (q *Queries) ListMerchantPrintAnomalies(ctx context.Context, arg ListMercha
 const listPrintLogsByOrder = `-- name: ListPrintLogsByOrder :many
 SELECT 
     pl.id, pl.order_id, pl.printer_id, pl.print_content, pl.status, pl.error_message, pl.printed_at, pl.created_at, pl.vendor_order_id, pl.task_key, pl.provider_origin_id, pl.provider_status_checked_at, pl.provider_status_check_attempts, pl.provider_status_last_error,
-    cp.printer_name
+    cp.printer_name,
+    cp.printer_type
 FROM print_logs pl
 INNER JOIN cloud_printers cp ON pl.printer_id = cp.id
 WHERE pl.order_id = $1
@@ -633,6 +634,7 @@ type ListPrintLogsByOrderRow struct {
 	ProviderStatusCheckAttempts int32              `json:"provider_status_check_attempts"`
 	ProviderStatusLastError     pgtype.Text        `json:"provider_status_last_error"`
 	PrinterName                 string             `json:"printer_name"`
+	PrinterType                 string             `json:"printer_type"`
 }
 
 func (q *Queries) ListPrintLogsByOrder(ctx context.Context, orderID int64) ([]ListPrintLogsByOrderRow, error) {
@@ -660,6 +662,7 @@ func (q *Queries) ListPrintLogsByOrder(ctx context.Context, orderID int64) ([]Li
 			&i.ProviderStatusCheckAttempts,
 			&i.ProviderStatusLastError,
 			&i.PrinterName,
+			&i.PrinterType,
 		); err != nil {
 			return nil, err
 		}

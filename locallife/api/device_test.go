@@ -1313,6 +1313,7 @@ func TestGetPrinterLiveStatusAPI(t *testing.T) {
 		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
 		buildStubs    func(store *mockdb.MockStore)
 		buildClient   func() *printerClientStub
+		buildManager  func(client *printerClientStub) cloudprint.Manager
 		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder, client *printerClientStub)
 	}{
 		{
@@ -1349,6 +1350,47 @@ func TestGetPrinterLiveStatusAPI(t *testing.T) {
 				require.Equal(t, "FEIE-80", *resp.Model)
 				require.Equal(t, printer.PrinterSn, client.queryPrinterSN)
 				require.Equal(t, printer.PrinterSn, client.queryPrinterInfoSN)
+			},
+		},
+		{
+			name:      "ShangpengOK",
+			printerID: printer.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+				shangpengPrinter := printer
+				shangpengPrinter.PrinterType = printerTypeShangpeng
+				shangpengPrinter.PrinterSn = "SP-SN-001"
+				store.EXPECT().GetCloudPrinter(gomock.Any(), gomock.Eq(printer.ID)).Times(1).Return(shangpengPrinter, nil)
+			},
+			buildClient: func() *printerClientStub {
+				return &printerClientStub{
+					queryPrinterStatus: "online",
+					queryPrinterInfo: cloudprint.PrinterInfo{
+						Model:  "SP-P1",
+						Status: "online",
+					},
+				}
+			},
+			buildManager: func(client *printerClientStub) cloudprint.Manager {
+				return printerProviderManagerStub{providers: map[string]cloudprint.Client{
+					printerTypeShangpeng: client,
+				}}
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder, client *printerClientStub) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp printerLiveStatusResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, printerTypeShangpeng, resp.PrinterType)
+				require.Equal(t, "online", resp.ProviderStatus)
+				require.True(t, resp.Online)
+				require.True(t, resp.Working)
+				require.NotNil(t, resp.Model)
+				require.Equal(t, "SP-P1", *resp.Model)
+				require.Empty(t, client.queryPrinterSN)
+				require.Equal(t, "SP-SN-001", client.queryPrinterInfoSN)
 			},
 		},
 		{
@@ -1401,7 +1443,11 @@ func TestGetPrinterLiveStatusAPI(t *testing.T) {
 
 			server := newTestServer(t, store)
 			client := tc.buildClient()
-			server.SetPrinterClientForTest(client)
+			if tc.buildManager != nil {
+				server.SetCloudPrinterManagerForTest(tc.buildManager(client))
+			} else {
+				server.SetPrinterClientForTest(client)
+			}
 			recorder := httptest.NewRecorder()
 
 			url := fmt.Sprintf("/v1/merchant/devices/%d/status", tc.printerID)

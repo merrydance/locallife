@@ -4915,6 +4915,8 @@ definitions:
         type: integer
       printer_name:
         type: string
+      printer_type:
+        type: string
       status:
         type: string
       vendor_order_id:
@@ -4937,6 +4939,8 @@ definitions:
       printer_id:
         type: integer
       printer_name:
+        type: string
+      printer_type:
         type: string
       vendor_order_id:
         type: string
@@ -5013,6 +5017,8 @@ definitions:
       printer_id:
         type: integer
       printer_name:
+        type: string
+      printer_type:
         type: string
       retry_hint:
         type: string
@@ -17501,7 +17507,7 @@ paths:
     get:
       consumes:
       - application/json
-      description: 向飞鹅云查询打印机在线状态与基础能力信息
+      description: 向云打印平台查询打印机在线状态与基础能力信息；易联云授权型打印机暂不支持此实时查询
       parameters:
       - description: 打印机ID
         in: path
@@ -18703,7 +18709,7 @@ paths:
     get:
       consumes:
       - application/json
-      description: 查询指定订单打印任务在飞鹅云侧的执行状态
+      description: 查询指定订单打印任务在云打印平台侧的执行状态；易联云授权型打印机暂不支持此实时查询
       parameters:
       - description: 订单ID
         in: path
@@ -18868,6 +18874,7 @@ paths:
         enum:
         - failed
         - pending
+        - cancelled
         in: query
         name: status
         type: string

@@ -10773,7 +10773,7 @@ const docTemplate = `{
                         "Bearer": []
                     }
                 ],
-                "description": "向飞鹅云查询打印机在线状态与基础能力信息",
+                "description": "向云打印平台查询打印机在线状态与基础能力信息；易联云授权型打印机暂不支持此实时查询",
                 "consumes": [
                     "application/json"
                 ],
@@ -11782,7 +11782,8 @@ const docTemplate = `{
                     {
                         "enum": [
                             "failed",
-                            "pending"
+                            "pending",
+                            "cancelled"
                         ],
                         "type": "string",
                         "description": "异常状态过滤",
@@ -12353,7 +12354,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "查询指定订单打印任务在飞鹅云侧的执行状态",
+                "description": "查询指定订单打印任务在云打印平台侧的执行状态；易联云授权型打印机暂不支持此实时查询",
                 "consumes": [
                     "application/json"
                 ],
@@ -39000,6 +39001,9 @@ const docTemplate = `{
                 "printer_name": {
                     "type": "string"
                 },
+                "printer_type": {
+                    "type": "string"
+                },
                 "status": {
                     "type": "string"
                 },
@@ -39033,6 +39037,9 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "printer_name": {
+                    "type": "string"
+                },
+                "printer_type": {
                     "type": "string"
                 },
                 "vendor_order_id": {
@@ -39149,6 +39156,9 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "printer_name": {
+                    "type": "string"
+                },
+                "printer_type": {
                     "type": "string"
                 },
                 "retry_hint": {

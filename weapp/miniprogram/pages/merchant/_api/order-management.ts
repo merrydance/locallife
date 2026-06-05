@@ -5,6 +5,7 @@
 
 import { request } from '../../../utils/request'
 import { canMerchantMarkOrderReady } from '../_utils/merchant-order-action-view'
+import type { PrinterType } from '../../../api/table-device-management'
 
 export const MERCHANT_REJECT_REASON_OPTIONS = [
     '门店临时打烊',
@@ -185,6 +186,7 @@ export interface MerchantOrderPrintJobResponse {
     order_id: number
     printer_id: number
     printer_name: string
+    printer_type: PrinterType | string
     status: string
     vendor_order_id?: string
     error_message?: string
@@ -202,6 +204,7 @@ export interface MerchantOrderPrintJobStatusResponse {
     order_id: number
     printer_id: number
     printer_name: string
+    printer_type: PrinterType | string
     local_status: string
     vendor_order_id?: string
     cloud_query_available: boolean
@@ -229,6 +232,7 @@ export interface MerchantPrintAnomalyItem {
     order_type: OrderResponse['order_type'] | string
     printer_id: number
     printer_name: string
+    printer_type: PrinterType | string
     local_status: string
     error_message?: string
     vendor_order_id?: string
@@ -493,7 +497,7 @@ export class MerchantOrderManagementService {
     static async listPrintAnomalies(params: {
         page_id: number
         page_size: number
-        status?: 'failed' | 'pending'
+        status?: 'failed' | 'pending' | 'cancelled'
     }): Promise<MerchantPrintAnomaliesResult> {
         return await request({
             url: '/v1/merchant/orders/print-anomalies',

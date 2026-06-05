@@ -49,7 +49,7 @@
               <t-tag size="small" variant="dark">{{item.order_type_label}}</t-tag>
               <text class="anomaly-order-no">#{{item.order_no}}</text>
             </view>
-            <text class="anomaly-printer">{{item.printer_name}}</text>
+            <text class="anomaly-printer">{{item.printer_name}} · {{item.printer_type_label}}</text>
           </view>
           <t-tag size="small" variant="dark" theme="{{item.status_theme}}">{{item.status_label}}</t-tag>
         </view>

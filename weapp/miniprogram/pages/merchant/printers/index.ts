@@ -20,6 +20,7 @@ const PRINTERS_AUTO_REFRESH_WINDOW_MS = 60 * 1000
 
 const PRINTER_TYPE_LABELS: Record<PrinterType, string> = {
   feieyun: '飞鹅云',
+  shangpeng: '商鹏云',
   yilianyun: '易联云',
   other: '其他'
 }
@@ -495,14 +496,6 @@ Page({
       statusPrinterName: printer.printer_name,
       liveStatus: null
     })
-
-    if (printer.printer_type !== 'feieyun') {
-      this.setData({
-        statusLoading: false,
-        statusErrorMessage: '当前仅支持飞鹅云打印机查询实时状态'
-      })
-      return
-    }
 
     try {
       const status = await deviceManagementService.getPrinterLiveStatus(printerId)

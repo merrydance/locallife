@@ -16,6 +16,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/merrydance/locallife/cloudprint"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
@@ -3383,6 +3384,7 @@ func TestListMerchantOrderPrintJobsAPI(t *testing.T) {
 			OrderID:       order.ID,
 			PrinterID:     101,
 			PrinterName:   "前台打印机",
+			PrinterType:   printerTypeFeieyun,
 			Status:        "success",
 			VendorOrderID: pgtype.Text{String: "vendor-1", Valid: true},
 			PrintedAt:     printedAt,
@@ -3393,6 +3395,7 @@ func TestListMerchantOrderPrintJobsAPI(t *testing.T) {
 			OrderID:      order.ID,
 			PrinterID:    102,
 			PrinterName:  "后厨打印机",
+			PrinterType:  printerTypeShangpeng,
 			Status:       "failed",
 			ErrorMessage: failedMessage,
 			CreatedAt:    now.Add(-time.Minute),
@@ -3425,10 +3428,12 @@ func TestListMerchantOrderPrintJobsAPI(t *testing.T) {
 				require.Equal(t, order.ID, resp.OrderID)
 				require.Len(t, resp.Items, 2)
 				require.Equal(t, "前台打印机", resp.Items[0].PrinterName)
+				require.Equal(t, printerTypeFeieyun, resp.Items[0].PrinterType)
 				require.NotNil(t, resp.Items[0].VendorOrderID)
 				require.Equal(t, "vendor-1", *resp.Items[0].VendorOrderID)
 				require.Nil(t, resp.Items[0].ErrorMessage)
 				require.NotNil(t, resp.Items[0].PrintedAt)
+				require.Equal(t, printerTypeShangpeng, resp.Items[1].PrinterType)
 				require.Equal(t, "printer offline", *resp.Items[1].ErrorMessage)
 			},
 		},
@@ -3496,6 +3501,7 @@ func TestGetMerchantOrderPrintJobStatusAPI(t *testing.T) {
 		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
 		buildStubs    func(store *mockdb.MockStore)
 		buildClient   func() *printerClientStub
+		buildManager  func(client *printerClientStub) cloudprint.Manager
 		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder, client *printerClientStub)
 	}{
 		{
@@ -3520,6 +3526,42 @@ func TestGetMerchantOrderPrintJobStatusAPI(t *testing.T) {
 				var resp merchantOrderPrintJobStatusResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, printLog.ID, resp.PrintLogID)
+				require.Equal(t, printerTypeFeieyun, resp.PrinterType)
+				require.True(t, resp.CloudQueryAvailable)
+				require.NotNil(t, resp.CloudPrinted)
+				require.True(t, *resp.CloudPrinted)
+				require.Equal(t, "vendor-job-1", client.queryOrderID)
+			},
+		},
+		{
+			name:       "ShangpengOK",
+			orderID:    order.ID,
+			printLogID: printLog.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				shangpengPrinter := printer
+				shangpengPrinter.PrinterType = printerTypeShangpeng
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
+				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				store.EXPECT().GetPrintLog(gomock.Any(), printLog.ID).Times(1).Return(printLog, nil)
+				store.EXPECT().GetCloudPrinter(gomock.Any(), printer.ID).Times(1).Return(shangpengPrinter, nil)
+			},
+			buildClient: func() *printerClientStub {
+				return &printerClientStub{queryPrinted: true}
+			},
+			buildManager: func(client *printerClientStub) cloudprint.Manager {
+				return printerProviderManagerStub{providers: map[string]cloudprint.Client{
+					printerTypeShangpeng: client,
+				}}
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder, client *printerClientStub) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp merchantOrderPrintJobStatusResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, printerTypeShangpeng, resp.PrinterType)
 				require.True(t, resp.CloudQueryAvailable)
 				require.NotNil(t, resp.CloudPrinted)
 				require.True(t, *resp.CloudPrinted)
@@ -3547,6 +3589,7 @@ func TestGetMerchantOrderPrintJobStatusAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var resp merchantOrderPrintJobStatusResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, printerTypeFeieyun, resp.PrinterType)
 				require.False(t, resp.CloudQueryAvailable)
 				require.Nil(t, resp.CloudPrinted)
 				require.Empty(t, client.queryOrderID)
@@ -3565,7 +3608,11 @@ func TestGetMerchantOrderPrintJobStatusAPI(t *testing.T) {
 
 			server := newTestServer(t, store)
 			client := tc.buildClient()
-			server.SetPrinterClientForTest(client)
+			if tc.buildManager != nil {
+				server.SetCloudPrinterManagerForTest(tc.buildManager(client))
+			} else {
+				server.SetPrinterClientForTest(client)
+			}
 			recorder := httptest.NewRecorder()
 
 			url := fmt.Sprintf("/v1/merchant/orders/%d/print-jobs/%d/status", tc.orderID, tc.printLogID)
@@ -3588,6 +3635,7 @@ func TestListMerchantPrintAnomaliesAPI(t *testing.T) {
 		name          string
 		query         string
 		buildStubs    func(store *mockdb.MockStore)
+		setupServer   func(server *Server)
 		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
 	}{
 		{
@@ -3618,15 +3666,64 @@ func TestListMerchantPrintAnomaliesAPI(t *testing.T) {
 					Status:     pgtype.Text{},
 				})).Times(1).Return(int64(1), nil)
 			},
+			setupServer: func(server *Server) {
+				server.SetCloudPrinterManagerForTest(printerProviderManagerStub{providers: map[string]cloudprint.Client{
+					printerTypeFeieyun: &printerClientStub{},
+				}})
+			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var resp listMerchantPrintAnomaliesResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Len(t, resp.Items, 1)
 				require.Equal(t, int64(1), resp.Total)
+				require.Equal(t, printerTypeFeieyun, resp.Items[0].PrinterType)
 				require.True(t, resp.Items[0].CanRetry)
 				require.NotNil(t, resp.Items[0].ErrorMessage)
 				require.Equal(t, "printer offline", *resp.Items[0].ErrorMessage)
+			},
+		},
+		{
+			name:  "StatusFilterCancelledShangpeng",
+			query: "?status=cancelled&page_size=10",
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+				store.EXPECT().ListMerchantPrintAnomalies(gomock.Any(), gomock.Eq(db.ListMerchantPrintAnomaliesParams{
+					MerchantID: merchant.ID,
+					Limit:      10,
+					Offset:     0,
+					Status:     pgtype.Text{String: db.PrintLogStatusCancelled, Valid: true},
+				})).Times(1).Return([]db.ListMerchantPrintAnomaliesRow{{
+					ID:          13,
+					OrderID:     103,
+					OrderNo:     "ORD-103",
+					OrderType:   db.OrderTypeTakeout,
+					PrinterID:   203,
+					PrinterName: "商鹏打印机",
+					PrinterType: printerTypeShangpeng,
+					IsActive:    true,
+					Status:      db.PrintLogStatusCancelled,
+					CreatedAt:   now,
+				}}, nil)
+				store.EXPECT().CountMerchantPrintAnomalies(gomock.Any(), gomock.Eq(db.CountMerchantPrintAnomaliesParams{
+					MerchantID: merchant.ID,
+					Status:     pgtype.Text{String: db.PrintLogStatusCancelled, Valid: true},
+				})).Times(1).Return(int64(1), nil)
+			},
+			setupServer: func(server *Server) {
+				server.SetCloudPrinterManagerForTest(printerProviderManagerStub{providers: map[string]cloudprint.Client{
+					printerTypeShangpeng: &printerClientStub{},
+				}})
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp listMerchantPrintAnomaliesResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Len(t, resp.Items, 1)
+				require.Equal(t, printerTypeShangpeng, resp.Items[0].PrinterType)
+				require.True(t, resp.Items[0].CanRetry)
+				require.Empty(t, resp.Items[0].RetryHint)
+				require.Equal(t, db.PrintLogStatusCancelled, resp.Items[0].LocalStatus)
 			},
 		},
 		{
@@ -3661,6 +3758,7 @@ func TestListMerchantPrintAnomaliesAPI(t *testing.T) {
 				var resp listMerchantPrintAnomaliesResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Len(t, resp.Items, 1)
+				require.Equal(t, printerTypeFeieyun, resp.Items[0].PrinterType)
 				require.False(t, resp.Items[0].CanRetry)
 				require.Equal(t, "printer is inactive", resp.Items[0].RetryHint)
 			},
@@ -3677,6 +3775,9 @@ func TestListMerchantPrintAnomaliesAPI(t *testing.T) {
 			tc.buildStubs(store)
 
 			server := newTestServer(t, store)
+			if tc.setupServer != nil {
+				tc.setupServer(server)
+			}
 			recorder := httptest.NewRecorder()
 
 			request, err := http.NewRequest(http.MethodGet, "/v1/merchant/orders/print-anomalies"+tc.query, nil)
@@ -3707,6 +3808,7 @@ func TestRetryMerchantOrderPrintJobAPI(t *testing.T) {
 		name          string
 		printLog      db.PrintLog
 		buildStubs    func(store *mockdb.MockStore, distributor *mockworker.MockTaskDistributor, currentPrintLog db.PrintLog)
+		setupServer   func(server *Server)
 		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
 	}{
 		{
@@ -3726,6 +3828,45 @@ func TestRetryMerchantOrderPrintJobAPI(t *testing.T) {
 					require.NotEmpty(t, payload.TaskKey)
 					return nil
 				})
+			},
+			setupServer: func(server *Server) {
+				server.SetCloudPrinterManagerForTest(printerProviderManagerStub{providers: map[string]cloudprint.Client{
+					printerTypeFeieyun: &printerClientStub{},
+				}})
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp retryMerchantOrderPrintJobResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, order.ID, resp.OrderID)
+				require.Equal(t, printLog.ID, resp.PrintLogID)
+				require.Equal(t, "retry", resp.Trigger)
+			},
+		},
+		{
+			name:     "ShangpengOK",
+			printLog: printLog,
+			buildStubs: func(store *mockdb.MockStore, distributor *mockworker.MockTaskDistributor, currentPrintLog db.PrintLog) {
+				shangpengPrinter := printer
+				shangpengPrinter.PrinterType = printerTypeShangpeng
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
+				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				store.EXPECT().GetPrintLog(gomock.Any(), currentPrintLog.ID).Times(1).Return(currentPrintLog, nil)
+				store.EXPECT().GetLatestPrintLogByOrderAndPrinter(gomock.Any(), db.GetLatestPrintLogByOrderAndPrinterParams{OrderID: order.ID, PrinterID: printer.ID}).Times(1).Return(currentPrintLog, nil)
+				store.EXPECT().GetCloudPrinter(gomock.Any(), printer.ID).Times(1).Return(shangpengPrinter, nil)
+				distributor.EXPECT().DistributeTaskPrintOrder(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(func(_ any, payload *worker.PrintOrderPayload, _ ...asynq.Option) error {
+					require.Equal(t, order.ID, payload.OrderID)
+					require.Equal(t, "retry", payload.Trigger)
+					require.Equal(t, currentPrintLog.ID, payload.RetryPrintLogID)
+					require.NotEmpty(t, payload.TaskKey)
+					return nil
+				})
+			},
+			setupServer: func(server *Server) {
+				server.SetCloudPrinterManagerForTest(printerProviderManagerStub{providers: map[string]cloudprint.Client{
+					printerTypeShangpeng: &printerClientStub{},
+				}})
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -3804,6 +3945,9 @@ func TestRetryMerchantOrderPrintJobAPI(t *testing.T) {
 
 			server := newTestServer(t, store)
 			server.SetTaskDistributorForTest(distributor)
+			if tc.setupServer != nil {
+				tc.setupServer(server)
+			}
 			recorder := httptest.NewRecorder()
 
 			url := fmt.Sprintf("/v1/merchant/orders/%d/print-jobs/%d/retry", order.ID, tc.printLog.ID)
