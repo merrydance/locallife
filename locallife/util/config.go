@@ -105,9 +105,13 @@ type Config struct {
 	FeieyunCallbackPublicKeyPEM  string        `mapstructure:"FEIEYUN_CALLBACK_PUBLIC_KEY_PEM"`
 	FeieyunCallbackPublicKeyPath string        `mapstructure:"FEIEYUN_CALLBACK_PUBLIC_KEY_PATH"`
 
-	// 多厂商云打印配置。当前运行时仍只注册飞鹅；易联云为开放型应用，商户/设备授权 token 不应作为全局静态配置。
+	// 多厂商云打印配置。当前运行时仍只注册飞鹅；易联云开放平台后台展示客户ID/应用ID/应用密钥，
+	// 官方 API 参数名为 client_id/client_secret。商户/设备授权 token 不应作为全局静态配置。
 	YilianyunEnabled          bool          `mapstructure:"YILIANYUN_ENABLED"`
 	YilianyunAPIBaseURL       string        `mapstructure:"YILIANYUN_API_BASE_URL"`
+	YilianyunCustomerID       string        `mapstructure:"YILIANYUN_CUSTOMER_ID"`
+	YilianyunAppID            string        `mapstructure:"YILIANYUN_APP_ID"`
+	YilianyunAppSecret        string        `mapstructure:"YILIANYUN_APP_SECRET"`
 	YilianyunClientID         string        `mapstructure:"YILIANYUN_CLIENT_ID"`
 	YilianyunClientSecret     string        `mapstructure:"YILIANYUN_CLIENT_SECRET"`
 	YilianyunAccessToken      string        `mapstructure:"YILIANYUN_ACCESS_TOKEN"`
@@ -304,6 +308,20 @@ func (c Config) EffectiveBaofuWithdrawNotifyURL() string {
 	return ""
 }
 
+func (c Config) EffectiveYilianyunClientID() string {
+	if appID := strings.TrimSpace(c.YilianyunAppID); appID != "" {
+		return appID
+	}
+	return strings.TrimSpace(c.YilianyunClientID)
+}
+
+func (c Config) EffectiveYilianyunClientSecret() string {
+	if appSecret := strings.TrimSpace(c.YilianyunAppSecret); appSecret != "" {
+		return appSecret
+	}
+	return strings.TrimSpace(c.YilianyunClientSecret)
+}
+
 func (c Config) ValidateBaofuConfig() error {
 	if !c.HasBaofuRuntimeConfig() {
 		return nil
@@ -332,15 +350,14 @@ func (c Config) ValidateBaofuConfig() error {
 func (c Config) ValidateCloudPrinterProviderConfig() error {
 	if c.YilianyunEnabled {
 		if strings.TrimSpace(c.YilianyunAPIBaseURL) == "" ||
-			strings.TrimSpace(c.YilianyunClientID) == "" ||
-			strings.TrimSpace(c.YilianyunClientSecret) == "" ||
-			strings.TrimSpace(c.YilianyunAuthCallbackURL) == "" {
-			return fmt.Errorf("YILIANYUN_API_BASE_URL, YILIANYUN_CLIENT_ID, YILIANYUN_CLIENT_SECRET and YILIANYUN_AUTH_CALLBACK_URL are required when YILIANYUN_ENABLED=true")
+			c.EffectiveYilianyunClientID() == "" ||
+			c.EffectiveYilianyunClientSecret() == "" {
+			return fmt.Errorf("YILIANYUN_API_BASE_URL, YILIANYUN_APP_ID and YILIANYUN_APP_SECRET are required when YILIANYUN_ENABLED=true; YILIANYUN_CLIENT_ID/YILIANYUN_CLIENT_SECRET remain accepted as compatibility aliases")
 		}
 		if err := validateRequiredAbsoluteConfigURL("YILIANYUN_API_BASE_URL", c.YilianyunAPIBaseURL, "YILIANYUN_ENABLED=true"); err != nil {
 			return err
 		}
-		if err := validateRequiredAbsoluteConfigURL("YILIANYUN_AUTH_CALLBACK_URL", c.YilianyunAuthCallbackURL, "YILIANYUN_ENABLED=true"); err != nil {
+		if err := validateOptionalAbsoluteConfigURL("YILIANYUN_AUTH_CALLBACK_URL", c.YilianyunAuthCallbackURL, "YILIANYUN_ENABLED=true"); err != nil {
 			return err
 		}
 		if c.YilianyunHTTPTimeout <= 0 {

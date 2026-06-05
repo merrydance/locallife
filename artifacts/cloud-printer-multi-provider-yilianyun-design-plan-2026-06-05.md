@@ -97,9 +97,9 @@ Important Feieyun coupling points:
 | Local provider key | `printer_type` value | `feieyun` | `yilianyun` | `shangpeng` |
 | Device identity | Stable `printer_sn` equivalent | `sn` | `machine_code` | `sn` |
 | Device secret | `printer_key` equivalent | device key | not used by the open-app authorization flow; do not store access tokens in `printer_key` | `pkey` for add, `key` in getModel |
-| App credential | Platform-level credential | `user`, `ukey` | `client_id`, `client_secret` | `appid`, `appsecret` |
+| App credential | Platform-level credential | `user`, `ukey` | backend shows customer/user ID, app ID, app secret; API sends app ID as `client_id` and signs with app secret as `client_secret` | `appid`, `appsecret` |
 | Access token | Token lifetime and storage owner | none | open-app per-printer token from merchant `code` exchange; encrypted DB storage owned by authorization flow | none documented |
-| Bind device | Remote registration endpoint | `/Api/Open/printerAddlist` | `GET /oauth/authorize` then `POST /oauth/oauth` with authorization `code` | `POST /v1/printer/add` |
+| Bind device | Remote registration endpoint | `/Api/Open/printerAddlist` | open-app authorization-code flow or open-app scan-code flow; self-owned `/printer/addprinter` is not the LocalLife default | `POST /v1/printer/add` |
 | Unbind device | Remote deregistration endpoint | `/Api/Open/printerDelList` | `POST /printer/deleteprinter` | `DELETE /v1/printer/delete` |
 | Text receipt print | Endpoint and content format | `/Api/Open/printMsg` | `POST /print/index` | `POST /v1/printer/print` |
 | Print idempotency | Provider duplicate guard | no explicit local origin id | `origin_id`, <= 32 chars, alnum only, unique per `client_id`; `idempotence=1` | no native idempotency field documented; use local idempotency and provider status query |
@@ -118,7 +118,14 @@ Important Feieyun coupling points:
 
 Yilianyun must use open application service mode for LocalLife. Do not implement the self-owned application mode unless the application type is changed by product/ops and this document is revised first.
 
-Open-app authorization flow:
+Official terminology and credential mapping:
+
+- Official docs distinguish self-owned application service mode and open application service mode. Third-party service providers use open application service mode, which can authorize multiple merchants.
+- Yilianyun backend may display three values such as customer/user ID, app ID, and app secret. Official API docs name the runtime pair `client_id` and `client_secret`: app ID maps to API `client_id`, and app secret maps to the signing secret `client_secret`.
+- Customer/user ID is an operator-facing developer/account identifier. Do not put it into API signatures or provider request bodies unless an official endpoint or provider support explicitly confirms that field.
+- Local config should use `YILIANYUN_APP_ID` and `YILIANYUN_APP_SECRET` as the primary names, with `YILIANYUN_CLIENT_ID` and `YILIANYUN_CLIENT_SECRET` kept only as compatibility aliases because the provider API calls them `client_id` and `client_secret`.
+
+Open-app authorization-code flow:
 
 - Merchant/operator starts Yilianyun authorization with `GET /oauth/authorize`, `response_type=code`, `client_id`, URL-encoded `redirect_uri`, and an unguessable `state`.
 - Yilianyun redirects to `YILIANYUN_AUTH_CALLBACK_URL` with `code` and `state`. The code is valid for 600 seconds, so the callback handler must exchange it immediately.
@@ -127,20 +134,31 @@ Open-app authorization flow:
 - Store access/refresh tokens encrypted in a DB-backed authorization table scoped to merchant/store/printer/provider. Do not store tokens in `cloud_printers.printer_key`, and do not use global `YILIANYUN_ACCESS_TOKEN` / `YILIANYUN_REFRESH_TOKEN` config as runtime credentials.
 - Refresh uses `grant_type=refresh_token` and is limited to 20 times per day per terminal, so refresh must be scheduler/command owned with a durable lock and must not run in constructors, startup loops, or every print call.
 
+Open-app scan-code / rapid authorization flow:
+
+- Official docs state scan-code rapid authorization only supports open application service mode.
+- The Mini Program can scan the printer body QR code or self-test receipt QR code to obtain `machine_code` plus `qr_key` or `msign`.
+- The backend exchanges those values through `POST /oauth/scancodemodel` with `client_id`, `machine_code`, exactly one of `qr_key` or `msign`, `scope=all`, signature, timestamp, and UUID request id.
+- The response returns `access_token`, `refresh_token`, and `expires_in`; store the token pair encrypted and scoped to the LocalLife printer authorization.
+- Prefer scan-code authorization for Mini Program device binding when product/ops wants an in-app bind flow and the available printer QR material is reliable. Keep authorization-code redirect flow available for operator/web flows where redirect UX is acceptable.
+
 Request protocol:
 
 - HTTP POST, `application/x-www-form-urlencoded`.
 - Authorized API calls use common fields `client_id`, `access_token`, `sign`, `timestamp`, `id` as UUID4. OAuth code exchange and refresh use `grant_type` and do not already have an `access_token`.
 - Signature: `lower(md5(client_id + timestamp + client_secret))`.
 - Domestic host: `https://open-api.10ss.net`.
-- Overseas host exists, but default LocalLife config should use domestic host unless product/ops explicitly needs overseas routing.
+- Overseas host: `https://open-api-os.10ss.net`. The official docs state that the interface method/path stays unchanged when switching host.
+- Default LocalLife config should use the domestic host unless product/ops explicitly needs overseas routing.
 
 Initial authorization recommendation:
 
-- Require `YILIANYUN_CLIENT_ID`, `YILIANYUN_CLIENT_SECRET`, `YILIANYUN_API_BASE_URL`, and `YILIANYUN_AUTH_CALLBACK_URL` before Yilianyun can be registered.
+- Require `YILIANYUN_APP_ID`, `YILIANYUN_APP_SECRET`, and `YILIANYUN_API_BASE_URL` before Yilianyun can be registered. `YILIANYUN_CUSTOMER_ID` may be stored for operator traceability but must not affect request signing unless a future official contract requires it.
+- `YILIANYUN_AUTH_CALLBACK_URL` is required only for the authorization-code redirect flow. It is optional for scan-code / rapid authorization.
+- Keep `YILIANYUN_CLIENT_ID` and `YILIANYUN_CLIENT_SECRET` as compatibility aliases for `YILIANYUN_APP_ID` and `YILIANYUN_APP_SECRET`.
 - Keep `YILIANYUN_ACCESS_TOKEN` and `YILIANYUN_REFRESH_TOKEN` as temporary compatibility placeholders only. They are not required, and the open-app runtime must not read them as global provider credentials.
 - Add the DB-backed authorization table, callback handler, CSRF `state` persistence, encrypted token storage, refresh ownership, and operator/merchant error states before enabling Yilianyun print runtime.
-- When `YILIANYUN_ENABLED=true`, missing app credentials or auth callback URL disables only Yilianyun registration by default and emits a loud structured error. Feieyun and other enabled providers must still start. Add an explicit `CLOUD_PRINTER_FAIL_ON_PROVIDER_CONFIG_ERROR=true` override only if ops wants whole-service fail-fast behavior for provider config mistakes.
+- When `YILIANYUN_ENABLED=true`, missing app ID, app secret, or API base URL disables only Yilianyun registration by default and emits a loud structured error. Feieyun and other enabled providers must still start. Add an explicit `CLOUD_PRINTER_FAIL_ON_PROVIDER_CONFIG_ERROR=true` override only if ops wants whole-service fail-fast behavior for provider config mistakes.
 - Token-related provider errors should disable only the affected Yilianyun authorization/printer at runtime; Feieyun and Shangpeng must remain available.
 
 ### Shangpeng
@@ -468,10 +486,12 @@ Config candidates:
 
 - `YILIANYUN_ENABLED`
 - `YILIANYUN_API_BASE_URL`
-- `YILIANYUN_CLIENT_ID`
-- `YILIANYUN_CLIENT_SECRET`
+- `YILIANYUN_CUSTOMER_ID` for operator traceability only; do not include it in signatures or provider calls unless a future official contract requires it.
+- `YILIANYUN_APP_ID`, primary config for the provider API `client_id`.
+- `YILIANYUN_APP_SECRET`, primary config for the provider signing secret documented as `client_secret`.
+- `YILIANYUN_CLIENT_ID` and `YILIANYUN_CLIENT_SECRET` remain compatibility aliases for older rollout drafts and tests.
 - `YILIANYUN_HTTP_TIMEOUT`
-- `YILIANYUN_AUTH_CALLBACK_URL`
+- `YILIANYUN_AUTH_CALLBACK_URL` is required only for authorization-code redirect flow, not for scan-code / rapid authorization.
 - `YILIANYUN_PRINT_CALLBACK_URL`
 - `YILIANYUN_ACCESS_TOKEN` and `YILIANYUN_REFRESH_TOKEN` may remain as compatibility placeholders during rollout, but open-app runtime code must not treat them as global credentials.
 - `SHANGPENG_ENABLED`
@@ -520,9 +540,10 @@ Files:
 Tasks:
 
 - Create a durable authorization session with merchant/store/printer intent, provider type, nonce/state, expiry, and one-time consumption.
-- Generate Yilianyun authorize URL with `response_type=code`, `client_id`, URL-encoded `redirect_uri=YILIANYUN_AUTH_CALLBACK_URL`, and opaque `state`.
-- Handle the Yilianyun redirect callback by validating `state`, expiry, one-time use, tenant ownership, and provider.
-- Exchange `code` for `access_token`, `refresh_token`, `machine_code`, and `expires_in` immediately; code is valid for 600 seconds.
+- For authorization-code flow, generate Yilianyun authorize URL with `response_type=code`, `client_id`, URL-encoded `redirect_uri=YILIANYUN_AUTH_CALLBACK_URL`, and opaque `state`.
+- For authorization-code flow, handle the Yilianyun redirect callback by validating `state`, expiry, one-time use, tenant ownership, and provider.
+- For authorization-code flow, exchange `code` for `access_token`, `refresh_token`, `machine_code`, and `expires_in` immediately; code is valid for 600 seconds.
+- For scan-code / rapid authorization, accept Mini Program scanned `machine_code` plus exactly one of `qr_key` or `msign`, then call `POST /oauth/scancodemodel` to obtain the printer authorization token pair.
 - Store tokens encrypted and scoped to the resulting printer/provider authorization. Do not write tokens to `cloud_printers.printer_key`.
 - Design refresh as a durable scheduler or operator command with rate-limit protection. Do not refresh in constructors, startup, request handlers, or every print call.
 - Surface stable merchant/operator errors for unbound, expired, refresh-failed, and provider-denied authorizations without leaking token values or raw provider payloads.

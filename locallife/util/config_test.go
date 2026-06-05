@@ -274,8 +274,9 @@ func TestLoadConfig_ReadsCloudPrinterProviderConfig(t *testing.T) {
 		"MIGRATION_URL=file://db/migration",
 		"YILIANYUN_ENABLED=true",
 		"YILIANYUN_API_BASE_URL=https://open-api.10ss.net",
-		"YILIANYUN_CLIENT_ID=yly-client",
-		"YILIANYUN_CLIENT_SECRET=yly-secret",
+		"YILIANYUN_CUSTOMER_ID=yly-customer",
+		"YILIANYUN_APP_ID=yly-app",
+		"YILIANYUN_APP_SECRET=yly-secret",
 		"YILIANYUN_ACCESS_TOKEN=yly-token",
 		"YILIANYUN_REFRESH_TOKEN=yly-refresh",
 		"YILIANYUN_HTTP_TIMEOUT=7s",
@@ -298,8 +299,11 @@ func TestLoadConfig_ReadsCloudPrinterProviderConfig(t *testing.T) {
 
 	require.True(t, config.YilianyunEnabled)
 	require.Equal(t, "https://open-api.10ss.net", config.YilianyunAPIBaseURL)
-	require.Equal(t, "yly-client", config.YilianyunClientID)
-	require.Equal(t, "yly-secret", config.YilianyunClientSecret)
+	require.Equal(t, "yly-customer", config.YilianyunCustomerID)
+	require.Equal(t, "yly-app", config.YilianyunAppID)
+	require.Equal(t, "yly-secret", config.YilianyunAppSecret)
+	require.Equal(t, "yly-app", config.EffectiveYilianyunClientID())
+	require.Equal(t, "yly-secret", config.EffectiveYilianyunClientSecret())
 	require.Equal(t, "yly-token", config.YilianyunAccessToken)
 	require.Equal(t, "yly-refresh", config.YilianyunRefreshToken)
 	require.Equal(t, 7*time.Second, config.YilianyunHTTPTimeout)
@@ -317,6 +321,27 @@ func TestLoadConfig_ReadsCloudPrinterProviderConfig(t *testing.T) {
 	require.Equal(t, 10*time.Hour, config.CloudPrinterStatusPollMaxAge)
 }
 
+func TestLoadConfig_ReadsYilianyunCompatibilityClientAliases(t *testing.T) {
+	configDir := writeTestConfigFile(t, strings.Join([]string{
+		"ENVIRONMENT=test",
+		"DB_SOURCE=postgresql:///test",
+		"MIGRATION_URL=file://db/migration",
+		"YILIANYUN_ENABLED=true",
+		"YILIANYUN_API_BASE_URL=https://open-api.10ss.net",
+		"YILIANYUN_CLIENT_ID=legacy-client-id",
+		"YILIANYUN_CLIENT_SECRET=legacy-client-secret",
+		"YILIANYUN_HTTP_TIMEOUT=7s",
+	}, "\n")+"\n")
+
+	config, err := LoadConfig(configDir)
+	require.NoError(t, err)
+
+	require.Equal(t, "legacy-client-id", config.YilianyunClientID)
+	require.Equal(t, "legacy-client-secret", config.YilianyunClientSecret)
+	require.Equal(t, "legacy-client-id", config.EffectiveYilianyunClientID())
+	require.Equal(t, "legacy-client-secret", config.EffectiveYilianyunClientSecret())
+}
+
 func TestValidateCloudPrinterProviderConfig(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -329,8 +354,8 @@ func TestValidateCloudPrinterProviderConfig(t *testing.T) {
 			config: Config{
 				YilianyunEnabled:                   true,
 				YilianyunAPIBaseURL:                "https://open-api.10ss.net",
-				YilianyunClientID:                  "client",
-				YilianyunClientSecret:              "secret",
+				YilianyunAppID:                     "app",
+				YilianyunAppSecret:                 "secret",
 				YilianyunHTTPTimeout:               time.Second,
 				YilianyunAuthCallbackURL:           "https://api.example.com/v1/cloud-printer/yilianyun/auth/callback",
 				CloudPrinterStatusPollInterval:     time.Minute,
@@ -340,23 +365,40 @@ func TestValidateCloudPrinterProviderConfig(t *testing.T) {
 			},
 		},
 		{
-			name: "yilianyun requires open app auth callback url",
+			name: "yilianyun scan-code open app does not require auth callback url",
 			config: Config{
-				YilianyunEnabled:      true,
-				YilianyunAPIBaseURL:   "https://open-api.10ss.net",
-				YilianyunClientID:     "client",
-				YilianyunClientSecret: "secret",
-				YilianyunHTTPTimeout:  time.Second,
+				YilianyunEnabled:                   true,
+				YilianyunAPIBaseURL:                "https://open-api.10ss.net",
+				YilianyunAppID:                     "app",
+				YilianyunAppSecret:                 "secret",
+				YilianyunHTTPTimeout:               time.Second,
+				CloudPrinterStatusPollInterval:     time.Minute,
+				CloudPrinterStatusPollBatchSize:    50,
+				CloudPrinterStatusPollInitialDelay: time.Second,
+				CloudPrinterStatusPollMaxAge:       time.Hour,
 			},
-			want: "YILIANYUN_AUTH_CALLBACK_URL",
+		},
+		{
+			name: "yilianyun accepts legacy client aliases",
+			config: Config{
+				YilianyunEnabled:                   true,
+				YilianyunAPIBaseURL:                "https://open-api.10ss.net",
+				YilianyunClientID:                  "client",
+				YilianyunClientSecret:              "secret",
+				YilianyunHTTPTimeout:               time.Second,
+				CloudPrinterStatusPollInterval:     time.Minute,
+				CloudPrinterStatusPollBatchSize:    50,
+				CloudPrinterStatusPollInitialDelay: time.Second,
+				CloudPrinterStatusPollMaxAge:       time.Hour,
+			},
 		},
 		{
 			name: "yilianyun auth callback url must be absolute",
 			config: Config{
 				YilianyunEnabled:         true,
 				YilianyunAPIBaseURL:      "https://open-api.10ss.net",
-				YilianyunClientID:        "client",
-				YilianyunClientSecret:    "secret",
+				YilianyunAppID:           "app",
+				YilianyunAppSecret:       "secret",
 				YilianyunHTTPTimeout:     time.Second,
 				YilianyunAuthCallbackURL: "/v1/cloud-printer/yilianyun/auth/callback",
 			},
@@ -367,8 +409,8 @@ func TestValidateCloudPrinterProviderConfig(t *testing.T) {
 			config: Config{
 				YilianyunEnabled:          true,
 				YilianyunAPIBaseURL:       "https://open-api.10ss.net",
-				YilianyunClientID:         "client",
-				YilianyunClientSecret:     "secret",
+				YilianyunAppID:            "app",
+				YilianyunAppSecret:        "secret",
 				YilianyunHTTPTimeout:      time.Second,
 				YilianyunAuthCallbackURL:  "https://api.example.com/v1/cloud-printer/yilianyun/auth/callback",
 				YilianyunPrintCallbackURL: "/webhooks/yilianyun/print-result",
@@ -380,8 +422,8 @@ func TestValidateCloudPrinterProviderConfig(t *testing.T) {
 			config: Config{
 				YilianyunEnabled:         true,
 				YilianyunAPIBaseURL:      "open-api.10ss.net",
-				YilianyunClientID:        "client",
-				YilianyunClientSecret:    "secret",
+				YilianyunAppID:           "app",
+				YilianyunAppSecret:       "secret",
 				YilianyunHTTPTimeout:     time.Second,
 				YilianyunAuthCallbackURL: "https://api.example.com/v1/cloud-printer/yilianyun/auth/callback",
 			},
