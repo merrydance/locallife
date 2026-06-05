@@ -48,6 +48,7 @@ type PrintInput struct {
 type PrinterInfo struct {
 	Model      string
 	Status     string
+	PrintWidth string
 	PrintLogo  *bool
 	ScanSwitch *bool
 }
@@ -323,6 +324,8 @@ func anyToString(value any) string {
 		return typed
 	case float64:
 		return strconv.FormatFloat(typed, 'f', -1, 64)
+	case json.Number:
+		return typed.String()
 	case bool:
 		return strconv.FormatBool(typed)
 	default:
