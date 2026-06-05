@@ -264,7 +264,13 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 	if auditWriter == nil {
 		auditWriter = NewDBAuditWriter(store)
 	}
-	cloudPrinterManager := cloudprint.NewManagerFromConfig(config)
+	cloudPrinterManager, err := cloudprint.NewRuntimeManagerFromConfig(config)
+	if err != nil {
+		if config.CloudPrinterFailOnProviderConfigError {
+			return nil, fmt.Errorf("invalid cloud printer provider config: %w", err)
+		}
+		log.Warn().Err(err).Msg("cloud printer provider config invalid, using validated runtime provider set")
+	}
 	printerClient, _ := cloudPrinterManager.Provider(string(cloudprint.ProviderFeieyun))
 
 	server := &Server{

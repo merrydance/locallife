@@ -8,20 +8,20 @@ INSERT INTO print_logs (
     provider_origin_id
 ) VALUES (
     $1, $2, $3, $4, $5, $6
-) RETURNING id, order_id, printer_id, print_content, status, error_message, printed_at, created_at, vendor_order_id, task_key, provider_origin_id;
+) RETURNING id, order_id, printer_id, print_content, status, error_message, printed_at, created_at, vendor_order_id, task_key, provider_origin_id, provider_status_checked_at, provider_status_check_attempts, provider_status_last_error;
 
 -- name: GetPrintLog :one
-SELECT id, order_id, printer_id, print_content, status, error_message, printed_at, created_at, vendor_order_id, task_key, provider_origin_id FROM print_logs
+SELECT id, order_id, printer_id, print_content, status, error_message, printed_at, created_at, vendor_order_id, task_key, provider_origin_id, provider_status_checked_at, provider_status_check_attempts, provider_status_last_error FROM print_logs
 WHERE id = $1 LIMIT 1;
 
 -- name: GetPrintLogByTaskKeyAndPrinter :one
-SELECT id, order_id, printer_id, print_content, status, error_message, printed_at, created_at, vendor_order_id, task_key, provider_origin_id FROM print_logs
+SELECT id, order_id, printer_id, print_content, status, error_message, printed_at, created_at, vendor_order_id, task_key, provider_origin_id, provider_status_checked_at, provider_status_check_attempts, provider_status_last_error FROM print_logs
 WHERE task_key = $1
     AND printer_id = $2
 LIMIT 1;
 
 -- name: GetPrintLogByVendorOrderID :one
-SELECT id, order_id, printer_id, print_content, status, error_message, printed_at, created_at, vendor_order_id, task_key, provider_origin_id FROM print_logs
+SELECT id, order_id, printer_id, print_content, status, error_message, printed_at, created_at, vendor_order_id, task_key, provider_origin_id, provider_status_checked_at, provider_status_check_attempts, provider_status_last_error FROM print_logs
 WHERE vendor_order_id = $1
 ORDER BY created_at DESC, id DESC
 LIMIT 1;
@@ -38,7 +38,10 @@ SELECT
     pl.created_at,
     pl.vendor_order_id,
     pl.task_key,
-    pl.provider_origin_id
+    pl.provider_origin_id,
+    pl.provider_status_checked_at,
+    pl.provider_status_check_attempts,
+    pl.provider_status_last_error
 FROM print_logs pl
 INNER JOIN cloud_printers cp ON pl.printer_id = cp.id
 WHERE cp.printer_type = $1
@@ -58,7 +61,10 @@ SELECT
     pl.created_at,
     pl.vendor_order_id,
     pl.task_key,
-    pl.provider_origin_id
+    pl.provider_origin_id,
+    pl.provider_status_checked_at,
+    pl.provider_status_check_attempts,
+    pl.provider_status_last_error
 FROM print_logs pl
 INNER JOIN cloud_printers cp ON pl.printer_id = cp.id
 WHERE cp.printer_type = $1
@@ -67,7 +73,7 @@ ORDER BY pl.created_at DESC, pl.id DESC
 LIMIT 1;
 
 -- name: GetLatestPrintLogByOrderAndPrinter :one
-SELECT id, order_id, printer_id, print_content, status, error_message, printed_at, created_at, vendor_order_id, task_key, provider_origin_id FROM print_logs
+SELECT id, order_id, printer_id, print_content, status, error_message, printed_at, created_at, vendor_order_id, task_key, provider_origin_id, provider_status_checked_at, provider_status_check_attempts, provider_status_last_error FROM print_logs
 WHERE order_id = $1
     AND printer_id = $2
 ORDER BY created_at DESC, id DESC
@@ -75,7 +81,7 @@ LIMIT 1;
 
 -- name: ListPrintLogsByOrder :many
 SELECT 
-    pl.id, pl.order_id, pl.printer_id, pl.print_content, pl.status, pl.error_message, pl.printed_at, pl.created_at, pl.vendor_order_id, pl.task_key, pl.provider_origin_id,
+    pl.id, pl.order_id, pl.printer_id, pl.print_content, pl.status, pl.error_message, pl.printed_at, pl.created_at, pl.vendor_order_id, pl.task_key, pl.provider_origin_id, pl.provider_status_checked_at, pl.provider_status_check_attempts, pl.provider_status_last_error,
     cp.printer_name
 FROM print_logs pl
 INNER JOIN cloud_printers cp ON pl.printer_id = cp.id
@@ -83,7 +89,7 @@ WHERE pl.order_id = $1
 ORDER BY pl.created_at;
 
 -- name: ListPrintLogsByPrinter :many
-SELECT id, order_id, printer_id, print_content, status, error_message, printed_at, created_at, vendor_order_id, task_key, provider_origin_id FROM print_logs
+SELECT id, order_id, printer_id, print_content, status, error_message, printed_at, created_at, vendor_order_id, task_key, provider_origin_id, provider_status_checked_at, provider_status_check_attempts, provider_status_last_error FROM print_logs
 WHERE printer_id = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3;
@@ -172,7 +178,94 @@ SET
     provider_origin_id = COALESCE($5, provider_origin_id),
     printed_at = CASE WHEN $2 = 'success' THEN now() ELSE printed_at END
 WHERE id = $1
-RETURNING id, order_id, printer_id, print_content, status, error_message, printed_at, created_at, vendor_order_id, task_key, provider_origin_id;
+RETURNING id, order_id, printer_id, print_content, status, error_message, printed_at, created_at, vendor_order_id, task_key, provider_origin_id, provider_status_checked_at, provider_status_check_attempts, provider_status_last_error;
+
+-- name: ClaimPendingProviderStatusPrintLogs :many
+UPDATE print_logs pl
+SET
+    provider_status_checked_at = now(),
+    provider_status_check_attempts = provider_status_check_attempts + 1,
+    provider_status_last_error = NULL
+FROM (
+    SELECT pl_inner.id
+    FROM print_logs pl_inner
+    INNER JOIN cloud_printers cp ON pl_inner.printer_id = cp.id
+    WHERE pl_inner.status = 'pending'
+        AND pl_inner.vendor_order_id IS NOT NULL
+        AND cp.printer_type = ANY(sqlc.arg(printer_types)::text[])
+        AND pl_inner.created_at <= sqlc.arg(ready_before)
+        AND pl_inner.created_at >= sqlc.arg(created_after)
+        AND (
+            pl_inner.provider_status_checked_at IS NULL
+            OR pl_inner.provider_status_checked_at <= sqlc.arg(checked_before)
+        )
+    ORDER BY pl_inner.created_at ASC, pl_inner.id ASC
+    LIMIT sqlc.arg(limit_count)
+    FOR UPDATE OF pl_inner SKIP LOCKED
+) claim,
+cloud_printers cp
+WHERE pl.id = claim.id
+    AND cp.id = pl.printer_id
+RETURNING
+    pl.id,
+    pl.order_id,
+    pl.printer_id,
+    pl.print_content,
+    pl.status,
+    pl.error_message,
+    pl.printed_at,
+    pl.created_at,
+    pl.vendor_order_id,
+    pl.task_key,
+    pl.provider_origin_id,
+    pl.provider_status_checked_at,
+    pl.provider_status_check_attempts,
+    pl.provider_status_last_error,
+    cp.printer_sn,
+    cp.printer_type;
+
+-- name: MarkProviderStatusPrintLogTerminal :one
+UPDATE print_logs
+SET
+    status = sqlc.arg(status),
+    error_message = sqlc.arg(error_message),
+    provider_status_checked_at = now(),
+    provider_status_last_error = NULL,
+    printed_at = CASE WHEN sqlc.arg(status) = 'success' THEN now() ELSE printed_at END
+WHERE id = sqlc.arg(id)
+    AND status = 'pending'
+RETURNING id, order_id, printer_id, print_content, status, error_message, printed_at, created_at, vendor_order_id, task_key, provider_origin_id, provider_status_checked_at, provider_status_check_attempts, provider_status_last_error;
+
+-- name: RecordProviderStatusPollError :one
+UPDATE print_logs
+SET
+    provider_status_checked_at = now(),
+    provider_status_last_error = sqlc.arg(provider_status_last_error)
+WHERE id = sqlc.arg(id)
+    AND status = 'pending'
+RETURNING id, order_id, printer_id, print_content, status, error_message, printed_at, created_at, vendor_order_id, task_key, provider_origin_id, provider_status_checked_at, provider_status_check_attempts, provider_status_last_error;
+
+-- name: ExpireProviderStatusPrintLogs :many
+UPDATE print_logs pl
+SET
+    status = 'failed',
+    error_message = sqlc.arg(error_message),
+    provider_status_checked_at = now(),
+    provider_status_last_error = NULL
+FROM (
+    SELECT pl_inner.id
+    FROM print_logs pl_inner
+    INNER JOIN cloud_printers cp ON pl_inner.printer_id = cp.id
+    WHERE pl_inner.status = 'pending'
+        AND pl_inner.vendor_order_id IS NOT NULL
+        AND cp.printer_type = ANY(sqlc.arg(printer_types)::text[])
+        AND pl_inner.created_at < sqlc.arg(expired_before)
+    ORDER BY pl_inner.created_at ASC, pl_inner.id ASC
+    LIMIT sqlc.arg(limit_count)
+    FOR UPDATE OF pl_inner SKIP LOCKED
+) expired
+WHERE pl.id = expired.id
+RETURNING pl.id, pl.order_id, pl.printer_id, pl.print_content, pl.status, pl.error_message, pl.printed_at, pl.created_at, pl.vendor_order_id, pl.task_key, pl.provider_origin_id, pl.provider_status_checked_at, pl.provider_status_check_attempts, pl.provider_status_last_error;
 
 -- name: CountPendingPrintLogs :one
 SELECT COUNT(*) FROM print_logs

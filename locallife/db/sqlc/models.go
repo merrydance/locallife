@@ -1814,17 +1814,20 @@ type PlatformConfig struct {
 }
 
 type PrintLog struct {
-	ID               int64              `json:"id"`
-	OrderID          int64              `json:"order_id"`
-	PrinterID        int64              `json:"printer_id"`
-	PrintContent     string             `json:"print_content"`
-	Status           string             `json:"status"`
-	ErrorMessage     pgtype.Text        `json:"error_message"`
-	PrintedAt        pgtype.Timestamptz `json:"printed_at"`
-	CreatedAt        time.Time          `json:"created_at"`
-	VendorOrderID    pgtype.Text        `json:"vendor_order_id"`
-	TaskKey          pgtype.Text        `json:"task_key"`
-	ProviderOriginID pgtype.Text        `json:"provider_origin_id"`
+	ID                          int64              `json:"id"`
+	OrderID                     int64              `json:"order_id"`
+	PrinterID                   int64              `json:"printer_id"`
+	PrintContent                string             `json:"print_content"`
+	Status                      string             `json:"status"`
+	ErrorMessage                pgtype.Text        `json:"error_message"`
+	PrintedAt                   pgtype.Timestamptz `json:"printed_at"`
+	CreatedAt                   time.Time          `json:"created_at"`
+	VendorOrderID               pgtype.Text        `json:"vendor_order_id"`
+	TaskKey                     pgtype.Text        `json:"task_key"`
+	ProviderOriginID            pgtype.Text        `json:"provider_origin_id"`
+	ProviderStatusCheckedAt     pgtype.Timestamptz `json:"provider_status_checked_at"`
+	ProviderStatusCheckAttempts int32              `json:"provider_status_check_attempts"`
+	ProviderStatusLastError     pgtype.Text        `json:"provider_status_last_error"`
 }
 
 // 分账规则配置表（Phase2 草案）

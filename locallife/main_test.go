@@ -6,7 +6,9 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"testing"
+	"time"
 
+	"github.com/merrydance/locallife/cloudprint"
 	"github.com/merrydance/locallife/util"
 	"github.com/stretchr/testify/require"
 )
@@ -18,6 +20,38 @@ func TestBuildMerchantWechatClient_PartialDirectConfigReturnsError(t *testing.T)
 	require.Nil(t, client)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "WECHAT_PAY_SERIAL_NUMBER")
+}
+
+func TestBuildCloudPrinterManagerWarnOnlyDisablesMalformedProvider(t *testing.T) {
+	manager, err := buildCloudPrinterManager(util.Config{
+		FeieyunEnabled:       true,
+		FeieyunUser:          "user",
+		FeieyunUkey:          "ukey",
+		ShangpengEnabled:     true,
+		ShangpengAPIBaseURL:  "open.spyun.net",
+		ShangpengAppID:       "appid",
+		ShangpengAppSecret:   "secret",
+		ShangpengHTTPTimeout: time.Second,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, manager)
+	require.True(t, manager.Supported(string(cloudprint.ProviderFeieyun)))
+	require.False(t, manager.Supported(string(cloudprint.ProviderShangpeng)))
+}
+
+func TestBuildCloudPrinterManagerStrictModeReturnsError(t *testing.T) {
+	manager, err := buildCloudPrinterManager(util.Config{
+		CloudPrinterFailOnProviderConfigError: true,
+		ShangpengEnabled:                      true,
+		ShangpengAPIBaseURL:                   "open.spyun.net",
+		ShangpengAppID:                        "appid",
+		ShangpengAppSecret:                    "secret",
+		ShangpengHTTPTimeout:                  time.Second,
+	})
+
+	require.Error(t, err)
+	require.Nil(t, manager)
 }
 
 func TestValidateProductionPaymentRuntime_RequiresBaofuMainBusinessInProduction(t *testing.T) {

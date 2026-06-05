@@ -139,7 +139,7 @@ func NewRedisTaskProcessor(
 	}
 	onboardingReviewSvc := logic.NewOnboardingReviewService(store)
 	credentialGovSvc := logic.NewCredentialGovernanceService(store)
-	cloudPrinterManager := cloudprint.NewManagerFromConfig(config)
+	cloudPrinterManager := buildRuntimeCloudPrinterManager(config)
 	printerClient, _ := cloudPrinterManager.Provider(string(cloudprint.ProviderFeieyun))
 
 	return &RedisTaskProcessor{
@@ -162,6 +162,19 @@ func NewRedisTaskProcessor(
 		roleCache:           make(map[int64]cachedUserRoles),
 		roleCacheTTL:        1 * time.Minute,
 	}
+}
+
+func buildRuntimeCloudPrinterManager(config util.Config) cloudprint.Manager {
+	runtimeConfig := config
+	runtimeConfig.CloudPrinterFailOnProviderConfigError = false
+	manager, err := cloudprint.NewRuntimeManagerFromConfig(runtimeConfig)
+	if err != nil {
+		log.Warn().Err(err).Msg("cloud printer provider config invalid, using validated runtime provider set for task processor")
+	}
+	if manager == nil {
+		return cloudprint.NewManagerFromConfig(util.Config{})
+	}
+	return manager
 }
 
 func (processor *RedisTaskProcessor) SetDirectPaymentClient(directPaymentClient wechat.DirectPaymentClientInterface) {

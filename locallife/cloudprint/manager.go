@@ -1,6 +1,12 @@
 package cloudprint
 
-import "github.com/merrydance/locallife/util"
+import (
+	"fmt"
+	"net/url"
+	"strings"
+
+	"github.com/merrydance/locallife/util"
+)
 
 // ProviderType is the LocalLife cloud-printer provider key.
 type ProviderType string
@@ -26,9 +32,8 @@ type providerManager struct {
 
 // NewManagerFromConfig builds the configured provider registry.
 //
-// This rollout intentionally registers only Feieyun so existing runtime
-// behavior stays unchanged while later providers are added behind the same
-// dispatch boundary.
+// Yilianyun is intentionally not registered yet because open-app authorization
+// token persistence is still pending.
 func NewManagerFromConfig(config util.Config) Manager {
 	manager := &providerManager{providers: make(map[string]Client)}
 
@@ -40,6 +45,70 @@ func NewManagerFromConfig(config util.Config) Manager {
 	}
 
 	return manager
+}
+
+// NewRuntimeManagerFromConfig validates provider settings before registering
+// runtime clients. In warn-only mode it returns a runtime-safe manager plus
+// the validation error for the caller's log boundary.
+func NewRuntimeManagerFromConfig(config util.Config) (Manager, error) {
+	configErr := config.ValidateCloudPrinterProviderConfig()
+	if configErr != nil && config.CloudPrinterFailOnProviderConfigError {
+		return nil, configErr
+	}
+
+	runtimeConfig := config
+	if err := validateYilianyunRuntimeProviderConfig(config); err != nil {
+		runtimeConfig.YilianyunEnabled = false
+	}
+	if err := validateShangpengRuntimeProviderConfig(config); err != nil {
+		runtimeConfig.ShangpengEnabled = false
+	}
+
+	return NewManagerFromConfig(runtimeConfig), configErr
+}
+
+func validateYilianyunRuntimeProviderConfig(config util.Config) error {
+	if !config.YilianyunEnabled {
+		return nil
+	}
+	if strings.TrimSpace(config.YilianyunAPIBaseURL) == "" ||
+		strings.TrimSpace(config.YilianyunAppID) == "" ||
+		strings.TrimSpace(config.YilianyunAppSecret) == "" {
+		return fmt.Errorf("YILIANYUN_API_BASE_URL, YILIANYUN_APP_ID and YILIANYUN_APP_SECRET are required when YILIANYUN_ENABLED=true")
+	}
+	if err := validateRuntimeProviderAbsoluteURL("YILIANYUN_API_BASE_URL", config.YilianyunAPIBaseURL); err != nil {
+		return err
+	}
+	if config.YilianyunHTTPTimeout <= 0 {
+		return fmt.Errorf("YILIANYUN_HTTP_TIMEOUT must be > 0 when YILIANYUN_ENABLED=true")
+	}
+	return nil
+}
+
+func validateShangpengRuntimeProviderConfig(config util.Config) error {
+	if !config.ShangpengEnabled {
+		return nil
+	}
+	if strings.TrimSpace(config.ShangpengAPIBaseURL) == "" ||
+		strings.TrimSpace(config.ShangpengAppID) == "" ||
+		strings.TrimSpace(config.ShangpengAppSecret) == "" {
+		return fmt.Errorf("SHANGPENG_API_BASE_URL, SHANGPENG_APPID and SHANGPENG_APPSECRET are required when SHANGPENG_ENABLED=true")
+	}
+	if err := validateRuntimeProviderAbsoluteURL("SHANGPENG_API_BASE_URL", config.ShangpengAPIBaseURL); err != nil {
+		return err
+	}
+	if config.ShangpengHTTPTimeout <= 0 {
+		return fmt.Errorf("SHANGPENG_HTTP_TIMEOUT must be > 0 when SHANGPENG_ENABLED=true")
+	}
+	return nil
+}
+
+func validateRuntimeProviderAbsoluteURL(name, value string) error {
+	parsed, err := url.Parse(strings.TrimSpace(value))
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return fmt.Errorf("%s must be a valid absolute URL", name)
+	}
+	return nil
 }
 
 func (m *providerManager) Provider(providerType string) (Client, bool) {

@@ -21,6 +21,7 @@ import (
 	baofuaccount "github.com/merrydance/locallife/baofu/account"
 	"github.com/merrydance/locallife/baofu/aggregatepay"
 	"github.com/merrydance/locallife/baofu/merchantreport"
+	"github.com/merrydance/locallife/cloudprint"
 	db "github.com/merrydance/locallife/db/sqlc"
 	_ "github.com/merrydance/locallife/docs" // Swagger docs
 	"github.com/merrydance/locallife/logic"
@@ -83,6 +84,11 @@ func main() {
 
 	if config.Environment == "development" {
 		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+	}
+
+	cloudPrinterManager, err := buildCloudPrinterManager(config)
+	if err != nil {
+		log.Fatal().Err(err).Msg("invalid cloud printer provider config")
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), interruptSignals...)
@@ -313,6 +319,9 @@ func main() {
 	schedulerManager.Register("claim-recovery", worker.NewClaimRecoveryScheduler(store, taskDistributor))
 	schedulerManager.Register("order-timeout", scheduler.NewOrderTimeoutScheduler(store))
 	schedulerManager.Register("takeout-auto-complete", scheduler.NewTakeoutAutoCompleteScheduler(store, taskDistributor))
+	if cloudPrinterManager.Supported(string(cloudprint.ProviderShangpeng)) {
+		schedulerManager.Register("cloud-printer-status-poll", worker.NewCloudPrinterStatusPollScheduler(store, cloudPrinterManager, config))
+	}
 	schedulerManager.Register("data-cleanup", scheduler.NewDataCleanupScheduler(store, taskDistributor, reconciliationPublisher))
 	schedulerManager.StartAll(ctx, waitGroup)
 
@@ -364,6 +373,17 @@ func buildMerchantWechatClient(config util.Config) (*wechat.DirectPaymentClient,
 	}
 
 	return directPaymentClient, nil
+}
+
+func buildCloudPrinterManager(config util.Config) (cloudprint.Manager, error) {
+	manager, err := cloudprint.NewRuntimeManagerFromConfig(config)
+	if err != nil {
+		if config.CloudPrinterFailOnProviderConfigError {
+			return nil, err
+		}
+		log.Warn().Err(err).Msg("cloud printer provider config invalid, using validated runtime provider set")
+	}
+	return manager, nil
 }
 
 func validateProductionPaymentRuntime(config util.Config) error {

@@ -2,6 +2,7 @@ package cloudprint
 
 import (
 	"testing"
+	"time"
 
 	"github.com/merrydance/locallife/util"
 	"github.com/stretchr/testify/require"
@@ -104,4 +105,51 @@ func TestManagerDoesNotRegisterYilianyunBeforeAuthorizationRuntimeImplementation
 	})
 
 	require.False(t, manager.Supported(string(ProviderYilianyun)))
+}
+
+func TestNewRuntimeManagerFromConfigDisablesMalformedProviderInWarnOnlyMode(t *testing.T) {
+	manager, err := NewRuntimeManagerFromConfig(util.Config{
+		FeieyunEnabled:       true,
+		FeieyunUser:          "user",
+		FeieyunUkey:          "ukey",
+		ShangpengEnabled:     true,
+		ShangpengAPIBaseURL:  "open.spyun.net",
+		ShangpengAppID:       "appid",
+		ShangpengAppSecret:   "secret",
+		ShangpengHTTPTimeout: time.Second,
+	})
+
+	require.Error(t, err)
+	require.NotNil(t, manager)
+	require.True(t, manager.Supported(string(ProviderFeieyun)))
+	require.False(t, manager.Supported(string(ProviderShangpeng)))
+}
+
+func TestNewRuntimeManagerFromConfigFailsOnMalformedProviderInStrictMode(t *testing.T) {
+	manager, err := NewRuntimeManagerFromConfig(util.Config{
+		CloudPrinterFailOnProviderConfigError: true,
+		ShangpengEnabled:                      true,
+		ShangpengAPIBaseURL:                   "open.spyun.net",
+		ShangpengAppID:                        "appid",
+		ShangpengAppSecret:                    "secret",
+		ShangpengHTTPTimeout:                  time.Second,
+	})
+
+	require.Error(t, err)
+	require.Nil(t, manager)
+}
+
+func TestNewRuntimeManagerFromConfigKeepsValidProviderWhenOnlyPollConfigIsInvalid(t *testing.T) {
+	manager, err := NewRuntimeManagerFromConfig(util.Config{
+		ShangpengEnabled:               true,
+		ShangpengAPIBaseURL:            "https://open.spyun.net",
+		ShangpengAppID:                 "appid",
+		ShangpengAppSecret:             "secret",
+		ShangpengHTTPTimeout:           time.Second,
+		CloudPrinterStatusPollInterval: -time.Second,
+	})
+
+	require.Error(t, err)
+	require.NotNil(t, manager)
+	require.True(t, manager.Supported(string(ProviderShangpeng)))
 }

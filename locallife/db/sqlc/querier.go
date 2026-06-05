@@ -92,6 +92,7 @@ type Querier interface {
 	ClaimExternalPaymentFactApplication(ctx context.Context, id int64) (ExternalPaymentFactApplication, error)
 	ClaimMerchantTakeoutSuspensionIfAvailable(ctx context.Context, arg ClaimMerchantTakeoutSuspensionIfAvailableParams) (int64, error)
 	ClaimPaymentDomainOutbox(ctx context.Context, arg ClaimPaymentDomainOutboxParams) (PaymentDomainOutbox, error)
+	ClaimPendingProviderStatusPrintLogs(ctx context.Context, arg ClaimPendingProviderStatusPrintLogsParams) ([]ClaimPendingProviderStatusPrintLogsRow, error)
 	ClaimRiderSuspensionIfAvailable(ctx context.Context, arg ClaimRiderSuspensionIfAvailableParams) (int64, error)
 	// P1-026: 清理长期未更新的购物车及其商品（ON DELETE CASCADE）
 	CleanupOldCarts(ctx context.Context, updatedAt time.Time) error
@@ -592,6 +593,7 @@ type Querier interface {
 	DeleteUserRoleByUserAndRole(ctx context.Context, arg DeleteUserRoleByUserAndRoleParams) error
 	// 软删除代金券模板
 	DeleteVoucher(ctx context.Context, id int64) error
+	ExpireProviderStatusPrintLogs(ctx context.Context, arg ExpireProviderStatusPrintLogsParams) ([]PrintLog, error)
 	ExpireStaleUploadSessions(ctx context.Context) ([]MediaUploadSession, error)
 	ExpireUnusedVouchers(ctx context.Context) (int64, error)
 	ExpireUploadSession(ctx context.Context, id string) (MediaUploadSession, error)
@@ -1619,6 +1621,7 @@ type Querier interface {
 	MarkOrderReplaced(ctx context.Context, arg MarkOrderReplacedParams) (Order, error)
 	MarkPaymentDomainOutboxFailed(ctx context.Context, arg MarkPaymentDomainOutboxFailedParams) (PaymentDomainOutbox, error)
 	MarkPaymentDomainOutboxPublished(ctx context.Context, id int64) (PaymentDomainOutbox, error)
+	MarkProviderStatusPrintLogTerminal(ctx context.Context, arg MarkProviderStatusPrintLogTerminalParams) (PrintLog, error)
 	MarkRecoveryDisputeCompensated(ctx context.Context, arg MarkRecoveryDisputeCompensatedParams) error
 	MarkReservationAdjustmentApplied(ctx context.Context, id int64) (ReservationAdjustment, error)
 	MarkReservationAdjustmentApplying(ctx context.Context, id int64) (ReservationAdjustment, error)
@@ -1634,6 +1637,7 @@ type Querier interface {
 	MarkUserVoucherAsUsed(ctx context.Context, arg MarkUserVoucherAsUsedParams) (UserVoucher, error)
 	// 浏览历史查询
 	RecordBrowseHistory(ctx context.Context, arg RecordBrowseHistoryParams) (BrowseHistory, error)
+	RecordProviderStatusPollError(ctx context.Context, arg RecordProviderStatusPollErrorParams) (PrintLog, error)
 	RecoverFailedBaofuAccountOpeningFlowFromActiveBinding(ctx context.Context, arg RecoverFailedBaofuAccountOpeningFlowFromActiveBindingParams) (BaofuAccountOpeningFlow, error)
 	RegisterMerchantAppDevice(ctx context.Context, arg RegisterMerchantAppDeviceParams) (MerchantAppDevice, error)
 	// 拒绝商户申请

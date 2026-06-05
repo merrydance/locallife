@@ -19,10 +19,13 @@ import (
 )
 
 type printClientRecorder struct {
-	inputs          []printInputSnapshot
-	callbackEnabled bool
-	printOrderID    string
-	printErr        error
+	inputs                []printInputSnapshot
+	callbackEnabled       bool
+	printOrderID          string
+	printErr              error
+	queryOrderStateCalls  []string
+	queryOrderStateResult bool
+	queryOrderStateErr    error
 }
 
 type printInputSnapshot struct {
@@ -52,7 +55,8 @@ func (r *printClientRecorder) PrintResultCallbackEnabled() bool {
 }
 
 func (r *printClientRecorder) QueryOrderState(ctx context.Context, orderID string) (bool, error) {
-	return false, nil
+	r.queryOrderStateCalls = append(r.queryOrderStateCalls, orderID)
+	return r.queryOrderStateResult, r.queryOrderStateErr
 }
 
 func (r *printClientRecorder) QueryPrinterStatus(ctx context.Context, sn string) (string, error) {

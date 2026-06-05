@@ -896,6 +896,21 @@ func (mr *MockStoreMockRecorder) ClaimPaymentDomainOutbox(ctx, arg any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClaimPaymentDomainOutbox", reflect.TypeOf((*MockStore)(nil).ClaimPaymentDomainOutbox), ctx, arg)
 }
 
+// ClaimPendingProviderStatusPrintLogs mocks base method.
+func (m *MockStore) ClaimPendingProviderStatusPrintLogs(ctx context.Context, arg db.ClaimPendingProviderStatusPrintLogsParams) ([]db.ClaimPendingProviderStatusPrintLogsRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClaimPendingProviderStatusPrintLogs", ctx, arg)
+	ret0, _ := ret[0].([]db.ClaimPendingProviderStatusPrintLogsRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ClaimPendingProviderStatusPrintLogs indicates an expected call of ClaimPendingProviderStatusPrintLogs.
+func (mr *MockStoreMockRecorder) ClaimPendingProviderStatusPrintLogs(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClaimPendingProviderStatusPrintLogs", reflect.TypeOf((*MockStore)(nil).ClaimPendingProviderStatusPrintLogs), ctx, arg)
+}
+
 // ClaimRiderSuspensionIfAvailable mocks base method.
 func (m *MockStore) ClaimRiderSuspensionIfAvailable(ctx context.Context, arg db.ClaimRiderSuspensionIfAvailableParams) (int64, error) {
 	m.ctrl.T.Helper()
@@ -6145,6 +6160,21 @@ func (m *MockStore) EnsureBaofuProfitSharingBillTx(ctx context.Context, arg db.C
 func (mr *MockStoreMockRecorder) EnsureBaofuProfitSharingBillTx(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnsureBaofuProfitSharingBillTx", reflect.TypeOf((*MockStore)(nil).EnsureBaofuProfitSharingBillTx), ctx, arg)
+}
+
+// ExpireProviderStatusPrintLogs mocks base method.
+func (m *MockStore) ExpireProviderStatusPrintLogs(ctx context.Context, arg db.ExpireProviderStatusPrintLogsParams) ([]db.PrintLog, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ExpireProviderStatusPrintLogs", ctx, arg)
+	ret0, _ := ret[0].([]db.PrintLog)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ExpireProviderStatusPrintLogs indicates an expected call of ExpireProviderStatusPrintLogs.
+func (mr *MockStoreMockRecorder) ExpireProviderStatusPrintLogs(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExpireProviderStatusPrintLogs", reflect.TypeOf((*MockStore)(nil).ExpireProviderStatusPrintLogs), ctx, arg)
 }
 
 // ExpireStaleUploadSessions mocks base method.
@@ -17896,6 +17926,21 @@ func (mr *MockStoreMockRecorder) MarkPaymentDomainOutboxPublished(ctx, id any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkPaymentDomainOutboxPublished", reflect.TypeOf((*MockStore)(nil).MarkPaymentDomainOutboxPublished), ctx, id)
 }
 
+// MarkProviderStatusPrintLogTerminal mocks base method.
+func (m *MockStore) MarkProviderStatusPrintLogTerminal(ctx context.Context, arg db.MarkProviderStatusPrintLogTerminalParams) (db.PrintLog, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkProviderStatusPrintLogTerminal", ctx, arg)
+	ret0, _ := ret[0].(db.PrintLog)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkProviderStatusPrintLogTerminal indicates an expected call of MarkProviderStatusPrintLogTerminal.
+func (mr *MockStoreMockRecorder) MarkProviderStatusPrintLogTerminal(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkProviderStatusPrintLogTerminal", reflect.TypeOf((*MockStore)(nil).MarkProviderStatusPrintLogTerminal), ctx, arg)
+}
+
 // MarkRecoveryDisputeCompensated mocks base method.
 func (m *MockStore) MarkRecoveryDisputeCompensated(ctx context.Context, arg db.MarkRecoveryDisputeCompensatedParams) error {
 	m.ctrl.T.Helper()
@@ -18222,6 +18267,21 @@ func (m *MockStore) RecordBrowseHistory(ctx context.Context, arg db.RecordBrowse
 func (mr *MockStoreMockRecorder) RecordBrowseHistory(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordBrowseHistory", reflect.TypeOf((*MockStore)(nil).RecordBrowseHistory), ctx, arg)
+}
+
+// RecordProviderStatusPollError mocks base method.
+func (m *MockStore) RecordProviderStatusPollError(ctx context.Context, arg db.RecordProviderStatusPollErrorParams) (db.PrintLog, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RecordProviderStatusPollError", ctx, arg)
+	ret0, _ := ret[0].(db.PrintLog)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RecordProviderStatusPollError indicates an expected call of RecordProviderStatusPollError.
+func (mr *MockStoreMockRecorder) RecordProviderStatusPollError(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordProviderStatusPollError", reflect.TypeOf((*MockStore)(nil).RecordProviderStatusPollError), ctx, arg)
 }
 
 // RecoverFailedBaofuAccountOpeningFlowFromActiveBinding mocks base method.
