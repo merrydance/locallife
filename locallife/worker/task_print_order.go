@@ -34,9 +34,9 @@ const (
 	printSlipFull    = "full"
 	printSlipKitchen = "kitchen"
 
-	printLogStatusPending = "pending"
-	printLogStatusSuccess = "success"
-	printLogStatusFailed  = "failed"
+	printLogStatusPending = db.PrintLogStatusPending
+	printLogStatusSuccess = db.PrintLogStatusSuccess
+	printLogStatusFailed  = db.PrintLogStatusFailed
 )
 
 type PrintOrderPayload struct {

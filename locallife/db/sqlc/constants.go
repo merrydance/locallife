@@ -165,6 +165,11 @@ const (
 	CloudPrinterAuthorizationStatusRefreshFailed = "refresh_failed"
 	CloudPrinterAuthorizationStatusRevoked       = "revoked"
 
+	PrintLogStatusPending   = "pending"
+	PrintLogStatusSuccess   = "success"
+	PrintLogStatusFailed    = "failed"
+	PrintLogStatusCancelled = "cancelled"
+
 	MerchantCapabilityStatusUnknown = "unknown"
 	MerchantCapabilityStatusYes     = "yes"
 	MerchantCapabilityStatusNo      = "no"

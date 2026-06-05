@@ -280,6 +280,7 @@ func TestLoadConfig_ReadsCloudPrinterProviderConfig(t *testing.T) {
 		"YILIANYUN_HTTP_TIMEOUT=7s",
 		"YILIANYUN_AUTH_CALLBACK_URL=https://api.example.com/v1/cloud-printer/yilianyun/auth/callback",
 		"YILIANYUN_PRINT_CALLBACK_URL=https://api.example.com/v1/webhooks/yilianyun/print-result",
+		"YILIANYUN_PRINT_CALLBACK_FRESHNESS_WINDOW=9m",
 		"SHANGPENG_ENABLED=true",
 		"SHANGPENG_API_BASE_URL=https://open.spyun.net",
 		"SHANGPENG_APPID=spyun-app",
@@ -303,6 +304,7 @@ func TestLoadConfig_ReadsCloudPrinterProviderConfig(t *testing.T) {
 	require.Equal(t, 7*time.Second, config.YilianyunHTTPTimeout)
 	require.Equal(t, "https://api.example.com/v1/cloud-printer/yilianyun/auth/callback", config.YilianyunAuthCallbackURL)
 	require.Equal(t, "https://api.example.com/v1/webhooks/yilianyun/print-result", config.YilianyunPrintCallbackURL)
+	require.Equal(t, 9*time.Minute, config.YilianyunPrintCallbackFreshnessWindow)
 	require.True(t, config.ShangpengEnabled)
 	require.Equal(t, "https://open.spyun.net", config.ShangpengAPIBaseURL)
 	require.Equal(t, "spyun-app", config.ShangpengAppID)

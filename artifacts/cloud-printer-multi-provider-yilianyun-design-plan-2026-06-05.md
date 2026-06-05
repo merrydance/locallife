@@ -633,7 +633,7 @@ Files:
 Tasks:
 
 - Add GET `/v1/webhooks/yilianyun/print-result` returning `{"data":"OK"}` for provider health check.
-- Add an operator-only command or startup/admin path to register and verify Yilianyun `YILIANYUN_PRINT_CALLBACK_URL` through `POST /oauth/setpushurl`.
+- Add an operator-only command to register and verify Yilianyun `YILIANYUN_PRINT_CALLBACK_URL` through `POST /oauth/setpushurl` for each authorized open-app printer. The official endpoint requires the encrypted per-printer `access_token` and `machine_code`; do not register it as a global startup side effect.
 - Add Yilianyun POST callback handler.
 - Verify callback signature using `md5(client_id + push_time + client_secret)`.
 - Enforce callback freshness using `push_time` and the configured 10-minute default window.
@@ -645,7 +645,7 @@ Tasks:
 - Implement polling with bounded batch size, worker-safe short-transaction row claiming, provider retention cutoff, provider-specific rate limit, sanitized poll metadata, provider calls outside DB transactions, and conditional `status='pending'` updates.
 - Mark expired callbackless pending logs failed with a stable LocalLife error after the retention window passes without printed evidence.
 - Test duplicate callback delivery, unknown callback order ids, signature failures, repeated polling of the same pending log, terminal success, terminal failed/cancelled, expired pending, provider timeout, and unsupported status-query branches.
-- Test stale and future-dated Yilianyun callbacks, provider health-check GET, and push URL registration failure keeping Yilianyun disabled.
+- Test stale and future-dated Yilianyun callbacks, provider health-check GET, push URL client request shape, and operator command validation. Real push URL registration remains an explicit operational step per authorized Yilianyun printer.
 
 Validation:
 

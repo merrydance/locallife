@@ -107,19 +107,20 @@ type Config struct {
 
 	// 多厂商云打印配置。当前运行时仍只注册飞鹅；易联云开放平台后台展示客户ID/应用ID/应用密钥，
 	// 官方 API 参数名为 client_id/client_secret。商户/设备授权 token 不应作为全局静态配置。
-	YilianyunEnabled          bool          `mapstructure:"YILIANYUN_ENABLED"`
-	YilianyunAPIBaseURL       string        `mapstructure:"YILIANYUN_API_BASE_URL"`
-	YilianyunCustomerID       string        `mapstructure:"YILIANYUN_CUSTOMER_ID"`
-	YilianyunAppID            string        `mapstructure:"YILIANYUN_APP_ID"`
-	YilianyunAppSecret        string        `mapstructure:"YILIANYUN_APP_SECRET"`
-	YilianyunHTTPTimeout      time.Duration `mapstructure:"YILIANYUN_HTTP_TIMEOUT"`
-	YilianyunAuthCallbackURL  string        `mapstructure:"YILIANYUN_AUTH_CALLBACK_URL"`
-	YilianyunPrintCallbackURL string        `mapstructure:"YILIANYUN_PRINT_CALLBACK_URL"`
-	ShangpengEnabled          bool          `mapstructure:"SHANGPENG_ENABLED"`
-	ShangpengAPIBaseURL       string        `mapstructure:"SHANGPENG_API_BASE_URL"`
-	ShangpengAppID            string        `mapstructure:"SHANGPENG_APPID"`
-	ShangpengAppSecret        string        `mapstructure:"SHANGPENG_APPSECRET"`
-	ShangpengHTTPTimeout      time.Duration `mapstructure:"SHANGPENG_HTTP_TIMEOUT"`
+	YilianyunEnabled                      bool          `mapstructure:"YILIANYUN_ENABLED"`
+	YilianyunAPIBaseURL                   string        `mapstructure:"YILIANYUN_API_BASE_URL"`
+	YilianyunCustomerID                   string        `mapstructure:"YILIANYUN_CUSTOMER_ID"`
+	YilianyunAppID                        string        `mapstructure:"YILIANYUN_APP_ID"`
+	YilianyunAppSecret                    string        `mapstructure:"YILIANYUN_APP_SECRET"`
+	YilianyunHTTPTimeout                  time.Duration `mapstructure:"YILIANYUN_HTTP_TIMEOUT"`
+	YilianyunAuthCallbackURL              string        `mapstructure:"YILIANYUN_AUTH_CALLBACK_URL"`
+	YilianyunPrintCallbackURL             string        `mapstructure:"YILIANYUN_PRINT_CALLBACK_URL"`
+	YilianyunPrintCallbackFreshnessWindow time.Duration `mapstructure:"YILIANYUN_PRINT_CALLBACK_FRESHNESS_WINDOW"`
+	ShangpengEnabled                      bool          `mapstructure:"SHANGPENG_ENABLED"`
+	ShangpengAPIBaseURL                   string        `mapstructure:"SHANGPENG_API_BASE_URL"`
+	ShangpengAppID                        string        `mapstructure:"SHANGPENG_APPID"`
+	ShangpengAppSecret                    string        `mapstructure:"SHANGPENG_APPSECRET"`
+	ShangpengHTTPTimeout                  time.Duration `mapstructure:"SHANGPENG_HTTP_TIMEOUT"`
 
 	CloudPrinterFailOnProviderConfigError bool          `mapstructure:"CLOUD_PRINTER_FAIL_ON_PROVIDER_CONFIG_ERROR"`
 	CloudPrinterStatusPollInterval        time.Duration `mapstructure:"CLOUD_PRINTER_STATUS_POLL_INTERVAL"`
@@ -500,6 +501,7 @@ func LoadConfig(path string) (config Config, err error) {
 	v.SetDefault("YILIANYUN_ENABLED", false)
 	v.SetDefault("YILIANYUN_API_BASE_URL", "https://open-api.10ss.net")
 	v.SetDefault("YILIANYUN_HTTP_TIMEOUT", "5s")
+	v.SetDefault("YILIANYUN_PRINT_CALLBACK_FRESHNESS_WINDOW", "10m")
 	v.SetDefault("SHANGPENG_ENABLED", false)
 	v.SetDefault("SHANGPENG_API_BASE_URL", "https://open.spyun.net")
 	v.SetDefault("SHANGPENG_HTTP_TIMEOUT", "5s")

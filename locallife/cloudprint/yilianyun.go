@@ -79,6 +79,13 @@ type YilianyunPrinterStatusInput struct {
 	MachineCode string
 }
 
+type YilianyunSetPrintCallbackURLInput struct {
+	AccessToken string
+	MachineCode string
+	CallbackURL string
+	Enabled     bool
+}
+
 type yilianyunAuthorizedResponse struct {
 	Error            *string         `json:"error"`
 	ErrorDescription string          `json:"error_description"`
@@ -296,7 +303,55 @@ func (c *YilianyunClient) GetPrinterInfo(ctx context.Context, input YilianyunPri
 	return info, nil
 }
 
+func (c *YilianyunClient) SetPrintCallbackURL(ctx context.Context, input YilianyunSetPrintCallbackURLInput) error {
+	machineCode := strings.TrimSpace(input.MachineCode)
+	accessToken := strings.TrimSpace(input.AccessToken)
+	callbackURL := strings.TrimSpace(input.CallbackURL)
+	if machineCode == "" {
+		return fmt.Errorf("machine_code is required")
+	}
+	if accessToken == "" {
+		return fmt.Errorf("access_token is required")
+	}
+	if callbackURL == "" {
+		return fmt.Errorf("callback url is required")
+	}
+	parsedCallbackURL, err := url.Parse(callbackURL)
+	if err != nil {
+		return fmt.Errorf("callback url is invalid: %w", err)
+	}
+	if parsedCallbackURL.Scheme != "http" && parsedCallbackURL.Scheme != "https" {
+		return fmt.Errorf("callback url must start with http:// or https://")
+	}
+	if parsedCallbackURL.Host == "" {
+		return fmt.Errorf("callback url host is required")
+	}
+
+	status := "close"
+	if input.Enabled {
+		status = "open"
+	}
+	_, callErr := c.callAuthorizedNoBody(ctx, "/oauth/setpushurl", accessToken, url.Values{
+		"machine_code": []string{machineCode},
+		"cmd":          []string{"oauth_finish"},
+		"url":          []string{callbackURL},
+		"status":       []string{status},
+	})
+	return callErr
+}
+
 func (c *YilianyunClient) callAuthorized(ctx context.Context, path string, accessToken string, params url.Values) (yilianyunAuthorizedResponse, error) {
+	response, err := c.callAuthorizedNoBody(ctx, path, accessToken, params)
+	if err != nil {
+		return yilianyunAuthorizedResponse{}, err
+	}
+	if len(response.Body) == 0 || string(response.Body) == "null" {
+		return yilianyunAuthorizedResponse{}, fmt.Errorf("yilianyun response missing body")
+	}
+	return response, nil
+}
+
+func (c *YilianyunClient) callAuthorizedNoBody(ctx context.Context, path string, accessToken string, params url.Values) (yilianyunAuthorizedResponse, error) {
 	if c == nil {
 		return yilianyunAuthorizedResponse{}, fmt.Errorf("yilianyun client is not configured")
 	}
@@ -350,9 +405,6 @@ func parseYilianyunAuthorizedResponse(rawBody []byte) (yilianyunAuthorizedRespon
 	errorCode := strings.TrimSpace(*response.Error)
 	if errorCode != "0" {
 		return yilianyunAuthorizedResponse{}, fmt.Errorf("yilianyun api error %s", errorCode)
-	}
-	if len(response.Body) == 0 || string(response.Body) == "null" {
-		return yilianyunAuthorizedResponse{}, fmt.Errorf("yilianyun response missing body")
 	}
 	return response, nil
 }

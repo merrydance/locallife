@@ -557,6 +557,9 @@ func (server *Server) setupRouter() {
 		webhooksGroup.POST("/baofu/refund", server.handleBaofuRefundNotify)
 		// 飞鹅云打印结果回调
 		webhooksGroup.POST("/feieyun/print-result", server.handleFeieyunPrintResultNotify)
+		// 易联云打印结果回调和推送地址健康检查
+		webhooksGroup.GET("/yilianyun/print-result", server.handleYilianyunPrintResultHealth)
+		webhooksGroup.POST("/yilianyun/print-result", server.handleYilianyunPrintResultNotify)
 	}
 
 	// 需要认证的路由

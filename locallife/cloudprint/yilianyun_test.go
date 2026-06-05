@@ -160,6 +160,81 @@ func TestYilianyunQueryPrintStatePreservesCancelledState(t *testing.T) {
 	require.Equal(t, PrintStateCancelled, state.Status)
 }
 
+func TestYilianyunSetPrintCallbackURLPostsOfficialFields(t *testing.T) {
+	var received url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, http.MethodPost, r.Method)
+		require.Equal(t, "/oauth/setpushurl", r.URL.Path)
+		require.Equal(t, "application/x-www-form-urlencoded", r.Header.Get("Content-Type"))
+		require.NoError(t, r.ParseForm())
+		received = r.PostForm
+		require.NoError(t, json.NewEncoder(w).Encode(map[string]any{
+			"error":             "0",
+			"error_description": "success",
+		}))
+	}))
+	defer server.Close()
+
+	client := newYilianyunClientFromConfig(util.Config{
+		YilianyunEnabled:     true,
+		YilianyunAPIBaseURL:  server.URL,
+		YilianyunAppID:       "client-001",
+		YilianyunAppSecret:   "secret-001",
+		YilianyunHTTPTimeout: time.Second,
+	}, fixedClock("1717555200"), fixedRequestID("3F2504E0-4F89-11D3-9A0C-0305E82C3301"))
+
+	err := client.SetPrintCallbackURL(context.Background(), YilianyunSetPrintCallbackURLInput{
+		AccessToken: "access-token-001",
+		MachineCode: "YL-SN-001",
+		CallbackURL: "https://api.example.com/v1/webhooks/yilianyun/print-result",
+		Enabled:     true,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "client-001", received.Get("client_id"))
+	require.Equal(t, "1717555200", received.Get("timestamp"))
+	require.Equal(t, "3F2504E0-4F89-11D3-9A0C-0305E82C3301", received.Get("id"))
+	require.Equal(t, BuildYilianyunSign("client-001", "1717555200", "secret-001"), received.Get("sign"))
+	require.Equal(t, "access-token-001", received.Get("access_token"))
+	require.Equal(t, "YL-SN-001", received.Get("machine_code"))
+	require.Equal(t, "oauth_finish", received.Get("cmd"))
+	require.Equal(t, "https://api.example.com/v1/webhooks/yilianyun/print-result", received.Get("url"))
+	require.Equal(t, "open", received.Get("status"))
+}
+
+func TestYilianyunSetPrintCallbackURLValidatesInputBeforeProviderCall(t *testing.T) {
+	client := newYilianyunClientFromConfig(util.Config{
+		YilianyunEnabled:     true,
+		YilianyunAPIBaseURL:  "https://open-api.10ss.net",
+		YilianyunAppID:       "client-001",
+		YilianyunAppSecret:   "secret-001",
+		YilianyunHTTPTimeout: time.Second,
+	}, fixedClock("1717555200"), fixedRequestID("request-id"))
+
+	err := client.SetPrintCallbackURL(context.Background(), YilianyunSetPrintCallbackURLInput{
+		AccessToken: "access-token-001",
+		MachineCode: "YL-SN-001",
+		Enabled:     true,
+	})
+	require.ErrorContains(t, err, "callback url is required")
+
+	err = client.SetPrintCallbackURL(context.Background(), YilianyunSetPrintCallbackURLInput{
+		AccessToken: "access-token-001",
+		MachineCode: "YL-SN-001",
+		CallbackURL: "ftp://api.example.com/callback",
+		Enabled:     true,
+	})
+	require.ErrorContains(t, err, "callback url must start with http:// or https://")
+
+	err = client.SetPrintCallbackURL(context.Background(), YilianyunSetPrintCallbackURLInput{
+		AccessToken: "access-token-001",
+		MachineCode: "YL-SN-001",
+		CallbackURL: "https://",
+		Enabled:     true,
+	})
+	require.ErrorContains(t, err, "callback url host is required")
+}
+
 func TestYilianyunPrintResultCallbackEnabledRequiresConfiguredClient(t *testing.T) {
 	var nilClient *YilianyunClient
 	require.False(t, nilClient.PrintResultCallbackEnabled())
