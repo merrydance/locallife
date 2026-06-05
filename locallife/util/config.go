@@ -112,10 +112,6 @@ type Config struct {
 	YilianyunCustomerID       string        `mapstructure:"YILIANYUN_CUSTOMER_ID"`
 	YilianyunAppID            string        `mapstructure:"YILIANYUN_APP_ID"`
 	YilianyunAppSecret        string        `mapstructure:"YILIANYUN_APP_SECRET"`
-	YilianyunClientID         string        `mapstructure:"YILIANYUN_CLIENT_ID"`
-	YilianyunClientSecret     string        `mapstructure:"YILIANYUN_CLIENT_SECRET"`
-	YilianyunAccessToken      string        `mapstructure:"YILIANYUN_ACCESS_TOKEN"`
-	YilianyunRefreshToken     string        `mapstructure:"YILIANYUN_REFRESH_TOKEN"`
 	YilianyunHTTPTimeout      time.Duration `mapstructure:"YILIANYUN_HTTP_TIMEOUT"`
 	YilianyunAuthCallbackURL  string        `mapstructure:"YILIANYUN_AUTH_CALLBACK_URL"`
 	YilianyunPrintCallbackURL string        `mapstructure:"YILIANYUN_PRINT_CALLBACK_URL"`
@@ -308,20 +304,6 @@ func (c Config) EffectiveBaofuWithdrawNotifyURL() string {
 	return ""
 }
 
-func (c Config) EffectiveYilianyunClientID() string {
-	if appID := strings.TrimSpace(c.YilianyunAppID); appID != "" {
-		return appID
-	}
-	return strings.TrimSpace(c.YilianyunClientID)
-}
-
-func (c Config) EffectiveYilianyunClientSecret() string {
-	if appSecret := strings.TrimSpace(c.YilianyunAppSecret); appSecret != "" {
-		return appSecret
-	}
-	return strings.TrimSpace(c.YilianyunClientSecret)
-}
-
 func (c Config) ValidateBaofuConfig() error {
 	if !c.HasBaofuRuntimeConfig() {
 		return nil
@@ -350,9 +332,9 @@ func (c Config) ValidateBaofuConfig() error {
 func (c Config) ValidateCloudPrinterProviderConfig() error {
 	if c.YilianyunEnabled {
 		if strings.TrimSpace(c.YilianyunAPIBaseURL) == "" ||
-			c.EffectiveYilianyunClientID() == "" ||
-			c.EffectiveYilianyunClientSecret() == "" {
-			return fmt.Errorf("YILIANYUN_API_BASE_URL, YILIANYUN_APP_ID and YILIANYUN_APP_SECRET are required when YILIANYUN_ENABLED=true; YILIANYUN_CLIENT_ID/YILIANYUN_CLIENT_SECRET remain accepted as compatibility aliases")
+			strings.TrimSpace(c.YilianyunAppID) == "" ||
+			strings.TrimSpace(c.YilianyunAppSecret) == "" {
+			return fmt.Errorf("YILIANYUN_API_BASE_URL, YILIANYUN_APP_ID and YILIANYUN_APP_SECRET are required when YILIANYUN_ENABLED=true")
 		}
 		if err := validateRequiredAbsoluteConfigURL("YILIANYUN_API_BASE_URL", c.YilianyunAPIBaseURL, "YILIANYUN_ENABLED=true"); err != nil {
 			return err

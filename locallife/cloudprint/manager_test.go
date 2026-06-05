@@ -82,8 +82,8 @@ func TestManagerDoesNotRegisterPlannedProvidersBeforeRuntimeImplementation(t *te
 	manager := NewManagerFromConfig(util.Config{
 		YilianyunEnabled:         true,
 		YilianyunAPIBaseURL:      "https://open-api.10ss.net",
-		YilianyunClientID:        "client",
-		YilianyunClientSecret:    "secret",
+		YilianyunAppID:           "app",
+		YilianyunAppSecret:       "secret",
 		YilianyunAuthCallbackURL: "https://api.example.com/v1/cloud-printer/yilianyun/auth/callback",
 		ShangpengEnabled:         true,
 		ShangpengAPIBaseURL:      "https://open.spyun.net",

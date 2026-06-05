@@ -123,7 +123,7 @@ Official terminology and credential mapping:
 - Official docs distinguish self-owned application service mode and open application service mode. Third-party service providers use open application service mode, which can authorize multiple merchants.
 - Yilianyun backend may display three values such as customer/user ID, app ID, and app secret. Official API docs name the runtime pair `client_id` and `client_secret`: app ID maps to API `client_id`, and app secret maps to the signing secret `client_secret`.
 - Customer/user ID is an operator-facing developer/account identifier. Do not put it into API signatures or provider request bodies unless an official endpoint or provider support explicitly confirms that field.
-- Local config should use `YILIANYUN_APP_ID` and `YILIANYUN_APP_SECRET` as the primary names, with `YILIANYUN_CLIENT_ID` and `YILIANYUN_CLIENT_SECRET` kept only as compatibility aliases because the provider API calls them `client_id` and `client_secret`.
+- Local config must use `YILIANYUN_APP_ID` and `YILIANYUN_APP_SECRET`. Do not expose `YILIANYUN_CLIENT_ID` or `YILIANYUN_CLIENT_SECRET` in configuration examples; those names are provider API parameter names, not backend field labels.
 
 Open-app authorization-code flow:
 
@@ -131,7 +131,7 @@ Open-app authorization-code flow:
 - Yilianyun redirects to `YILIANYUN_AUTH_CALLBACK_URL` with `code` and `state`. The code is valid for 600 seconds, so the callback handler must exchange it immediately.
 - The backend exchanges `code` through `POST /oauth/oauth` with `grant_type=authorization_code`, `scope=all`, request signature, timestamp, and UUID request id.
 - The response returns `access_token`, `refresh_token`, `machine_code`, and `expires_in`; official docs state that every printer has a unique `access_token`.
-- Store access/refresh tokens encrypted in a DB-backed authorization table scoped to merchant/store/printer/provider. Do not store tokens in `cloud_printers.printer_key`, and do not use global `YILIANYUN_ACCESS_TOKEN` / `YILIANYUN_REFRESH_TOKEN` config as runtime credentials.
+- Store access/refresh tokens encrypted in a DB-backed authorization table scoped to merchant/store/printer/provider. Do not store tokens in `cloud_printers.printer_key`, and do not configure provider-level global token env vars.
 - Refresh uses `grant_type=refresh_token` and is limited to 20 times per day per terminal, so refresh must be scheduler/command owned with a durable lock and must not run in constructors, startup loops, or every print call.
 
 Open-app scan-code / rapid authorization flow:
@@ -155,8 +155,8 @@ Initial authorization recommendation:
 
 - Require `YILIANYUN_APP_ID`, `YILIANYUN_APP_SECRET`, and `YILIANYUN_API_BASE_URL` before Yilianyun can be registered. `YILIANYUN_CUSTOMER_ID` may be stored for operator traceability but must not affect request signing unless a future official contract requires it.
 - `YILIANYUN_AUTH_CALLBACK_URL` is required only for the authorization-code redirect flow. It is optional for scan-code / rapid authorization.
-- Keep `YILIANYUN_CLIENT_ID` and `YILIANYUN_CLIENT_SECRET` as compatibility aliases for `YILIANYUN_APP_ID` and `YILIANYUN_APP_SECRET`.
-- Keep `YILIANYUN_ACCESS_TOKEN` and `YILIANYUN_REFRESH_TOKEN` as temporary compatibility placeholders only. They are not required, and the open-app runtime must not read them as global provider credentials.
+- Do not add `YILIANYUN_CLIENT_ID` or `YILIANYUN_CLIENT_SECRET` env vars. Provider clients should translate `YILIANYUN_APP_ID` to API `client_id` and `YILIANYUN_APP_SECRET` to signing secret `client_secret` internally.
+- Do not add `YILIANYUN_ACCESS_TOKEN` or `YILIANYUN_REFRESH_TOKEN` env vars. Open-app token values are obtained only through authorization flows and encrypted in DB-backed authorization state.
 - Add the DB-backed authorization table, callback handler, CSRF `state` persistence, encrypted token storage, refresh ownership, and operator/merchant error states before enabling Yilianyun print runtime.
 - When `YILIANYUN_ENABLED=true`, missing app ID, app secret, or API base URL disables only Yilianyun registration by default and emits a loud structured error. Feieyun and other enabled providers must still start. Add an explicit `CLOUD_PRINTER_FAIL_ON_PROVIDER_CONFIG_ERROR=true` override only if ops wants whole-service fail-fast behavior for provider config mistakes.
 - Token-related provider errors should disable only the affected Yilianyun authorization/printer at runtime; Feieyun and Shangpeng must remain available.
@@ -489,11 +489,10 @@ Config candidates:
 - `YILIANYUN_CUSTOMER_ID` for operator traceability only; do not include it in signatures or provider calls unless a future official contract requires it.
 - `YILIANYUN_APP_ID`, primary config for the provider API `client_id`.
 - `YILIANYUN_APP_SECRET`, primary config for the provider signing secret documented as `client_secret`.
-- `YILIANYUN_CLIENT_ID` and `YILIANYUN_CLIENT_SECRET` remain compatibility aliases for older rollout drafts and tests.
 - `YILIANYUN_HTTP_TIMEOUT`
 - `YILIANYUN_AUTH_CALLBACK_URL` is required only for authorization-code redirect flow, not for scan-code / rapid authorization.
 - `YILIANYUN_PRINT_CALLBACK_URL`
-- `YILIANYUN_ACCESS_TOKEN` and `YILIANYUN_REFRESH_TOKEN` may remain as compatibility placeholders during rollout, but open-app runtime code must not treat them as global credentials.
+- Do not configure `YILIANYUN_ACCESS_TOKEN` or `YILIANYUN_REFRESH_TOKEN`; open-app runtime code must load token values only from encrypted authorization state.
 - `SHANGPENG_ENABLED`
 - `SHANGPENG_API_BASE_URL`
 - `SHANGPENG_APPID`
