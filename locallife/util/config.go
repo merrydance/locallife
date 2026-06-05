@@ -105,6 +105,27 @@ type Config struct {
 	FeieyunCallbackPublicKeyPEM  string        `mapstructure:"FEIEYUN_CALLBACK_PUBLIC_KEY_PEM"`
 	FeieyunCallbackPublicKeyPath string        `mapstructure:"FEIEYUN_CALLBACK_PUBLIC_KEY_PATH"`
 
+	// 多厂商云打印配置。当前运行时仍只注册飞鹅；易联云/商鹏字段先作为后续 provider runtime 的配置基础。
+	YilianyunEnabled          bool          `mapstructure:"YILIANYUN_ENABLED"`
+	YilianyunAPIBaseURL       string        `mapstructure:"YILIANYUN_API_BASE_URL"`
+	YilianyunClientID         string        `mapstructure:"YILIANYUN_CLIENT_ID"`
+	YilianyunClientSecret     string        `mapstructure:"YILIANYUN_CLIENT_SECRET"`
+	YilianyunAccessToken      string        `mapstructure:"YILIANYUN_ACCESS_TOKEN"`
+	YilianyunRefreshToken     string        `mapstructure:"YILIANYUN_REFRESH_TOKEN"`
+	YilianyunHTTPTimeout      time.Duration `mapstructure:"YILIANYUN_HTTP_TIMEOUT"`
+	YilianyunPrintCallbackURL string        `mapstructure:"YILIANYUN_PRINT_CALLBACK_URL"`
+	ShangpengEnabled          bool          `mapstructure:"SHANGPENG_ENABLED"`
+	ShangpengAPIBaseURL       string        `mapstructure:"SHANGPENG_API_BASE_URL"`
+	ShangpengAppID            string        `mapstructure:"SHANGPENG_APPID"`
+	ShangpengAppSecret        string        `mapstructure:"SHANGPENG_APPSECRET"`
+	ShangpengHTTPTimeout      time.Duration `mapstructure:"SHANGPENG_HTTP_TIMEOUT"`
+
+	CloudPrinterFailOnProviderConfigError bool          `mapstructure:"CLOUD_PRINTER_FAIL_ON_PROVIDER_CONFIG_ERROR"`
+	CloudPrinterStatusPollInterval        time.Duration `mapstructure:"CLOUD_PRINTER_STATUS_POLL_INTERVAL"`
+	CloudPrinterStatusPollBatchSize       int           `mapstructure:"CLOUD_PRINTER_STATUS_POLL_BATCH_SIZE"`
+	CloudPrinterStatusPollInitialDelay    time.Duration `mapstructure:"CLOUD_PRINTER_STATUS_POLL_INITIAL_DELAY"`
+	CloudPrinterStatusPollMaxAge          time.Duration `mapstructure:"CLOUD_PRINTER_STATUS_POLL_MAX_AGE"`
+
 	// 对外服务的基础 URL（生产环境必填）。设置后 API 生成的签名 URL 将以此为前缀，
 	// 避免依赖客户端可控的 Origin/Host 头（SSRF/开放重定向防护）。
 	// 示例：https://api.example.com
@@ -307,6 +328,58 @@ func (c Config) ValidateBaofuConfig() error {
 	return nil
 }
 
+func (c Config) ValidateCloudPrinterProviderConfig() error {
+	if c.YilianyunEnabled {
+		if strings.TrimSpace(c.YilianyunAPIBaseURL) == "" ||
+			strings.TrimSpace(c.YilianyunClientID) == "" ||
+			strings.TrimSpace(c.YilianyunClientSecret) == "" ||
+			strings.TrimSpace(c.YilianyunAccessToken) == "" {
+			return fmt.Errorf("YILIANYUN_API_BASE_URL, YILIANYUN_CLIENT_ID, YILIANYUN_CLIENT_SECRET and YILIANYUN_ACCESS_TOKEN are required when YILIANYUN_ENABLED=true")
+		}
+		if err := validateRequiredAbsoluteConfigURL("YILIANYUN_API_BASE_URL", c.YilianyunAPIBaseURL, "YILIANYUN_ENABLED=true"); err != nil {
+			return err
+		}
+		if c.YilianyunHTTPTimeout <= 0 {
+			return fmt.Errorf("YILIANYUN_HTTP_TIMEOUT must be > 0 when YILIANYUN_ENABLED=true")
+		}
+		if err := validateOptionalAbsoluteConfigURL("YILIANYUN_PRINT_CALLBACK_URL", c.YilianyunPrintCallbackURL, "YILIANYUN_ENABLED=true"); err != nil {
+			return err
+		}
+	}
+
+	if c.ShangpengEnabled {
+		if strings.TrimSpace(c.ShangpengAPIBaseURL) == "" ||
+			strings.TrimSpace(c.ShangpengAppID) == "" ||
+			strings.TrimSpace(c.ShangpengAppSecret) == "" {
+			return fmt.Errorf("SHANGPENG_API_BASE_URL, SHANGPENG_APPID and SHANGPENG_APPSECRET are required when SHANGPENG_ENABLED=true")
+		}
+		if err := validateRequiredAbsoluteConfigURL("SHANGPENG_API_BASE_URL", c.ShangpengAPIBaseURL, "SHANGPENG_ENABLED=true"); err != nil {
+			return err
+		}
+		if c.ShangpengHTTPTimeout <= 0 {
+			return fmt.Errorf("SHANGPENG_HTTP_TIMEOUT must be > 0 when SHANGPENG_ENABLED=true")
+		}
+	}
+
+	if c.YilianyunEnabled || c.ShangpengEnabled {
+		if c.CloudPrinterStatusPollInterval <= 0 {
+			return fmt.Errorf("CLOUD_PRINTER_STATUS_POLL_INTERVAL must be > 0 when a cloud printer provider is enabled")
+		}
+		if c.CloudPrinterStatusPollBatchSize <= 0 {
+			return fmt.Errorf("CLOUD_PRINTER_STATUS_POLL_BATCH_SIZE must be > 0 when a cloud printer provider is enabled")
+		}
+		if c.CloudPrinterStatusPollInitialDelay < 0 {
+			return fmt.Errorf("CLOUD_PRINTER_STATUS_POLL_INITIAL_DELAY must be >= 0 when a cloud printer provider is enabled")
+		}
+		if c.CloudPrinterStatusPollMaxAge <= 0 {
+			return fmt.Errorf("CLOUD_PRINTER_STATUS_POLL_MAX_AGE must be > 0 when a cloud printer provider is enabled")
+		}
+	} else if c.CloudPrinterStatusPollBatchSize < 0 {
+		return fmt.Errorf("CLOUD_PRINTER_STATUS_POLL_BATCH_SIZE must be >= 0")
+	}
+	return nil
+}
+
 func (c Config) ValidateWechatPayConfig() error {
 	if !c.HasWechatPayRuntimeConfig() {
 		return nil
@@ -367,6 +440,20 @@ func validateRequiredAbsoluteConfigURL(fieldName string, raw string, scope strin
 	return nil
 }
 
+func validateOptionalAbsoluteConfigURL(fieldName string, raw string, scope string) error {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil
+	}
+
+	parsed, err := url.Parse(trimmed)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return fmt.Errorf("%s must be a valid absolute URL when %s", fieldName, scope)
+	}
+
+	return nil
+}
+
 // LoadConfig reads configuration from file or environment variables.
 // Each call creates an isolated viper instance so multiple invocations
 // (e.g. parallel tests) do not share or pollute global state.
@@ -407,6 +494,17 @@ func LoadConfig(path string) (config Config, err error) {
 	v.SetDefault("FEIEYUN_ENABLED", false)
 	v.SetDefault("FEIEYUN_API_BASE_URL", "https://api.feieyun.cn")
 	v.SetDefault("FEIEYUN_HTTP_TIMEOUT", "5s")
+	v.SetDefault("YILIANYUN_ENABLED", false)
+	v.SetDefault("YILIANYUN_API_BASE_URL", "https://open-api.10ss.net")
+	v.SetDefault("YILIANYUN_HTTP_TIMEOUT", "5s")
+	v.SetDefault("SHANGPENG_ENABLED", false)
+	v.SetDefault("SHANGPENG_API_BASE_URL", "https://open.spyun.net")
+	v.SetDefault("SHANGPENG_HTTP_TIMEOUT", "5s")
+	v.SetDefault("CLOUD_PRINTER_FAIL_ON_PROVIDER_CONFIG_ERROR", false)
+	v.SetDefault("CLOUD_PRINTER_STATUS_POLL_INTERVAL", "1m")
+	v.SetDefault("CLOUD_PRINTER_STATUS_POLL_BATCH_SIZE", 50)
+	v.SetDefault("CLOUD_PRINTER_STATUS_POLL_INITIAL_DELAY", "30s")
+	v.SetDefault("CLOUD_PRINTER_STATUS_POLL_MAX_AGE", "12h")
 	v.SetDefault("BAOFU_MAIN_BUSINESS_ENABLED", false)
 	v.SetDefault("BAOFU_HTTP_TIMEOUT", "30s")
 	v.SetDefault("BAOFU_ACCOUNT_VERIFY_FEE_FEN", 200)

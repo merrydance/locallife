@@ -56,18 +56,20 @@ INSERT INTO print_logs (
     printer_id,
     print_content,
     status,
-    task_key
+    task_key,
+    provider_origin_id
 ) VALUES (
-    $1, $2, $3, $4, $5
-) RETURNING id, order_id, printer_id, print_content, status, error_message, printed_at, created_at, vendor_order_id, task_key
+    $1, $2, $3, $4, $5, $6
+) RETURNING id, order_id, printer_id, print_content, status, error_message, printed_at, created_at, vendor_order_id, task_key, provider_origin_id
 `
 
 type CreatePrintLogParams struct {
-	OrderID      int64       `json:"order_id"`
-	PrinterID    int64       `json:"printer_id"`
-	PrintContent string      `json:"print_content"`
-	Status       string      `json:"status"`
-	TaskKey      pgtype.Text `json:"task_key"`
+	OrderID          int64       `json:"order_id"`
+	PrinterID        int64       `json:"printer_id"`
+	PrintContent     string      `json:"print_content"`
+	Status           string      `json:"status"`
+	TaskKey          pgtype.Text `json:"task_key"`
+	ProviderOriginID pgtype.Text `json:"provider_origin_id"`
 }
 
 func (q *Queries) CreatePrintLog(ctx context.Context, arg CreatePrintLogParams) (PrintLog, error) {
@@ -77,6 +79,7 @@ func (q *Queries) CreatePrintLog(ctx context.Context, arg CreatePrintLogParams) 
 		arg.PrintContent,
 		arg.Status,
 		arg.TaskKey,
+		arg.ProviderOriginID,
 	)
 	var i PrintLog
 	err := row.Scan(
@@ -90,12 +93,13 @@ func (q *Queries) CreatePrintLog(ctx context.Context, arg CreatePrintLogParams) 
 		&i.CreatedAt,
 		&i.VendorOrderID,
 		&i.TaskKey,
+		&i.ProviderOriginID,
 	)
 	return i, err
 }
 
 const getLatestPrintLogByOrderAndPrinter = `-- name: GetLatestPrintLogByOrderAndPrinter :one
-SELECT id, order_id, printer_id, print_content, status, error_message, printed_at, created_at, vendor_order_id, task_key FROM print_logs
+SELECT id, order_id, printer_id, print_content, status, error_message, printed_at, created_at, vendor_order_id, task_key, provider_origin_id FROM print_logs
 WHERE order_id = $1
     AND printer_id = $2
 ORDER BY created_at DESC, id DESC
@@ -121,12 +125,13 @@ func (q *Queries) GetLatestPrintLogByOrderAndPrinter(ctx context.Context, arg Ge
 		&i.CreatedAt,
 		&i.VendorOrderID,
 		&i.TaskKey,
+		&i.ProviderOriginID,
 	)
 	return i, err
 }
 
 const getPrintLog = `-- name: GetPrintLog :one
-SELECT id, order_id, printer_id, print_content, status, error_message, printed_at, created_at, vendor_order_id, task_key FROM print_logs
+SELECT id, order_id, printer_id, print_content, status, error_message, printed_at, created_at, vendor_order_id, task_key, provider_origin_id FROM print_logs
 WHERE id = $1 LIMIT 1
 `
 
@@ -144,12 +149,103 @@ func (q *Queries) GetPrintLog(ctx context.Context, id int64) (PrintLog, error) {
 		&i.CreatedAt,
 		&i.VendorOrderID,
 		&i.TaskKey,
+		&i.ProviderOriginID,
+	)
+	return i, err
+}
+
+const getPrintLogByProviderAndOriginID = `-- name: GetPrintLogByProviderAndOriginID :one
+SELECT
+    pl.id,
+    pl.order_id,
+    pl.printer_id,
+    pl.print_content,
+    pl.status,
+    pl.error_message,
+    pl.printed_at,
+    pl.created_at,
+    pl.vendor_order_id,
+    pl.task_key,
+    pl.provider_origin_id
+FROM print_logs pl
+INNER JOIN cloud_printers cp ON pl.printer_id = cp.id
+WHERE cp.printer_type = $1
+    AND pl.provider_origin_id = $2
+ORDER BY pl.created_at DESC, pl.id DESC
+LIMIT 1
+`
+
+type GetPrintLogByProviderAndOriginIDParams struct {
+	PrinterType      string      `json:"printer_type"`
+	ProviderOriginID pgtype.Text `json:"provider_origin_id"`
+}
+
+func (q *Queries) GetPrintLogByProviderAndOriginID(ctx context.Context, arg GetPrintLogByProviderAndOriginIDParams) (PrintLog, error) {
+	row := q.db.QueryRow(ctx, getPrintLogByProviderAndOriginID, arg.PrinterType, arg.ProviderOriginID)
+	var i PrintLog
+	err := row.Scan(
+		&i.ID,
+		&i.OrderID,
+		&i.PrinterID,
+		&i.PrintContent,
+		&i.Status,
+		&i.ErrorMessage,
+		&i.PrintedAt,
+		&i.CreatedAt,
+		&i.VendorOrderID,
+		&i.TaskKey,
+		&i.ProviderOriginID,
+	)
+	return i, err
+}
+
+const getPrintLogByProviderAndVendorOrderID = `-- name: GetPrintLogByProviderAndVendorOrderID :one
+SELECT
+    pl.id,
+    pl.order_id,
+    pl.printer_id,
+    pl.print_content,
+    pl.status,
+    pl.error_message,
+    pl.printed_at,
+    pl.created_at,
+    pl.vendor_order_id,
+    pl.task_key,
+    pl.provider_origin_id
+FROM print_logs pl
+INNER JOIN cloud_printers cp ON pl.printer_id = cp.id
+WHERE cp.printer_type = $1
+    AND pl.vendor_order_id = $2
+ORDER BY pl.created_at DESC, pl.id DESC
+LIMIT 1
+`
+
+type GetPrintLogByProviderAndVendorOrderIDParams struct {
+	PrinterType   string      `json:"printer_type"`
+	VendorOrderID pgtype.Text `json:"vendor_order_id"`
+}
+
+func (q *Queries) GetPrintLogByProviderAndVendorOrderID(ctx context.Context, arg GetPrintLogByProviderAndVendorOrderIDParams) (PrintLog, error) {
+	row := q.db.QueryRow(ctx, getPrintLogByProviderAndVendorOrderID, arg.PrinterType, arg.VendorOrderID)
+	var i PrintLog
+	err := row.Scan(
+		&i.ID,
+		&i.OrderID,
+		&i.PrinterID,
+		&i.PrintContent,
+		&i.Status,
+		&i.ErrorMessage,
+		&i.PrintedAt,
+		&i.CreatedAt,
+		&i.VendorOrderID,
+		&i.TaskKey,
+		&i.ProviderOriginID,
 	)
 	return i, err
 }
 
 const getPrintLogByTaskKeyAndPrinter = `-- name: GetPrintLogByTaskKeyAndPrinter :one
-SELECT id, order_id, printer_id, print_content, status, error_message, printed_at, created_at, vendor_order_id, task_key FROM print_logs
+SELECT id, order_id, printer_id, print_content, status, error_message, printed_at, created_at, vendor_order_id, task_key, provider_origin_id FROM print_logs
 WHERE task_key = $1
     AND printer_id = $2
 LIMIT 1
@@ -174,12 +270,13 @@ func (q *Queries) GetPrintLogByTaskKeyAndPrinter(ctx context.Context, arg GetPri
 		&i.CreatedAt,
 		&i.VendorOrderID,
 		&i.TaskKey,
+		&i.ProviderOriginID,
 	)
 	return i, err
 }
 
 const getPrintLogByVendorOrderID = `-- name: GetPrintLogByVendorOrderID :one
-SELECT id, order_id, printer_id, print_content, status, error_message, printed_at, created_at, vendor_order_id, task_key FROM print_logs
+SELECT id, order_id, printer_id, print_content, status, error_message, printed_at, created_at, vendor_order_id, task_key, provider_origin_id FROM print_logs
 WHERE vendor_order_id = $1
 ORDER BY created_at DESC, id DESC
 LIMIT 1
@@ -199,6 +296,7 @@ func (q *Queries) GetPrintLogByVendorOrderID(ctx context.Context, vendorOrderID 
 		&i.CreatedAt,
 		&i.VendorOrderID,
 		&i.TaskKey,
+		&i.ProviderOriginID,
 	)
 	return i, err
 }
@@ -217,6 +315,7 @@ WITH latest AS (
                 pl.status,
                 pl.error_message,
                 pl.vendor_order_id,
+                pl.provider_origin_id,
                 pl.created_at,
                 pl.printed_at
         FROM print_logs pl
@@ -225,7 +324,7 @@ WITH latest AS (
         WHERE o.merchant_id = $1
         ORDER BY pl.order_id, pl.printer_id, pl.created_at DESC
 )
-SELECT id, order_id, order_no, order_type, printer_id, printer_name, printer_type, is_active, status, error_message, vendor_order_id, created_at, printed_at FROM latest
+SELECT id, order_id, order_no, order_type, printer_id, printer_name, printer_type, is_active, status, error_message, vendor_order_id, provider_origin_id, created_at, printed_at FROM latest
 WHERE status <> 'success'
     AND ($4::text IS NULL OR status = $4)
 ORDER BY created_at DESC
@@ -240,19 +339,20 @@ type ListMerchantPrintAnomaliesParams struct {
 }
 
 type ListMerchantPrintAnomaliesRow struct {
-	ID            int64              `json:"id"`
-	OrderID       int64              `json:"order_id"`
-	OrderNo       string             `json:"order_no"`
-	OrderType     string             `json:"order_type"`
-	PrinterID     int64              `json:"printer_id"`
-	PrinterName   string             `json:"printer_name"`
-	PrinterType   string             `json:"printer_type"`
-	IsActive      bool               `json:"is_active"`
-	Status        string             `json:"status"`
-	ErrorMessage  pgtype.Text        `json:"error_message"`
-	VendorOrderID pgtype.Text        `json:"vendor_order_id"`
-	CreatedAt     time.Time          `json:"created_at"`
-	PrintedAt     pgtype.Timestamptz `json:"printed_at"`
+	ID               int64              `json:"id"`
+	OrderID          int64              `json:"order_id"`
+	OrderNo          string             `json:"order_no"`
+	OrderType        string             `json:"order_type"`
+	PrinterID        int64              `json:"printer_id"`
+	PrinterName      string             `json:"printer_name"`
+	PrinterType      string             `json:"printer_type"`
+	IsActive         bool               `json:"is_active"`
+	Status           string             `json:"status"`
+	ErrorMessage     pgtype.Text        `json:"error_message"`
+	VendorOrderID    pgtype.Text        `json:"vendor_order_id"`
+	ProviderOriginID pgtype.Text        `json:"provider_origin_id"`
+	CreatedAt        time.Time          `json:"created_at"`
+	PrintedAt        pgtype.Timestamptz `json:"printed_at"`
 }
 
 func (q *Queries) ListMerchantPrintAnomalies(ctx context.Context, arg ListMerchantPrintAnomaliesParams) ([]ListMerchantPrintAnomaliesRow, error) {
@@ -281,6 +381,7 @@ func (q *Queries) ListMerchantPrintAnomalies(ctx context.Context, arg ListMercha
 			&i.Status,
 			&i.ErrorMessage,
 			&i.VendorOrderID,
+			&i.ProviderOriginID,
 			&i.CreatedAt,
 			&i.PrintedAt,
 		); err != nil {
@@ -296,7 +397,7 @@ func (q *Queries) ListMerchantPrintAnomalies(ctx context.Context, arg ListMercha
 
 const listPrintLogsByOrder = `-- name: ListPrintLogsByOrder :many
 SELECT 
-    pl.id, pl.order_id, pl.printer_id, pl.print_content, pl.status, pl.error_message, pl.printed_at, pl.created_at, pl.vendor_order_id, pl.task_key,
+    pl.id, pl.order_id, pl.printer_id, pl.print_content, pl.status, pl.error_message, pl.printed_at, pl.created_at, pl.vendor_order_id, pl.task_key, pl.provider_origin_id,
     cp.printer_name
 FROM print_logs pl
 INNER JOIN cloud_printers cp ON pl.printer_id = cp.id
@@ -305,17 +406,18 @@ ORDER BY pl.created_at
 `
 
 type ListPrintLogsByOrderRow struct {
-	ID            int64              `json:"id"`
-	OrderID       int64              `json:"order_id"`
-	PrinterID     int64              `json:"printer_id"`
-	PrintContent  string             `json:"print_content"`
-	Status        string             `json:"status"`
-	ErrorMessage  pgtype.Text        `json:"error_message"`
-	PrintedAt     pgtype.Timestamptz `json:"printed_at"`
-	CreatedAt     time.Time          `json:"created_at"`
-	VendorOrderID pgtype.Text        `json:"vendor_order_id"`
-	TaskKey       pgtype.Text        `json:"task_key"`
-	PrinterName   string             `json:"printer_name"`
+	ID               int64              `json:"id"`
+	OrderID          int64              `json:"order_id"`
+	PrinterID        int64              `json:"printer_id"`
+	PrintContent     string             `json:"print_content"`
+	Status           string             `json:"status"`
+	ErrorMessage     pgtype.Text        `json:"error_message"`
+	PrintedAt        pgtype.Timestamptz `json:"printed_at"`
+	CreatedAt        time.Time          `json:"created_at"`
+	VendorOrderID    pgtype.Text        `json:"vendor_order_id"`
+	TaskKey          pgtype.Text        `json:"task_key"`
+	ProviderOriginID pgtype.Text        `json:"provider_origin_id"`
+	PrinterName      string             `json:"printer_name"`
 }
 
 func (q *Queries) ListPrintLogsByOrder(ctx context.Context, orderID int64) ([]ListPrintLogsByOrderRow, error) {
@@ -338,6 +440,7 @@ func (q *Queries) ListPrintLogsByOrder(ctx context.Context, orderID int64) ([]Li
 			&i.CreatedAt,
 			&i.VendorOrderID,
 			&i.TaskKey,
+			&i.ProviderOriginID,
 			&i.PrinterName,
 		); err != nil {
 			return nil, err
@@ -351,7 +454,7 @@ func (q *Queries) ListPrintLogsByOrder(ctx context.Context, orderID int64) ([]Li
 }
 
 const listPrintLogsByPrinter = `-- name: ListPrintLogsByPrinter :many
-SELECT id, order_id, printer_id, print_content, status, error_message, printed_at, created_at, vendor_order_id, task_key FROM print_logs
+SELECT id, order_id, printer_id, print_content, status, error_message, printed_at, created_at, vendor_order_id, task_key, provider_origin_id FROM print_logs
 WHERE printer_id = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
@@ -383,6 +486,7 @@ func (q *Queries) ListPrintLogsByPrinter(ctx context.Context, arg ListPrintLogsB
 			&i.CreatedAt,
 			&i.VendorOrderID,
 			&i.TaskKey,
+			&i.ProviderOriginID,
 		); err != nil {
 			return nil, err
 		}
@@ -406,6 +510,7 @@ const listTimedOutPrintAnomalies = `-- name: ListTimedOutPrintAnomalies :many
     pl.status,
     pl.error_message,
     pl.vendor_order_id,
+    pl.provider_origin_id,
     pl.created_at AS anomaly_created_at
 FROM print_logs pl
 INNER JOIN orders o ON pl.order_id = o.id
@@ -443,6 +548,7 @@ type ListTimedOutPrintAnomaliesRow struct {
 	Status           string      `json:"status"`
 	ErrorMessage     pgtype.Text `json:"error_message"`
 	VendorOrderID    pgtype.Text `json:"vendor_order_id"`
+	ProviderOriginID pgtype.Text `json:"provider_origin_id"`
 	AnomalyCreatedAt time.Time   `json:"anomaly_created_at"`
 }
 
@@ -466,6 +572,7 @@ func (q *Queries) ListTimedOutPrintAnomalies(ctx context.Context, arg ListTimedO
 			&i.Status,
 			&i.ErrorMessage,
 			&i.VendorOrderID,
+			&i.ProviderOriginID,
 			&i.AnomalyCreatedAt,
 		); err != nil {
 			return nil, err
@@ -484,16 +591,18 @@ SET
     status = $2,
     error_message = $3,
     vendor_order_id = COALESCE($4, vendor_order_id),
+    provider_origin_id = COALESCE($5, provider_origin_id),
     printed_at = CASE WHEN $2 = 'success' THEN now() ELSE printed_at END
 WHERE id = $1
-RETURNING id, order_id, printer_id, print_content, status, error_message, printed_at, created_at, vendor_order_id, task_key
+RETURNING id, order_id, printer_id, print_content, status, error_message, printed_at, created_at, vendor_order_id, task_key, provider_origin_id
 `
 
 type UpdatePrintLogStatusParams struct {
-	ID            int64       `json:"id"`
-	Status        string      `json:"status"`
-	ErrorMessage  pgtype.Text `json:"error_message"`
-	VendorOrderID pgtype.Text `json:"vendor_order_id"`
+	ID               int64       `json:"id"`
+	Status           string      `json:"status"`
+	ErrorMessage     pgtype.Text `json:"error_message"`
+	VendorOrderID    pgtype.Text `json:"vendor_order_id"`
+	ProviderOriginID pgtype.Text `json:"provider_origin_id"`
 }
 
 func (q *Queries) UpdatePrintLogStatus(ctx context.Context, arg UpdatePrintLogStatusParams) (PrintLog, error) {
@@ -502,6 +611,7 @@ func (q *Queries) UpdatePrintLogStatus(ctx context.Context, arg UpdatePrintLogSt
 		arg.Status,
 		arg.ErrorMessage,
 		arg.VendorOrderID,
+		arg.ProviderOriginID,
 	)
 	var i PrintLog
 	err := row.Scan(
@@ -515,6 +625,7 @@ func (q *Queries) UpdatePrintLogStatus(ctx context.Context, arg UpdatePrintLogSt
 		&i.CreatedAt,
 		&i.VendorOrderID,
 		&i.TaskKey,
+		&i.ProviderOriginID,
 	)
 	return i, err
 }

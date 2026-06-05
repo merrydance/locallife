@@ -10377,6 +10377,36 @@ func (mr *MockStoreMockRecorder) GetPrintLog(ctx, id any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPrintLog", reflect.TypeOf((*MockStore)(nil).GetPrintLog), ctx, id)
 }
 
+// GetPrintLogByProviderAndOriginID mocks base method.
+func (m *MockStore) GetPrintLogByProviderAndOriginID(ctx context.Context, arg db.GetPrintLogByProviderAndOriginIDParams) (db.PrintLog, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetPrintLogByProviderAndOriginID", ctx, arg)
+	ret0, _ := ret[0].(db.PrintLog)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetPrintLogByProviderAndOriginID indicates an expected call of GetPrintLogByProviderAndOriginID.
+func (mr *MockStoreMockRecorder) GetPrintLogByProviderAndOriginID(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPrintLogByProviderAndOriginID", reflect.TypeOf((*MockStore)(nil).GetPrintLogByProviderAndOriginID), ctx, arg)
+}
+
+// GetPrintLogByProviderAndVendorOrderID mocks base method.
+func (m *MockStore) GetPrintLogByProviderAndVendorOrderID(ctx context.Context, arg db.GetPrintLogByProviderAndVendorOrderIDParams) (db.PrintLog, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetPrintLogByProviderAndVendorOrderID", ctx, arg)
+	ret0, _ := ret[0].(db.PrintLog)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetPrintLogByProviderAndVendorOrderID indicates an expected call of GetPrintLogByProviderAndVendorOrderID.
+func (mr *MockStoreMockRecorder) GetPrintLogByProviderAndVendorOrderID(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPrintLogByProviderAndVendorOrderID", reflect.TypeOf((*MockStore)(nil).GetPrintLogByProviderAndVendorOrderID), ctx, arg)
+}
+
 // GetPrintLogByTaskKeyAndPrinter mocks base method.
 func (m *MockStore) GetPrintLogByTaskKeyAndPrinter(ctx context.Context, arg db.GetPrintLogByTaskKeyAndPrinterParams) (db.PrintLog, error) {
 	m.ctrl.T.Helper()

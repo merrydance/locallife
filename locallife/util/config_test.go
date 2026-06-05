@@ -267,6 +267,165 @@ func TestLoadConfig_ReadsFeieyunCallbackPublicKeyFromPath(t *testing.T) {
 	require.Equal(t, strings.TrimSpace(publicPEM), config.FeieyunCallbackPublicKeyPEM)
 }
 
+func TestLoadConfig_ReadsCloudPrinterProviderConfig(t *testing.T) {
+	configDir := writeTestConfigFile(t, strings.Join([]string{
+		"ENVIRONMENT=test",
+		"DB_SOURCE=postgresql:///test",
+		"MIGRATION_URL=file://db/migration",
+		"YILIANYUN_ENABLED=true",
+		"YILIANYUN_API_BASE_URL=https://open-api.10ss.net",
+		"YILIANYUN_CLIENT_ID=yly-client",
+		"YILIANYUN_CLIENT_SECRET=yly-secret",
+		"YILIANYUN_ACCESS_TOKEN=yly-token",
+		"YILIANYUN_REFRESH_TOKEN=yly-refresh",
+		"YILIANYUN_HTTP_TIMEOUT=7s",
+		"YILIANYUN_PRINT_CALLBACK_URL=https://api.example.com/v1/webhooks/yilianyun/print-result",
+		"SHANGPENG_ENABLED=true",
+		"SHANGPENG_API_BASE_URL=https://open.spyun.net",
+		"SHANGPENG_APPID=spyun-app",
+		"SHANGPENG_APPSECRET=spyun-secret",
+		"SHANGPENG_HTTP_TIMEOUT=8s",
+		"CLOUD_PRINTER_FAIL_ON_PROVIDER_CONFIG_ERROR=true",
+		"CLOUD_PRINTER_STATUS_POLL_INTERVAL=2m",
+		"CLOUD_PRINTER_STATUS_POLL_BATCH_SIZE=25",
+		"CLOUD_PRINTER_STATUS_POLL_INITIAL_DELAY=45s",
+		"CLOUD_PRINTER_STATUS_POLL_MAX_AGE=10h",
+	}, "\n")+"\n")
+
+	config, err := LoadConfig(configDir)
+	require.NoError(t, err)
+
+	require.True(t, config.YilianyunEnabled)
+	require.Equal(t, "https://open-api.10ss.net", config.YilianyunAPIBaseURL)
+	require.Equal(t, "yly-client", config.YilianyunClientID)
+	require.Equal(t, "yly-secret", config.YilianyunClientSecret)
+	require.Equal(t, "yly-token", config.YilianyunAccessToken)
+	require.Equal(t, "yly-refresh", config.YilianyunRefreshToken)
+	require.Equal(t, 7*time.Second, config.YilianyunHTTPTimeout)
+	require.Equal(t, "https://api.example.com/v1/webhooks/yilianyun/print-result", config.YilianyunPrintCallbackURL)
+	require.True(t, config.ShangpengEnabled)
+	require.Equal(t, "https://open.spyun.net", config.ShangpengAPIBaseURL)
+	require.Equal(t, "spyun-app", config.ShangpengAppID)
+	require.Equal(t, "spyun-secret", config.ShangpengAppSecret)
+	require.Equal(t, 8*time.Second, config.ShangpengHTTPTimeout)
+	require.True(t, config.CloudPrinterFailOnProviderConfigError)
+	require.Equal(t, 2*time.Minute, config.CloudPrinterStatusPollInterval)
+	require.Equal(t, 25, config.CloudPrinterStatusPollBatchSize)
+	require.Equal(t, 45*time.Second, config.CloudPrinterStatusPollInitialDelay)
+	require.Equal(t, 10*time.Hour, config.CloudPrinterStatusPollMaxAge)
+}
+
+func TestValidateCloudPrinterProviderConfig(t *testing.T) {
+	tests := []struct {
+		name   string
+		config Config
+		want   string
+	}{
+		{name: "disabled skips validation", config: Config{}},
+		{
+			name: "yilianyun requires credentials",
+			config: Config{
+				YilianyunEnabled:      true,
+				YilianyunAPIBaseURL:   "https://open-api.10ss.net",
+				YilianyunClientID:     "client",
+				YilianyunClientSecret: "secret",
+				YilianyunHTTPTimeout:  time.Second,
+			},
+			want: "YILIANYUN_ACCESS_TOKEN",
+		},
+		{
+			name: "yilianyun callback url must be absolute",
+			config: Config{
+				YilianyunEnabled:          true,
+				YilianyunAPIBaseURL:       "https://open-api.10ss.net",
+				YilianyunClientID:         "client",
+				YilianyunClientSecret:     "secret",
+				YilianyunAccessToken:      "token",
+				YilianyunHTTPTimeout:      time.Second,
+				YilianyunPrintCallbackURL: "/webhooks/yilianyun/print-result",
+			},
+			want: "YILIANYUN_PRINT_CALLBACK_URL must be a valid absolute URL",
+		},
+		{
+			name: "yilianyun api base url must be absolute",
+			config: Config{
+				YilianyunEnabled:      true,
+				YilianyunAPIBaseURL:   "open-api.10ss.net",
+				YilianyunClientID:     "client",
+				YilianyunClientSecret: "secret",
+				YilianyunAccessToken:  "token",
+				YilianyunHTTPTimeout:  time.Second,
+			},
+			want: "YILIANYUN_API_BASE_URL must be a valid absolute URL",
+		},
+		{
+			name: "shangpeng requires app secret",
+			config: Config{
+				ShangpengEnabled:     true,
+				ShangpengAPIBaseURL:  "https://open.spyun.net",
+				ShangpengAppID:       "appid",
+				ShangpengHTTPTimeout: time.Second,
+			},
+			want: "SHANGPENG_APPSECRET",
+		},
+		{
+			name: "shangpeng api base url must be absolute",
+			config: Config{
+				ShangpengEnabled:     true,
+				ShangpengAPIBaseURL:  "open.spyun.net",
+				ShangpengAppID:       "appid",
+				ShangpengAppSecret:   "secret",
+				ShangpengHTTPTimeout: time.Second,
+			},
+			want: "SHANGPENG_API_BASE_URL must be a valid absolute URL",
+		},
+		{
+			name: "enabled provider requires positive polling config",
+			config: Config{
+				YilianyunEnabled:      true,
+				YilianyunAPIBaseURL:   "https://open-api.10ss.net",
+				YilianyunClientID:     "client",
+				YilianyunClientSecret: "secret",
+				YilianyunAccessToken:  "token",
+				YilianyunHTTPTimeout:  time.Second,
+			},
+			want: "CLOUD_PRINTER_STATUS_POLL_INTERVAL must be > 0",
+		},
+		{
+			name: "valid providers pass",
+			config: Config{
+				YilianyunEnabled:                   true,
+				YilianyunAPIBaseURL:                "https://open-api.10ss.net",
+				YilianyunClientID:                  "client",
+				YilianyunClientSecret:              "secret",
+				YilianyunAccessToken:               "token",
+				YilianyunHTTPTimeout:               time.Second,
+				ShangpengEnabled:                   true,
+				ShangpengAPIBaseURL:                "https://open.spyun.net",
+				ShangpengAppID:                     "appid",
+				ShangpengAppSecret:                 "secret",
+				ShangpengHTTPTimeout:               time.Second,
+				CloudPrinterStatusPollInterval:     time.Minute,
+				CloudPrinterStatusPollBatchSize:    50,
+				CloudPrinterStatusPollInitialDelay: time.Second,
+				CloudPrinterStatusPollMaxAge:       time.Hour,
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.config.ValidateCloudPrinterProviderConfig()
+			if tc.want == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			require.Contains(t, err.Error(), tc.want)
+		})
+	}
+}
+
 func TestEffectiveWechatPayMerchantTransferNotifyURL(t *testing.T) {
 	config := Config{
 		WechatPayMerchantTransferNotifyURL: "https://example.com/v1/webhooks/wechat-pay/merchant-transfer-notify",

@@ -77,3 +77,20 @@ func TestManagerRejectsUnknownProvider(t *testing.T) {
 	require.False(t, ok)
 	require.Nil(t, provider)
 }
+
+func TestManagerDoesNotRegisterPlannedProvidersBeforeRuntimeImplementation(t *testing.T) {
+	manager := NewManagerFromConfig(util.Config{
+		YilianyunEnabled:      true,
+		YilianyunAPIBaseURL:   "https://open-api.10ss.net",
+		YilianyunClientID:     "client",
+		YilianyunClientSecret: "secret",
+		YilianyunAccessToken:  "token",
+		ShangpengEnabled:      true,
+		ShangpengAPIBaseURL:   "https://open.spyun.net",
+		ShangpengAppID:        "appid",
+		ShangpengAppSecret:    "secret",
+	})
+
+	require.False(t, manager.Supported(string(ProviderYilianyun)))
+	require.False(t, manager.Supported(string(ProviderShangpeng)))
+}

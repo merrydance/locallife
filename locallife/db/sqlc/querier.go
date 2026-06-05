@@ -981,6 +981,8 @@ type Querier interface {
 	GetPopularMerchants(ctx context.Context, arg GetPopularMerchantsParams) ([]GetPopularMerchantsRow, error)
 	GetPrimaryTableImage(ctx context.Context, tableID int64) (TableImage, error)
 	GetPrintLog(ctx context.Context, id int64) (PrintLog, error)
+	GetPrintLogByProviderAndOriginID(ctx context.Context, arg GetPrintLogByProviderAndOriginIDParams) (PrintLog, error)
+	GetPrintLogByProviderAndVendorOrderID(ctx context.Context, arg GetPrintLogByProviderAndVendorOrderIDParams) (PrintLog, error)
 	GetPrintLogByTaskKeyAndPrinter(ctx context.Context, arg GetPrintLogByTaskKeyAndPrinterParams) (PrintLog, error)
 	GetPrintLogByVendorOrderID(ctx context.Context, vendorOrderID pgtype.Text) (PrintLog, error)
 	GetProfitSharingOrder(ctx context.Context, id int64) (ProfitSharingOrder, error)
