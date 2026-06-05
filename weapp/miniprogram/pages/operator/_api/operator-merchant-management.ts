@@ -64,6 +64,24 @@ export interface OperatorMerchantDetailResponse {
     updated_at: string
 }
 
+export type MerchantCapabilityStatus = 'unknown' | 'yes' | 'no'
+
+export interface OperatorMerchantCapabilitiesResponse {
+    merchant_id: number
+    open_kitchen_status: MerchantCapabilityStatus
+    dine_in_status: MerchantCapabilityStatus
+    system_labels?: string[]
+    source: string
+    note?: string
+    updated_at?: string
+}
+
+export interface UpdateOperatorMerchantCapabilitiesRequest extends Record<string, unknown> {
+    open_kitchen_status?: MerchantCapabilityStatus
+    dine_in_status?: MerchantCapabilityStatus
+    note?: string
+}
+
 /** 商户排行响应 - 基于swagger api.operatorMerchantRankingResponse */
 export interface OperatorMerchantRankingResponse {
     rankings: OperatorMerchantRankingItem[]
@@ -191,6 +209,24 @@ export class OperatorMerchantManagementService {
         return request({
             url: `/v1/operator/merchants/${merchantId}`,
             method: 'GET'
+        })
+    }
+
+    async getMerchantCapabilities(merchantId: number): Promise<OperatorMerchantCapabilitiesResponse> {
+        return request({
+            url: `/v1/operator/merchants/${merchantId}/capabilities`,
+            method: 'GET'
+        })
+    }
+
+    async updateMerchantCapabilities(
+        merchantId: number,
+        data: UpdateOperatorMerchantCapabilitiesRequest
+    ): Promise<OperatorMerchantCapabilitiesResponse> {
+        return request({
+            url: `/v1/operator/merchants/${merchantId}/capabilities`,
+            method: 'PATCH',
+            data
         })
     }
 

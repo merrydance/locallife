@@ -44,6 +44,41 @@
       <view class="row"><text class="label">更新时间</text><text class="value">{{detail.updated_at}}</text></view>
     </view>
 
+    <view class="card">
+      <view class="section-header">
+        <text class="section-title">经营能力</text>
+        <t-button size="small" theme="default" variant="text" icon="edit" disabled="{{capabilityLoading || capabilityError || !capabilities}}" bind:tap="onOpenCapabilityEditor">调整能力</t-button>
+      </view>
+
+      <view wx:if="{{capabilityLoading}}" class="stats-loading">
+        <t-loading size="small" />
+        <text class="loading-text">加载中...</text>
+      </view>
+
+      <view wx:elif="{{capabilityError}}" class="capability-error">
+        <text class="empty-tip">{{capabilityError}}</text>
+        <t-button size="small" theme="primary" variant="text" bind:tap="onRetryCapabilities">重试</t-button>
+      </view>
+
+      <block wx:elif="{{capabilities}}">
+        <view class="capability-grid">
+          <view class="capability-item">
+            <text class="capability-label">明厨亮灶</text>
+            <t-tag theme="{{capabilities.open_kitchen_theme}}" variant="light" size="small">{{capabilities.open_kitchen_label}}</t-tag>
+          </view>
+          <view class="capability-item">
+            <text class="capability-label">堂食服务</text>
+            <t-tag theme="{{capabilities.dine_in_theme}}" variant="light" size="small">{{capabilities.dine_in_label}}</t-tag>
+          </view>
+        </view>
+
+        <view class="divider" />
+        <view class="row"><text class="label">系统展示标签</text><text class="value">{{capabilities.system_label_text}}</text></view>
+        <view wx:if="{{capabilities.note}}" class="row"><text class="label">复核备注</text><text class="value">{{capabilities.note}}</text></view>
+        <view wx:if="{{capabilities.updated_at}}" class="row"><text class="label">复核时间</text><text class="value">{{capabilities.updated_at}}</text></view>
+      </block>
+    </view>
+
     <!-- 经营情况 -->
     <view class="card">
       <view class="section-header">
@@ -121,3 +156,43 @@
   </block>
 
 </view>
+
+<t-popup wx:if="{{capabilityEditorVisible}}" visible="{{capabilityEditorVisible}}" placement="bottom" bind:visible-change="onCapabilityEditorVisibleChange">
+  <view class="popup-sheet">
+    <view class="popup-title">调整经营能力</view>
+
+    <view class="popup-block">
+      <text class="popup-label">明厨亮灶</text>
+      <t-radio-group value="{{capabilityForm.open_kitchen_status}}" borderless="{{true}}" icon="line" data-field="open_kitchen_status" bind:change="onCapabilityStatusChange">
+        <view wx:for="{{openKitchenOptions}}" wx:key="value" class="capability-option">
+          <t-radio value="{{item.value}}" label="{{item.label}}" />
+        </view>
+      </t-radio-group>
+    </view>
+
+    <view class="popup-block">
+      <text class="popup-label">堂食服务</text>
+      <t-radio-group value="{{capabilityForm.dine_in_status}}" borderless="{{true}}" icon="line" data-field="dine_in_status" bind:change="onCapabilityStatusChange">
+        <view wx:for="{{dineInOptions}}" wx:key="value" class="capability-option">
+          <t-radio value="{{item.value}}" label="{{item.label}}" />
+        </view>
+      </t-radio-group>
+    </view>
+
+    <view class="popup-block">
+      <text class="popup-label">复核备注</text>
+      <t-textarea
+        value="{{capabilityForm.note}}"
+        placeholder="可选，记录现场复核依据"
+        maxlength="500"
+        indicator
+        bindchange="onCapabilityNoteChange"
+      />
+    </view>
+
+    <view class="popup-actions">
+      <t-button theme="default" disabled="{{capabilitySubmitting}}" bind:tap="onCloseCapabilityEditor">取消</t-button>
+      <t-button theme="primary" loading="{{capabilitySubmitting}}" bind:tap="onSubmitCapabilityEditor">保存能力</t-button>
+    </view>
+  </view>
+</t-popup>

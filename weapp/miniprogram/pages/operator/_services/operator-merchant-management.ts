@@ -2,9 +2,11 @@ import {
   getMerchantStatusDisplay,
   operatorMerchantManagementService,
   parseMerchantStatusFilter,
+  type MerchantCapabilityStatus,
   type MerchantQueryParams,
   type MerchantStatsResponse,
   type MerchantStatus,
+  type OperatorMerchantCapabilitiesResponse,
   type OperatorMerchantDetailResponse,
   type OperatorMerchantItem
 } from '../_api/operator-merchant-management'
@@ -46,6 +48,27 @@ export interface OperatorMerchantDetailView {
   status_label: string
 }
 
+export interface OperatorMerchantCapabilitiesView {
+  merchant_id: number
+  open_kitchen_status: MerchantCapabilityStatus
+  dine_in_status: MerchantCapabilityStatus
+  open_kitchen_label: string
+  open_kitchen_theme: 'success' | 'warning' | 'default'
+  dine_in_label: string
+  dine_in_theme: 'success' | 'warning' | 'default'
+  system_labels: string[]
+  system_label_text: string
+  source: string
+  note: string
+  updated_at: string
+}
+
+export interface OperatorMerchantCapabilityFormData {
+  open_kitchen_status: MerchantCapabilityStatus
+  dine_in_status: MerchantCapabilityStatus
+  note: string
+}
+
 export type OperatorMerchantStatsView = MerchantStatsResponse & {
   total_sales_display: string
   total_commission_display: string
@@ -53,6 +76,17 @@ export type OperatorMerchantStatsView = MerchantStatsResponse & {
   repurchase_rate_display: string
   avg_orders_per_user_display: string
   top_dishes_with_revenue: Array<{ dish_name: string, total_sold: number, total_revenue_display: string }>
+}
+
+function buildCapabilityStatusView(status: MerchantCapabilityStatus, yesLabel: string, noLabel: string) {
+  switch (status) {
+    case 'yes':
+      return { label: yesLabel, theme: 'success' as const }
+    case 'no':
+      return { label: noLabel, theme: 'warning' as const }
+    default:
+      return { label: '未确认', theme: 'default' as const }
+  }
 }
 
 function adaptMerchantItem(item: OperatorMerchantItem): OperatorMerchantListView {
@@ -64,6 +98,29 @@ function adaptMerchantItem(item: OperatorMerchantItem): OperatorMerchantListView
     status_theme: statusDisplay.theme,
     business_state_label: item.is_open ? '营业中' : '未营业',
     business_state_theme: item.is_open ? 'success' : 'default'
+  }
+}
+
+function adaptMerchantCapabilities(capability: OperatorMerchantCapabilitiesResponse): OperatorMerchantCapabilitiesView {
+  const openKitchenStatus = capability.open_kitchen_status || 'unknown'
+  const dineInStatus = capability.dine_in_status || 'unknown'
+  const openKitchenView = buildCapabilityStatusView(openKitchenStatus, '有明厨亮灶', '无明厨亮灶')
+  const dineInView = buildCapabilityStatusView(dineInStatus, '支持堂食', '不支持堂食')
+  const systemLabels = capability.system_labels || []
+
+  return {
+    merchant_id: Number(capability.merchant_id || 0),
+    open_kitchen_status: openKitchenStatus,
+    dine_in_status: dineInStatus,
+    open_kitchen_label: openKitchenView.label,
+    open_kitchen_theme: openKitchenView.theme,
+    dine_in_label: dineInView.label,
+    dine_in_theme: dineInView.theme,
+    system_labels: systemLabels,
+    system_label_text: systemLabels.length > 0 ? systemLabels.join('、') : '暂无系统标签',
+    source: capability.source || '',
+    note: capability.note || '',
+    updated_at: capability.updated_at || ''
   }
 }
 
@@ -128,6 +185,23 @@ export async function loadOperatorMerchantListPageData(params: {
 export async function loadOperatorMerchantDetailView(id: number): Promise<OperatorMerchantDetailView> {
   const raw = await operatorMerchantManagementService.getMerchantDetail(id)
   return adaptMerchantDetail(raw as OperatorMerchantDetailResponse & Record<string, unknown>)
+}
+
+export async function loadOperatorMerchantCapabilitiesView(id: number): Promise<OperatorMerchantCapabilitiesView> {
+  const raw = await operatorMerchantManagementService.getMerchantCapabilities(id)
+  return adaptMerchantCapabilities(raw)
+}
+
+export async function submitOperatorMerchantCapabilities(
+  id: number,
+  form: OperatorMerchantCapabilityFormData
+): Promise<OperatorMerchantCapabilitiesView> {
+  const raw = await operatorMerchantManagementService.updateMerchantCapabilities(id, {
+    open_kitchen_status: form.open_kitchen_status,
+    dine_in_status: form.dine_in_status,
+    note: form.note.trim()
+  })
+  return adaptMerchantCapabilities(raw)
 }
 
 export async function loadOperatorMerchantStatsView(id: number, days = 30): Promise<OperatorMerchantStatsView> {
