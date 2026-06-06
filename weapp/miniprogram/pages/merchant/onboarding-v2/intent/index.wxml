@@ -1,0 +1,80 @@
+<custom-navbar title="开户意愿确认" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view
+  class="intent-page page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
+  style="--page-shell-nav-height: {{navBarHeight}}px;"
+>
+  <view wx:if="{{initialLoading}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载确认流程中..." layout="vertical" />
+  </view>
+
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty icon="error-circle" description="{{initialErrorMessage || '确认流程加载失败，请重试'}}" />
+    <t-button theme="primary" bindtap="onRetry">重新加载</t-button>
+  </view>
+
+  <view wx:elif="{{intentViewState}}" class="page-content">
+    <view wx:if="{{refreshError}}" class="sync-state">
+      <t-icon name="error-circle" size="32rpx" />
+      <text class="sync-state__text">{{refreshError}}</text>
+      <t-button size="small" theme="primary" variant="text" bindtap="onRefresh">重试</t-button>
+    </view>
+
+    <view class="status-section">
+      <view class="status-section__main">
+        <view class="status-section__title">{{intentViewState.title}}</view>
+        <view class="status-section__desc">{{intentViewState.description}}</view>
+      </view>
+      <t-tag theme="{{intentViewState.statusTheme}}">{{intentViewState.statusText}}</t-tag>
+    </view>
+
+    <view wx:if="{{intentViewState.ready && intentViewState.qrConfigured}}" class="qr-section">
+      <view class="qr-frame">
+        <t-image class="qr-image" src="{{intentViewState.qrUrl}}" mode="aspectFit" />
+      </view>
+      <view class="qr-meta" wx:if="{{intentViewState.qrUpdatedAt}}">二维码更新于 {{intentViewState.qrUpdatedAt}}</view>
+    </view>
+
+    <t-cell-group wx:if="{{intentViewState.ready && intentViewState.qrConfigured}}" class="guide-section">
+      <t-cell title="法人使用本人微信" note="仅由营业执照法人本人操作" />
+      <t-cell title="保存二维码到相册" note="点击下方按钮保存拓展二维码" />
+      <t-cell title="从相册识别二维码" note="在微信内打开图片并识别二维码，进入微信自家小程序按提示确认" />
+    </t-cell-group>
+
+    <view wx:elif="{{!intentViewState.ready || !intentViewState.qrConfigured}}" class="state-panel">
+      <t-empty icon="{{intentViewState.qrConfigured ? 'time' : 'error-circle'}}" description="{{intentViewState.description}}" />
+    </view>
+
+    <view wx:if="{{qrSaveMessage}}" class="save-state save-state--{{qrSaveState}}">
+      <t-icon wx:if="{{qrSaveState === 'saved'}}" name="check-circle" size="32rpx" />
+      <t-icon wx:elif="{{qrSaveState === 'permission_denied' || qrSaveState === 'download_failed' || qrSaveState === 'save_failed'}}" name="error-circle" size="32rpx" />
+      <t-loading wx:else theme="circular" size="32rpx" />
+      <text class="save-state__text">{{qrSaveMessage}}</text>
+      <t-button
+        wx:if="{{qrSaveState === 'permission_denied'}}"
+        size="small"
+        theme="primary"
+        variant="text"
+        bindtap="onOpenSetting"
+      >
+        去设置
+      </t-button>
+    </view>
+
+    <view class="action-area">
+      <t-button
+        wx:if="{{intentViewState.ready && intentViewState.qrConfigured}}"
+        theme="primary"
+        block
+        loading="{{saving}}"
+        disabled="{{saving || refreshing}}"
+        bindtap="onSaveQr"
+      >
+        保存二维码
+      </t-button>
+      <t-button theme="default" block disabled="{{saving}}" bindtap="onBackToProgress">
+        返回入驻进度
+      </t-button>
+    </view>
+  </view>
+</view>

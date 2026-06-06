@@ -1,0 +1,123 @@
+.onboarding-page {
+  min-height: 100vh;
+}
+
+.state-block {
+  min-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24rpx;
+}
+
+.progress-section,
+.task-panel {
+  background: var(--td-bg-color-container);
+  border: 1rpx solid var(--td-border-level-1-color);
+  border-radius: var(--radius-md);
+  padding: 24rpx;
+  box-sizing: border-box;
+}
+
+.sync-state {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  color: var(--td-error-color);
+  background: var(--td-error-color-light);
+  border-radius: var(--radius-sm);
+  padding: 16rpx;
+}
+
+.sync-state__text {
+  flex: 1;
+  font-size: 24rpx;
+  line-height: 1.45;
+}
+
+.task-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+}
+
+.task-panel__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.task-panel__title {
+  color: var(--td-text-color-primary);
+  font-size: 32rpx;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.task-panel__desc {
+  margin-top: 8rpx;
+  color: var(--td-text-color-secondary);
+  font-size: 26rpx;
+  line-height: 1.5;
+}
+
+.stage-list {
+  display: flex;
+  flex-direction: column;
+  border-top: 1rpx solid var(--td-border-level-1-color);
+}
+
+.stage-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid var(--td-border-level-2-color);
+}
+
+.stage-row__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.stage-row__title {
+  color: var(--td-text-color-primary);
+  font-size: 28rpx;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.stage-row__desc {
+  margin-top: 6rpx;
+  color: var(--td-text-color-secondary);
+  font-size: 24rpx;
+  line-height: 1.45;
+}
+
+.stage-row__status {
+  flex-shrink: 0;
+  color: var(--td-text-color-secondary);
+  font-size: 24rpx;
+  line-height: 1.4;
+}
+
+.stage-row--done .stage-row__status {
+  color: var(--td-success-color);
+}
+
+.stage-row--error .stage-row__status {
+  color: var(--td-error-color);
+}
+
+.stage-row--locked {
+  opacity: 0.72;
+}
+
+.action-area {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
