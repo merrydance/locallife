@@ -78,6 +78,11 @@ RETURNING *;
 SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours FROM merchants
 WHERE id = $1 AND deleted_at IS NULL LIMIT 1;
 
+-- name: LockMerchantForUpdate :one
+SELECT id FROM merchants
+WHERE id = $1 AND deleted_at IS NULL
+FOR UPDATE;
+
 -- name: GetMerchantByOwner :one
 -- 获取用户关联的商户（支持店主和员工）
 -- 优先返回 owner_user_id 匹配的商户，其次返回 merchant_staff 关联的商户
@@ -681,4 +686,3 @@ WHERE m.status = 'active'
   AND COALESCE(mp.is_takeout_suspended, false) = false
   AND m.region_id = sqlc.narg('region_id')
   AND mt.tag_id = sqlc.arg('tag_id');
-

@@ -17496,6 +17496,21 @@ func (mr *MockStoreMockRecorder) ListWithdrawalRecords(ctx, arg any) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListWithdrawalRecords", reflect.TypeOf((*MockStore)(nil).ListWithdrawalRecords), ctx, arg)
 }
 
+// LockMerchantForUpdate mocks base method.
+func (m *MockStore) LockMerchantForUpdate(ctx context.Context, id int64) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "LockMerchantForUpdate", ctx, id)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// LockMerchantForUpdate indicates an expected call of LockMerchantForUpdate.
+func (mr *MockStoreMockRecorder) LockMerchantForUpdate(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LockMerchantForUpdate", reflect.TypeOf((*MockStore)(nil).LockMerchantForUpdate), ctx, id)
+}
+
 // MarkActiveWantedMerchantMatchedByMerchant mocks base method.
 func (m *MockStore) MarkActiveWantedMerchantMatchedByMerchant(ctx context.Context, arg db.MarkActiveWantedMerchantMatchedByMerchantParams) error {
 	m.ctrl.T.Helper()
@@ -19727,6 +19742,21 @@ func (m *MockStore) SetMediaAssetUploadStatus(ctx context.Context, arg db.SetMed
 func (mr *MockStoreMockRecorder) SetMediaAssetUploadStatus(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetMediaAssetUploadStatus", reflect.TypeOf((*MockStore)(nil).SetMediaAssetUploadStatus), ctx, arg)
+}
+
+// SetMerchantTagsTx mocks base method.
+func (m *MockStore) SetMerchantTagsTx(ctx context.Context, arg db.SetMerchantTagsTxParams) (db.SetMerchantTagsTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetMerchantTagsTx", ctx, arg)
+	ret0, _ := ret[0].(db.SetMerchantTagsTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SetMerchantTagsTx indicates an expected call of SetMerchantTagsTx.
+func (mr *MockStoreMockRecorder) SetMerchantTagsTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetMerchantTagsTx", reflect.TypeOf((*MockStore)(nil).SetMerchantTagsTx), ctx, arg)
 }
 
 // SetOperatorWallet mocks base method.

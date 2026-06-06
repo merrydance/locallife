@@ -260,8 +260,14 @@ func (server *Server) setMerchantTags(ctx *gin.Context) {
 		return
 	}
 
-	// 校验所有 tag_id 均为 merchant 类型
+	seenTagIDs := make(map[int64]bool, len(req.TagIDs))
 	for _, tagID := range req.TagIDs {
+		if seenTagIDs[tagID] {
+			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("tag %d is duplicated", tagID)))
+			return
+		}
+		seenTagIDs[tagID] = true
+
 		tag, err := server.store.GetTag(ctx, tagID)
 		if err != nil {
 			if isNotFoundError(err) {
@@ -277,35 +283,23 @@ func (server *Server) setMerchantTags(ctx *gin.Context) {
 		}
 	}
 
-	// 原子替换：清空旧标签，写入新标签
-	if err := server.store.ClearMerchantTags(ctx, merchant.ID); err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-	for _, tagID := range req.TagIDs {
-		if err := server.store.AddMerchantTag(ctx, db.AddMerchantTagParams{
-			MerchantID: merchant.ID,
-			TagID:      tagID,
-		}); err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-	}
-
-	// 返回最新标签列表
-	tags, err := server.store.ListMerchantTags(ctx, merchant.ID)
+	result, err := server.store.SetMerchantTagsTx(ctx, db.SetMerchantTagsTxParams{
+		MerchantID: merchant.ID,
+		TagIDs:     req.TagIDs,
+	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	result := make([]tagDetailResponse, len(tags))
-	for i, t := range tags {
-		result[i] = tagDetailResponse{
+
+	tags := make([]tagDetailResponse, len(result.Tags))
+	for i, t := range result.Tags {
+		tags[i] = tagDetailResponse{
 			ID:        t.ID,
 			Name:      t.Name,
 			Type:      t.Type,
 			SortOrder: t.SortOrder,
 		}
 	}
-	ctx.JSON(http.StatusOK, merchantTagsResponse{Tags: result})
+	ctx.JSON(http.StatusOK, merchantTagsResponse{Tags: tags})
 }

@@ -1928,6 +1928,19 @@ func (q *Queries) ListOpenMerchants(ctx context.Context, arg ListOpenMerchantsPa
 	return items, nil
 }
 
+const lockMerchantForUpdate = `-- name: LockMerchantForUpdate :one
+SELECT id FROM merchants
+WHERE id = $1 AND deleted_at IS NULL
+FOR UPDATE
+`
+
+func (q *Queries) LockMerchantForUpdate(ctx context.Context, id int64) (int64, error) {
+	row := q.db.QueryRow(ctx, lockMerchantForUpdate, id)
+	var id_2 int64
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
 const removeMerchantTag = `-- name: RemoveMerchantTag :exec
 DELETE FROM merchant_tags
 WHERE merchant_id = $1 AND tag_id = $2

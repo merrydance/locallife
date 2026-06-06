@@ -1593,6 +1593,7 @@ type Querier interface {
 	ListWeatherCoefficients(ctx context.Context, arg ListWeatherCoefficientsParams) ([]WeatherCoefficient, error)
 	ListWechatNotificationsByOutTradeNo(ctx context.Context, outTradeNo pgtype.Text) ([]WechatNotification, error)
 	ListWithdrawalRecords(ctx context.Context, arg ListWithdrawalRecordsParams) ([]WithdrawalRecord, error)
+	LockMerchantForUpdate(ctx context.Context, id int64) (int64, error)
 	MarkActiveWantedMerchantMatchedByMerchant(ctx context.Context, arg MarkActiveWantedMerchantMatchedByMerchantParams) error
 	MarkAllNotificationsAsRead(ctx context.Context, userID int64) error
 	MarkAllOperatorNotificationsAsRead(ctx context.Context, userID int64) error

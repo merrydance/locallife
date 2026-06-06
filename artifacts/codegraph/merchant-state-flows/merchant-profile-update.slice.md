@@ -1,7 +1,7 @@
 # Merchant Profile Update Slice
 
-Status: third merchant-state flow slice
-Risk class: G2 - merchant-visible profile state spans multiple truth sources, has media async recovery, optimistic locking, and partial-write risk
+Status: third merchant-state flow slice; category replacement fix applied 2026-06-06
+Risk class: G2 - merchant-visible profile state spans multiple truth sources, has media async recovery, optimistic locking, and remaining shop-image scoping risk
 Scope: merchant profile settings page and profile-images page -> profile/category/media/shop-image persistence -> public/storefront readers
 
 ## Variant Coverage
@@ -20,13 +20,13 @@ This slice does not cover:
 - Merchant onboarding document/OCR workflow except where profile-images reuses the application endpoint for shop-image truth.
 - Operator-side merchant profile management.
 - Payment/settlement profile submission.
-- Changing the discovered partial-write and application-row scoping issues.
+- Changing the discovered application-row scoping issues.
 
 ## Product Invariant
 
 When a merchant changes shop-facing profile data, the backend durable truth must converge before the merchant-visible page claims success. Basic profile and logo changes must use the merchant version as an optimistic lock. Category replacement should be all-or-nothing. Storefront/environment images should update one authoritative record for the current merchant and must not drift between local pending state, media asset state, and public/search readers.
 
-Current implementation meets the optimistic-lock invariant for basic profile and logo. Category and shop-image persistence have weaker boundaries documented below.
+Current implementation meets the optimistic-lock invariant for basic profile and logo. Fixed 2026-06-06: category replacement now rejects duplicate tag IDs before write and uses a store transaction that locks the merchant row before replacing tag rows. Shop-image persistence still has weaker application-row scoping documented below.
 
 ## Primary Forward Chain
 
@@ -54,11 +54,11 @@ Current implementation meets the optimistic-lock invariant for basic profile and
 8. `UpdateMerchant` and `ClearMerchantLogo` update `merchants` with `WHERE id = ... AND version = ... AND deleted_at IS NULL`, incrementing `version`.
    Evidence: `locallife/db/query/merchant.sql:114`, `locallife/db/query/merchant.sql:126`, `locallife/db/query/merchant.sql:128`, `locallife/db/query/merchant.sql:133`, `locallife/db/query/merchant.sql:137`.
 
-9. `setMerchantTags` validates every requested tag exists and has type `merchant`, then clears all merchant tags and inserts requested tag IDs before returning the latest list.
-   Evidence: `locallife/api/tag.go:241`, `locallife/api/tag.go:263`, `locallife/api/tag.go:280`, `locallife/api/tag.go:285`, `locallife/api/tag.go:296`.
+9. `setMerchantTags` validates every requested tag exists, rejects duplicate tag IDs, verifies each tag has type `merchant`, then delegates replace-all to `SetMerchantTagsTx` and returns the transaction result.
+   Evidence: `locallife/api/tag.go:241`, `locallife/api/tag.go:263`, `locallife/api/tag.go:265`, `locallife/api/tag.go:271`, `locallife/api/tag.go:286`, `locallife/api/tag.go:295`.
 
-10. SQL for merchant tags is a separate delete and insert path over `merchant_tags`.
-    Evidence: `locallife/db/query/merchant.sql:244`, `locallife/db/query/merchant.sql:256`, `locallife/db/query/merchant.sql:270`.
+10. `SetMerchantTagsTx` wraps `LockMerchantForUpdate`, `ClearMerchantTags`, per-tag `AddMerchantTag`, and `ListMerchantTags` in `execTx`, so same-merchant replacements serialize and insert/list failures roll back the clear step.
+    Evidence: `locallife/db/sqlc/tx_merchant_tags.go:17`, `locallife/db/sqlc/tx_merchant_tags.go:21`, `locallife/db/sqlc/tx_merchant_tags.go:22`, `locallife/db/sqlc/tx_merchant_tags.go:26`, `locallife/db/sqlc/tx_merchant_tags.go:30`, `locallife/db/sqlc/tx_merchant_tags.go:39`.
 
 11. The profile-images page loads `GET /v1/merchants/me` for logo/version and `GET /v1/merchant/application` for storefront/environment image JSON. If application fetch fails in non-strict mode, it preserves local image state and schedules pending persistence when needed.
     Evidence: `weapp/miniprogram/pages/merchant/profile-images/index.ts:91`, `weapp/miniprogram/pages/merchant/profile-images/index.ts:93`, `weapp/miniprogram/pages/merchant/profile-images/index.ts:96`, `weapp/miniprogram/pages/merchant/profile-images/index.ts:115`, `weapp/miniprogram/pages/merchant/profile-images/index.ts:117`, `weapp/miniprogram/pages/merchant/profile-images/index.ts:168`.
@@ -111,7 +111,7 @@ Current implementation meets the optimistic-lock invariant for basic profile and
 - Logo upload can leave an uploaded media asset unreferenced if the subsequent merchant PATCH conflicts or fails.
 - Shop-image upload/remove uses per-section saving flags and generation checks. The backend PATCH is last-write-wins over provided URL arrays.
 - Frontend retries ambiguous shop-image persistence failures with backoff and eventually rehydrates from server truth.
-- Tag PUT has no idempotency key. Repeating the same successful request converges to the same category set, but the implementation is not atomic.
+- Tag PUT has no idempotency key. Repeating the same successful request converges to the same category set, duplicate tag IDs are rejected as 400, and replacement is transaction-backed with a merchant row lock.
 
 ## Recovery And Async Convergence Paths
 
@@ -138,18 +138,18 @@ Observed tests:
 - `locallife/api/merchant_test.go` covers invalid stored shop-image JSON returning internal server error.
 - `locallife/api/security_authz_test.go` denies unauthorized profile/shop-image/tag writes.
 - `locallife/api/media_test.go` and `media_moderation_test.go` cover media upload session/complete idempotency and moderation/public URL behavior.
-- `locallife/db/sqlc/merchant_test.go` covers basic merchant tag insert/list and `GetMerchantWithTags`.
+- `locallife/api/tag_test.go` covers `PUT /v1/merchants/me/tags` calling `SetMerchantTagsTx` and rejecting duplicate tag IDs before write.
+- `locallife/db/sqlc/merchant_test.go` covers basic merchant tag insert/list, `GetMerchantWithTags`, missing-merchant rejection, and rollback of `SetMerchantTagsTx` when replacement insertion fails.
 
 Missing high-value tests:
 
-- API or DB test proving `PUT /v1/merchants/me/tags` is atomic under insert failure.
 - DB/API test proving `/v1/merchants/me/shop-images` updates exactly one intended application row for the current merchant/user.
 - Frontend or integration test for pending shop-image persistence recovery after ambiguous network failure.
 - Test for logo PATCH conflict after a media upload, including local rollback/user guidance.
 
 ## Gaps And Refactor Notes
 
-- `setMerchantTags` comment says atomic replace, but the code clears old tags and inserts new tags without an explicit transaction. This can leave partial categories on failure.
+- Fixed 2026-06-06: `setMerchantTags` now rejects duplicate tag IDs and calls `SetMerchantTagsTx`; the transaction locks the merchant row before replacing tags, and DB coverage proves missing merchants fail plus old categories remain after a replacement insert failure.
 - `UpdateMerchantApplicationShopImages` uses `WHERE user_id = $1 RETURNING *` without status/order/limit. If multiple application rows exist for a user, the write target is ambiguous and may affect or return more than one row.
 - Storing approved merchant shop images on `merchant_applications` couples live storefront assets to onboarding records. A merchant-owned image table or explicitly selected latest approved application would be clearer.
 - `json.Marshal` errors are ignored for string slices in shop-image handler. They are practically impossible for `[]string`, but the pattern weakens the persisted-data standard.
@@ -161,8 +161,8 @@ Missing high-value tests:
 - Request branches checked: `GET/PATCH /v1/merchants/me`, `GET/PUT /v1/merchants/me/tags`, `GET /v1/tags?type=merchant`, media upload session/complete/read, `PATCH /v1/merchants/me/shop-images`, `GET /v1/merchant/application`, and application image writeback SQL.
 - Backend state branches checked: merchant basic fields, logo media asset id, optimistic version, merchant tags, global tag dictionary, media sessions/assets/moderation/public URL variants, application storefront/environment URL arrays, and approved/draft application image ownership.
 - Async branches checked: media moderation/public URL availability, frontend polling for media URL, pending logo/shop-image recovery, shop-image persistence retry/backoff, and application reload. No backend scheduler/worker was found for shop-image convergence.
-- Failure/retry branches checked: profile version conflict, uploaded logo asset orphan after PATCH conflict/failure, non-transactional tag replace, shop-image last-write-wins, ambiguous application row update by user id, application read failure while keeping local image state, ignored JSON marshal pattern, and duplicated role API drift.
+- Failure/retry branches checked: profile version conflict, uploaded logo asset orphan after PATCH conflict/failure, transaction-backed tag replace rollback, duplicate tag-id rejection, shop-image last-write-wins, ambiguous application row update by user id, application read failure while keeping local image state, ignored JSON marshal pattern, and duplicated role API drift.
 - Reader/consumer branches checked: dashboard/current merchant cache, public merchant list/detail/search, dish/order/cart display of logo/name/address, profile images page, merchant application page, media readers, and tag/category displays.
 - Authorization/tenant branches checked: Mini Program merchant console access, backend owner/manager profile-write routes, server-side merchant resolution, media session owner checks, private/public media read distinction, shop-image route middleware plus user-id scoped update, and tag route current merchant resolution.
-- Zombie/unreachable branches checked: live storefront images are stored on application rows rather than merchant-owned state; `UpdateMerchantApplicationShopImages` can target multiple/no unstable rows; duplicated onboarding APIs can drift; tag replace claims atomic behavior without transaction.
-- Test-proof gaps checked: existing tests cover profile version/logo URL, invalid shop-image JSON, authz denial, media upload/moderation, and tag SQL basics. Missing proof remains for atomic tag replace, exact shop-image application scoping, pending image recovery, and logo conflict rollback/copy.
+- Zombie/unreachable branches checked: live storefront images are stored on application rows rather than merchant-owned state; `UpdateMerchantApplicationShopImages` can target multiple/no unstable rows; duplicated onboarding APIs can drift.
+- Test-proof gaps checked: existing tests cover profile version/logo URL, invalid shop-image JSON, authz denial, media upload/moderation, tag SQL basics, transactional tag replacement, duplicate tag-id rejection, missing-merchant rejection, and rollback on tag replacement failure. Missing proof remains for exact shop-image application scoping, pending image recovery, and logo conflict rollback/copy.

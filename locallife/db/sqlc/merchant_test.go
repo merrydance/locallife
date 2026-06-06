@@ -1125,6 +1125,37 @@ func TestClearMerchantTags(t *testing.T) {
 	require.Empty(t, tags)
 }
 
+func TestSetMerchantTagsTxRollsBackWhenReplacementFails(t *testing.T) {
+	merchant := createRandomMerchantForTest(t)
+	originalTag := createRandomTag(t, "merchant")
+	replacementTag := createRandomTag(t, "merchant")
+
+	err := testStore.AddMerchantTag(context.Background(), AddMerchantTagParams{
+		MerchantID: merchant.ID,
+		TagID:      originalTag.ID,
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.SetMerchantTagsTx(context.Background(), SetMerchantTagsTxParams{
+		MerchantID: merchant.ID,
+		TagIDs:     []int64{replacementTag.ID, replacementTag.ID},
+	})
+	require.Error(t, err)
+
+	tags, err := testStore.ListMerchantTags(context.Background(), merchant.ID)
+	require.NoError(t, err)
+	require.Len(t, tags, 1)
+	require.Equal(t, originalTag.ID, tags[0].ID)
+}
+
+func TestSetMerchantTagsTxRejectsMissingMerchant(t *testing.T) {
+	_, err := testStore.SetMerchantTagsTx(context.Background(), SetMerchantTagsTxParams{
+		MerchantID: util.RandomInt(1_000_000_000, 2_000_000_000),
+		TagIDs:     []int64{},
+	})
+	require.ErrorIs(t, err, ErrRecordNotFound)
+}
+
 func TestGetMerchantWithTags(t *testing.T) {
 	merchant := createRandomMerchantForTest(t)
 
