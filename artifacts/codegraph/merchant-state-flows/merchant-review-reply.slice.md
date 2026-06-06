@@ -124,6 +124,7 @@ Observed tests:
 - API tests cover merchant review list/count and review image URL enrichment.
 - Fixed 2026-06-06: API/sqlc tests cover hidden-review reply visibility, proving merchant owner all-list/reply includes hidden reviews, public merchant list stays visible-only, and the customer/user list retains the user's hidden review.
 - Fixed 2026-06-06: SQL tests cover reply overwrite/timestamp semantics, proving repeated identical replies refresh `replied_at`, later different replies overwrite the single stored reply, and visibility is unchanged.
+- Fixed 2026-06-06: API tests cover merchant all-review image resolver behavior, proving hidden-review all-list returns approved public image URLs, withholds pending review images from merchants, and does not expose review media asset ids.
 
 Missing high-value tests:
 
@@ -135,7 +136,7 @@ Missing high-value tests:
 - Fixed 2026-06-06: the product path remains owner-only; the Mini Program page copy/access gate is owner-aware and no longer relies on backend denial for non-owner staff.
 - Decide whether reply update should preserve reply history or expose a clear/delete reply action.
 - Fixed 2026-06-06: repeated identical reply semantics are explicit and non-idempotent; the backend treats it as a new edit and refreshes `replied_at`.
-- Verify image URL visibility for hidden reviews in merchant all-review response; if hidden review images should not use public URLs, switch to an owner/merchant-visible resolver.
+- Fixed 2026-06-06: merchant all-review image URLs follow the public resolver contract; pending review images remain visible only to the uploading user through the owner-view resolver.
 
 ## Branch Exhaustion
 
@@ -143,8 +144,8 @@ Missing high-value tests:
 - Request branches checked: merchant all-review list/count, merchant reply POST/PATCH path, public merchant review list, user review list, customer review create/update/delete adjacency, operator visibility updates, media image URL enrichment, and WeChat content-safety check.
 - Backend state branches checked: `reviews.merchant_reply`, `replied_at`, `is_visible`, review image rows, single overwrite semantics, hidden review inclusion for merchant owner, public visible-only readers, and customer-owned review writers outside this slice.
 - Async branches checked: none found for merchant reply. Content-safety is synchronous and blocks persistence; page refresh/re-entry is the only recovery path.
-- Failure/retry branches checked: duplicate reply submit guard, last-write-wins reply, repeated identical reply updating timestamp, no version/history/delete endpoint, missing OpenID/provider failure, local row patch after success, silent list refresh failure, and hidden-review image public URL ambiguity.
+- Failure/retry branches checked: duplicate reply submit guard, last-write-wins reply, repeated identical reply updating timestamp, no version/history/delete endpoint, missing OpenID/provider failure, local row patch after success, silent list refresh failure, and hidden-review image public-resolver behavior.
 - Reader/consumer branches checked: merchant review list/count, public merchant review list, user review list, review image resolver, dashboard/stat counts if any, and customer-visible reply fields.
 - Authorization/tenant branches checked: Mini Program owner-aware review-management access, backend owner-only review management routes, merchant ownership check for reply, route merchant id validation for list, and content-safety check using merchant user's WeChat OpenID.
-- Zombie/unreachable branches checked: non-owner page entry drift is fixed; no clear/delete/history path despite reply edit UI; merchant hidden-review images use public URL resolver; managers' product permission remains owner-only unless product later changes backend middleware.
-- Test-proof gaps checked: existing tests cover reply happy path/content-safety call, SQL update, list/count, image enrichment, Mini Program non-owner page denial, hidden-review reply visibility across merchant/public/user readers, and repeated identical reply timestamp-refresh semantics. Missing proof remains for missing OpenID/provider failure Mini Program copy.
+- Zombie/unreachable branches checked: non-owner page entry drift is fixed; no clear/delete/history path despite reply edit UI; merchant hidden-review images use public URL resolver and withhold pending images; managers' product permission remains owner-only unless product later changes backend middleware.
+- Test-proof gaps checked: existing tests cover reply happy path/content-safety call, SQL update, list/count, image enrichment, Mini Program non-owner page denial, hidden-review reply visibility across merchant/public/user readers, repeated identical reply timestamp-refresh semantics, and merchant all-review public image resolver behavior. Missing proof remains for missing OpenID/provider failure Mini Program copy.

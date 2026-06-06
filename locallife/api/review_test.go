@@ -1340,6 +1340,93 @@ func TestListMerchantReviewsAPI_HidesPendingReviewImages(t *testing.T) {
 	require.Empty(t, response.Reviews[0].ImageURLs, "public merchant reviews must hide pending images")
 }
 
+func TestListMerchantAllReviewsAPI_UsesPublicReviewImageResolver(t *testing.T) {
+	owner, _ := randomUser(t)
+	reviewAuthor, _ := randomUser(t)
+	merchant := randomMerchant(owner.ID)
+	review := db.Review{
+		ID:         1,
+		OrderID:    1,
+		UserID:     reviewAuthor.ID,
+		MerchantID: merchant.ID,
+		Content:    "Hidden review with photos",
+		IsVisible:  false,
+		CreatedAt:  time.Now(),
+	}
+
+	const approvedAssetID int64 = 100
+	const pendingAssetID int64 = 101
+	reviewImages := []db.ReviewImage{
+		{ReviewID: review.ID, MediaAssetID: approvedAssetID, SortOrder: 0},
+		{ReviewID: review.ID, MediaAssetID: pendingAssetID, SortOrder: 1},
+	}
+	assets := []db.ListMediaAssetsByIDsRow{
+		{
+			ID:               approvedAssetID,
+			ObjectKey:        "user/review/100/approved.jpg",
+			Visibility:       "public",
+			MediaCategory:    "review",
+			ModerationStatus: "approved",
+			UploadedBy:       reviewAuthor.ID,
+		},
+		{
+			ID:               pendingAssetID,
+			ObjectKey:        "user/review/101/pending.jpg",
+			Visibility:       "public",
+			MediaCategory:    "review",
+			ModerationStatus: "pending",
+			UploadedBy:       reviewAuthor.ID,
+		},
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+	store.EXPECT().
+		ListAllReviewsByMerchant(gomock.Any(), gomock.Eq(db.ListAllReviewsByMerchantParams{
+			MerchantID: merchant.ID,
+			Limit:      10,
+			Offset:     0,
+		})).
+		Times(1).
+		Return([]db.Review{review}, nil)
+	store.EXPECT().
+		CountAllReviewsByMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
+		Times(1).
+		Return(int64(1), nil)
+	store.EXPECT().
+		ListReviewImagesByReviews(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(reviewImages, nil)
+	store.EXPECT().
+		ListMediaAssetsByIDs(gomock.Any(), gomock.Eq([]int64{approvedAssetID, pendingAssetID})).
+		Times(1).
+		Return(assets, nil)
+
+	server, _ := newTestServerForMedia(t, store)
+
+	url := fmt.Sprintf("/v1/reviews/merchants/%d/all?page_id=1&page_size=10", merchant.ID)
+	request, err := http.NewRequest(http.MethodGet, url, nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var response reviewListResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.Len(t, response.Reviews, 1)
+	require.False(t, response.Reviews[0].IsVisible)
+	require.Empty(t, response.Reviews[0].ImageAssetIDs, "merchant all-review response should not expose review media asset ids")
+	require.Len(t, response.Reviews[0].ImageURLs, 1, "merchant all-review should only include approved review images")
+	require.Contains(t, response.Reviews[0].ImageURLs[0], "https://cdn.test.example.com")
+	require.Contains(t, response.Reviews[0].ImageURLs[0], assets[0].ObjectKey)
+	require.NotContains(t, response.Reviews[0].ImageURLs[0], assets[1].ObjectKey)
+}
+
 // TestListUserReviewsAPI_WithOwnPendingReviewImages locks the owner-view media contract:
 // users may see their own just-uploaded review images before async moderation finishes.
 func TestListUserReviewsAPI_WithOwnPendingReviewImages(t *testing.T) {
