@@ -5,6 +5,7 @@ import { logger } from '../../../utils/logger'
 import { getStableBarHeights } from '../../../utils/responsive'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 import { ensureMerchantReviewManagementAccess } from '../../../utils/console-access'
+import { getMerchantReviewReplyErrorMessage } from '../_utils/merchant-review-reply-error'
 
 const REVIEWS_AUTO_REFRESH_WINDOW_MS = 60 * 1000
 
@@ -259,7 +260,7 @@ Page({
       })
     } catch (err) {
       logger.error('Reply merchant review failed', err)
-      wx.showToast({ title: getErrorMessage(err, '回复评价失败，请稍后重试'), icon: 'none' })
+      wx.showToast({ title: getMerchantReviewReplyErrorMessage(err), icon: 'none' })
     } finally {
       wx.hideLoading()
       this.setData({ replySubmitting: false })

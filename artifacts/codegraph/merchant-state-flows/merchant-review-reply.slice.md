@@ -53,7 +53,7 @@ Merchant review replies should have one trustworthy content boundary:
    Evidence: `weapp/miniprogram/pages/merchant/reviews/index.ts:190`, `weapp/miniprogram/pages/merchant/reviews/index.ts:194`, `weapp/miniprogram/pages/merchant/reviews/index.ts:197`.
 
 8. Submit validates non-empty and length <= 500, then calls `ReviewService.replyToReview`.
-   Evidence: `weapp/miniprogram/pages/merchant/reviews/index.ts:226`, `weapp/miniprogram/pages/merchant/reviews/index.ts:229`, `weapp/miniprogram/pages/merchant/reviews/index.ts:234`, `weapp/miniprogram/pages/merchant/reviews/index.ts:243`.
+   Evidence: `weapp/miniprogram/pages/merchant/reviews/index.ts:229`, `weapp/miniprogram/pages/merchant/reviews/index.ts:232`, `weapp/miniprogram/pages/merchant/reviews/index.ts:237`, `weapp/miniprogram/pages/merchant/reviews/index.ts:246`.
 
 9. The frontend wrapper maps reply to `POST /v1/reviews/:id/reply`.
    Evidence: `weapp/miniprogram/pages/merchant/_main_shared/api/review.ts:174`, `weapp/miniprogram/pages/merchant/_main_shared/api/review.ts:176`.
@@ -67,8 +67,8 @@ Merchant review replies should have one trustworthy content boundary:
 12. `UpdateMerchantReply` overwrites `reviews.merchant_reply` and sets `replied_at = now()`.
     Evidence: `locallife/api/review.go:543`, `locallife/api/review.go:544`, `locallife/db/query/review.sql:45`, `locallife/db/query/review.sql:47`, `locallife/db/query/review.sql:48`.
 
-13. Reply response enriches review image URLs, then the Mini Program updates only the affected review row locally.
-    Evidence: `locallife/api/review.go:553`, `locallife/api/review.go:554`, `locallife/api/review.go:700`, `weapp/miniprogram/pages/merchant/reviews/index.ts:244`, `weapp/miniprogram/pages/merchant/reviews/index.ts:249`.
+13. Reply response enriches review image URLs, then the Mini Program updates only the affected review row locally. Reply submission failures are mapped through `getMerchantReviewReplyErrorMessage` so missing WeChat OpenID, risky text, and content-safety provider/gateway failures use Chinese product copy instead of raw backend/provider diagnostics.
+    Evidence: `locallife/api/review.go:553`, `locallife/api/review.go:554`, `locallife/api/review.go:700`, `weapp/miniprogram/pages/merchant/reviews/index.ts:246`, `weapp/miniprogram/pages/merchant/reviews/index.ts:249`, `weapp/miniprogram/pages/merchant/reviews/index.ts:263`, `weapp/miniprogram/pages/merchant/_utils/merchant-review-reply-error.ts:31`.
 
 14. Public merchant review list only returns visible reviews; user review list returns the user's reviews. Both response builders expose merchant reply fields when present.
     Evidence: `locallife/api/review.go:285`, `locallife/api/review.go:300`, `locallife/api/review.go:413`, `locallife/api/review.go:771`, `locallife/db/query/review.sql:20`, `locallife/db/query/review.sql:32`.
@@ -125,11 +125,12 @@ Observed tests:
 - Fixed 2026-06-06: API/sqlc tests cover hidden-review reply visibility, proving merchant owner all-list/reply includes hidden reviews, public merchant list stays visible-only, and the customer/user list retains the user's hidden review.
 - Fixed 2026-06-06: SQL tests cover reply overwrite/timestamp semantics, proving repeated identical replies refresh `replied_at`, later different replies overwrite the single stored reply, and visibility is unchanged.
 - Fixed 2026-06-06: API tests cover merchant all-review image resolver behavior, proving hidden-review all-list returns approved public image URLs, withholds pending review images from merchants, and does not expose review media asset ids.
+- Fixed 2026-06-06: Mini Program `check-merchant-review-reply-error-copy` covers missing WeChat OpenID, text content-safety failure, and content-safety provider/gateway failure copy for reply submission.
 
 Missing high-value tests:
 
 - Fixed 2026-06-06: Mini Program owner-access coverage in `weapp/scripts/check-merchant-review-owner-access.test.js` proves `merchant_staff` is denied by the page gate and `merchant_owner` is granted.
-- Missing WeChat OpenID and content-safety provider failure should have product-copy expectations in the Mini Program.
+- No remaining Mini Program reply failure-copy test gap is known for the currently traced missing OpenID/content-safety branches.
 
 ## Gaps And Refactor Notes
 
@@ -137,6 +138,7 @@ Missing high-value tests:
 - Decide whether reply update should preserve reply history or expose a clear/delete reply action.
 - Fixed 2026-06-06: repeated identical reply semantics are explicit and non-idempotent; the backend treats it as a new edit and refreshes `replied_at`.
 - Fixed 2026-06-06: merchant all-review image URLs follow the public resolver contract; pending review images remain visible only to the uploading user through the owner-view resolver.
+- Fixed 2026-06-06: review reply failure copy is task-owned in the Mini Program and does not expose backend English, OpenID terminology, or WeChat provider diagnostics for the traced reply submit failures.
 
 ## Branch Exhaustion
 
@@ -148,4 +150,4 @@ Missing high-value tests:
 - Reader/consumer branches checked: merchant review list/count, public merchant review list, user review list, review image resolver, dashboard/stat counts if any, and customer-visible reply fields.
 - Authorization/tenant branches checked: Mini Program owner-aware review-management access, backend owner-only review management routes, merchant ownership check for reply, route merchant id validation for list, and content-safety check using merchant user's WeChat OpenID.
 - Zombie/unreachable branches checked: non-owner page entry drift is fixed; no clear/delete/history path despite reply edit UI; merchant hidden-review images use public URL resolver and withhold pending images; managers' product permission remains owner-only unless product later changes backend middleware.
-- Test-proof gaps checked: existing tests cover reply happy path/content-safety call, SQL update, list/count, image enrichment, Mini Program non-owner page denial, hidden-review reply visibility across merchant/public/user readers, repeated identical reply timestamp-refresh semantics, and merchant all-review public image resolver behavior. Missing proof remains for missing OpenID/provider failure Mini Program copy.
+- Test-proof gaps checked: existing tests cover reply happy path/content-safety call, SQL update, list/count, image enrichment, Mini Program non-owner page denial, hidden-review reply visibility across merchant/public/user readers, repeated identical reply timestamp-refresh semantics, merchant all-review public image resolver behavior, and Mini Program missing OpenID/content-safety reply failure copy.
