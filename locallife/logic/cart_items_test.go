@@ -2,6 +2,7 @@ package logic
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	mockdb "github.com/merrydance/locallife/db/mock"
@@ -114,4 +115,70 @@ func TestAddCartItem_NewDish(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, cart.ID, result.Cart.ID)
+}
+
+func TestAddCartItem_RejectsUnavailableComboChildDish(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	comboID := int64(10)
+
+	store.EXPECT().
+		GetMerchant(gomock.Any(), int64(2)).
+		Times(1).
+		Return(db.Merchant{ID: 2, Status: "active", IsOpen: true}, nil)
+	store.EXPECT().
+		GetComboSet(gomock.Any(), comboID).
+		Times(1).
+		Return(db.ComboSet{ID: comboID, MerchantID: 2, Name: "套餐", IsOnline: true}, nil)
+	store.EXPECT().
+		ListComboDishOrderability(gomock.Any(), comboID).
+		Times(1).
+		Return([]db.ListComboDishOrderabilityRow{
+			comboDishOrderabilityRow(20, "暂不可售菜品", true, true, false),
+		}, nil)
+
+	_, err := AddCartItem(context.Background(), store, AddCartItemInput{
+		UserID:      1,
+		MerchantID:  2,
+		ComboID:     &comboID,
+		Quantity:    1,
+		MaxQuantity: 99,
+	})
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 400, reqErr.Status)
+	require.Contains(t, reqErr.Error(), "暂不可售菜品")
+}
+
+func TestAddCartItem_PropagatesComboChildOrderabilityStoreError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	comboID := int64(10)
+	storeErr := errors.New("list combo dish orderability failed")
+
+	store.EXPECT().
+		GetMerchant(gomock.Any(), int64(2)).
+		Times(1).
+		Return(db.Merchant{ID: 2, Status: "active", IsOpen: true}, nil)
+	store.EXPECT().
+		GetComboSet(gomock.Any(), comboID).
+		Times(1).
+		Return(db.ComboSet{ID: comboID, MerchantID: 2, Name: "套餐", IsOnline: true}, nil)
+	store.EXPECT().
+		ListComboDishOrderability(gomock.Any(), comboID).
+		Times(1).
+		Return(nil, storeErr)
+
+	_, err := AddCartItem(context.Background(), store, AddCartItemInput{
+		UserID:      1,
+		MerchantID:  2,
+		ComboID:     &comboID,
+		Quantity:    1,
+		MaxQuantity: 99,
+	})
+	require.ErrorIs(t, err, storeErr)
+	require.NotErrorAs(t, err, new(*RequestError))
 }

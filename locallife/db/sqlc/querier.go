@@ -1274,6 +1274,7 @@ type Querier interface {
 	ListCombinedPaymentOrdersForReconciliation(ctx context.Context, arg ListCombinedPaymentOrdersForReconciliationParams) ([]ListCombinedPaymentOrdersForReconciliationRow, error)
 	ListCombinedPaymentSubOrders(ctx context.Context, combinedPaymentID int64) ([]CombinedPaymentSubOrder, error)
 	ListCombinedPaymentSubOrdersWithMerchant(ctx context.Context, combinedPaymentID int64) ([]ListCombinedPaymentSubOrdersWithMerchantRow, error)
+	ListComboDishOrderability(ctx context.Context, comboID int64) ([]ListComboDishOrderabilityRow, error)
 	ListComboDishes(ctx context.Context, comboID int64) ([]ListComboDishesRow, error)
 	ListComboSetsByMerchant(ctx context.Context, arg ListComboSetsByMerchantParams) ([]ListComboSetsByMerchantRow, error)
 	ListComboTags(ctx context.Context, comboID int64) ([]Tag, error)

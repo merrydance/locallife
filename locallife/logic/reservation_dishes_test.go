@@ -160,6 +160,71 @@ func TestValidateReservationItemsRejectsUnavailableDish(t *testing.T) {
 	require.Contains(t, requestErr.Error(), "暂不可售")
 }
 
+func TestValidateReservationItemsRejectsUnavailableComboChildDish(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	merchantID := int64(20)
+	comboID := int64(50)
+	dishID := int64(60)
+
+	store.EXPECT().
+		GetComboSet(gomock.Any(), comboID).
+		Return(db.ComboSet{
+			ID:         comboID,
+			MerchantID: merchantID,
+			Name:       "多人套餐",
+			ComboPrice: 6800,
+			IsOnline:   true,
+		}, nil)
+	store.EXPECT().
+		ListComboDishOrderability(gomock.Any(), comboID).
+		Return([]db.ListComboDishOrderabilityRow{
+			comboDishOrderabilityRow(dishID, "暂不可售菜品", true, true, false),
+		}, nil)
+
+	_, _, err := ValidateReservationItems(context.Background(), store, merchantID, []ReservationItemInput{{
+		ComboID:  &comboID,
+		Quantity: 1,
+	}})
+
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 400, reqErr.Status)
+	require.Contains(t, reqErr.Error(), "暂不可售菜品")
+}
+
+func TestValidateReservationItemsPropagatesComboChildOrderabilityStoreError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	merchantID := int64(20)
+	comboID := int64(50)
+	storeErr := errors.New("list combo dish orderability failed")
+
+	store.EXPECT().
+		GetComboSet(gomock.Any(), comboID).
+		Return(db.ComboSet{
+			ID:         comboID,
+			MerchantID: merchantID,
+			Name:       "多人套餐",
+			ComboPrice: 6800,
+			IsOnline:   true,
+		}, nil)
+	store.EXPECT().
+		ListComboDishOrderability(gomock.Any(), comboID).
+		Return(nil, storeErr)
+
+	_, _, err := ValidateReservationItems(context.Background(), store, merchantID, []ReservationItemInput{{
+		ComboID:  &comboID,
+		Quantity: 1,
+	}})
+
+	require.ErrorIs(t, err, storeErr)
+	require.NotErrorAs(t, err, new(*RequestError))
+}
+
 func TestModifyReservationDishesPositiveDeltaCreatesPendingAdjustmentWithoutReplacingItems(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

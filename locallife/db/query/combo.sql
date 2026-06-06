@@ -155,6 +155,18 @@ JOIN combo_dishes cd ON d.id = cd.dish_id
 WHERE cd.combo_id = $1 AND d.deleted_at IS NULL
 ORDER BY cd.id ASC;
 
+-- name: ListComboDishOrderability :many
+SELECT
+  cd.dish_id,
+  COALESCE(d.name, '') AS dish_name,
+  (d.id IS NOT NULL AND d.deleted_at IS NULL) AS dish_exists,
+  COALESCE(d.is_online, false)::boolean AS is_online,
+  COALESCE(d.is_available, false)::boolean AS is_available
+FROM combo_dishes cd
+LEFT JOIN dishes d ON d.id = cd.dish_id
+WHERE cd.combo_id = $1
+ORDER BY cd.id ASC;
+
 -- name: RemoveComboDish :exec
 DELETE FROM combo_dishes
 WHERE combo_id = $1 AND dish_id = $2;
@@ -220,6 +232,27 @@ LEFT JOIN order_items oi ON cs.id = oi.combo_id
 LEFT JOIN orders o ON o.id = oi.order_id AND o.status IN ('user_delivered', 'completed')
 LEFT JOIN merchants m ON cs.merchant_id = m.id
 WHERE cs.is_online = true AND cs.deleted_at IS NULL AND m.status = 'active'
+AND EXISTS (
+    SELECT 1
+    FROM combo_dishes cd
+    JOIN dishes d ON d.id = cd.dish_id
+    WHERE cd.combo_id = cs.id
+      AND d.deleted_at IS NULL
+      AND d.is_online = true
+      AND d.is_available = true
+)
+AND NOT EXISTS (
+    SELECT 1
+    FROM combo_dishes cd
+    LEFT JOIN dishes d ON d.id = cd.dish_id
+    WHERE cd.combo_id = cs.id
+      AND (
+          d.id IS NULL
+          OR d.deleted_at IS NOT NULL
+          OR d.is_online IS DISTINCT FROM true
+          OR d.is_available IS DISTINCT FROM true
+      )
+)
 GROUP BY cs.id, m.is_open, m.latitude, m.longitude
 ORDER BY 
     m.is_open DESC, 
@@ -231,18 +264,39 @@ LIMIT $1;
 -- name: GetCombosByIDs :many
 -- 批量获取套餐详情
 SELECT 
-    id,
-    merchant_id,
-    name,
-    description,
-    image_media_asset_id,
-    original_price,
-    combo_price,
-    is_online
-FROM combo_sets
-WHERE id = ANY($1::bigint[])
-  AND deleted_at IS NULL
-  AND is_online = true;
+    cs.id,
+    cs.merchant_id,
+    cs.name,
+    cs.description,
+    cs.image_media_asset_id,
+    cs.original_price,
+    cs.combo_price,
+    cs.is_online
+FROM combo_sets cs
+WHERE cs.id = ANY($1::bigint[])
+  AND cs.deleted_at IS NULL
+  AND cs.is_online = true
+  AND EXISTS (
+      SELECT 1
+      FROM combo_dishes cd
+      JOIN dishes d ON d.id = cd.dish_id
+      WHERE cd.combo_id = cs.id
+        AND d.deleted_at IS NULL
+        AND d.is_online = true
+        AND d.is_available = true
+  )
+  AND NOT EXISTS (
+      SELECT 1
+      FROM combo_dishes cd
+      LEFT JOIN dishes d ON d.id = cd.dish_id
+      WHERE cd.combo_id = cs.id
+        AND (
+            d.id IS NULL
+            OR d.deleted_at IS NOT NULL
+            OR d.is_online IS DISTINCT FROM true
+            OR d.is_available IS DISTINCT FROM true
+        )
+  );
 
 -- name: GetCombosWithMerchantByIDs :many
 -- 批量获取套餐详情及商户信息（用于推荐流展示）
@@ -260,6 +314,8 @@ SELECT
          WHERE cd.combo_id = cs.id 
            AND d.image_media_asset_id IS NOT NULL
            AND d.deleted_at IS NULL
+           AND d.is_online = true
+           AND d.is_available = true
          ORDER BY cd.id ASC 
          LIMIT 1)
     ) AS image_media_asset_id,
@@ -286,7 +342,28 @@ JOIN merchants m ON m.id = cs.merchant_id
 WHERE cs.id = ANY($1::bigint[])
   AND cs.deleted_at IS NULL
   AND cs.is_online = true
-  AND m.status = 'active';
+  AND m.status = 'active'
+  AND EXISTS (
+      SELECT 1
+      FROM combo_dishes cd
+      JOIN dishes d ON d.id = cd.dish_id
+      WHERE cd.combo_id = cs.id
+        AND d.deleted_at IS NULL
+        AND d.is_online = true
+        AND d.is_available = true
+  )
+  AND NOT EXISTS (
+      SELECT 1
+      FROM combo_dishes cd
+      LEFT JOIN dishes d ON d.id = cd.dish_id
+      WHERE cd.combo_id = cs.id
+        AND (
+            d.id IS NULL
+            OR d.deleted_at IS NOT NULL
+            OR d.is_online IS DISTINCT FROM true
+            OR d.is_available IS DISTINCT FROM true
+        )
+  );
 
 -- name: ListOnlineCombosByMerchant :many
 -- 获取商户上架套餐（用于扫码点餐菜单展示）
@@ -307,9 +384,30 @@ SELECT
       '[]'
     ) as tags
 FROM combo_sets cs
-WHERE merchant_id = $1
-  AND deleted_at IS NULL
-  AND is_online = true
+WHERE cs.merchant_id = $1
+  AND cs.deleted_at IS NULL
+  AND cs.is_online = true
+  AND EXISTS (
+      SELECT 1
+      FROM combo_dishes cd
+      JOIN dishes d ON d.id = cd.dish_id
+      WHERE cd.combo_id = cs.id
+        AND d.deleted_at IS NULL
+        AND d.is_online = true
+        AND d.is_available = true
+  )
+  AND NOT EXISTS (
+      SELECT 1
+      FROM combo_dishes cd
+      LEFT JOIN dishes d ON d.id = cd.dish_id
+      WHERE cd.combo_id = cs.id
+        AND (
+            d.id IS NULL
+            OR d.deleted_at IS NOT NULL
+            OR d.is_online IS DISTINCT FROM true
+            OR d.is_available IS DISTINCT FROM true
+        )
+  )
 ORDER BY created_at DESC;
 
 -- name: SearchComboIDsGlobal :many
@@ -322,6 +420,27 @@ WHERE
   AND cs.deleted_at IS NULL
   AND cs.is_online = true
   AND cs.name ILIKE '%' || $1 || '%'
+  AND EXISTS (
+      SELECT 1
+      FROM combo_dishes cd
+      JOIN dishes d ON d.id = cd.dish_id
+      WHERE cd.combo_id = cs.id
+        AND d.deleted_at IS NULL
+        AND d.is_online = true
+        AND d.is_available = true
+  )
+  AND NOT EXISTS (
+      SELECT 1
+      FROM combo_dishes cd
+      LEFT JOIN dishes d ON d.id = cd.dish_id
+      WHERE cd.combo_id = cs.id
+        AND (
+            d.id IS NULL
+            OR d.deleted_at IS NOT NULL
+            OR d.is_online IS DISTINCT FROM true
+            OR d.is_available IS DISTINCT FROM true
+        )
+  )
 ORDER BY cs.created_at DESC;
 
 -- name: SearchCombosGlobal :many
@@ -374,6 +493,8 @@ LEFT JOIN LATERAL (
     WHERE cd.combo_id = cs.id
       AND d.image_media_asset_id IS NOT NULL
       AND d.deleted_at IS NULL
+      AND d.is_online = true
+      AND d.is_available = true
     ORDER BY cd.id ASC
     LIMIT 1
 ) AS dish_img ON TRUE
@@ -384,6 +505,27 @@ WHERE
   AND m.region_id = sqlc.narg('region_id')
     AND cs.deleted_at IS NULL
     AND cs.is_online = true
+    AND EXISTS (
+        SELECT 1
+        FROM combo_dishes cd
+        JOIN dishes d ON d.id = cd.dish_id
+        WHERE cd.combo_id = cs.id
+          AND d.deleted_at IS NULL
+          AND d.is_online = true
+          AND d.is_available = true
+    )
+    AND NOT EXISTS (
+        SELECT 1
+        FROM combo_dishes cd
+        LEFT JOIN dishes d ON d.id = cd.dish_id
+        WHERE cd.combo_id = cs.id
+          AND (
+              d.id IS NULL
+              OR d.deleted_at IS NOT NULL
+              OR d.is_online IS DISTINCT FROM true
+              OR d.is_available IS DISTINCT FROM true
+          )
+    )
     AND (
         $1::text = '' OR 
         cs.name ILIKE '%' || $1 || '%' OR 
@@ -408,6 +550,27 @@ WHERE
   AND m.region_id = sqlc.narg('region_id')
     AND cs.deleted_at IS NULL
     AND cs.is_online = true
+    AND EXISTS (
+        SELECT 1
+        FROM combo_dishes cd
+        JOIN dishes d ON d.id = cd.dish_id
+        WHERE cd.combo_id = cs.id
+          AND d.deleted_at IS NULL
+          AND d.is_online = true
+          AND d.is_available = true
+    )
+    AND NOT EXISTS (
+        SELECT 1
+        FROM combo_dishes cd
+        LEFT JOIN dishes d ON d.id = cd.dish_id
+        WHERE cd.combo_id = cs.id
+          AND (
+              d.id IS NULL
+              OR d.deleted_at IS NOT NULL
+              OR d.is_online IS DISTINCT FROM true
+              OR d.is_available IS DISTINCT FROM true
+          )
+    )
     AND (
         $1::text = '' OR 
         cs.name ILIKE '%' || $1 || '%' OR 
@@ -421,4 +584,6 @@ FROM combo_dishes cd
 JOIN dishes d ON cd.dish_id = d.id
 WHERE cd.combo_id = ANY($1::bigint[])
   AND d.deleted_at IS NULL
+  AND d.is_online = true
+  AND d.is_available = true
 ORDER BY cd.combo_id, cd.id ASC;

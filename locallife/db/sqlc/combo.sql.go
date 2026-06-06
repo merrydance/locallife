@@ -122,6 +122,27 @@ WHERE
   AND m.region_id = $2
     AND cs.deleted_at IS NULL
     AND cs.is_online = true
+    AND EXISTS (
+        SELECT 1
+        FROM combo_dishes cd
+        JOIN dishes d ON d.id = cd.dish_id
+        WHERE cd.combo_id = cs.id
+          AND d.deleted_at IS NULL
+          AND d.is_online = true
+          AND d.is_available = true
+    )
+    AND NOT EXISTS (
+        SELECT 1
+        FROM combo_dishes cd
+        LEFT JOIN dishes d ON d.id = cd.dish_id
+        WHERE cd.combo_id = cs.id
+          AND (
+              d.id IS NULL
+              OR d.deleted_at IS NOT NULL
+              OR d.is_online IS DISTINCT FROM true
+              OR d.is_available IS DISTINCT FROM true
+          )
+    )
     AND (
         $1::text = '' OR 
         cs.name ILIKE '%' || $1 || '%' OR 
@@ -213,6 +234,8 @@ FROM combo_dishes cd
 JOIN dishes d ON cd.dish_id = d.id
 WHERE cd.combo_id = ANY($1::bigint[])
   AND d.deleted_at IS NULL
+  AND d.is_online = true
+  AND d.is_available = true
 ORDER BY cd.combo_id, cd.id ASC
 `
 
@@ -341,18 +364,39 @@ func (q *Queries) GetComboSetWithDetails(ctx context.Context, id int64) (GetComb
 
 const getCombosByIDs = `-- name: GetCombosByIDs :many
 SELECT 
-    id,
-    merchant_id,
-    name,
-    description,
-    image_media_asset_id,
-    original_price,
-    combo_price,
-    is_online
-FROM combo_sets
-WHERE id = ANY($1::bigint[])
-  AND deleted_at IS NULL
-  AND is_online = true
+    cs.id,
+    cs.merchant_id,
+    cs.name,
+    cs.description,
+    cs.image_media_asset_id,
+    cs.original_price,
+    cs.combo_price,
+    cs.is_online
+FROM combo_sets cs
+WHERE cs.id = ANY($1::bigint[])
+  AND cs.deleted_at IS NULL
+  AND cs.is_online = true
+  AND EXISTS (
+      SELECT 1
+      FROM combo_dishes cd
+      JOIN dishes d ON d.id = cd.dish_id
+      WHERE cd.combo_id = cs.id
+        AND d.deleted_at IS NULL
+        AND d.is_online = true
+        AND d.is_available = true
+  )
+  AND NOT EXISTS (
+      SELECT 1
+      FROM combo_dishes cd
+      LEFT JOIN dishes d ON d.id = cd.dish_id
+      WHERE cd.combo_id = cs.id
+        AND (
+            d.id IS NULL
+            OR d.deleted_at IS NOT NULL
+            OR d.is_online IS DISTINCT FROM true
+            OR d.is_available IS DISTINCT FROM true
+        )
+  )
 `
 
 type GetCombosByIDsRow struct {
@@ -410,6 +454,8 @@ SELECT
          WHERE cd.combo_id = cs.id 
            AND d.image_media_asset_id IS NOT NULL
            AND d.deleted_at IS NULL
+           AND d.is_online = true
+           AND d.is_available = true
          ORDER BY cd.id ASC 
          LIMIT 1)
     ) AS image_media_asset_id,
@@ -437,6 +483,27 @@ WHERE cs.id = ANY($1::bigint[])
   AND cs.deleted_at IS NULL
   AND cs.is_online = true
   AND m.status = 'active'
+  AND EXISTS (
+      SELECT 1
+      FROM combo_dishes cd
+      JOIN dishes d ON d.id = cd.dish_id
+      WHERE cd.combo_id = cs.id
+        AND d.deleted_at IS NULL
+        AND d.is_online = true
+        AND d.is_available = true
+  )
+  AND NOT EXISTS (
+      SELECT 1
+      FROM combo_dishes cd
+      LEFT JOIN dishes d ON d.id = cd.dish_id
+      WHERE cd.combo_id = cs.id
+        AND (
+            d.id IS NULL
+            OR d.deleted_at IS NOT NULL
+            OR d.is_online IS DISTINCT FROM true
+            OR d.is_available IS DISTINCT FROM true
+        )
+  )
 `
 
 type GetCombosWithMerchantByIDsRow struct {
@@ -511,6 +578,27 @@ LEFT JOIN order_items oi ON cs.id = oi.combo_id
 LEFT JOIN orders o ON o.id = oi.order_id AND o.status IN ('user_delivered', 'completed')
 LEFT JOIN merchants m ON cs.merchant_id = m.id
 WHERE cs.is_online = true AND cs.deleted_at IS NULL AND m.status = 'active'
+AND EXISTS (
+    SELECT 1
+    FROM combo_dishes cd
+    JOIN dishes d ON d.id = cd.dish_id
+    WHERE cd.combo_id = cs.id
+      AND d.deleted_at IS NULL
+      AND d.is_online = true
+      AND d.is_available = true
+)
+AND NOT EXISTS (
+    SELECT 1
+    FROM combo_dishes cd
+    LEFT JOIN dishes d ON d.id = cd.dish_id
+    WHERE cd.combo_id = cs.id
+      AND (
+          d.id IS NULL
+          OR d.deleted_at IS NOT NULL
+          OR d.is_online IS DISTINCT FROM true
+          OR d.is_available IS DISTINCT FROM true
+      )
+)
 GROUP BY cs.id, m.is_open, m.latitude, m.longitude
 ORDER BY 
     m.is_open DESC, 
@@ -559,6 +647,53 @@ func (q *Queries) GetPopularCombos(ctx context.Context, arg GetPopularCombosPara
 			&i.OriginalPrice,
 			&i.ComboPrice,
 			&i.TotalSold,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listComboDishOrderability = `-- name: ListComboDishOrderability :many
+SELECT
+  cd.dish_id,
+  COALESCE(d.name, '') AS dish_name,
+  (d.id IS NOT NULL AND d.deleted_at IS NULL) AS dish_exists,
+  COALESCE(d.is_online, false)::boolean AS is_online,
+  COALESCE(d.is_available, false)::boolean AS is_available
+FROM combo_dishes cd
+LEFT JOIN dishes d ON d.id = cd.dish_id
+WHERE cd.combo_id = $1
+ORDER BY cd.id ASC
+`
+
+type ListComboDishOrderabilityRow struct {
+	DishID      int64       `json:"dish_id"`
+	DishName    string      `json:"dish_name"`
+	DishExists  pgtype.Bool `json:"dish_exists"`
+	IsOnline    bool        `json:"is_online"`
+	IsAvailable bool        `json:"is_available"`
+}
+
+func (q *Queries) ListComboDishOrderability(ctx context.Context, comboID int64) ([]ListComboDishOrderabilityRow, error) {
+	rows, err := q.db.Query(ctx, listComboDishOrderability, comboID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListComboDishOrderabilityRow{}
+	for rows.Next() {
+		var i ListComboDishOrderabilityRow
+		if err := rows.Scan(
+			&i.DishID,
+			&i.DishName,
+			&i.DishExists,
+			&i.IsOnline,
+			&i.IsAvailable,
 		); err != nil {
 			return nil, err
 		}
@@ -807,9 +942,30 @@ SELECT
       '[]'
     ) as tags
 FROM combo_sets cs
-WHERE merchant_id = $1
-  AND deleted_at IS NULL
-  AND is_online = true
+WHERE cs.merchant_id = $1
+  AND cs.deleted_at IS NULL
+  AND cs.is_online = true
+  AND EXISTS (
+      SELECT 1
+      FROM combo_dishes cd
+      JOIN dishes d ON d.id = cd.dish_id
+      WHERE cd.combo_id = cs.id
+        AND d.deleted_at IS NULL
+        AND d.is_online = true
+        AND d.is_available = true
+  )
+  AND NOT EXISTS (
+      SELECT 1
+      FROM combo_dishes cd
+      LEFT JOIN dishes d ON d.id = cd.dish_id
+      WHERE cd.combo_id = cs.id
+        AND (
+            d.id IS NULL
+            OR d.deleted_at IS NOT NULL
+            OR d.is_online IS DISTINCT FROM true
+            OR d.is_available IS DISTINCT FROM true
+        )
+  )
 ORDER BY created_at DESC
 `
 
@@ -925,6 +1081,27 @@ WHERE
   AND cs.deleted_at IS NULL
   AND cs.is_online = true
   AND cs.name ILIKE '%' || $1 || '%'
+  AND EXISTS (
+      SELECT 1
+      FROM combo_dishes cd
+      JOIN dishes d ON d.id = cd.dish_id
+      WHERE cd.combo_id = cs.id
+        AND d.deleted_at IS NULL
+        AND d.is_online = true
+        AND d.is_available = true
+  )
+  AND NOT EXISTS (
+      SELECT 1
+      FROM combo_dishes cd
+      LEFT JOIN dishes d ON d.id = cd.dish_id
+      WHERE cd.combo_id = cs.id
+        AND (
+            d.id IS NULL
+            OR d.deleted_at IS NOT NULL
+            OR d.is_online IS DISTINCT FROM true
+            OR d.is_available IS DISTINCT FROM true
+        )
+  )
 ORDER BY cs.created_at DESC
 `
 
@@ -995,6 +1172,8 @@ LEFT JOIN LATERAL (
     WHERE cd.combo_id = cs.id
       AND d.image_media_asset_id IS NOT NULL
       AND d.deleted_at IS NULL
+      AND d.is_online = true
+      AND d.is_available = true
     ORDER BY cd.id ASC
     LIMIT 1
 ) AS dish_img ON TRUE
@@ -1005,6 +1184,27 @@ WHERE
   AND m.region_id = $6
     AND cs.deleted_at IS NULL
     AND cs.is_online = true
+    AND EXISTS (
+        SELECT 1
+        FROM combo_dishes cd
+        JOIN dishes d ON d.id = cd.dish_id
+        WHERE cd.combo_id = cs.id
+          AND d.deleted_at IS NULL
+          AND d.is_online = true
+          AND d.is_available = true
+    )
+    AND NOT EXISTS (
+        SELECT 1
+        FROM combo_dishes cd
+        LEFT JOIN dishes d ON d.id = cd.dish_id
+        WHERE cd.combo_id = cs.id
+          AND (
+              d.id IS NULL
+              OR d.deleted_at IS NOT NULL
+              OR d.is_online IS DISTINCT FROM true
+              OR d.is_available IS DISTINCT FROM true
+          )
+    )
     AND (
         $1::text = '' OR 
         cs.name ILIKE '%' || $1 || '%' OR 

@@ -812,6 +812,9 @@ func ValidateReservationItems(ctx context.Context, store db.Store, merchantID in
 			if !combo.IsOnline {
 				return nil, 0, NewRequestError(http.StatusBadRequest, fmt.Errorf("套餐 %s 已下架", combo.Name))
 			}
+			if err := validateComboChildDishesOrderable(ctx, store, combo.ID, combo.Name); err != nil {
+				return nil, 0, err
+			}
 			unitPrice = combo.ComboPrice
 		}
 

@@ -229,6 +229,45 @@ func TestCalculateOrderItems(t *testing.T) {
 			},
 		},
 		{
+			name:  "ComboChildUnavailable",
+			items: []OrderItemInput{{ComboID: &comboID, Quantity: 1}},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetComboSet(gomock.Any(), comboID).
+					Times(1).
+					Return(defaultCombo, nil)
+				store.EXPECT().
+					ListComboDishOrderability(gomock.Any(), comboID).
+					Times(1).
+					Return([]db.ListComboDishOrderabilityRow{
+						comboDishOrderabilityRow(dishID, "Dish A", true, true, false),
+					}, nil)
+			},
+			check: func(t *testing.T, _ int64, _ []db.CreateOrderItemParams, err error) {
+				require.Error(t, err)
+				require.Equal(t, "combo Combo A contains unavailable dish Dish A", err.Error())
+			},
+		},
+		{
+			name:  "ComboChildOrderabilityStoreError",
+			items: []OrderItemInput{{ComboID: &comboID, Quantity: 1}},
+			buildStubs: func(store *mockdb.MockStore) {
+				storeErr := errors.New("list combo dish orderability failed")
+				store.EXPECT().
+					GetComboSet(gomock.Any(), comboID).
+					Times(1).
+					Return(defaultCombo, nil)
+				store.EXPECT().
+					ListComboDishOrderability(gomock.Any(), comboID).
+					Times(1).
+					Return(nil, storeErr)
+			},
+			check: func(t *testing.T, _ int64, _ []db.CreateOrderItemParams, err error) {
+				require.Error(t, err)
+				require.Equal(t, "list combo dish orderability failed", err.Error())
+			},
+		},
+		{
 			name:  "SuccessCombo",
 			items: []OrderItemInput{{ComboID: &comboID, Quantity: 3}},
 			buildStubs: func(store *mockdb.MockStore) {
@@ -236,6 +275,12 @@ func TestCalculateOrderItems(t *testing.T) {
 					GetComboSet(gomock.Any(), comboID).
 					Times(1).
 					Return(defaultCombo, nil)
+				store.EXPECT().
+					ListComboDishOrderability(gomock.Any(), comboID).
+					Times(1).
+					Return([]db.ListComboDishOrderabilityRow{
+						comboDishOrderabilityRow(dishID, "Dish A", true, true, true),
+					}, nil)
 			},
 			check: func(t *testing.T, subtotal int64, orderItems []db.CreateOrderItemParams, err error) {
 				require.NoError(t, err)

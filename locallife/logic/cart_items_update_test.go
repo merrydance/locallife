@@ -2,6 +2,7 @@ package logic
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -82,4 +83,68 @@ func TestUpdateCartItem_Success(t *testing.T) {
 	result, err := UpdateCartItem(context.Background(), store, UpdateCartItemInput{UserID: 1, ItemID: 1, Quantity: &qty, MaxQuantity: 99})
 	require.NoError(t, err)
 	require.Equal(t, int64(2), result.Cart.ID)
+}
+
+func TestUpdateCartItem_RejectsUnavailableComboChildDish(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	cartItem := db.GetCartItemRow{ID: 1, CartID: 2, ComboID: pgtype.Int8{Int64: 10, Valid: true}}
+	qty := int16(2)
+
+	store.EXPECT().
+		GetCartItem(gomock.Any(), int64(1)).
+		Times(1).
+		Return(cartItem, nil)
+	store.EXPECT().
+		GetCart(gomock.Any(), int64(2)).
+		Times(1).
+		Return(db.Cart{ID: 2, UserID: 1}, nil)
+	store.EXPECT().
+		GetComboSet(gomock.Any(), int64(10)).
+		Times(1).
+		Return(db.ComboSet{ID: 10, Name: "套餐", IsOnline: true}, nil)
+	store.EXPECT().
+		ListComboDishOrderability(gomock.Any(), int64(10)).
+		Times(1).
+		Return([]db.ListComboDishOrderabilityRow{
+			comboDishOrderabilityRow(20, "暂不可售菜品", true, true, false),
+		}, nil)
+
+	_, err := UpdateCartItem(context.Background(), store, UpdateCartItemInput{UserID: 1, ItemID: 1, Quantity: &qty, MaxQuantity: 99})
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 400, reqErr.Status)
+	require.Contains(t, reqErr.Error(), "暂不可售菜品")
+}
+
+func TestUpdateCartItem_PropagatesComboChildOrderabilityStoreError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	cartItem := db.GetCartItemRow{ID: 1, CartID: 2, ComboID: pgtype.Int8{Int64: 10, Valid: true}}
+	qty := int16(2)
+	storeErr := errors.New("list combo dish orderability failed")
+
+	store.EXPECT().
+		GetCartItem(gomock.Any(), int64(1)).
+		Times(1).
+		Return(cartItem, nil)
+	store.EXPECT().
+		GetCart(gomock.Any(), int64(2)).
+		Times(1).
+		Return(db.Cart{ID: 2, UserID: 1}, nil)
+	store.EXPECT().
+		GetComboSet(gomock.Any(), int64(10)).
+		Times(1).
+		Return(db.ComboSet{ID: 10, Name: "套餐", IsOnline: true}, nil)
+	store.EXPECT().
+		ListComboDishOrderability(gomock.Any(), int64(10)).
+		Times(1).
+		Return(nil, storeErr)
+
+	_, err := UpdateCartItem(context.Background(), store, UpdateCartItemInput{UserID: 1, ItemID: 1, Quantity: &qty, MaxQuantity: 99})
+	require.ErrorIs(t, err, storeErr)
+	require.NotErrorAs(t, err, new(*RequestError))
 }

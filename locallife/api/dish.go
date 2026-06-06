@@ -295,8 +295,16 @@ func (server *Server) updateDishCategory(ctx *gin.Context) {
 		finalName = txResult.NewCategoryName
 		finalSortOrder = txResult.SortOrder
 	} else if req.SortOrder != nil {
-		// 如果只更新了排序，且名称没变，则直接使用新的排序
-		finalSortOrder = *req.SortOrder
+		updatedMdc, err := server.store.UpdateMerchantDishCategoryOrder(ctx, db.UpdateMerchantDishCategoryOrderParams{
+			MerchantID: merchant.ID,
+			CategoryID: uri.ID,
+			SortOrder:  *req.SortOrder,
+		})
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("update merchant dish category order: %w", err)))
+			return
+		}
+		finalSortOrder = updatedMdc.SortOrder
 	}
 
 	ctx.JSON(http.StatusOK, dishCategoryResponse{

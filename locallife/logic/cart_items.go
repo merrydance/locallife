@@ -120,6 +120,9 @@ func AddCartItem(ctx context.Context, store db.Store, input AddCartItemInput) (A
 		if !combo.IsOnline {
 			return result, NewRequestError(http.StatusBadRequest, errors.New("combo is not available"))
 		}
+		if err := validateComboChildDishesOrderable(ctx, store, combo.ID, combo.Name); err != nil {
+			return result, err
+		}
 	}
 
 	var tableID, reservationID pgtype.Int8
@@ -294,6 +297,9 @@ func UpdateCartItem(ctx context.Context, store db.Store, input UpdateCartItemInp
 		}
 		if !combo.IsOnline {
 			return result, NewRequestError(http.StatusBadRequest, errors.New("combo is not available"))
+		}
+		if err := validateComboChildDishesOrderable(ctx, store, combo.ID, combo.Name); err != nil {
+			return result, err
 		}
 	}
 

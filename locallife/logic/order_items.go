@@ -85,6 +85,9 @@ func CalculateOrderItems(ctx context.Context, store db.Store, merchantID int64, 
 			if !combo.IsOnline {
 				return 0, nil, fmt.Errorf("combo %s is offline", combo.Name)
 			}
+			if err := validateComboChildDishesOrderable(ctx, store, combo.ID, combo.Name); err != nil {
+				return 0, nil, err
+			}
 
 			name = combo.Name
 			unitPrice = combo.ComboPrice

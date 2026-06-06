@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -51,6 +52,16 @@ func comboDetailsRow(combo db.ComboSet, dishesJSON, tagsJSON []byte) db.GetCombo
 		UpdatedAt:         combo.UpdatedAt,
 		Dishes:            dishesJSON,
 		Tags:              tagsJSON,
+	}
+}
+
+func comboDishOrderabilityRow(dishID int64, name string, dishExists bool, isOnline bool, isAvailable bool) db.ListComboDishOrderabilityRow {
+	return db.ListComboDishOrderabilityRow{
+		DishID:      dishID,
+		DishName:    name,
+		DishExists:  pgtype.Bool{Bool: dishExists, Valid: true},
+		IsOnline:    isOnline,
+		IsAvailable: isAvailable,
 	}
 }
 
@@ -110,7 +121,7 @@ func TestCreateComboSetAPI(t *testing.T) {
 	responseDishesJSON := []byte(`[{"dish_id":101,"dish_name":"菜品1","dish_price":1200,"quantity":2}]`)
 	responseTagsJSON := []byte(`[{"id":11,"name":"招牌"}]`)
 	normalizedDishID := int64(101)
-	normalizedDish := db.Dish{ID: normalizedDishID, MerchantID: merchant.ID, Name: "菜品1", Price: 1200}
+	normalizedDish := db.Dish{ID: normalizedDishID, MerchantID: merchant.ID, Name: "菜品1", Price: 1200, IsAvailable: true, IsOnline: true}
 	customizationGroups := comboCustomizationGroupsFixture()
 
 	testCases := []struct {
@@ -233,6 +244,34 @@ func TestCreateComboSetAPI(t *testing.T) {
 						Price:               normalizedDish.Price,
 						CustomizationGroups: customizationGroups,
 					}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name: "RejectOnlineComboWithUnavailableDish",
+			body: gin.H{
+				"name":        combo.Name,
+				"combo_price": combo.ComboPrice,
+				"is_online":   true,
+				"dishes": []gin.H{{
+					"dish_id":  normalizedDishID,
+					"quantity": 1,
+				}},
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				unavailableDish := normalizedDish
+				unavailableDish.IsAvailable = false
+				store.EXPECT().
+					GetDish(gomock.Any(), gomock.Eq(normalizedDishID)).
+					Times(1).
+					Return(unavailableDish, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -714,6 +753,13 @@ func TestGetPublicComboDetailAPI_ApprovedMerchantKeepsOpenState(t *testing.T) {
 		Return(detailsRow, nil)
 
 	store.EXPECT().
+		ListComboDishOrderability(gomock.Any(), gomock.Eq(combo.ID)).
+		Times(1).
+		Return([]db.ListComboDishOrderabilityRow{
+			comboDishOrderabilityRow(201, "可售菜品", true, true, true),
+		}, nil)
+
+	store.EXPECT().
 		GetMerchant(gomock.Any(), combo.MerchantID).
 		Times(1).
 		Return(merchant, nil)
@@ -738,6 +784,39 @@ func TestGetPublicComboDetailAPI_ApprovedMerchantKeepsOpenState(t *testing.T) {
 	require.True(t, response.IsOpen)
 }
 
+func TestGetPublicComboDetailAPI_RejectsUnavailableChildDish(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	combo := randomComboSet(merchant.ID)
+	combo.IsOnline = true
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetComboSetWithDetails(gomock.Any(), gomock.Eq(combo.ID)).
+		Times(1).
+		Return(comboDetailsRow(combo, nil, nil), nil)
+	store.EXPECT().
+		ListComboDishOrderability(gomock.Any(), gomock.Eq(combo.ID)).
+		Times(1).
+		Return([]db.ListComboDishOrderabilityRow{
+			comboDishOrderabilityRow(201, "暂不可售菜品", true, true, false),
+		}, nil)
+
+	server, _ := newTestServerForMedia(t, store)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, fmt.Sprintf("/v1/public/combos/%d", combo.ID), nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusNotFound, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "combo set not found")
+}
+
 // ==================== 套餐更新测试 ====================
 
 func TestUpdateComboSetAPI(t *testing.T) {
@@ -747,7 +826,7 @@ func TestUpdateComboSetAPI(t *testing.T) {
 	responseDishesJSON := []byte(`[{"dish_id":201,"dish_name":"菜品A","dish_price":1800,"quantity":1},{"dish_id":202,"dish_name":"菜品B","dish_price":2200,"quantity":3}]`)
 	responseTagsJSON := []byte(`[{"id":21,"name":"午市推荐"}]`)
 	normalizedDishID := int64(201)
-	normalizedDish := db.Dish{ID: normalizedDishID, MerchantID: merchant.ID, Name: "菜品A", Price: 1500}
+	normalizedDish := db.Dish{ID: normalizedDishID, MerchantID: merchant.ID, Name: "菜品A", Price: 1500, IsAvailable: true, IsOnline: true}
 	customizationGroups := comboCustomizationGroupsFixture()
 
 	newName := "Updated Combo"
@@ -781,6 +860,13 @@ func TestUpdateComboSetAPI(t *testing.T) {
 					GetComboSet(gomock.Any(), gomock.Eq(combo.ID)).
 					Times(1).
 					Return(combo, nil)
+
+				store.EXPECT().
+					ListComboDishOrderability(gomock.Any(), gomock.Eq(combo.ID)).
+					Times(1).
+					Return([]db.ListComboDishOrderabilityRow{
+						comboDishOrderabilityRow(normalizedDishID, normalizedDish.Name, true, true, true),
+					}, nil)
 
 				store.EXPECT().
 					UpdateComboSetTx(gomock.Any(), gomock.Any()).
@@ -892,6 +978,92 @@ func TestUpdateComboSetAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name: "RejectOnlineComboWithOfflineDish",
+			body: gin.H{
+				"id":        combo.ID,
+				"is_online": true,
+				"dishes": []gin.H{{
+					"dish_id":  normalizedDishID,
+					"quantity": 1,
+				}},
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetComboSet(gomock.Any(), gomock.Eq(combo.ID)).
+					Times(1).
+					Return(combo, nil)
+
+				offlineDish := normalizedDish
+				offlineDish.IsOnline = false
+				store.EXPECT().
+					GetDish(gomock.Any(), gomock.Eq(normalizedDishID)).
+					Times(1).
+					Return(offlineDish, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name: "RejectOnlineComboWithExistingUnavailableDish",
+			body: gin.H{
+				"id":        combo.ID,
+				"is_online": true,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetComboSet(gomock.Any(), gomock.Eq(combo.ID)).
+					Times(1).
+					Return(combo, nil)
+
+				store.EXPECT().
+					ListComboDishOrderability(gomock.Any(), gomock.Eq(combo.ID)).
+					Times(1).
+					Return([]db.ListComboDishOrderabilityRow{
+						comboDishOrderabilityRow(normalizedDishID, normalizedDish.Name, true, true, false),
+					}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name: "ListExistingDishesError",
+			body: gin.H{
+				"id":        combo.ID,
+				"is_online": true,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetComboSet(gomock.Any(), gomock.Eq(combo.ID)).
+					Times(1).
+					Return(combo, nil)
+
+				store.EXPECT().
+					ListComboDishOrderability(gomock.Any(), gomock.Eq(combo.ID)).
+					Times(1).
+					Return(nil, errors.New("list combo dishes failed"))
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusInternalServerError, recorder.Code)
 			},
 		},
 		{
@@ -1115,10 +1287,12 @@ func TestAddComboDishAPI(t *testing.T) {
 
 	// 创建一个属于该商户的菜品
 	dish := db.Dish{
-		ID:         dishID,
-		MerchantID: merchant.ID,
-		Name:       util.RandomString(8),
-		Price:      util.RandomInt(1000, 10000),
+		ID:          dishID,
+		MerchantID:  merchant.ID,
+		Name:        util.RandomString(8),
+		Price:       util.RandomInt(1000, 10000),
+		IsAvailable: true,
+		IsOnline:    true,
 	}
 
 	comboDish := db.ComboDish{
@@ -1159,6 +1333,13 @@ func TestAddComboDishAPI(t *testing.T) {
 					GetDish(gomock.Any(), gomock.Eq(dishID)).
 					Times(1).
 					Return(dish, nil)
+
+				store.EXPECT().
+					ListComboDishOrderability(gomock.Any(), gomock.Eq(combo.ID)).
+					Times(1).
+					Return([]db.ListComboDishOrderabilityRow{
+						comboDishOrderabilityRow(301, "热销菜", true, true, true),
+					}, nil)
 
 				store.EXPECT().
 					AddComboDish(gomock.Any(), gomock.Any()).
@@ -1202,6 +1383,105 @@ func TestAddComboDishAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
+			},
+		},
+		{
+			name:    "RejectUnavailableDishForOnlineCombo",
+			comboID: combo.ID,
+			body: gin.H{
+				"dish_id": dishID,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetComboSet(gomock.Any(), gomock.Eq(combo.ID)).
+					Times(1).
+					Return(combo, nil)
+
+				unavailableDish := dish
+				unavailableDish.IsAvailable = false
+				store.EXPECT().
+					GetDish(gomock.Any(), gomock.Eq(dishID)).
+					Times(1).
+					Return(unavailableDish, nil)
+
+				store.EXPECT().
+					ListComboDishOrderability(gomock.Any(), gomock.Eq(combo.ID)).
+					Times(1).
+					Return([]db.ListComboDishOrderabilityRow{
+						comboDishOrderabilityRow(301, "热销菜", true, true, true),
+					}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name:    "RejectExistingUnavailableDishForOnlineCombo",
+			comboID: combo.ID,
+			body: gin.H{
+				"dish_id": dishID,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetComboSet(gomock.Any(), gomock.Eq(combo.ID)).
+					Times(1).
+					Return(combo, nil)
+
+				store.EXPECT().
+					GetDish(gomock.Any(), gomock.Eq(dishID)).
+					Times(1).
+					Return(dish, nil)
+
+				store.EXPECT().
+					ListComboDishOrderability(gomock.Any(), gomock.Eq(combo.ID)).
+					Times(1).
+					Return([]db.ListComboDishOrderabilityRow{
+						comboDishOrderabilityRow(301, "旧菜品", true, true, false),
+					}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name:    "ListExistingDishesError",
+			comboID: combo.ID,
+			body: gin.H{
+				"dish_id": dishID,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetComboSet(gomock.Any(), gomock.Eq(combo.ID)).
+					Times(1).
+					Return(combo, nil)
+
+				store.EXPECT().
+					GetDish(gomock.Any(), gomock.Eq(dishID)).
+					Times(1).
+					Return(dish, nil)
+
+				store.EXPECT().
+					ListComboDishOrderability(gomock.Any(), gomock.Eq(combo.ID)).
+					Times(1).
+					Return(nil, errors.New("list combo dishes failed"))
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusInternalServerError, recorder.Code)
 			},
 		},
 		{
@@ -1303,6 +1583,13 @@ func TestToggleComboOnlineAPI(t *testing.T) {
 					Return(combo, nil)
 
 				store.EXPECT().
+					ListComboDishOrderability(gomock.Any(), gomock.Eq(combo.ID)).
+					Times(1).
+					Return([]db.ListComboDishOrderabilityRow{
+						comboDishOrderabilityRow(301, "热销菜", true, true, true),
+					}, nil)
+
+				store.EXPECT().
 					UpdateComboSetOnlineStatus(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
@@ -1354,6 +1641,60 @@ func TestToggleComboOnlineAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
+			},
+		},
+		{
+			name:    "RejectOnlineWithUnavailableChildDish",
+			comboID: combo.ID,
+			body: gin.H{
+				"is_online": true,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetComboSet(gomock.Any(), gomock.Eq(combo.ID)).
+					Times(1).
+					Return(combo, nil)
+
+				store.EXPECT().
+					ListComboDishOrderability(gomock.Any(), gomock.Eq(combo.ID)).
+					Times(1).
+					Return([]db.ListComboDishOrderabilityRow{
+						comboDishOrderabilityRow(301, "热销菜", true, true, false),
+					}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name:    "ListExistingDishesError",
+			comboID: combo.ID,
+			body: gin.H{
+				"is_online": true,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetComboSet(gomock.Any(), gomock.Eq(combo.ID)).
+					Times(1).
+					Return(combo, nil)
+
+				store.EXPECT().
+					ListComboDishOrderability(gomock.Any(), gomock.Eq(combo.ID)).
+					Times(1).
+					Return(nil, errors.New("list combo dishes failed"))
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusInternalServerError, recorder.Code)
 			},
 		},
 	}

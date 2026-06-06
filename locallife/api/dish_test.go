@@ -252,6 +252,71 @@ func TestListDishCategoriesAPI(t *testing.T) {
 	}
 }
 
+func TestUpdateDishCategorySortOrderAPI(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	category := randomDishCategory()
+	oldSortOrder := int16(2)
+	newSortOrder := int16(9)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+	store.EXPECT().
+		GetMerchantDishCategory(gomock.Any(), gomock.Eq(db.GetMerchantDishCategoryParams{
+			MerchantID: merchant.ID,
+			CategoryID: category.ID,
+		})).
+		Times(1).
+		Return(db.MerchantDishCategory{
+			MerchantID: merchant.ID,
+			CategoryID: category.ID,
+			SortOrder:  oldSortOrder,
+		}, nil)
+
+	store.EXPECT().
+		GetDishCategory(gomock.Any(), gomock.Eq(category.ID)).
+		Times(1).
+		Return(category, nil)
+
+	store.EXPECT().
+		UpdateMerchantDishCategoryOrder(gomock.Any(), gomock.Eq(db.UpdateMerchantDishCategoryOrderParams{
+			MerchantID: merchant.ID,
+			CategoryID: category.ID,
+			SortOrder:  newSortOrder,
+		})).
+		Times(1).
+		Return(db.MerchantDishCategory{
+			MerchantID: merchant.ID,
+			CategoryID: category.ID,
+			SortOrder:  newSortOrder,
+		}, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	body := gin.H{"sort_order": newSortOrder}
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	url := fmt.Sprintf("/v1/dishes/categories/%d", category.ID)
+	request, err := http.NewRequest(http.MethodPatch, url, bytes.NewReader(data))
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var gotCategory dishCategoryResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &gotCategory)
+	require.Equal(t, category.ID, gotCategory.ID)
+	require.Equal(t, category.Name, gotCategory.Name)
+	require.Equal(t, newSortOrder, gotCategory.SortOrder)
+}
+
 // ==================== 菜品管理测试 ====================
 
 func TestCreateDishAPI(t *testing.T) {

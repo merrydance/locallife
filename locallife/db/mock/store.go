@@ -13746,6 +13746,21 @@ func (mr *MockStoreMockRecorder) ListCombinedPaymentSubOrdersWithMerchant(ctx, c
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListCombinedPaymentSubOrdersWithMerchant", reflect.TypeOf((*MockStore)(nil).ListCombinedPaymentSubOrdersWithMerchant), ctx, combinedPaymentID)
 }
 
+// ListComboDishOrderability mocks base method.
+func (m *MockStore) ListComboDishOrderability(ctx context.Context, comboID int64) ([]db.ListComboDishOrderabilityRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListComboDishOrderability", ctx, comboID)
+	ret0, _ := ret[0].([]db.ListComboDishOrderabilityRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListComboDishOrderability indicates an expected call of ListComboDishOrderability.
+func (mr *MockStoreMockRecorder) ListComboDishOrderability(ctx, comboID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListComboDishOrderability", reflect.TypeOf((*MockStore)(nil).ListComboDishOrderability), ctx, comboID)
+}
+
 // ListComboDishes mocks base method.
 func (m *MockStore) ListComboDishes(ctx context.Context, comboID int64) ([]db.ListComboDishesRow, error) {
 	m.ctrl.T.Helper()

@@ -564,7 +564,13 @@ SELECT
   cs.combo_price,
   -- 实时计算实际原价（单品价之和）
   COALESCE(
-    (SELECT SUM(d.price * cd.quantity) FROM combo_dishes cd JOIN dishes d ON d.id = cd.dish_id WHERE cd.combo_id = cs.id),
+    (SELECT SUM(d.price * cd.quantity)
+     FROM combo_dishes cd
+     JOIN dishes d ON d.id = cd.dish_id
+     WHERE cd.combo_id = cs.id
+       AND d.deleted_at IS NULL
+       AND d.is_online = true
+       AND d.is_available = true),
     cs.original_price
   )::bigint as original_price,
   cs.is_online,
@@ -577,6 +583,9 @@ SELECT
     FROM combo_dishes cd
     JOIN dishes d ON d.id = cd.dish_id
     WHERE cd.combo_id = cs.id
+      AND d.deleted_at IS NULL
+      AND d.is_online = true
+      AND d.is_available = true
   ) as dishes,
   COALESCE(
     (SELECT json_agg(t.name) FROM combo_tags ct JOIN tags t ON t.id = ct.tag_id WHERE ct.combo_id = cs.id),
@@ -586,6 +595,27 @@ FROM combo_sets cs
 WHERE cs.merchant_id = $1
   AND cs.is_online = true
   AND cs.deleted_at IS NULL
+  AND EXISTS (
+    SELECT 1
+    FROM combo_dishes cd
+    JOIN dishes d ON d.id = cd.dish_id
+    WHERE cd.combo_id = cs.id
+      AND d.deleted_at IS NULL
+      AND d.is_online = true
+      AND d.is_available = true
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM combo_dishes cd
+    LEFT JOIN dishes d ON d.id = cd.dish_id
+    WHERE cd.combo_id = cs.id
+      AND (
+        d.id IS NULL
+        OR d.deleted_at IS NOT NULL
+        OR d.is_online IS DISTINCT FROM true
+        OR d.is_available IS DISTINCT FROM true
+      )
+  )
 ORDER BY cs.id
 `
 

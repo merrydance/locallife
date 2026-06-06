@@ -184,6 +184,39 @@ func buildComboSetSummaryFromDishes(dishes []db.DishWithQuantity, originalPrice 
 	}
 }
 
+func validateComboDishOrderable(dishName string, isOnline bool, isAvailable bool) error {
+	if !isOnline {
+		return fmt.Errorf("dish %s is offline", dishName)
+	}
+	if !isAvailable {
+		return fmt.Errorf("dish %s is unavailable", dishName)
+	}
+	return nil
+}
+
+func (server *Server) validateExistingComboDishesOrderable(ctx context.Context, comboID int64, requireNonEmpty bool) (int, error) {
+	dishes, err := server.store.ListComboDishOrderability(ctx, comboID)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+	if requireNonEmpty && len(dishes) == 0 {
+		return http.StatusBadRequest, errors.New("combo has no available dishes")
+	}
+	for _, dish := range dishes {
+		dishName := dish.DishName
+		if dishName == "" {
+			dishName = fmt.Sprintf("%d", dish.DishID)
+		}
+		if !dish.DishExists.Valid || !dish.DishExists.Bool {
+			return http.StatusBadRequest, fmt.Errorf("dish %s is unavailable", dishName)
+		}
+		if err := validateComboDishOrderable(dishName, dish.IsOnline, dish.IsAvailable); err != nil {
+			return http.StatusBadRequest, err
+		}
+	}
+	return 0, nil
+}
+
 func decodeComboSetDetailsFields(result db.GetComboSetWithDetailsRow) ([]dishInComboResponse, []tagResponse, error) {
 	var dishes []dishInComboResponse
 	var tags []tagResponse
@@ -244,10 +277,15 @@ func (server *Server) resolveComboSummary(
 	merchantID int64,
 	legacyDishIDs []int64,
 	requestedDishes []comboDishInput,
+	requireOrderable bool,
 ) (comboSetSummary, int, error) {
 	requestedSelections, err := buildComboDishSelections(legacyDishIDs, requestedDishes)
 	if err != nil {
 		return comboSetSummary{}, http.StatusBadRequest, err
+	}
+
+	if requireOrderable && len(requestedSelections) == 0 {
+		return comboSetSummary{}, http.StatusBadRequest, errors.New("combo has no available dishes")
 	}
 
 	if requestedSelections == nil {
@@ -271,6 +309,11 @@ func (server *Server) resolveComboSummary(
 		}
 		if resolvedDish.MerchantID != merchantID {
 			return comboSetSummary{}, http.StatusForbidden, fmt.Errorf("dish %d does not belong to this merchant", dish.DishID)
+		}
+		if requireOrderable {
+			if err := validateComboDishOrderable(resolvedDish.Name, resolvedDish.IsOnline, resolvedDish.IsAvailable); err != nil {
+				return comboSetSummary{}, http.StatusBadRequest, err
+			}
 		}
 
 		dish.DishBasePriceSnapshot = resolvedDish.Price
@@ -310,7 +353,7 @@ func (server *Server) createComboSet(ctx *gin.Context) {
 		return
 	}
 
-	comboSummary, statusCode, err := server.resolveComboSummary(ctx, merchant.ID, req.DishIDs, req.Dishes)
+	comboSummary, statusCode, err := server.resolveComboSummary(ctx, merchant.ID, req.DishIDs, req.Dishes, req.IsOnline)
 	if err != nil {
 		if statusCode == http.StatusInternalServerError {
 			ctx.JSON(statusCode, internalError(ctx, err))
@@ -503,6 +546,16 @@ func (server *Server) getPublicComboDetail(ctx *gin.Context) {
 	// 消费者端只能查看上架的套餐
 	if !result.IsOnline {
 		ctx.JSON(http.StatusNotFound, errorResponse(errors.New("combo set is not online")))
+		return
+	}
+
+	statusCode, err := server.validateExistingComboDishesOrderable(ctx, result.ID, true)
+	if err != nil {
+		if statusCode == http.StatusInternalServerError {
+			ctx.JSON(statusCode, internalError(ctx, err))
+			return
+		}
+		ctx.JSON(http.StatusNotFound, errorResponse(errors.New("combo set not found")))
 		return
 	}
 
@@ -756,7 +809,7 @@ func (server *Server) updateComboSet(ctx *gin.Context) {
 
 	var dishesWithQty *[]db.DishWithQuantity
 	if req.Dishes != nil {
-		resolvedSummary, statusCode, err := server.resolveComboSummary(ctx, merchant.ID, nil, req.Dishes)
+		resolvedSummary, statusCode, err := server.resolveComboSummary(ctx, merchant.ID, nil, req.Dishes, params.IsOnline.Bool)
 		if err != nil {
 			if statusCode == http.StatusInternalServerError {
 				ctx.JSON(statusCode, internalError(ctx, err))
@@ -767,6 +820,16 @@ func (server *Server) updateComboSet(ctx *gin.Context) {
 		}
 		dishesWithQty = &resolvedSummary.Dishes
 		params.OriginalPrice = pgtype.Int8{Int64: resolvedSummary.OriginalPrice, Valid: true}
+	} else if params.IsOnline.Bool {
+		statusCode, err := server.validateExistingComboDishesOrderable(ctx, existingCombo.ID, true)
+		if err != nil {
+			if statusCode == http.StatusInternalServerError {
+				ctx.JSON(statusCode, internalError(ctx, err))
+				return
+			}
+			ctx.JSON(statusCode, errorResponse(err))
+			return
+		}
 	}
 
 	var tagIDs *[]int64
@@ -857,6 +920,18 @@ func (server *Server) toggleComboOnline(ctx *gin.Context) {
 	if combo.MerchantID != merchant.ID {
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized to modify this combo set")))
 		return
+	}
+
+	if *bodyReq.IsOnline {
+		statusCode, err := server.validateExistingComboDishesOrderable(ctx, combo.ID, true)
+		if err != nil {
+			if statusCode == http.StatusInternalServerError {
+				ctx.JSON(statusCode, internalError(ctx, err))
+				return
+			}
+			ctx.JSON(statusCode, errorResponse(err))
+			return
+		}
 	}
 
 	// 更新上架状态
@@ -1014,6 +1089,21 @@ func (server *Server) addComboDish(ctx *gin.Context) {
 	if dish.MerchantID != merchant.ID {
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("dish does not belong to this merchant")))
 		return
+	}
+	if combo.IsOnline {
+		statusCode, err := server.validateExistingComboDishesOrderable(ctx, combo.ID, false)
+		if err != nil {
+			if statusCode == http.StatusInternalServerError {
+				ctx.JSON(statusCode, internalError(ctx, err))
+				return
+			}
+			ctx.JSON(statusCode, errorResponse(err))
+			return
+		}
+		if err := validateComboDishOrderable(dish.Name, dish.IsOnline, dish.IsAvailable); err != nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+			return
+		}
 	}
 
 	// 添加关联
