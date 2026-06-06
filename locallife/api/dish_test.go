@@ -317,6 +317,153 @@ func TestUpdateDishCategorySortOrderAPI(t *testing.T) {
 	require.Equal(t, newSortOrder, gotCategory.SortOrder)
 }
 
+func TestUpdateDishCategoryRenameUnlinkedDuringTxAPI(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	category := randomDishCategory()
+	oldSortOrder := int16(2)
+	newSortOrder := int16(9)
+	newName := util.RandomString(8)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+	store.EXPECT().
+		GetMerchantDishCategory(gomock.Any(), gomock.Eq(db.GetMerchantDishCategoryParams{
+			MerchantID: merchant.ID,
+			CategoryID: category.ID,
+		})).
+		Times(1).
+		Return(db.MerchantDishCategory{
+			MerchantID: merchant.ID,
+			CategoryID: category.ID,
+			SortOrder:  oldSortOrder,
+		}, nil)
+
+	store.EXPECT().
+		GetDishCategory(gomock.Any(), gomock.Eq(category.ID)).
+		Times(1).
+		Return(category, nil)
+
+	store.EXPECT().
+		RenameMerchantDishCategoryTx(gomock.Any(), gomock.Eq(db.RenameMerchantDishCategoryTxParams{
+			MerchantID:    merchant.ID,
+			OldCategoryID: category.ID,
+			NewName:       newName,
+			SortOrder:     newSortOrder,
+		})).
+		Times(1).
+		Return(db.RenameMerchantDishCategoryTxResult{}, db.ErrMerchantDishCategoryNotLinked)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	body := gin.H{"name": newName, "sort_order": newSortOrder}
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	url := fmt.Sprintf("/v1/dishes/categories/%d", category.ID)
+	request, err := http.NewRequest(http.MethodPatch, url, bytes.NewReader(data))
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusForbidden, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "not your category")
+}
+
+func TestDeleteDishCategoryRejectsActiveDishesAPI(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	category := randomDishCategory()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+	store.EXPECT().
+		GetMerchantDishCategory(gomock.Any(), gomock.Eq(db.GetMerchantDishCategoryParams{
+			MerchantID: merchant.ID,
+			CategoryID: category.ID,
+		})).
+		Times(1).
+		Return(db.MerchantDishCategory{
+			MerchantID: merchant.ID,
+			CategoryID: category.ID,
+		}, nil)
+
+	store.EXPECT().
+		UnlinkUnusedMerchantDishCategoryTx(gomock.Any(), gomock.Eq(db.UnlinkUnusedMerchantDishCategoryParams{
+			MerchantID: merchant.ID,
+			CategoryID: category.ID,
+		})).
+		Times(1).
+		Return(db.MerchantDishCategory{}, db.ErrMerchantDishCategoryHasActiveDishes)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	url := fmt.Sprintf("/v1/dishes/categories/%d", category.ID)
+	request, err := http.NewRequest(http.MethodDelete, url, nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusConflict, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "category has active dishes")
+}
+
+func TestDeleteDishCategoryAPI(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	category := randomDishCategory()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+	store.EXPECT().
+		GetMerchantDishCategory(gomock.Any(), gomock.Eq(db.GetMerchantDishCategoryParams{
+			MerchantID: merchant.ID,
+			CategoryID: category.ID,
+		})).
+		Times(1).
+		Return(db.MerchantDishCategory{
+			MerchantID: merchant.ID,
+			CategoryID: category.ID,
+		}, nil)
+
+	store.EXPECT().
+		UnlinkUnusedMerchantDishCategoryTx(gomock.Any(), gomock.Eq(db.UnlinkUnusedMerchantDishCategoryParams{
+			MerchantID: merchant.ID,
+			CategoryID: category.ID,
+		})).
+		Times(1).
+		Return(db.MerchantDishCategory{
+			MerchantID: merchant.ID,
+			CategoryID: category.ID,
+		}, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	url := fmt.Sprintf("/v1/dishes/categories/%d", category.ID)
+	request, err := http.NewRequest(http.MethodDelete, url, nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "category deleted successfully")
+}
+
 // ==================== 菜品管理测试 ====================
 
 func TestCreateDishAPI(t *testing.T) {
@@ -562,6 +709,39 @@ func TestCreateDishAPI(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, int64(0), resp.Data.Price)
 				require.Nil(t, resp.Data.MemberPrice)
+			},
+		},
+		{
+			name: "CategoryUnlinkedDuringCreate",
+			body: gin.H{
+				"category_id":  category.ID,
+				"name":         dish.Name,
+				"price":        dish.Price,
+				"is_available": true,
+				"is_online":    true,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetMerchantDishCategory(gomock.Any(), gomock.Eq(db.GetMerchantDishCategoryParams{
+						MerchantID: merchant.ID,
+						CategoryID: category.ID,
+					})).
+					Times(1).
+					Return(db.MerchantDishCategory{}, nil)
+
+				store.EXPECT().
+					CreateDishTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.CreateDishTxResult{}, db.ErrMerchantDishCategoryNotLinked)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusForbidden, recorder.Code)
+				require.Contains(t, recorder.Body.String(), "category does not belong to this merchant")
 			},
 		},
 		{
@@ -898,6 +1078,7 @@ func TestUpdateDishAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
 	dish := randomDish(merchant.ID, nil)
+	category := randomDishCategory()
 
 	testCases := []struct {
 		name          string
@@ -1020,6 +1201,33 @@ func TestUpdateDishAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
+			},
+		},
+		{
+			name:   "CategoryUnlinkedDuringUpdate",
+			dishID: dish.ID,
+			body: gin.H{
+				"category_id": category.ID,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetDish(gomock.Any(), gomock.Eq(dish.ID)).
+					Times(1).
+					Return(dish, nil)
+
+				store.EXPECT().
+					UpdateDishTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.UpdateDishTxResult{}, db.ErrMerchantDishCategoryNotLinked)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusForbidden, recorder.Code)
+				require.Contains(t, recorder.Body.String(), "category does not belong to this merchant")
 			},
 		},
 	}

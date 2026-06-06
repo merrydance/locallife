@@ -288,6 +288,10 @@ func (server *Server) updateDishCategory(ctx *gin.Context) {
 			SortOrder:     finalSortOrder,
 		})
 		if err != nil {
+			if errors.Is(err, db.ErrMerchantDishCategoryNotLinked) {
+				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not your category")))
+				return
+			}
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("rename dish category: %w", err)))
 			return
 		}
@@ -330,6 +334,7 @@ type deleteDishCategoryUriRequest struct {
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "无权操作此分类"
 // @Failure 404 {object} ErrorResponse "分类不存在"
+// @Failure 409 {object} ErrorResponse "分类仍有菜品使用"
 // @Failure 500 {object} ErrorResponse "服务器内部错误"
 // @Router /v1/dishes/categories/{id} [delete]
 // @Security BearerAuth
@@ -368,12 +373,20 @@ func (server *Server) deleteDishCategory(ctx *gin.Context) {
 		return
 	}
 
-	// 取消关联分类
-	err = server.store.UnlinkMerchantDishCategory(ctx, db.UnlinkMerchantDishCategoryParams{
+	// 仅当没有活跃菜品继续使用该分类时才解除商户分类链接，避免留下隐藏分类引用。
+	_, err = server.store.UnlinkUnusedMerchantDishCategoryTx(ctx, db.UnlinkUnusedMerchantDishCategoryParams{
 		MerchantID: merchant.ID,
 		CategoryID: uri.ID,
 	})
 	if err != nil {
+		if errors.Is(err, db.ErrMerchantDishCategoryHasActiveDishes) {
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("category has active dishes")))
+			return
+		}
+		if errors.Is(err, db.ErrMerchantDishCategoryNotLinked) {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not your category")))
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("unlink merchant dish category: %w", err)))
 		return
 	}
@@ -609,6 +622,10 @@ func (server *Server) createDish(ctx *gin.Context) {
 		CustomizationGroups: customizationInputs,
 	})
 	if err != nil {
+		if errors.Is(err, db.ErrMerchantDishCategoryNotLinked) {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("category does not belong to this merchant")))
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("create dish tx: %w", err)))
 		return
 	}
@@ -1169,6 +1186,10 @@ func (server *Server) updateDish(ctx *gin.Context) {
 		TagIDs:            tagIDs,
 	})
 	if err != nil {
+		if errors.Is(err, db.ErrMerchantDishCategoryNotLinked) {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("category does not belong to this merchant")))
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("update dish tx: %w", err)))
 		return
 	}

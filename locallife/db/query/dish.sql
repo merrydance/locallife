@@ -51,9 +51,27 @@ RETURNING *;
 SELECT merchant_id, category_id, sort_order, created_at FROM merchant_dish_categories
 WHERE merchant_id = $1 AND category_id = $2;
 
+-- name: GetMerchantDishCategoryForUpdate :one
+SELECT merchant_id, category_id, sort_order, created_at FROM merchant_dish_categories
+WHERE merchant_id = $1 AND category_id = $2
+FOR UPDATE;
+
 -- name: UnlinkMerchantDishCategory :exec
 DELETE FROM merchant_dish_categories
 WHERE merchant_id = $1 AND category_id = $2;
+
+-- name: UnlinkUnusedMerchantDishCategory :one
+DELETE FROM merchant_dish_categories mdc
+WHERE mdc.merchant_id = $1
+  AND mdc.category_id = $2
+  AND NOT EXISTS (
+    SELECT 1
+    FROM dishes d
+    WHERE d.merchant_id = mdc.merchant_id
+      AND d.category_id = mdc.category_id
+      AND d.deleted_at IS NULL
+  )
+RETURNING *;
 
 -- name: UpdateDishesCategory :exec
 UPDATE dishes
@@ -84,6 +102,11 @@ INSERT INTO dishes (
 -- name: GetDish :one
 SELECT id, merchant_id, category_id, name, description, price, member_price, is_available, is_online, sort_order, created_at, updated_at, prepare_time, deleted_at, monthly_sales, repurchase_rate, image_media_asset_id, is_packaging FROM dishes
 WHERE id = $1 AND deleted_at IS NULL LIMIT 1;
+
+-- name: GetDishForUpdate :one
+SELECT id, merchant_id, category_id, name, description, price, member_price, is_available, is_online, sort_order, created_at, updated_at, prepare_time, deleted_at, monthly_sales, repurchase_rate, image_media_asset_id, is_packaging FROM dishes
+WHERE id = $1 AND deleted_at IS NULL
+FOR UPDATE;
 
 -- name: GetDishWithDetails :one
 SELECT 

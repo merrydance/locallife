@@ -650,6 +650,38 @@ func (q *Queries) GetDishComplete(ctx context.Context, id int64) (GetDishComplet
 	return i, err
 }
 
+const getDishForUpdate = `-- name: GetDishForUpdate :one
+SELECT id, merchant_id, category_id, name, description, price, member_price, is_available, is_online, sort_order, created_at, updated_at, prepare_time, deleted_at, monthly_sales, repurchase_rate, image_media_asset_id, is_packaging FROM dishes
+WHERE id = $1 AND deleted_at IS NULL
+FOR UPDATE
+`
+
+func (q *Queries) GetDishForUpdate(ctx context.Context, id int64) (Dish, error) {
+	row := q.db.QueryRow(ctx, getDishForUpdate, id)
+	var i Dish
+	err := row.Scan(
+		&i.ID,
+		&i.MerchantID,
+		&i.CategoryID,
+		&i.Name,
+		&i.Description,
+		&i.Price,
+		&i.MemberPrice,
+		&i.IsAvailable,
+		&i.IsOnline,
+		&i.SortOrder,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PrepareTime,
+		&i.DeletedAt,
+		&i.MonthlySales,
+		&i.RepurchaseRate,
+		&i.ImageMediaAssetID,
+		&i.IsPackaging,
+	)
+	return i, err
+}
+
 const getDishIDsByCuisines = `-- name: GetDishIDsByCuisines :many
 SELECT d.id FROM dishes d
 WHERE d.is_online = true 
@@ -1174,6 +1206,29 @@ type GetMerchantDishCategoryParams struct {
 
 func (q *Queries) GetMerchantDishCategory(ctx context.Context, arg GetMerchantDishCategoryParams) (MerchantDishCategory, error) {
 	row := q.db.QueryRow(ctx, getMerchantDishCategory, arg.MerchantID, arg.CategoryID)
+	var i MerchantDishCategory
+	err := row.Scan(
+		&i.MerchantID,
+		&i.CategoryID,
+		&i.SortOrder,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getMerchantDishCategoryForUpdate = `-- name: GetMerchantDishCategoryForUpdate :one
+SELECT merchant_id, category_id, sort_order, created_at FROM merchant_dish_categories
+WHERE merchant_id = $1 AND category_id = $2
+FOR UPDATE
+`
+
+type GetMerchantDishCategoryForUpdateParams struct {
+	MerchantID int64 `json:"merchant_id"`
+	CategoryID int64 `json:"category_id"`
+}
+
+func (q *Queries) GetMerchantDishCategoryForUpdate(ctx context.Context, arg GetMerchantDishCategoryForUpdateParams) (MerchantDishCategory, error) {
+	row := q.db.QueryRow(ctx, getMerchantDishCategoryForUpdate, arg.MerchantID, arg.CategoryID)
 	var i MerchantDishCategory
 	err := row.Scan(
 		&i.MerchantID,
@@ -2153,6 +2208,37 @@ type UnlinkMerchantDishCategoryParams struct {
 func (q *Queries) UnlinkMerchantDishCategory(ctx context.Context, arg UnlinkMerchantDishCategoryParams) error {
 	_, err := q.db.Exec(ctx, unlinkMerchantDishCategory, arg.MerchantID, arg.CategoryID)
 	return err
+}
+
+const unlinkUnusedMerchantDishCategory = `-- name: UnlinkUnusedMerchantDishCategory :one
+DELETE FROM merchant_dish_categories mdc
+WHERE mdc.merchant_id = $1
+  AND mdc.category_id = $2
+  AND NOT EXISTS (
+    SELECT 1
+    FROM dishes d
+    WHERE d.merchant_id = mdc.merchant_id
+      AND d.category_id = mdc.category_id
+      AND d.deleted_at IS NULL
+  )
+RETURNING merchant_id, category_id, sort_order, created_at
+`
+
+type UnlinkUnusedMerchantDishCategoryParams struct {
+	MerchantID int64 `json:"merchant_id"`
+	CategoryID int64 `json:"category_id"`
+}
+
+func (q *Queries) UnlinkUnusedMerchantDishCategory(ctx context.Context, arg UnlinkUnusedMerchantDishCategoryParams) (MerchantDishCategory, error) {
+	row := q.db.QueryRow(ctx, unlinkUnusedMerchantDishCategory, arg.MerchantID, arg.CategoryID)
+	var i MerchantDishCategory
+	err := row.Scan(
+		&i.MerchantID,
+		&i.CategoryID,
+		&i.SortOrder,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const updateDish = `-- name: UpdateDish :one

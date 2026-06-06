@@ -750,6 +750,7 @@ type Querier interface {
 	// 菜品分类销售统计
 	GetDishCategoryStats(ctx context.Context, arg GetDishCategoryStatsParams) ([]GetDishCategoryStatsRow, error)
 	GetDishComplete(ctx context.Context, id int64) (GetDishCompleteRow, error)
+	GetDishForUpdate(ctx context.Context, id int64) (Dish, error)
 	// 根据菜系获取菜品ID（用于基于偏好推荐）
 	// 注：当前merchants表无cuisine_type字段，简化为按价格区间查询热门菜品
 	GetDishIDsByCuisines(ctx context.Context, arg GetDishIDsByCuisinesParams) ([]int64, error)
@@ -850,6 +851,7 @@ type Querier interface {
 	// 商户日报: 按天聚合订单数据
 	GetMerchantDailyStats(ctx context.Context, arg GetMerchantDailyStatsParams) ([]GetMerchantDailyStatsRow, error)
 	GetMerchantDishCategory(ctx context.Context, arg GetMerchantDishCategoryParams) (MerchantDishCategory, error)
+	GetMerchantDishCategoryForUpdate(ctx context.Context, arg GetMerchantDishCategoryForUpdateParams) (MerchantDishCategory, error)
 	// 获取商户所有在线菜品（含分类信息）- 消费者端使用
 	GetMerchantDishesWithCategory(ctx context.Context, merchantID int64) ([]GetMerchantDishesWithCategoryRow, error)
 	// 商户财务概览：统计收入、服务费、净收入
@@ -1770,6 +1772,7 @@ type Querier interface {
 	// 解冻用户余额（提现失败时）
 	UnfreezeUserBalance(ctx context.Context, arg UnfreezeUserBalanceParams) (UserBalance, error)
 	UnlinkMerchantDishCategory(ctx context.Context, arg UnlinkMerchantDishCategoryParams) error
+	UnlinkUnusedMerchantDishCategory(ctx context.Context, arg UnlinkUnusedMerchantDishCategoryParams) (MerchantDishCategory, error)
 	UnregisterMerchantAppDevice(ctx context.Context, arg UnregisterMerchantAppDeviceParams) (int64, error)
 	UnsuspendMerchant(ctx context.Context, merchantID int64) error
 	UnsuspendMerchantTakeout(ctx context.Context, merchantID int64) error

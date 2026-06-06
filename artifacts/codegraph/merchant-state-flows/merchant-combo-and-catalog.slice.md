@@ -29,7 +29,7 @@ Combos and categories should preserve one coherent catalog truth:
 - Tag/category creation controls visible in the merchant Mini Program should match backend permissions.
 - Re-entry after save/delete should reload backend truth, not rely on local draft state.
 
-Current implementation has good combo create/update transaction boundaries. Fixed 2026-06-06: online-combo write entrypoints, public combo detail/list/scan/search/recommendation readers, and cart/order/reservation validators now fail closed when combo children are empty, missing, soft-deleted, offline, or unavailable. Category sort-only persistence and combo delete soft-delete contract documentation were also fixed on 2026-06-06. Remaining drift is around combo-tag creation permission, category unlink effects on existing dishes, and direct combo-dish endpoint shape.
+Current implementation has good combo create/update transaction boundaries. Fixed 2026-06-06: online-combo write entrypoints, public combo detail/list/scan/search/recommendation readers, and cart/order/reservation validators now fail closed when combo children are empty, missing, soft-deleted, offline, or unavailable. Category sort-only persistence, active-dish category delete blocking, rename/delete category-link writer serialization, and combo delete soft-delete contract documentation were also fixed on 2026-06-06. Remaining drift is around combo-tag creation permission and direct combo-dish endpoint shape.
 
 ## Primary Forward Chain
 
@@ -87,14 +87,14 @@ Current implementation has good combo create/update transaction boundaries. Fixe
 18. Backend category routes are under owner/manager/chef middleware. Create/link uses `CreateDishCategory` then `LinkMerchantDishCategory` as two separate writes outside an explicit transaction.
     Evidence: `locallife/api/server.go:787`, `locallife/api/server.go:792`, `locallife/db/query/dish.sql:9`, `locallife/db/query/dish.sql:17`.
 
-19. Category rename uses `RenameMerchantDishCategoryTx`, which creates/reuses a global category, links it, migrates merchant dishes to the new category, and unlinks the old category in one transaction.
-    Evidence: `locallife/api/dish.go:281`, `locallife/api/dish.go:284`, `locallife/db/sqlc/tx_dish_category.go:25`, `locallife/db/sqlc/tx_dish_category.go:55`, `locallife/db/sqlc/tx_dish_category.go:64`.
+19. Fixed 2026-06-06: category rename uses `RenameMerchantDishCategoryTx`, which creates/reuses a global category, locks the old/new merchant-category links in deterministic category-id order, links the new category, migrates merchant dishes to it, and unlinks the old category in one transaction. Concurrent create/update writers targeting the old category wait on the same link lock and fail closed after rename commits.
+    Evidence: `locallife/api/dish.go:281`, `locallife/api/dish.go:284`, `locallife/db/sqlc/tx_dish_category.go:38`, `locallife/db/sqlc/tx_dish_category.go:45`, `locallife/db/sqlc/tx_dish_category.go:53`, `locallife/db/sqlc/tx_dish_category.go:69`, `locallife/db/sqlc/tx_dish_category.go:79`, `locallife/db/sqlc/tx_dish_category.go:88`, `locallife/db/sqlc/dish_test.go:319`, `locallife/db/sqlc/dish_test.go:392`.
 
 20. Fixed 2026-06-06: category sort-only update calls `UpdateMerchantDishCategoryOrder` after merchant-category ownership is verified, and the response uses the persisted `merchant_dish_categories.sort_order`.
     Evidence: `locallife/api/dish.go:273`, `locallife/api/dish.go:297`, `locallife/api/dish.go:298`, `locallife/api/dish.go:307`, `locallife/db/query/dish.sql:43`, `locallife/api/dish_test.go:255`.
 
-21. Category delete only unlinks `merchant_dish_categories`; it does not migrate or clear `dishes.category_id` for existing dishes.
-    Evidence: `locallife/api/dish.go:328`, `locallife/api/dish.go:350`, `locallife/api/dish.go:363`, `locallife/db/query/dish.sql:54`, `locallife/db/query/dish.sql:58`.
+21. Fixed 2026-06-06: category delete now uses `UnlinkUnusedMerchantDishCategoryTx`. It locks the merchant-category link, then conditionally unlinks `merchant_dish_categories` only when no active dish still references the category; otherwise the API returns 409 and leaves the link intact. Dish create/update transactions also lock the target category link before writing `dishes.category_id`, using the same category-link lock order as rename.
+    Evidence: `locallife/api/dish.go:329`, `locallife/api/dish.go:374`, `locallife/api/dish.go:380`, `locallife/db/query/dish.sql:54`, `locallife/db/query/dish.sql:63`, `locallife/db/sqlc/tx_dish_category.go:105`, `locallife/db/sqlc/tx_dish_category.go:112`, `locallife/db/sqlc/tx_dish_category.go:123`, `locallife/db/sqlc/tx_dish.go:46`, `locallife/db/sqlc/tx_dish.go:160`, `locallife/db/sqlc/dish_test.go:192`, `locallife/api/dish_test.go:320`.
 
 22. Combo edit exposes tag creation through `TagService.createTag({ type: 'combo' })`, but backend `POST /v1/tags` is admin-only.
     Evidence: `weapp/miniprogram/pages/merchant/combos/edit/index.ts:360`, `weapp/miniprogram/pages/merchant/combos/edit/index.ts:373`, `weapp/miniprogram/pages/merchant/_main_shared/api/dish.ts:566`, `locallife/api/server.go:778`, `locallife/api/server.go:782`.
@@ -105,8 +105,9 @@ Current implementation has good combo create/update transaction boundaries. Fixe
 - `ListComboDishOrderability` is the dedicated fail-closed dependency query for child existence, soft delete, online, and availability checks. `GetComboSetWithDetails` intentionally remains the merchant/admin detail reader; public detail wraps it with orderability validation instead of globally hiding problematic management state.
 - `ListOnlineCombosByMerchant`, `GetMerchantOnlineCombos`, `GetCombosByIDs`, `GetCombosWithMerchantByIDs`, `SearchComboIDsGlobal`, `SearchCombosGlobal`, `CountSearchCombosGlobal`, `GetPopularCombos`, and `GetComboMemberImagesByCombos` now align on the child-orderability invariant for customer-facing reads and images.
 - Direct combo-dish add/remove endpoints and Mini Program wrappers appear to be legacy/narrow paths relative to the current full `PUT /v1/combos/:id` edit workflow.
-- Category rename is transaction-protected, but category create/link and delete are not symmetrical with rename.
+- Category create/link remains two writes outside an explicit transaction, but dish create/update/delete/rename now share the merchant-category link lock before changing `dishes.category_id` or removing a category link.
 - Fixed 2026-06-06: category sort-order SQL is now invoked by the sort-only handler branch and covered by API/sqlc regressions.
+- Fixed 2026-06-06: category delete and rename no longer leave active dishes pointing at merchant-hidden categories; delete, rename, and dish create/update paths serialize on the merchant-category link, and active references block delete with 409.
 - Fixed 2026-06-06: combo delete wording now matches persistence behavior, and sqlc coverage proves association rows are retained after soft delete.
 - Combo tag create/delete wrappers exist on the merchant shared API surface, but backend mutation routes require admin.
 
@@ -117,7 +118,7 @@ Current implementation has good combo create/update transaction boundaries. Fixe
 - `combo_tags`: owns selected combo tag ids.
 - `dish_categories`: global category name catalog.
 - `merchant_dish_categories`: merchant-specific category links and sort order.
-- `dishes.category_id`: durable dish classification; rename migrates it, delete currently leaves it untouched.
+- `dishes.category_id`: durable dish classification; rename migrates it, and delete is blocked while active dishes still reference the category.
 
 ## Trust, Authorization, And Tenant Checks
 
@@ -158,7 +159,8 @@ Observed tests/signals:
 - Logic tests now cover cart add/update, direct order calculation, and reservation item validation rejecting unavailable combo child dishes.
 - SQLC tests now cover public combo queries excluding missing, soft-deleted, offline, or unavailable child dishes across public list/search/recommendation readers.
 - SQLC tests now cover combo soft delete hiding the main combo while retaining combo-dish and combo-tag associations for history/audit.
-- Category rename has an explicit transaction implementation.
+- SQLC and API tests now cover active-dish category delete blocking, successful unlink for empty categories, dish create/update rejection when a category link is gone, and rename serialization against concurrent old-category create/update writers.
+- Category rename has an explicit transaction implementation and old-category link lock coverage.
 
 Missing high-value tests:
 
@@ -166,7 +168,7 @@ Missing high-value tests:
 - Fixed 2026-06-06: public combo detail, public merchant combos, scan menu, search/recommendation readers, cart, direct order, and reservation all agree on child dish availability/orderability.
 - Fixed 2026-06-06: category sort-only update persists `merchant_dish_categories.sort_order`.
 - Fixed 2026-06-06: combo delete retains association rows intentionally after soft delete and has persistence regression coverage.
-- Category delete either migrates/clears existing dish categories or deliberately exposes an uncategorized state in every reader.
+- Fixed 2026-06-06: category delete locks the category link and blocks while active dishes still use the category; rename locks the old category link while migrating/unlinking, avoiding hidden-category or implicit uncategorized states under concurrent writes.
 - Merchant combo tag creation is hidden or backed by a merchant-authorized backend route.
 - Direct combo-dish add/remove endpoints are either covered by current product semantics or retired/quarantined.
 
@@ -174,9 +176,9 @@ Missing high-value tests:
 
 - Fixed 2026-06-06: online combo create/update/toggle/direct-add, public combo detail/list/scan/search/recommendation readers, and cart/order/reservation validators now enforce orderable child dishes. If product later wants degraded combo visibility, it should be introduced as an explicit new contract with copy and tests rather than by weakening the fail-closed default.
 - Public combo detail still uses the merchant/admin detail query, then applies public orderability validation. Keep that boundary so merchants can inspect and repair invalid combos while customers cannot order them.
-- Fixed 2026-06-06: category sort-only update persists through `UpdateMerchantDishCategoryOrder`; remaining category work is delete semantics and reader copy/contracts.
+- Fixed 2026-06-06: category sort-only update persists through `UpdateMerchantDishCategoryOrder`.
 - Fixed 2026-06-06: combo delete is soft-delete-with-retained-associations by contract; do not implement association cleanup unless product explicitly changes the history/audit requirement.
-- Decide category delete semantics for dishes currently assigned to that category: block delete, migrate to uncategorized, or explicitly allow hidden category ids and update readers.
+- Fixed 2026-06-06: category delete semantics are block-if-active, and rename/delete share category-link writer serialization with dish create/update; products that want migration-to-uncategorized later should add an explicit new workflow and copy.
 - Remove merchant-facing tag mutation controls for combo tags or add a merchant-authorized tag creation contract with tests.
 - Retire direct combo-dish add/remove wrappers/routes if the full combo update path is the only supported workflow.
 
@@ -186,8 +188,8 @@ Missing high-value tests:
 - Request branches checked: combo CRUD/status/delete/detail/list, full combo update, direct add/remove combo-dish routes, combo tag wrappers, category create/link/update/delete/list/sort, public online combo readers, search, cart add/update, direct order creation, and reservation item validation.
 - Backend state branches checked: `combo_sets.is_online/deleted_at`, child `combo_dishes`, fixed customizations and price snapshots, combo tags, global `dish_categories`, merchant category links/sort order, `dishes.category_id`, and child dish online/availability state.
 - Async branches checked: combo/category writes are synchronous only; no worker, scheduler, websocket, or outbox repair was found. Downstream cart/order/reservation revalidation occurs synchronously when a customer acts.
-- Failure/retry branches checked: local duplicate guards, last-write-wins edits, stale selected child dish online-save rejection, public/action child-orderability rejection, existing-child lookup failure mapping, fixed category sort-only persistence, fixed combo soft-delete association-retention contract, category delete leaving dish category ids, merchant tag create backend admin denial, direct add/remove payload drift, and repeated direct add without durable idempotency.
+- Failure/retry branches checked: local duplicate guards, last-write-wins edits, stale selected child dish online-save rejection, public/action child-orderability rejection, existing-child lookup failure mapping, fixed category sort-only persistence, fixed combo soft-delete association-retention contract, fixed category delete active-reference conflict plus delete/rename category-link writer serialization, merchant tag create backend admin denial, direct add/remove payload drift, and repeated direct add without durable idempotency.
 - Reader/consumer branches checked: merchant combo/category pages, public storefront combo list/detail, scan menu, cart, direct order, reservation prepay, search, and child image enrichment.
 - Authorization/tenant branches checked: owner/manager/chef routes, combo ownership checks, child dish ownership validation on create/update/add, online-combo child dish orderability validation on create/update/toggle/add, category merchant-link validation, and customer readers/action validators enforcing backend-side orderability checks rather than trusting picker filters.
-- Zombie/unreachable branches checked: direct combo-dish routes/wrappers are stale relative to full edit workflow; merchant-facing combo tag mutation calls admin-only backend routes; category sort branch now invokes its existing SQL; combo delete contract now matches SQL behavior; category delete does not reconcile `dishes.category_id`.
-- Test-proof gaps checked: existing signals cover combo offline rejection at combo-set level, online-combo write-side child dish orderability, public/read/action child orderability, transactional category rename, category sort-only persistence, and combo soft-delete association retention. Missing proof remains for category delete semantics, merchant tag creation contract, and retirement/coverage for direct add/remove routes.
+- Zombie/unreachable branches checked: direct combo-dish routes/wrappers are stale relative to full edit workflow; merchant-facing combo tag mutation calls admin-only backend routes; category sort branch now invokes its existing SQL; combo delete contract now matches SQL behavior; category delete now blocks active dish references instead of reconciling `dishes.category_id` after unlink.
+- Test-proof gaps checked: existing signals cover combo offline rejection at combo-set level, online-combo write-side child dish orderability, public/read/action child orderability, transactional category rename with old-link locking, category sort-only persistence, combo soft-delete association retention, category delete active-reference blocking, and category-link rejection in dish create/update transactions. Missing proof remains for merchant tag creation contract and retirement/coverage for direct add/remove routes.

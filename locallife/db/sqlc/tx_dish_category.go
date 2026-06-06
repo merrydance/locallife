@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -41,6 +42,30 @@ func (store *SQLStore) RenameMerchantDishCategoryTx(ctx context.Context, arg Ren
 			return fmt.Errorf("create new dish category: %w", err)
 		}
 
+		categoryIDs := []int64{arg.OldCategoryID}
+		if newCategory.ID != arg.OldCategoryID {
+			categoryIDs = append(categoryIDs, newCategory.ID)
+			if categoryIDs[1] < categoryIDs[0] {
+				categoryIDs[0], categoryIDs[1] = categoryIDs[1], categoryIDs[0]
+			}
+		}
+
+		for _, categoryID := range categoryIDs {
+			_, err = q.GetMerchantDishCategoryForUpdate(ctx, GetMerchantDishCategoryForUpdateParams{
+				MerchantID: arg.MerchantID,
+				CategoryID: categoryID,
+			})
+			if err != nil {
+				if errors.Is(err, ErrRecordNotFound) {
+					if categoryID == arg.OldCategoryID {
+						return ErrMerchantDishCategoryNotLinked
+					}
+					continue
+				}
+				return fmt.Errorf("lock merchant dish category %d: %w", categoryID, err)
+			}
+		}
+
 		// Step 2: Link the merchant to the new global category.
 		mdc, err := q.LinkMerchantDishCategory(ctx, LinkMerchantDishCategoryParams{
 			MerchantID: arg.MerchantID,
@@ -71,6 +96,38 @@ func (store *SQLStore) RenameMerchantDishCategoryTx(ctx context.Context, arg Ren
 		result.NewCategoryID = newCategory.ID
 		result.NewCategoryName = newCategory.Name
 		result.SortOrder = mdc.SortOrder
+		return nil
+	})
+
+	return result, err
+}
+
+// UnlinkUnusedMerchantDishCategoryTx locks the merchant-category link before
+// unlinking so concurrent dish create/update requests cannot add a live
+// reference between the active-dish check and the unlink.
+func (store *SQLStore) UnlinkUnusedMerchantDishCategoryTx(ctx context.Context, arg UnlinkUnusedMerchantDishCategoryParams) (MerchantDishCategory, error) {
+	var result MerchantDishCategory
+
+	err := store.execTx(ctx, func(q *Queries) error {
+		_, err := q.GetMerchantDishCategoryForUpdate(ctx, GetMerchantDishCategoryForUpdateParams{
+			MerchantID: arg.MerchantID,
+			CategoryID: arg.CategoryID,
+		})
+		if err != nil {
+			if errors.Is(err, ErrRecordNotFound) {
+				return ErrMerchantDishCategoryNotLinked
+			}
+			return fmt.Errorf("lock merchant dish category: %w", err)
+		}
+
+		result, err = q.UnlinkUnusedMerchantDishCategory(ctx, arg)
+		if err != nil {
+			if errors.Is(err, ErrRecordNotFound) {
+				return ErrMerchantDishCategoryHasActiveDishes
+			}
+			return fmt.Errorf("unlink unused merchant dish category: %w", err)
+		}
+
 		return nil
 	})
 

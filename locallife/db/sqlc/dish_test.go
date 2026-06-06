@@ -189,6 +189,306 @@ func TestUnlinkMerchantDishCategory(t *testing.T) {
 	require.Empty(t, mdc)
 }
 
+func TestUnlinkUnusedMerchantDishCategoryTxBlocksActiveDishes(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	category, _ := createAndLinkRandomDishCategory(t, merchant.ID)
+	dish := createRandomDish(t, merchant.ID, category.ID)
+
+	_, err := testStore.UnlinkUnusedMerchantDishCategoryTx(context.Background(), UnlinkUnusedMerchantDishCategoryParams{
+		MerchantID: merchant.ID,
+		CategoryID: category.ID,
+	})
+	require.ErrorIs(t, err, ErrMerchantDishCategoryHasActiveDishes)
+
+	mdc, err := testStore.GetMerchantDishCategory(context.Background(), GetMerchantDishCategoryParams{
+		MerchantID: merchant.ID,
+		CategoryID: category.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, category.ID, mdc.CategoryID)
+
+	reloadedDish, err := testStore.GetDish(context.Background(), dish.ID)
+	require.NoError(t, err)
+	require.True(t, reloadedDish.CategoryID.Valid)
+	require.Equal(t, category.ID, reloadedDish.CategoryID.Int64)
+}
+
+func TestUnlinkUnusedMerchantDishCategoryTxAllowsEmptyCategory(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	category, _ := createAndLinkRandomDishCategory(t, merchant.ID)
+
+	unlinked, err := testStore.UnlinkUnusedMerchantDishCategoryTx(context.Background(), UnlinkUnusedMerchantDishCategoryParams{
+		MerchantID: merchant.ID,
+		CategoryID: category.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, merchant.ID, unlinked.MerchantID)
+	require.Equal(t, category.ID, unlinked.CategoryID)
+
+	_, err = testStore.GetMerchantDishCategory(context.Background(), GetMerchantDishCategoryParams{
+		MerchantID: merchant.ID,
+		CategoryID: category.ID,
+	})
+	require.ErrorIs(t, err, ErrRecordNotFound)
+}
+
+func TestUnlinkUnusedMerchantDishCategoryTxRejectsUnlinkedCategory(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	category := createRandomDishCategory(t)
+
+	_, err := testStore.UnlinkUnusedMerchantDishCategoryTx(context.Background(), UnlinkUnusedMerchantDishCategoryParams{
+		MerchantID: merchant.ID,
+		CategoryID: category.ID,
+	})
+	require.ErrorIs(t, err, ErrMerchantDishCategoryNotLinked)
+}
+
+func pauseDishCategoryMigration(t *testing.T, store *SQLStore, oldCategoryID int64) (func(), func()) {
+	t.Helper()
+	suffix := time.Now().UnixNano()
+	functionName := fmt.Sprintf("pause_rename_category_%d", suffix)
+	triggerName := fmt.Sprintf("pause_rename_category_trigger_%d", suffix)
+	lockClassID := int32(65001)
+	lockObjectID := int32(suffix % 1_000_000_000)
+
+	lockConn, err := store.connPool.Acquire(context.Background())
+	require.NoError(t, err)
+	t.Cleanup(lockConn.Release)
+
+	_, err = lockConn.Exec(context.Background(), "SELECT pg_advisory_lock($1, $2)", lockClassID, lockObjectID)
+	require.NoError(t, err)
+	lockHeld := true
+	t.Cleanup(func() {
+		if lockHeld {
+			_, _ = lockConn.Exec(context.Background(), "SELECT pg_advisory_unlock($1, $2)", lockClassID, lockObjectID)
+		}
+	})
+
+	_, err = store.connPool.Exec(context.Background(), fmt.Sprintf(`
+CREATE FUNCTION %s() RETURNS trigger AS $$
+BEGIN
+	IF OLD.category_id = %d AND NEW.category_id IS DISTINCT FROM OLD.category_id THEN
+		PERFORM pg_advisory_xact_lock(%d, %d);
+	END IF;
+	RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER %s
+BEFORE UPDATE OF category_id ON dishes
+FOR EACH ROW EXECUTE FUNCTION %s();
+`, functionName, oldCategoryID, lockClassID, lockObjectID, triggerName, functionName))
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, _ = store.connPool.Exec(context.Background(), fmt.Sprintf("DROP TRIGGER IF EXISTS %s ON dishes", triggerName))
+		_, _ = store.connPool.Exec(context.Background(), fmt.Sprintf("DROP FUNCTION IF EXISTS %s()", functionName))
+	})
+
+	waitForPausedMigration := func() {
+		t.Helper()
+		require.Eventually(t, func() bool {
+			var waitingLocks int64
+			err := store.connPool.QueryRow(context.Background(), `
+SELECT COUNT(*)
+FROM pg_locks
+WHERE locktype = 'advisory'
+  AND classid::bigint = $1
+  AND objid::bigint = $2
+  AND granted = false
+`, lockClassID, lockObjectID).Scan(&waitingLocks)
+			return err == nil && waitingLocks > 0
+		}, 2*time.Second, 25*time.Millisecond)
+	}
+
+	releaseMigration := func() {
+		t.Helper()
+		if !lockHeld {
+			return
+		}
+
+		var unlocked bool
+		err = lockConn.QueryRow(context.Background(), "SELECT pg_advisory_unlock($1, $2)", lockClassID, lockObjectID).Scan(&unlocked)
+		require.NoError(t, err)
+		require.True(t, unlocked)
+		lockHeld = false
+	}
+
+	return waitForPausedMigration, releaseMigration
+}
+
+func TestRenameMerchantDishCategoryTxSerializesOldCategoryCreateWriters(t *testing.T) {
+	store := testStore.(*SQLStore)
+	merchant := createRandomMerchantForDish(t)
+	oldCategory, _ := createAndLinkRandomDishCategory(t, merchant.ID)
+	createRandomDish(t, merchant.ID, oldCategory.ID)
+	waitForPausedMigration, releaseMigration := pauseDishCategoryMigration(t, store, oldCategory.ID)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	renameErrCh := make(chan error, 1)
+	go func() {
+		_, renameErr := store.RenameMerchantDishCategoryTx(ctx, RenameMerchantDishCategoryTxParams{
+			MerchantID:    merchant.ID,
+			OldCategoryID: oldCategory.ID,
+			NewName:       util.RandomString(12),
+			SortOrder:     int16(util.RandomInt(1, 100)),
+		})
+		renameErrCh <- renameErr
+	}()
+
+	waitForPausedMigration()
+
+	createErrCh := make(chan error, 1)
+	go func() {
+		_, createErr := store.CreateDishTx(ctx, CreateDishTxParams{
+			MerchantID:    merchant.ID,
+			CategoryID:    pgtype.Int8{Int64: oldCategory.ID, Valid: true},
+			Name:          util.RandomString(10),
+			Price:         util.RandomMoney(),
+			IsAvailable:   true,
+			IsOnline:      true,
+			SortOrder:     int16(util.RandomInt(1, 100)),
+			PrepareTime:   10,
+			IsPackaging:   false,
+			IngredientIDs: nil,
+			TagIDs:        nil,
+		})
+		createErrCh <- createErr
+	}()
+
+	select {
+	case createErr := <-createErrCh:
+		require.Failf(t, "create dish should wait for rename to finish with the old category link locked", "create error: %v", createErr)
+	case <-time.After(500 * time.Millisecond):
+	}
+
+	releaseMigration()
+
+	select {
+	case renameErr := <-renameErrCh:
+		require.NoError(t, renameErr)
+	case <-time.After(3 * time.Second):
+		require.FailNow(t, "rename did not finish after releasing advisory lock")
+	}
+
+	select {
+	case createErr := <-createErrCh:
+		require.ErrorIs(t, createErr, ErrMerchantDishCategoryNotLinked)
+	case <-time.After(3 * time.Second):
+		require.FailNow(t, "create did not finish after rename committed")
+	}
+
+	var activeOldCategoryDishes int64
+	err := store.connPool.QueryRow(context.Background(), `
+SELECT COUNT(*)
+FROM dishes
+WHERE merchant_id = $1 AND category_id = $2 AND deleted_at IS NULL
+`, merchant.ID, oldCategory.ID).Scan(&activeOldCategoryDishes)
+	require.NoError(t, err)
+	require.Zero(t, activeOldCategoryDishes)
+}
+
+func TestRenameMerchantDishCategoryTxSerializesOldCategoryUpdateWriters(t *testing.T) {
+	store := testStore.(*SQLStore)
+	merchant := createRandomMerchantForDish(t)
+	oldCategory, _ := createAndLinkRandomDishCategory(t, merchant.ID)
+	currentCategory, _ := createAndLinkRandomDishCategory(t, merchant.ID)
+	createRandomDish(t, merchant.ID, oldCategory.ID)
+	dishToUpdate := createRandomDish(t, merchant.ID, currentCategory.ID)
+	waitForPausedMigration, releaseMigration := pauseDishCategoryMigration(t, store, oldCategory.ID)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	renameErrCh := make(chan error, 1)
+	go func() {
+		_, renameErr := store.RenameMerchantDishCategoryTx(ctx, RenameMerchantDishCategoryTxParams{
+			MerchantID:    merchant.ID,
+			OldCategoryID: oldCategory.ID,
+			NewName:       util.RandomString(12),
+			SortOrder:     int16(util.RandomInt(1, 100)),
+		})
+		renameErrCh <- renameErr
+	}()
+
+	waitForPausedMigration()
+
+	updateErrCh := make(chan error, 1)
+	go func() {
+		_, updateErr := store.UpdateDishTx(ctx, UpdateDishTxParams{
+			ID:         dishToUpdate.ID,
+			CategoryID: pgtype.Int8{Int64: oldCategory.ID, Valid: true},
+		})
+		updateErrCh <- updateErr
+	}()
+
+	select {
+	case updateErr := <-updateErrCh:
+		require.Failf(t, "update dish should wait for rename to finish with the old category link locked", "update error: %v", updateErr)
+	case <-time.After(500 * time.Millisecond):
+	}
+
+	releaseMigration()
+
+	select {
+	case renameErr := <-renameErrCh:
+		require.NoError(t, renameErr)
+	case <-time.After(3 * time.Second):
+		require.FailNow(t, "rename did not finish after releasing advisory lock")
+	}
+
+	select {
+	case updateErr := <-updateErrCh:
+		require.ErrorIs(t, updateErr, ErrMerchantDishCategoryNotLinked)
+	case <-time.After(3 * time.Second):
+		require.FailNow(t, "update did not finish after rename committed")
+	}
+
+	reloadedDish, err := store.GetDish(context.Background(), dishToUpdate.ID)
+	require.NoError(t, err)
+	require.True(t, reloadedDish.CategoryID.Valid)
+	require.Equal(t, currentCategory.ID, reloadedDish.CategoryID.Int64)
+}
+
+func TestRenameMerchantDishCategoryTxReusesLinkedCategory(t *testing.T) {
+	store := testStore.(*SQLStore)
+	merchant := createRandomMerchantForDish(t)
+	oldCategory, _ := createAndLinkRandomDishCategory(t, merchant.ID)
+	targetCategory, _ := createAndLinkRandomDishCategory(t, merchant.ID)
+	dish := createRandomDish(t, merchant.ID, oldCategory.ID)
+	newSortOrder := int16(util.RandomInt(1, 100))
+
+	result, err := store.RenameMerchantDishCategoryTx(context.Background(), RenameMerchantDishCategoryTxParams{
+		MerchantID:    merchant.ID,
+		OldCategoryID: oldCategory.ID,
+		NewName:       targetCategory.Name,
+		SortOrder:     newSortOrder,
+	})
+	require.NoError(t, err)
+	require.Equal(t, targetCategory.ID, result.NewCategoryID)
+	require.Equal(t, targetCategory.Name, result.NewCategoryName)
+	require.Equal(t, newSortOrder, result.SortOrder)
+
+	_, err = store.GetMerchantDishCategory(context.Background(), GetMerchantDishCategoryParams{
+		MerchantID: merchant.ID,
+		CategoryID: oldCategory.ID,
+	})
+	require.ErrorIs(t, err, ErrRecordNotFound)
+
+	targetLink, err := store.GetMerchantDishCategory(context.Background(), GetMerchantDishCategoryParams{
+		MerchantID: merchant.ID,
+		CategoryID: targetCategory.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, newSortOrder, targetLink.SortOrder)
+
+	reloadedDish, err := store.GetDish(context.Background(), dish.ID)
+	require.NoError(t, err)
+	require.True(t, reloadedDish.CategoryID.Valid)
+	require.Equal(t, targetCategory.ID, reloadedDish.CategoryID.Int64)
+}
+
 // ============================================
 // 菜品测试
 // ============================================
@@ -245,6 +545,35 @@ func TestCreateDishTxRollbackOnCustomizationFailure(t *testing.T) {
 		_, getErr := testStore.GetDish(context.Background(), result.Dish.ID)
 		require.Error(t, getErr)
 	}
+}
+
+func TestCreateDishTxRejectsUnlinkedCategory(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	category := createRandomDishCategory(t)
+
+	beforeCount, err := testStore.CountDishesByMerchant(context.Background(), CountDishesByMerchantParams{
+		MerchantID: merchant.ID,
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.CreateDishTx(context.Background(), CreateDishTxParams{
+		MerchantID:  merchant.ID,
+		CategoryID:  pgtype.Int8{Int64: category.ID, Valid: true},
+		Name:        util.RandomString(10),
+		Description: pgtype.Text{String: util.RandomString(20), Valid: true},
+		Price:       util.RandomMoney(),
+		IsAvailable: true,
+		IsOnline:    true,
+		SortOrder:   int16(util.RandomInt(1, 100)),
+		PrepareTime: 10,
+	})
+	require.ErrorIs(t, err, ErrMerchantDishCategoryNotLinked)
+
+	afterCount, err := testStore.CountDishesByMerchant(context.Background(), CountDishesByMerchantParams{
+		MerchantID: merchant.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
 }
 
 func TestGetDish(t *testing.T) {
@@ -453,6 +782,24 @@ func TestUpdateDish(t *testing.T) {
 	require.Equal(t, dish.ID, updatedDish.ID)
 	require.Equal(t, newName, updatedDish.Name)
 	require.Equal(t, newPrice, updatedDish.Price)
+}
+
+func TestUpdateDishTxRejectsUnlinkedCategory(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	category, _ := createAndLinkRandomDishCategory(t, merchant.ID)
+	unlinkedCategory := createRandomDishCategory(t)
+	dish := createRandomDish(t, merchant.ID, category.ID)
+
+	_, err := testStore.UpdateDishTx(context.Background(), UpdateDishTxParams{
+		ID:         dish.ID,
+		CategoryID: pgtype.Int8{Int64: unlinkedCategory.ID, Valid: true},
+	})
+	require.ErrorIs(t, err, ErrMerchantDishCategoryNotLinked)
+
+	reloadedDish, err := testStore.GetDish(context.Background(), dish.ID)
+	require.NoError(t, err)
+	require.True(t, reloadedDish.CategoryID.Valid)
+	require.Equal(t, category.ID, reloadedDish.CategoryID.Int64)
 }
 
 func TestUpdateDishAvailability(t *testing.T) {

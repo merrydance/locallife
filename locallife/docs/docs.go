@@ -5230,6 +5230,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
+                    "409": {
+                        "description": "分类仍有菜品使用",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
                     "500": {
                         "description": "服务器内部错误",
                         "schema": {

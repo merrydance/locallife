@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -41,6 +42,19 @@ func (store *SQLStore) CreateDishTx(ctx context.Context, arg CreateDishTxParams)
 
 	err := store.execTx(ctx, func(q *Queries) error {
 		var err error
+
+		if arg.CategoryID.Valid {
+			_, err = q.GetMerchantDishCategoryForUpdate(ctx, GetMerchantDishCategoryForUpdateParams{
+				MerchantID: arg.MerchantID,
+				CategoryID: arg.CategoryID.Int64,
+			})
+			if err != nil {
+				if errors.Is(err, ErrRecordNotFound) {
+					return ErrMerchantDishCategoryNotLinked
+				}
+				return fmt.Errorf("lock merchant dish category: %w", err)
+			}
+		}
 
 		// Step 1: Create dish
 		result.Dish, err = q.CreateDish(ctx, CreateDishParams{
@@ -142,6 +156,28 @@ func (store *SQLStore) UpdateDishTx(ctx context.Context, arg UpdateDishTxParams)
 
 	err := store.execTx(ctx, func(q *Queries) error {
 		var err error
+
+		if arg.CategoryID.Valid {
+			currentDish, err := q.GetDish(ctx, arg.ID)
+			if err != nil {
+				return fmt.Errorf("get dish: %w", err)
+			}
+			_, err = q.GetMerchantDishCategoryForUpdate(ctx, GetMerchantDishCategoryForUpdateParams{
+				MerchantID: currentDish.MerchantID,
+				CategoryID: arg.CategoryID.Int64,
+			})
+			if err != nil {
+				if errors.Is(err, ErrRecordNotFound) {
+					return ErrMerchantDishCategoryNotLinked
+				}
+				return fmt.Errorf("lock merchant dish category: %w", err)
+			}
+		}
+
+		_, err = q.GetDishForUpdate(ctx, arg.ID)
+		if err != nil {
+			return fmt.Errorf("lock dish: %w", err)
+		}
 
 		// Step 1: Update dish
 		result.Dish, err = q.UpdateDish(ctx, UpdateDishParams{

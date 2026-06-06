@@ -19,6 +19,8 @@ var ErrClaimResponsibleRiderMissing = errors.New("claim rider recovery requires 
 var ErrGroupApplicationReviewConflict = errors.New("group application review conflict")
 var ErrGroupJoinRequestReviewConflict = errors.New("group join request review conflict")
 var ErrMerchantAlreadyJoinedGroup = errors.New("merchant already joined group")
+var ErrMerchantDishCategoryHasActiveDishes = errors.New("merchant dish category has active dishes")
+var ErrMerchantDishCategoryNotLinked = errors.New("merchant dish category is not linked")
 
 // ErrPaymentMissingOrderID indicates a payment_order with business_type=order has no order_id.
 // Callers should skip retry and alert for manual intervention.

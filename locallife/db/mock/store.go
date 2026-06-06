@@ -8112,6 +8112,21 @@ func (mr *MockStoreMockRecorder) GetDishComplete(ctx, id any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDishComplete", reflect.TypeOf((*MockStore)(nil).GetDishComplete), ctx, id)
 }
 
+// GetDishForUpdate mocks base method.
+func (m *MockStore) GetDishForUpdate(ctx context.Context, id int64) (db.Dish, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDishForUpdate", ctx, id)
+	ret0, _ := ret[0].(db.Dish)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetDishForUpdate indicates an expected call of GetDishForUpdate.
+func (mr *MockStoreMockRecorder) GetDishForUpdate(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDishForUpdate", reflect.TypeOf((*MockStore)(nil).GetDishForUpdate), ctx, id)
+}
+
 // GetDishIDsByCuisines mocks base method.
 func (m *MockStore) GetDishIDsByCuisines(ctx context.Context, arg db.GetDishIDsByCuisinesParams) ([]int64, error) {
 	m.ctrl.T.Helper()
@@ -9205,6 +9220,21 @@ func (m *MockStore) GetMerchantDishCategory(ctx context.Context, arg db.GetMerch
 func (mr *MockStoreMockRecorder) GetMerchantDishCategory(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMerchantDishCategory", reflect.TypeOf((*MockStore)(nil).GetMerchantDishCategory), ctx, arg)
+}
+
+// GetMerchantDishCategoryForUpdate mocks base method.
+func (m *MockStore) GetMerchantDishCategoryForUpdate(ctx context.Context, arg db.GetMerchantDishCategoryForUpdateParams) (db.MerchantDishCategory, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMerchantDishCategoryForUpdate", ctx, arg)
+	ret0, _ := ret[0].(db.MerchantDishCategory)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMerchantDishCategoryForUpdate indicates an expected call of GetMerchantDishCategoryForUpdate.
+func (mr *MockStoreMockRecorder) GetMerchantDishCategoryForUpdate(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMerchantDishCategoryForUpdate", reflect.TypeOf((*MockStore)(nil).GetMerchantDishCategoryForUpdate), ctx, arg)
 }
 
 // GetMerchantDishesWithCategory mocks base method.
@@ -20079,6 +20109,36 @@ func (m *MockStore) UnlinkMerchantDishCategory(ctx context.Context, arg db.Unlin
 func (mr *MockStoreMockRecorder) UnlinkMerchantDishCategory(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnlinkMerchantDishCategory", reflect.TypeOf((*MockStore)(nil).UnlinkMerchantDishCategory), ctx, arg)
+}
+
+// UnlinkUnusedMerchantDishCategory mocks base method.
+func (m *MockStore) UnlinkUnusedMerchantDishCategory(ctx context.Context, arg db.UnlinkUnusedMerchantDishCategoryParams) (db.MerchantDishCategory, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UnlinkUnusedMerchantDishCategory", ctx, arg)
+	ret0, _ := ret[0].(db.MerchantDishCategory)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UnlinkUnusedMerchantDishCategory indicates an expected call of UnlinkUnusedMerchantDishCategory.
+func (mr *MockStoreMockRecorder) UnlinkUnusedMerchantDishCategory(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnlinkUnusedMerchantDishCategory", reflect.TypeOf((*MockStore)(nil).UnlinkUnusedMerchantDishCategory), ctx, arg)
+}
+
+// UnlinkUnusedMerchantDishCategoryTx mocks base method.
+func (m *MockStore) UnlinkUnusedMerchantDishCategoryTx(ctx context.Context, arg db.UnlinkUnusedMerchantDishCategoryParams) (db.MerchantDishCategory, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UnlinkUnusedMerchantDishCategoryTx", ctx, arg)
+	ret0, _ := ret[0].(db.MerchantDishCategory)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UnlinkUnusedMerchantDishCategoryTx indicates an expected call of UnlinkUnusedMerchantDishCategoryTx.
+func (mr *MockStoreMockRecorder) UnlinkUnusedMerchantDishCategoryTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnlinkUnusedMerchantDishCategoryTx", reflect.TypeOf((*MockStore)(nil).UnlinkUnusedMerchantDishCategoryTx), ctx, arg)
 }
 
 // UnregisterMerchantAppDevice mocks base method.
