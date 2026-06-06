@@ -345,6 +345,33 @@ func (server *Server) writeMerchantApplicationDraftResponse(ctx *gin.Context, st
 	return true
 }
 
+// getMyMerchantApplication godoc
+// @Summary 获取当前用户商户入驻申请
+// @Description 只读获取当前用户最新商户入驻申请，用于提交后轮询状态；不会创建草稿或重置待审核申请。
+// @Tags 商户申请
+// @Accept json
+// @Produce json
+// @Success 200 {object} merchantApplicationDraftResponse "获取成功"
+// @Failure 401 {object} ErrorResponse "未登录"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/merchants/applications/me [get]
+// @Security BearerAuth
+func (server *Server) getMyMerchantApplication(ctx *gin.Context) {
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	app, err := server.store.GetUserMerchantApplication(ctx, authPayload.UserID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusOK, struct{}{})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	server.writeMerchantApplicationDraftResponse(ctx, http.StatusOK, app)
+}
+
 // ==================== 获取或创建草稿 ====================
 
 // getOrCreateMerchantApplicationDraft godoc

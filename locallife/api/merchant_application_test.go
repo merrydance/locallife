@@ -415,6 +415,72 @@ func TestGetOrCreateMerchantApplicationDraft(t *testing.T) {
 	}
 }
 
+func TestGetMyMerchantApplicationDoesNotResetSubmittedApplication(t *testing.T) {
+	user, _ := randomUser(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectMerchantApplicationPublicDocumentLookups(store, user.ID)
+
+	submittedApp := randomMerchantAppDraftWithData(user.ID)
+	submittedApp.Status = "submitted"
+	store.EXPECT().
+		GetUserMerchantApplication(gomock.Any(), user.ID).
+		Times(1).
+		Return(submittedApp, nil)
+	store.EXPECT().
+		ResetMerchantApplicationTx(gomock.Any(), gomock.Any()).
+		Times(0)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/merchants/applications/me", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var resp merchantApplicationDraftResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, submittedApp.ID, resp.ID)
+	require.Equal(t, "submitted", resp.Status)
+}
+
+func TestGetMyMerchantApplicationReturnsEmptyStateWithoutCreatingDraft(t *testing.T) {
+	user, _ := randomUser(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetUserMerchantApplication(gomock.Any(), user.ID).
+		Times(1).
+		Return(db.MerchantApplication{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		CreateMerchantApplicationDraft(gomock.Any(), gomock.Any()).
+		Times(0)
+	store.EXPECT().
+		ResetMerchantApplicationTx(gomock.Any(), gomock.Any()).
+		Times(0)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/merchants/applications/me", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.JSONEq(t, `{}`, string(unwrapAPIResponseData(t, recorder.Body.Bytes())))
+}
+
 // ==================== 更新基础信息测试 ====================
 
 func TestUpdateMerchantApplicationBasicInfo(t *testing.T) {

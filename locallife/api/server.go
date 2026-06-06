@@ -726,6 +726,7 @@ func (server *Server) setupRouter() {
 	}
 
 	// M3.1: 商户入驻申请（新版 - 自动审核）
+	authGroup.GET("/merchants/applications/me", server.getMyMerchantApplication) // 兼容小程序提交后状态轮询，只读
 	merchantAppGroup := authGroup.Group("/merchant/application")
 	{
 		merchantAppGroup.GET("", server.getOrCreateMerchantApplicationDraft)      // 创建/获取草稿

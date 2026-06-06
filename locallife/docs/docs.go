@@ -13953,6 +13953,46 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/merchants/applications/me": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "只读获取当前用户最新商户入驻申请，用于提交后轮询状态；不会创建草稿或重置待审核申请。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户申请"
+                ],
+                "summary": "获取当前用户商户入驻申请",
+                "responses": {
+                    "200": {
+                        "description": "获取成功",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantApplicationDraftResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未登录",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/merchants/images/upload": {
             "post": {
                 "security": [
