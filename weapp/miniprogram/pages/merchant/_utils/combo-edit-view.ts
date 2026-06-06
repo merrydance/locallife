@@ -7,8 +7,6 @@ import {
 } from '../_main_shared/api/dish'
 import { getPublicImageUrl } from '../../../utils/image'
 
-export type CreatePopupMode = 'tag' | ''
-
 export interface DishOption {
   id: number
   name: string

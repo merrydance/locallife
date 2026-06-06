@@ -24,7 +24,6 @@ import {
   parsePriceInputToFen,
   syncDishCustomizationSelection,
   type ComboEditOptions,
-  type CreatePopupMode,
   type DishOption,
   type FormInputDetail,
   type SelectedSpecState
@@ -50,10 +49,6 @@ Page({
     availableTags: [] as TagInfo[],
     selectedTagIds: [] as number[],
     selectedTagState: {} as Record<string, boolean>,
-    tagSubmitting: false,
-    createPopupVisible: false,
-    createPopupMode: '' as CreatePopupMode,
-    createInputValue: '',
     selectedDishIds: [] as number[],
     allDishes: [] as DishOption[],
     dishes: [] as DishOption[],
@@ -327,72 +322,6 @@ Page({
       selectedTagIds,
       selectedTagState: buildSelectedTagState(selectedTagIds)
     })
-  },
-
-  onCreateTag() {
-    if (this.data.tagSubmitting) {
-      return
-    }
-
-    this.setData({
-      createPopupVisible: true,
-      createPopupMode: 'tag',
-      createInputValue: ''
-    })
-  },
-
-  onCloseCreatePopup() {
-    if (this.data.tagSubmitting) {
-      return
-    }
-
-    this.setData({
-      createPopupVisible: false,
-      createPopupMode: '',
-      createInputValue: ''
-    })
-  },
-
-  onCreateInputChange(e: WechatMiniprogram.CustomEvent<FormInputDetail>) {
-    this.setData({ createInputValue: (e.detail.value || '').replace(/^\s+/, '') })
-  },
-
-  async onConfirmCreatePopup() {
-    if (this.data.tagSubmitting || this.data.createPopupMode !== 'tag') {
-      return
-    }
-
-    const name = this.data.createInputValue.trim()
-    if (!name) {
-      wx.showToast({ title: '标签名称不能为空', icon: 'none' })
-      return
-    }
-
-    this.setData({ tagSubmitting: true })
-    try {
-      const created = await TagService.createTag({ name, type: 'combo' })
-      const availableTags = this.data.availableTags.some((tag) => tag.id === created.id)
-        ? this.data.availableTags
-        : [...this.data.availableTags, created]
-      const selectedTagIds = this.data.selectedTagIds.includes(created.id)
-        ? this.data.selectedTagIds
-        : [...this.data.selectedTagIds, created.id]
-
-      this.setData({
-        createPopupVisible: false,
-        createPopupMode: '',
-        createInputValue: '',
-        availableTags,
-        selectedTagIds,
-        selectedTagState: buildSelectedTagState(selectedTagIds),
-        loadWarningMessage: ''
-      })
-    } catch (err) {
-      logger.error('Create combo tag failed', err)
-      wx.showToast({ title: getErrorMessage(err, '新增标签失败，请稍后重试'), icon: 'none' })
-    } finally {
-      this.setData({ tagSubmitting: false })
-    }
   },
 
   onComboOnlineSwitchChange(e: WechatMiniprogram.CustomEvent<{ value: boolean }>) {

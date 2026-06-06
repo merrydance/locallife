@@ -52,6 +52,10 @@
   gap: 8rpx;
 }
 
+.section-top-main--spaced {
+  margin-bottom: 20rpx;
+}
+
 .section-top-button {
   flex-shrink: 0;
 }

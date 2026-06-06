@@ -123,14 +123,9 @@
       </view>
 
       <view class="section-panel">
-        <view class="section-top-action">
-          <view class="section-top-main">
-            <text class="section-title">4. 套餐标签</text>
-            <text wx:if="{{availableTags.length}}" class="section-caption">已选 {{selectedTagIds.length}} 个</text>
-          </view>
-          <view class="section-top-button">
-            <t-button size="small" theme="primary" icon="add" loading="{{tagSubmitting}}" bind:tap="onCreateTag">新增标签</t-button>
-          </view>
+        <view class="section-top-main section-top-main--spaced">
+          <text class="section-title">4. 套餐标签</text>
+          <text wx:if="{{availableTags.length}}" class="section-caption">已选 {{selectedTagIds.length}} 个</text>
         </view>
 
         <view wx:if="{{availableTags.length}}" class="tag-check-list">
@@ -145,7 +140,7 @@
           />
         </view>
 
-        <view wx:else class="tag-empty-text">暂无套餐标签，可先新增标签。</view>
+        <view wx:else class="tag-empty-text">暂无可选套餐标签</view>
       </view>
 
       <view class="summary-card">
@@ -181,21 +176,5 @@
       </view>
     </view>
 
-    <t-dialog
-      visible="{{createPopupVisible}}"
-      title="新增套餐标签"
-      confirm-btn="{{ { content: '确定', loading: tagSubmitting } }}"
-      cancel-btn="取消"
-      bind:confirm="onConfirmCreatePopup"
-      bind:cancel="onCloseCreatePopup"
-    >
-      <view slot="content" class="dialog-form">
-        <t-input
-          label="标签名称"
-          value="{{createInputValue}}"
-          bind:change="onCreateInputChange"
-        />
-      </view>
-    </t-dialog>
   </block>
 </view>
