@@ -851,10 +851,6 @@ func (server *Server) setupRouter() {
 		combosGroup.PUT("/:id", server.updateComboSet)
 		combosGroup.PUT("/:id/online", server.toggleComboOnline)
 		combosGroup.DELETE("/:id", server.deleteComboSet)
-
-		// 套餐-菜品关联
-		combosGroup.POST("/:id/dishes", server.addComboDish)
-		combosGroup.DELETE("/:id/dishes/:dish_id", server.removeComboDish)
 	}
 
 	// M4: 库存管理路由

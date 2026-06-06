@@ -409,13 +409,6 @@ export interface CreateComboSetRequest extends Record<string, unknown> {
 }
 
 /**
- * 添加套餐菜品请求 - 对齐 api.addComboDishBodyRequest
- */
-export interface AddComboDishBodyRequest extends Record<string, unknown> {
-    dish_id: number                              // 菜品ID（必填）
-}
-
-/**
  * 切换套餐上架状态请求 - 对齐 api.toggleComboOnlineBodyRequest
  */
 export interface ToggleComboOnlineBodyRequest extends Record<string, unknown> {
@@ -838,32 +831,6 @@ export class ComboManagementService {
     static async deleteCombo(comboId: number): Promise<void> {
         return await request({
             url: `/v1/combos/${comboId}`,
-            method: 'DELETE'
-        })
-    }
-
-    /**
-     * 添加菜品到套餐
-     * POST /v1/combos/{id}/dishes
-     */
-    static async addDishToCombo(comboId: number, data: {
-        dish_id: number
-        quantity: number
-    }): Promise<void> {
-        return await request({
-            url: `/v1/combos/${comboId}/dishes`,
-            method: 'POST',
-            data
-        })
-    }
-
-    /**
-     * 从套餐中移除菜品
-     * DELETE /v1/combos/{id}/dishes/{dish_id}
-     */
-    static async removeDishFromCombo(comboId: number, dishId: number): Promise<void> {
-        return await request({
-            url: `/v1/combos/${comboId}/dishes/${dishId}`,
             method: 'DELETE'
         })
     }

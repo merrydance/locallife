@@ -1277,270 +1277,44 @@ func TestDeleteComboSetAPI(t *testing.T) {
 	}
 }
 
-// ==================== 套餐添加菜品测试 ====================
+// ==================== 旧套餐-菜品直连路由退役测试 ====================
 
-func TestAddComboDishAPI(t *testing.T) {
-	user, _ := randomUser(t)
-	merchant := randomMerchant(user.ID)
-	combo := randomComboSet(merchant.ID)
-	dishID := util.RandomInt(1, 100)
+func TestDirectComboDishRoutesRetiredAPI(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-	// 创建一个属于该商户的菜品
-	dish := db.Dish{
-		ID:          dishID,
-		MerchantID:  merchant.ID,
-		Name:        util.RandomString(8),
-		Price:       util.RandomInt(1000, 10000),
-		IsAvailable: true,
-		IsOnline:    true,
-	}
-
-	comboDish := db.ComboDish{
-		ID:                    util.RandomInt(1, 1000),
-		ComboID:               combo.ID,
-		DishID:                dishID,
-		Quantity:              1,
-		DishBasePriceSnapshot: dish.Price,
-	}
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
 
 	testCases := []struct {
-		name          string
-		comboID       int64
-		body          gin.H
-		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		buildStubs    func(store *mockdb.MockStore)
-		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+		name   string
+		method string
+		url    string
+		body   *bytes.Reader
 	}{
 		{
-			name:    "OK",
-			comboID: combo.ID,
-			body: gin.H{
-				"dish_id": dishID,
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
-
-				store.EXPECT().
-					GetComboSet(gomock.Any(), gomock.Eq(combo.ID)).
-					Times(1).
-					Return(combo, nil)
-
-				// P1修复：添加菜品所有权验证
-				store.EXPECT().
-					GetDish(gomock.Any(), gomock.Eq(dishID)).
-					Times(1).
-					Return(dish, nil)
-
-				store.EXPECT().
-					ListComboDishOrderability(gomock.Any(), gomock.Eq(combo.ID)).
-					Times(1).
-					Return([]db.ListComboDishOrderabilityRow{
-						comboDishOrderabilityRow(301, "热销菜", true, true, true),
-					}, nil)
-
-				store.EXPECT().
-					AddComboDish(gomock.Any(), gomock.Any()).
-					Times(1).
-					DoAndReturn(func(_ context.Context, arg db.AddComboDishParams) (db.ComboDish, error) {
-						require.Equal(t, dish.Price, arg.DishBasePriceSnapshot)
-						return comboDish, nil
-					})
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-			},
+			name:   "AddDishRouteRetired",
+			method: http.MethodPost,
+			url:    "/v1/combos/123/dishes",
+			body:   bytes.NewReader([]byte(`{"dish_id":456}`)),
 		},
 		{
-			name:    "DishNotBelongToMerchant",
-			comboID: combo.ID,
-			body: gin.H{
-				"dish_id": dishID,
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
-
-				store.EXPECT().
-					GetComboSet(gomock.Any(), gomock.Eq(combo.ID)).
-					Times(1).
-					Return(combo, nil)
-
-				// 返回一个属于其他商户的菜品
-				otherDish := db.Dish{
-					ID:         dishID,
-					MerchantID: merchant.ID + 1, // 不同的商户
-					Name:       util.RandomString(8),
-				}
-				store.EXPECT().
-					GetDish(gomock.Any(), gomock.Eq(dishID)).
-					Times(1).
-					Return(otherDish, nil)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusForbidden, recorder.Code)
-			},
-		},
-		{
-			name:    "RejectUnavailableDishForOnlineCombo",
-			comboID: combo.ID,
-			body: gin.H{
-				"dish_id": dishID,
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
-
-				store.EXPECT().
-					GetComboSet(gomock.Any(), gomock.Eq(combo.ID)).
-					Times(1).
-					Return(combo, nil)
-
-				unavailableDish := dish
-				unavailableDish.IsAvailable = false
-				store.EXPECT().
-					GetDish(gomock.Any(), gomock.Eq(dishID)).
-					Times(1).
-					Return(unavailableDish, nil)
-
-				store.EXPECT().
-					ListComboDishOrderability(gomock.Any(), gomock.Eq(combo.ID)).
-					Times(1).
-					Return([]db.ListComboDishOrderabilityRow{
-						comboDishOrderabilityRow(301, "热销菜", true, true, true),
-					}, nil)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
-			},
-		},
-		{
-			name:    "RejectExistingUnavailableDishForOnlineCombo",
-			comboID: combo.ID,
-			body: gin.H{
-				"dish_id": dishID,
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
-
-				store.EXPECT().
-					GetComboSet(gomock.Any(), gomock.Eq(combo.ID)).
-					Times(1).
-					Return(combo, nil)
-
-				store.EXPECT().
-					GetDish(gomock.Any(), gomock.Eq(dishID)).
-					Times(1).
-					Return(dish, nil)
-
-				store.EXPECT().
-					ListComboDishOrderability(gomock.Any(), gomock.Eq(combo.ID)).
-					Times(1).
-					Return([]db.ListComboDishOrderabilityRow{
-						comboDishOrderabilityRow(301, "旧菜品", true, true, false),
-					}, nil)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
-			},
-		},
-		{
-			name:    "ListExistingDishesError",
-			comboID: combo.ID,
-			body: gin.H{
-				"dish_id": dishID,
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
-
-				store.EXPECT().
-					GetComboSet(gomock.Any(), gomock.Eq(combo.ID)).
-					Times(1).
-					Return(combo, nil)
-
-				store.EXPECT().
-					GetDish(gomock.Any(), gomock.Eq(dishID)).
-					Times(1).
-					Return(dish, nil)
-
-				store.EXPECT().
-					ListComboDishOrderability(gomock.Any(), gomock.Eq(combo.ID)).
-					Times(1).
-					Return(nil, errors.New("list combo dishes failed"))
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusInternalServerError, recorder.Code)
-			},
-		},
-		{
-			name:    "NoAuthorization",
-			comboID: combo.ID,
-			body: gin.H{
-				"dish_id": dishID,
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				// No authorization
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				expectNoMerchantAccessResolution(store)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusUnauthorized, recorder.Code)
-			},
-		},
-		{
-			name:    "InvalidDishID",
-			comboID: combo.ID,
-			body: gin.H{
-				"dish_id": 0,
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
-			},
+			name:   "RemoveDishRouteRetired",
+			method: http.MethodDelete,
+			url:    "/v1/combos/123/dishes/456",
+			body:   bytes.NewReader(nil),
 		},
 	}
 
 	for i := range testCases {
 		tc := testCases[i]
-
 		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			store := mockdb.NewMockStore(ctrl)
-			tc.buildStubs(store)
-
-			server := newTestServer(t, store)
 			recorder := httptest.NewRecorder()
-
-			data, err := json.Marshal(tc.body)
+			request, err := http.NewRequest(tc.method, tc.url, tc.body)
 			require.NoError(t, err)
 
-			url := fmt.Sprintf("/v1/combos/%d/dishes", tc.comboID)
-			request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(data))
-			require.NoError(t, err)
-
-			tc.setupAuth(t, request, server.tokenMaker)
 			server.router.ServeHTTP(recorder, request)
-			tc.checkResponse(t, recorder)
+			require.Equal(t, http.StatusNotFound, recorder.Code)
 		})
 	}
 }
@@ -1717,100 +1491,6 @@ func TestToggleComboOnlineAPI(t *testing.T) {
 
 			url := fmt.Sprintf("/v1/combos/%d/online", tc.comboID)
 			request, err := http.NewRequest(http.MethodPut, url, bytes.NewReader(data))
-			require.NoError(t, err)
-
-			tc.setupAuth(t, request, server.tokenMaker)
-			server.router.ServeHTTP(recorder, request)
-			tc.checkResponse(t, recorder)
-		})
-	}
-}
-
-// ==================== 套餐移除菜品测试 ====================
-
-func TestRemoveComboDishAPI(t *testing.T) {
-	user, _ := randomUser(t)
-	merchant := randomMerchant(user.ID)
-	combo := randomComboSet(merchant.ID)
-	dishID := util.RandomInt(1, 100)
-
-	testCases := []struct {
-		name          string
-		comboID       int64
-		dishID        int64
-		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		buildStubs    func(store *mockdb.MockStore)
-		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
-	}{
-		{
-			name:    "OK",
-			comboID: combo.ID,
-			dishID:  dishID,
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
-
-				store.EXPECT().
-					GetComboSet(gomock.Any(), gomock.Eq(combo.ID)).
-					Times(1).
-					Return(combo, nil)
-
-				store.EXPECT().
-					RemoveComboDish(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(nil)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-			},
-		},
-		{
-			name:    "NoAuthorization",
-			comboID: combo.ID,
-			dishID:  dishID,
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				// No authorization
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				expectNoMerchantAccessResolution(store)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusUnauthorized, recorder.Code)
-			},
-		},
-		{
-			name:    "InvalidDishID",
-			comboID: combo.ID,
-			dishID:  0,
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
-			},
-		},
-	}
-
-	for i := range testCases {
-		tc := testCases[i]
-
-		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			store := mockdb.NewMockStore(ctrl)
-			tc.buildStubs(store)
-
-			server := newTestServer(t, store)
-			recorder := httptest.NewRecorder()
-
-			url := fmt.Sprintf("/v1/combos/%d/dishes/%d", tc.comboID, tc.dishID)
-			request, err := http.NewRequest(http.MethodDelete, url, nil)
 			require.NoError(t, err)
 
 			tc.setupAuth(t, request, server.tokenMaker)

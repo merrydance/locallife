@@ -205,8 +205,6 @@ p, merchant_owner, /v1/combos/:id, GET
 p, merchant_owner, /v1/combos/:id, PUT
 p, merchant_owner, /v1/combos/:id/online, PUT
 p, merchant_owner, /v1/combos/:id, DELETE
-p, merchant_owner, /v1/combos/:id/dishes, POST
-p, merchant_owner, /v1/combos/:id/dishes/:dish_id, DELETE
 
 # Inventory Management
 p, merchant_owner, /v1/inventory, POST

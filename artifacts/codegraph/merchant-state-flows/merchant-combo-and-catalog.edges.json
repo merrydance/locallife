@@ -107,42 +107,35 @@
       "kind": "frontend_api",
       "label": "ComboManagementService.listCombos",
       "file": "weapp/miniprogram/pages/merchant/_main_shared/api/dish.ts",
-      "line": 836
+      "line": 764
     },
     {
       "id": "apiWrapper.comboGet",
       "kind": "frontend_api",
       "label": "ComboManagementService.getComboDetail",
       "file": "weapp/miniprogram/pages/merchant/_main_shared/api/dish.ts",
-      "line": 852
+      "line": 785
     },
     {
       "id": "apiWrapper.comboCreateUpdate",
       "kind": "frontend_api",
       "label": "ComboManagementService.createCombo/updateCombo",
       "file": "weapp/miniprogram/pages/merchant/_main_shared/api/dish.ts",
-      "line": 874
+      "line": 807
     },
     {
       "id": "apiWrapper.comboDelete",
       "kind": "frontend_api",
       "label": "ComboManagementService.deleteCombo",
       "file": "weapp/miniprogram/pages/merchant/_main_shared/api/dish.ts",
-      "line": 898
-    },
-    {
-      "id": "apiWrapper.comboDirectDishes",
-      "kind": "frontend_api",
-      "label": "Direct add/remove combo dish wrappers",
-      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/dish.ts",
-      "line": 909
+      "line": 831
     },
     {
       "id": "apiWrapper.comboOnline",
       "kind": "frontend_api",
       "label": "ComboManagementService.updateComboOnlineStatus",
       "file": "weapp/miniprogram/pages/merchant/_main_shared/api/dish.ts",
-      "line": 935
+      "line": 842
     },
     {
       "id": "apiWrapper.categoryCrud",
@@ -163,7 +156,7 @@
       "kind": "backend_route",
       "label": "/v1/combos merchant route group",
       "file": "locallife/api/server.go",
-      "line": 812
+      "line": 843
     },
     {
       "id": "route.dishCategoryGroup",
@@ -191,63 +184,49 @@
       "kind": "backend_handler",
       "label": "listComboSets",
       "file": "locallife/api/combo.go",
-      "line": 569
+      "line": 622
     },
     {
       "id": "api.createComboSet",
       "kind": "backend_handler",
       "label": "createComboSet",
       "file": "locallife/api/combo.go",
-      "line": 297
+      "line": 340
     },
     {
       "id": "api.updateComboSet",
       "kind": "backend_handler",
       "label": "updateComboSet",
       "file": "locallife/api/combo.go",
-      "line": 673
+      "line": 726
     },
     {
       "id": "api.resolveComboSummary",
       "kind": "backend_logic",
       "label": "resolveComboSummary",
       "file": "locallife/api/combo.go",
-      "line": 242
+      "line": 275
     },
     {
       "id": "api.toggleComboOnline",
       "kind": "backend_handler",
       "label": "toggleComboOnline",
       "file": "locallife/api/combo.go",
-      "line": 822
+      "line": 885
     },
     {
       "id": "api.deleteComboSet",
       "kind": "backend_handler",
       "label": "deleteComboSet",
       "file": "locallife/api/combo.go",
-      "line": 899
-    },
-    {
-      "id": "api.addComboDish",
-      "kind": "backend_handler",
-      "label": "addComboDish",
-      "file": "locallife/api/combo.go",
-      "line": 963
-    },
-    {
-      "id": "api.removeComboDish",
-      "kind": "backend_handler",
-      "label": "removeComboDish",
-      "file": "locallife/api/combo.go",
-      "line": 1056
+      "line": 974
     },
     {
       "id": "api.publicComboDetail",
       "kind": "backend_reader",
       "label": "getPublicComboDetail",
       "file": "locallife/api/combo.go",
-      "line": 485
+      "line": 528
     },
     {
       "id": "api.publicMerchantCombos",
@@ -552,26 +531,6 @@
       "from": "apiWrapper.tagCreate",
       "to": "route.tagsAdminOnly",
       "kind": "http_permission_drift"
-    },
-    {
-      "from": "apiWrapper.comboDirectDishes",
-      "to": "api.addComboDish",
-      "kind": "http_legacy"
-    },
-    {
-      "from": "apiWrapper.comboDirectDishes",
-      "to": "api.removeComboDish",
-      "kind": "http_legacy"
-    },
-    {
-      "from": "api.addComboDish",
-      "to": "sql.comboDishes",
-      "kind": "writes"
-    },
-    {
-      "from": "api.removeComboDish",
-      "to": "sql.comboDishes",
-      "kind": "writes"
     },
     {
       "from": "route.comboGroup",
