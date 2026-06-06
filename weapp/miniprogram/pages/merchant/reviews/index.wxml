@@ -2,7 +2,7 @@
 
 <view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
   <view wx:if="{{accessReady && accessDenied}}" class="state-block">
-    <t-empty icon="error-circle" description="当前账号无商户权限，请返回“我的”切换身份" />
+    <t-empty icon="error-circle" description="{{accessDeniedMessage}}" />
   </view>
 
   <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">

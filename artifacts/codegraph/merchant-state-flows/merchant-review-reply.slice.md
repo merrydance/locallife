@@ -31,8 +31,8 @@ Merchant review replies should have one trustworthy content boundary:
 
 ## Primary Forward Chain
 
-1. Merchant reviews page checks general merchant console access, then loads merchant review data.
-   Evidence: `weapp/miniprogram/pages/merchant/reviews/index.ts:118`, `weapp/miniprogram/pages/merchant/reviews/index.ts:122`, `weapp/miniprogram/pages/merchant/reviews/index.ts:133`.
+1. Merchant reviews page checks owner-aware review-management access, then loads merchant review data only for owner-capable roles.
+   Evidence: `weapp/miniprogram/pages/merchant/reviews/index.ts:123`, `weapp/miniprogram/pages/merchant/reviews/index.ts:126`, `weapp/miniprogram/pages/merchant/reviews/index.ts:135`, `weapp/miniprogram/utils/console-access.ts:100`, `weapp/miniprogram/utils/console-access.ts:299`.
 
 2. The page resolves merchant id from `current_merchant` cache or `getMyMerchantProfile`.
    Evidence: `weapp/miniprogram/pages/merchant/reviews/index.ts:267`, `weapp/miniprogram/pages/merchant/reviews/index.ts:272`, `weapp/miniprogram/pages/merchant/reviews/index.ts:282`.
@@ -77,7 +77,7 @@ Merchant review replies should have one trustworthy content boundary:
 
 - Merchant all-reviews intentionally includes hidden reviews, while public merchant reviews filter `is_visible = true`.
 - Reply is a single overwrite field plus timestamp; there is no durable reply history, delete/clear reply endpoint, or optimistic version.
-- Merchant owner-only route middleware is stricter than the page's generic merchant-console access check; the page can load but then fail API access for non-owner staff.
+- Fixed 2026-06-06: merchant owner-only route middleware now matches the page's owner-aware `ensureMerchantReviewManagementAccess` gate, so non-owner staff see an owner-only denied state before all-review/reply API calls.
 - Customer review update uses `UpdateReviewTx` for content/images, but merchant reply uses a direct SQL update because only one review row is changed.
 - Review images are public-resolved for merchant all-review response, not owner-only-resolved. Hidden review text can be listed to the merchant, but image visibility follows the public URL resolver.
 
@@ -90,7 +90,7 @@ Merchant review replies should have one trustworthy content boundary:
 
 ## Trust, Authorization, And Tenant Checks
 
-- Frontend only checks generic merchant console access.
+- Frontend checks owner-aware review-management access for `merchant`/`merchant_owner` roles before loading the page.
 - Backend write/read merchant management routes require merchant owner role.
 - Backend validates route merchant id for list-all and review merchant ownership for reply.
 - Reply content is checked using the merchant user's WeChat OpenID before persistence.
@@ -125,14 +125,14 @@ Observed tests:
 
 Missing high-value tests:
 
-- Non-owner merchant staff denial should be covered at the Mini Program/API contract level because the page gate is generic while backend is owner-only.
+- Fixed 2026-06-06: Mini Program owner-access coverage in `weapp/scripts/check-merchant-review-owner-access.test.js` proves `merchant_staff` is denied by the page gate and `merchant_owner` is granted.
 - Repeated identical reply should be explicitly accepted as timestamp refresh or made idempotent.
 - Hidden-review reply visibility should be covered end to end: merchant can reply, public list still hides the review, user/owner views behave as intended.
 - Missing WeChat OpenID and content-safety provider failure should have product-copy expectations in the Mini Program.
 
 ## Gaps And Refactor Notes
 
-- Decide whether managers should be allowed to reply to reviews; if not, make the page copy/access gate owner-aware instead of relying on backend denial.
+- Fixed 2026-06-06: the product path remains owner-only; the Mini Program page copy/access gate is owner-aware and no longer relies on backend denial for non-owner staff.
 - Decide whether reply update should preserve reply history or expose a clear/delete reply action.
 - Make repeated identical reply semantics explicit: either accept `replied_at` refresh or short-circuit no-op.
 - Verify image URL visibility for hidden reviews in merchant all-review response; if hidden review images should not use public URLs, switch to an owner/merchant-visible resolver.
@@ -145,6 +145,6 @@ Missing high-value tests:
 - Async branches checked: none found for merchant reply. Content-safety is synchronous and blocks persistence; page refresh/re-entry is the only recovery path.
 - Failure/retry branches checked: duplicate reply submit guard, last-write-wins reply, repeated identical reply updating timestamp, no version/history/delete endpoint, missing OpenID/provider failure, local row patch after success, silent list refresh failure, and hidden-review image public URL ambiguity.
 - Reader/consumer branches checked: merchant review list/count, public merchant review list, user review list, review image resolver, dashboard/stat counts if any, and customer-visible reply fields.
-- Authorization/tenant branches checked: Mini Program generic console access, backend owner-only review management routes, merchant ownership check for reply, route merchant id validation for list, and content-safety check using merchant user's WeChat OpenID.
-- Zombie/unreachable branches checked: page can be entered by non-owner staff while backend denies; no clear/delete/history path despite reply edit UI; merchant hidden-review images use public URL resolver; managers' product permission is undecided.
-- Test-proof gaps checked: existing tests cover reply happy path/content-safety call, SQL update, list/count, and image enrichment. Missing proof remains for non-owner page/API contract, repeated identical reply semantics, hidden-review merchant/public/user visibility e2e, and missing OpenID/provider failure Mini Program copy.
+- Authorization/tenant branches checked: Mini Program owner-aware review-management access, backend owner-only review management routes, merchant ownership check for reply, route merchant id validation for list, and content-safety check using merchant user's WeChat OpenID.
+- Zombie/unreachable branches checked: non-owner page entry drift is fixed; no clear/delete/history path despite reply edit UI; merchant hidden-review images use public URL resolver; managers' product permission remains owner-only unless product later changes backend middleware.
+- Test-proof gaps checked: existing tests cover reply happy path/content-safety call, SQL update, list/count, image enrichment, and Mini Program non-owner page denial. Missing proof remains for repeated identical reply semantics, hidden-review merchant/public/user visibility e2e, and missing OpenID/provider failure Mini Program copy.

@@ -16,6 +16,7 @@ export interface ConsoleWorkbench {
 
 const MERCHANT_CONSOLE_ROLES = ['merchant', 'merchant_owner', 'merchant_staff']
 const MERCHANT_APPLYMENT_MANAGER_ROLES = ['merchant', 'merchant_owner']
+const MERCHANT_REVIEW_MANAGER_ROLES = ['merchant', 'merchant_owner']
 const USER_INFO_CACHE_FRESHNESS_MS = 60 * 1000
 const MERCHANT_DEVICE_ACCESS_CACHE_FRESHNESS_MS = 60 * 1000
 
@@ -96,6 +97,11 @@ export function canManageMerchantApplyment(roles: string[]) {
   return normalizedRoles.some((role) => MERCHANT_APPLYMENT_MANAGER_ROLES.includes(role))
 }
 
+export function canManageMerchantReviews(roles: string[]) {
+  const normalizedRoles = normalizeConsoleRoles(roles)
+  return normalizedRoles.some((role) => MERCHANT_REVIEW_MANAGER_ROLES.includes(role))
+}
+
 export type MerchantConsoleAccessResult =
   | { status: 'granted', user?: UserResponse }
   | { status: 'denied', message: string }
@@ -132,6 +138,10 @@ export function getMerchantDeviceManagementErrorMessage(result: MerchantDeviceMa
 
 export function getMerchantApplymentAccessDeniedMessage() {
   return '结算账户开户仅支持老板账号维护，请联系老板处理。'
+}
+
+export function getMerchantReviewManagementAccessDeniedMessage() {
+  return '评价管理仅支持老板账号处理，请联系老板回复顾客评价。'
 }
 
 function getFreshCachedUserInfo() {
@@ -274,6 +284,38 @@ export async function ensureMerchantApplymentAccess() {
       return {
         status: 'denied',
         message: getMerchantApplymentAccessDeniedMessage()
+      } as MerchantConsoleAccessResult
+    }
+
+    return { status: 'granted', user } as MerchantConsoleAccessResult
+  } catch (_err) {
+    return {
+      status: 'error',
+      message: '商户权限校验失败，请检查网络后重试'
+    } as MerchantConsoleAccessResult
+  }
+}
+
+export async function ensureMerchantReviewManagementAccess() {
+  if (shouldBypassConsoleRoleValidation()) {
+    return { status: 'granted' } as MerchantConsoleAccessResult
+  }
+
+  try {
+    const user = await getRecentUserInfo()
+    const roles = user.roles || []
+
+    if (!hasMerchantConsoleAccess(roles)) {
+      return {
+        status: 'denied',
+        message: '当前账号无商户权限，请返回“我的”切换身份'
+      } as MerchantConsoleAccessResult
+    }
+
+    if (!canManageMerchantReviews(roles)) {
+      return {
+        status: 'denied',
+        message: getMerchantReviewManagementAccessDeniedMessage()
       } as MerchantConsoleAccessResult
     }
 

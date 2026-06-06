@@ -4,7 +4,7 @@ import ReviewService, { Review } from '../_main_shared/api/review'
 import { logger } from '../../../utils/logger'
 import { getStableBarHeights } from '../../../utils/responsive'
 import { getErrorUserMessage } from '../../../utils/user-facing'
-import { ensureMerchantConsoleAccess } from '../../../utils/console-access'
+import { ensureMerchantReviewManagementAccess } from '../../../utils/console-access'
 
 const REVIEWS_AUTO_REFRESH_WINDOW_MS = 60 * 1000
 
@@ -92,6 +92,7 @@ Page({
     navBarHeight: 88,
     accessReady: false,
     accessDenied: false,
+    accessDeniedMessage: '',
     accessErrorMessage: '',
     initialLoading: true,
     initialError: false,
@@ -119,10 +120,11 @@ Page({
     const { navBarHeight } = getStableBarHeights()
     this.setData({ navBarHeight })
 
-    const accessResult = await ensureMerchantConsoleAccess()
+    const accessResult = await ensureMerchantReviewManagementAccess()
     this.setData({
       accessReady: true,
       accessDenied: accessResult.status === 'denied',
+      accessDeniedMessage: accessResult.status === 'denied' ? accessResult.message : '',
       accessErrorMessage: accessResult.status === 'error' ? accessResult.message : ''
     })
     if (accessResult.status !== 'granted') {
@@ -134,7 +136,7 @@ Page({
   },
 
   onRetryAccess() {
-    this.setData({ accessReady: false, accessDenied: false, accessErrorMessage: '', initialLoading: true })
+    this.setData({ accessReady: false, accessDenied: false, accessDeniedMessage: '', accessErrorMessage: '', initialLoading: true })
     this.onLoad()
   },
 
