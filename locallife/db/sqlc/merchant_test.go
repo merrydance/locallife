@@ -476,6 +476,61 @@ func TestSearchMerchants_DistanceSort(t *testing.T) {
 	require.LessOrEqual(t, merchants[0].DistanceMeters, merchants[1].DistanceMeters)
 }
 
+func TestSearchMerchantsUsesLatestApplicationImagesOnly(t *testing.T) {
+	owner := createRandomUser(t)
+	region := createRandomRegion(t)
+	keyword := "SEARCH_APP_IMAGES_" + util.RandomString(6)
+	appData, _ := json.Marshal(map[string]string{"test": "data"})
+	merchant, err := testStore.CreateMerchant(context.Background(), CreateMerchantParams{
+		OwnerUserID:     owner.ID,
+		Name:            keyword,
+		Phone:           fmt.Sprintf("138%08d", util.RandomInt(10000000, 99999999)),
+		Address:         "test address " + util.RandomString(10),
+		Latitude:        numericFromFloat(39.9080),
+		Longitude:       numericFromFloat(116.3970),
+		Status:          "active",
+		ApplicationData: appData,
+		RegionID:        region.ID,
+	})
+	require.NoError(t, err)
+
+	olderApp := createRandomMerchantApplicationWithUser(t, owner.ID)
+	latestApp := createRandomMerchantApplicationWithUser(t, owner.ID)
+	olderImages := []byte(`["uploads/merchant/older-cover.jpg"]`)
+	latestImages := []byte(`["uploads/merchant/latest-cover.jpg"]`)
+	store, ok := testStore.(*SQLStore)
+	require.True(t, ok)
+	_, err = store.connPool.Exec(context.Background(), `
+		UPDATE merchant_applications
+		SET created_at = CASE id
+			WHEN $1 THEN now() - interval '2 hours'
+			WHEN $2 THEN now() - interval '1 hour'
+		END,
+		storefront_images = CASE id
+			WHEN $1 THEN $3::jsonb
+			WHEN $2 THEN $4::jsonb
+		END
+		WHERE id = ANY($5)
+	`, olderApp.ID, latestApp.ID, olderImages, latestImages, []int64{olderApp.ID, latestApp.ID})
+	require.NoError(t, err)
+
+	merchants, err := testStore.SearchMerchants(context.Background(), SearchMerchantsParams{
+		Offset:  0,
+		Limit:   10,
+		Column3: keyword,
+		Column4: 39.9082,
+		Column5: 116.3975,
+		RegionID: pgtype.Int8{
+			Int64: region.ID,
+			Valid: true,
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, merchants, 1)
+	require.Equal(t, merchant.ID, merchants[0].ID)
+	require.JSONEq(t, string(latestImages), string(merchants[0].StorefrontImages))
+}
+
 func TestSearchMerchantsByTag_DistanceSort(t *testing.T) {
 	region := createRandomRegion(t)
 	tag := createRandomTag(t, "merchant")
@@ -505,6 +560,64 @@ func TestSearchMerchantsByTag_DistanceSort(t *testing.T) {
 	require.Equal(t, nearMerchant.ID, merchants[0].ID)
 	require.Equal(t, farMerchant.ID, merchants[1].ID)
 	require.LessOrEqual(t, merchants[0].DistanceMeters, merchants[1].DistanceMeters)
+}
+
+func TestSearchMerchantsByTagUsesLatestApplicationImagesOnly(t *testing.T) {
+	owner := createRandomUser(t)
+	region := createRandomRegion(t)
+	tag := createRandomTag(t, "merchant")
+	keyword := "TAG_APP_IMAGES_" + util.RandomString(6)
+	appData, _ := json.Marshal(map[string]string{"test": "data"})
+	merchant, err := testStore.CreateMerchant(context.Background(), CreateMerchantParams{
+		OwnerUserID:     owner.ID,
+		Name:            keyword,
+		Phone:           fmt.Sprintf("138%08d", util.RandomInt(10000000, 99999999)),
+		Address:         "test address " + util.RandomString(10),
+		Latitude:        numericFromFloat(39.9080),
+		Longitude:       numericFromFloat(116.3970),
+		Status:          "active",
+		ApplicationData: appData,
+		RegionID:        region.ID,
+	})
+	require.NoError(t, err)
+	err = testStore.AddMerchantTag(context.Background(), AddMerchantTagParams{MerchantID: merchant.ID, TagID: tag.ID})
+	require.NoError(t, err)
+
+	olderApp := createRandomMerchantApplicationWithUser(t, owner.ID)
+	latestApp := createRandomMerchantApplicationWithUser(t, owner.ID)
+	olderImages := []byte(`["uploads/merchant/tag-older-cover.jpg"]`)
+	latestImages := []byte(`["uploads/merchant/tag-latest-cover.jpg"]`)
+	store, ok := testStore.(*SQLStore)
+	require.True(t, ok)
+	_, err = store.connPool.Exec(context.Background(), `
+		UPDATE merchant_applications
+		SET created_at = CASE id
+			WHEN $1 THEN now() - interval '2 hours'
+			WHEN $2 THEN now() - interval '1 hour'
+		END,
+		storefront_images = CASE id
+			WHEN $1 THEN $3::jsonb
+			WHEN $2 THEN $4::jsonb
+		END
+		WHERE id = ANY($5)
+	`, olderApp.ID, latestApp.ID, olderImages, latestImages, []int64{olderApp.ID, latestApp.ID})
+	require.NoError(t, err)
+
+	merchants, err := testStore.SearchMerchantsByTag(context.Background(), SearchMerchantsByTagParams{
+		TagID:   tag.ID,
+		UserLat: 39.9082,
+		UserLng: 116.3975,
+		RegionID: pgtype.Int8{
+			Int64: region.ID,
+			Valid: true,
+		},
+		Limit:  10,
+		Offset: 0,
+	})
+	require.NoError(t, err)
+	require.Len(t, merchants, 1)
+	require.Equal(t, merchant.ID, merchants[0].ID)
+	require.JSONEq(t, string(latestImages), string(merchants[0].StorefrontImages))
 }
 
 func TestSearchMerchantsByTag_ExcludesBindbankSubmittedMerchants(t *testing.T) {
@@ -665,6 +778,67 @@ func TestMerchantApplicationListQueriesUseIDTieBreaker(t *testing.T) {
 	require.Len(t, draftApps, 2)
 	require.Equal(t, app2.ID, draftApps[0].ID)
 	require.Equal(t, app1.ID, draftApps[1].ID)
+}
+
+func TestGetMerchantApplicationDraftUsesIDTieBreaker(t *testing.T) {
+	user := createRandomUser(t)
+	app1 := createRandomMerchantApplicationWithUser(t, user.ID)
+	app2 := createRandomMerchantApplicationWithUser(t, user.ID)
+	sameCreatedAt := time.Now().UTC().Add(-1 * time.Hour).Truncate(time.Microsecond)
+
+	store, ok := testStore.(*SQLStore)
+	require.True(t, ok)
+
+	_, err := store.connPool.Exec(context.Background(), `
+		UPDATE merchant_applications
+		SET created_at = $1
+		WHERE id = ANY($2)
+	`, sameCreatedAt, []int64{app1.ID, app2.ID})
+	require.NoError(t, err)
+
+	draft, err := testStore.GetMerchantApplicationDraft(context.Background(), user.ID)
+	require.NoError(t, err)
+	require.Equal(t, app2.ID, draft.ID)
+	require.Greater(t, app2.ID, app1.ID)
+}
+
+func TestUpdateMerchantApplicationShopImagesTargetsLatestApplicationOnly(t *testing.T) {
+	user := createRandomUser(t)
+	olderApp := createRandomMerchantApplicationWithUser(t, user.ID)
+	latestApp := createRandomMerchantApplicationWithUser(t, user.ID)
+	olderCreatedAt := time.Now().UTC().Add(-2 * time.Hour).Truncate(time.Microsecond)
+	latestCreatedAt := time.Now().UTC().Add(-1 * time.Hour).Truncate(time.Microsecond)
+	oldStorefrontImages := []byte(`["uploads/merchant/old-storefront.jpg"]`)
+	oldEnvironmentImages := []byte(`["uploads/merchant/old-environment.jpg"]`)
+	newStorefrontImages := []byte(`["uploads/merchant/new-storefront.jpg"]`)
+
+	store, ok := testStore.(*SQLStore)
+	require.True(t, ok)
+
+	_, err := store.connPool.Exec(context.Background(), `
+		UPDATE merchant_applications
+		SET created_at = CASE id
+			WHEN $1 THEN $3::timestamptz
+			WHEN $2 THEN $4::timestamptz
+		END,
+		storefront_images = $5,
+		environment_images = $6
+		WHERE id = ANY($7)
+	`, olderApp.ID, latestApp.ID, olderCreatedAt, latestCreatedAt, oldStorefrontImages, oldEnvironmentImages, []int64{olderApp.ID, latestApp.ID})
+	require.NoError(t, err)
+
+	updatedApp, err := testStore.UpdateMerchantApplicationShopImages(context.Background(), UpdateMerchantApplicationShopImagesParams{
+		UserID:           user.ID,
+		StorefrontImages: newStorefrontImages,
+	})
+	require.NoError(t, err)
+	require.Equal(t, latestApp.ID, updatedApp.ID)
+	require.JSONEq(t, string(newStorefrontImages), string(updatedApp.StorefrontImages))
+
+	unchangedOlderApp, err := testStore.GetMerchantApplication(context.Background(), olderApp.ID)
+	require.NoError(t, err)
+	require.JSONEq(t, string(oldStorefrontImages), string(unchangedOlderApp.StorefrontImages))
+	require.JSONEq(t, string(oldEnvironmentImages), string(unchangedOlderApp.EnvironmentImages))
 }
 
 func TestUpdateMerchantApplicationStatus(t *testing.T) {

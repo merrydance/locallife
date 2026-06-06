@@ -726,3 +726,79 @@ func TestUpdateCurrentMerchantShopImages_ReturnsInternalServerErrorOnInvalidStor
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
 	require.Equal(t, "internal server error", resp.Message)
 }
+
+func TestUpdateCurrentMerchantShopImagesFailsClosedWhenMerchantContextMissing(t *testing.T) {
+	user, _ := randomUser(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectNoMerchantAccessResolution(store)
+	store.EXPECT().
+		UpdateMerchantApplicationShopImages(gomock.Any(), gomock.Any()).
+		Times(0)
+
+	server := newTestServer(t, store)
+	body, err := json.Marshal(updateCurrentMerchantShopImagesRequest{
+		StorefrontImages: []string{"uploads/merchants/12/storefront/new.jpg"},
+	})
+	require.NoError(t, err)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request, err = http.NewRequest(http.MethodPatch, "/v1/merchants/me/shop-images", bytes.NewReader(body))
+	require.NoError(t, err)
+	ctx.Request.Header.Set("Content-Type", "application/json")
+	ctx.Set(authorizationPayloadKey, &token.Payload{UserID: user.ID})
+
+	server.updateCurrentMerchantShopImages(ctx)
+
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	var resp ErrorResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, "internal server error", resp.Error)
+}
+
+func TestUpdateCurrentMerchantShopImagesUsesResolvedMerchantOwnerForStaff(t *testing.T) {
+	manager, _ := randomUser(t)
+	merchant := randomMerchant(manager.ID + 1000)
+	merchant.Status = "active"
+	merchant.RegionID = 1
+	storefrontImages := []string{"uploads/merchants/12/storefront/new.jpg"}
+	storedStorefrontImages, err := json.Marshal(storefrontImages)
+	require.NoError(t, err)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectStaffRole(store, manager.ID, merchant, "manager")
+	store.EXPECT().
+		UpdateMerchantApplicationShopImages(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ any, arg db.UpdateMerchantApplicationShopImagesParams) (db.MerchantApplication, error) {
+			require.Equal(t, merchant.OwnerUserID, arg.UserID)
+			require.JSONEq(t, string(storedStorefrontImages), string(arg.StorefrontImages))
+			return db.MerchantApplication{
+				ID:               91,
+				UserID:           merchant.OwnerUserID,
+				StorefrontImages: storedStorefrontImages,
+			}, nil
+		})
+
+	server := newTestServer(t, store)
+	body, err := json.Marshal(updateCurrentMerchantShopImagesRequest{
+		StorefrontImages: storefrontImages,
+	})
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPatch, "/v1/merchants/me/shop-images", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, manager.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+}

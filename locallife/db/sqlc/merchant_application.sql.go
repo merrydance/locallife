@@ -344,7 +344,7 @@ func (q *Queries) CreateMerchantApplicationDraft(ctx context.Context, userID int
 const getMerchantApplicationDraft = `-- name: GetMerchantApplicationDraft :one
 SELECT id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id, review_summary FROM merchant_applications
 WHERE user_id = $1 AND status IN ('draft', 'submitted', 'rejected', 'approved')
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT 1
 `
 
@@ -1052,12 +1052,17 @@ func (q *Queries) UpdateMerchantApplicationReviewSummary(ctx context.Context, ar
 }
 
 const updateMerchantApplicationShopImages = `-- name: UpdateMerchantApplicationShopImages :one
-UPDATE merchant_applications
+UPDATE merchant_applications ma
 SET
   storefront_images = COALESCE($2, storefront_images),
   environment_images = COALESCE($3, environment_images),
   updated_at = now()
-WHERE user_id = $1
+WHERE id = (
+  SELECT selected_ma.id FROM merchant_applications selected_ma
+  WHERE selected_ma.user_id = $1 AND selected_ma.status IN ('draft', 'submitted', 'rejected', 'approved')
+  ORDER BY selected_ma.created_at DESC, selected_ma.id DESC
+  LIMIT 1
+)
 RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id, review_summary
 `
 

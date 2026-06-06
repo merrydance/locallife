@@ -20,7 +20,7 @@ RETURNING *;
 -- 获取用户的草稿或可编辑申请（包含所有状态，以便随时编辑）
 SELECT id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id, review_summary FROM merchant_applications
 WHERE user_id = $1 AND status IN ('draft', 'submitted', 'rejected', 'approved')
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT 1;
 
 -- name: UpdateMerchantApplicationBasicInfo :one
@@ -207,12 +207,17 @@ RETURNING *;
 
 -- name: UpdateMerchantApplicationShopImages :one
 -- 更新门头照和环境照（商户已审核通过后也可以更新）
-UPDATE merchant_applications
+UPDATE merchant_applications ma
 SET
   storefront_images = COALESCE(sqlc.narg(storefront_images), storefront_images),
   environment_images = COALESCE(sqlc.narg(environment_images), environment_images),
   updated_at = now()
-WHERE user_id = $1
+WHERE id = (
+  SELECT selected_ma.id FROM merchant_applications selected_ma
+  WHERE selected_ma.user_id = $1 AND selected_ma.status IN ('draft', 'submitted', 'rejected', 'approved')
+  ORDER BY selected_ma.created_at DESC, selected_ma.id DESC
+  LIMIT 1
+)
 RETURNING *;
 
 -- name: ResetStaleMerchantOCRStatus :exec

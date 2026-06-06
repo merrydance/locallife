@@ -412,8 +412,6 @@ type updateCurrentMerchantShopImagesResponse struct {
 // @Router /v1/merchants/me/shop-images [patch]
 // @Security BearerAuth
 func (server *Server) updateCurrentMerchantShopImages(ctx *gin.Context) {
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
 	var req updateCurrentMerchantShopImagesRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
@@ -428,21 +426,35 @@ func (server *Server) updateCurrentMerchantShopImages(ctx *gin.Context) {
 		return
 	}
 
+	merchant, ok := GetMerchantFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, errors.New("merchant context not found")))
+		return
+	}
+
 	arg := db.UpdateMerchantApplicationShopImagesParams{
-		UserID: authPayload.UserID,
+		UserID: merchant.OwnerUserID,
 	}
 	if req.StorefrontImages != nil {
 		for i, img := range req.StorefrontImages {
 			req.StorefrontImages[i] = normalizeImageURLForStorage(img)
 		}
-		jsonData, _ := json.Marshal(req.StorefrontImages)
+		jsonData, err := json.Marshal(req.StorefrontImages)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
 		arg.StorefrontImages = jsonData
 	}
 	if req.EnvironmentImages != nil {
 		for i, img := range req.EnvironmentImages {
 			req.EnvironmentImages[i] = normalizeImageURLForStorage(img)
 		}
-		jsonData, _ := json.Marshal(req.EnvironmentImages)
+		jsonData, err := json.Marshal(req.EnvironmentImages)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
 		arg.EnvironmentImages = jsonData
 	}
 

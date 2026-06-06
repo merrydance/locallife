@@ -205,7 +205,14 @@ SELECT m.id, m.owner_user_id, m.name, m.description, m.phone, m.address, m.latit
   , COALESCE(earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($4::float8, $5::float8)), 0)::bigint AS distance_meters
 FROM merchants m
   LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
-  LEFT JOIN merchant_applications ma ON ma.user_id = m.owner_user_id
+  LEFT JOIN LATERAL (
+    SELECT selected_ma.storefront_images
+    FROM merchant_applications selected_ma
+    WHERE selected_ma.user_id = m.owner_user_id
+      AND selected_ma.status IN ('draft', 'submitted', 'rejected', 'approved')
+    ORDER BY selected_ma.created_at DESC, selected_ma.id DESC
+    LIMIT 1
+  ) ma ON true
 WHERE m.status = 'active'
   AND m.deleted_at IS NULL
   AND COALESCE(mp.is_takeout_suspended, false) = false
@@ -648,7 +655,14 @@ SELECT m.id, m.owner_user_id, m.name, m.description, m.phone, m.address, m.latit
   , COALESCE(earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth(sqlc.arg('user_lat')::float8, sqlc.arg('user_lng')::float8)), 0)::bigint AS distance_meters
 FROM merchants m
   LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
-  LEFT JOIN merchant_applications ma ON ma.user_id = m.owner_user_id
+  LEFT JOIN LATERAL (
+    SELECT selected_ma.storefront_images
+    FROM merchant_applications selected_ma
+    WHERE selected_ma.user_id = m.owner_user_id
+      AND selected_ma.status IN ('draft', 'submitted', 'rejected', 'approved')
+    ORDER BY selected_ma.created_at DESC, selected_ma.id DESC
+    LIMIT 1
+  ) ma ON true
   INNER JOIN merchant_tags mt_filter ON m.id = mt_filter.merchant_id
 WHERE m.status = 'active'
   AND m.deleted_at IS NULL
