@@ -256,15 +256,47 @@ func TestUpdateComboSetOnlineStatus(t *testing.T) {
 
 func TestDeleteComboSet(t *testing.T) {
 	merchant := createRandomMerchantForDish(t)
+	category := createRandomDishCategory(t)
 	combo := createRandomComboSet(t, merchant.ID)
+	dish := createRandomDish(t, merchant.ID, category.ID)
+	tag := createRandomTag(t, "combo")
 
-	err := testStore.DeleteComboSet(context.Background(), combo.ID)
+	_, err := testStore.AddComboDish(context.Background(), newComboDishParams(combo.ID, dish, 2))
+	require.NoError(t, err)
+	_, err = testStore.AddComboTag(context.Background(), AddComboTagParams{
+		ComboID: combo.ID,
+		TagID:   tag.ID,
+	})
 	require.NoError(t, err)
 
-	// 验证已删除
+	dishes, err := testStore.ListComboDishes(context.Background(), combo.ID)
+	require.NoError(t, err)
+	require.Len(t, dishes, 1)
+	require.Equal(t, dish.ID, dishes[0].ID)
+
+	tags, err := testStore.ListComboTags(context.Background(), combo.ID)
+	require.NoError(t, err)
+	require.Len(t, tags, 1)
+	require.Equal(t, tag.ID, tags[0].ID)
+
+	err = testStore.DeleteComboSet(context.Background(), combo.ID)
+	require.NoError(t, err)
+
+	// 验证软删除后主套餐对普通读取不可见。
 	combo2, err := testStore.GetComboSet(context.Background(), combo.ID)
 	require.Error(t, err)
 	require.Empty(t, combo2)
+
+	// 关联行被刻意保留，用于历史订单、审计和后台排查。
+	dishes, err = testStore.ListComboDishes(context.Background(), combo.ID)
+	require.NoError(t, err)
+	require.Len(t, dishes, 1)
+	require.Equal(t, dish.ID, dishes[0].ID)
+
+	tags, err = testStore.ListComboTags(context.Background(), combo.ID)
+	require.NoError(t, err)
+	require.Len(t, tags, 1)
+	require.Equal(t, tag.ID, tags[0].ID)
 }
 
 func TestCountComboSetsByMerchant(t *testing.T) {

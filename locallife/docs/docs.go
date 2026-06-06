@@ -2783,7 +2783,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "删除套餐（级联删除关联关系）",
+                "description": "软删除套餐；套餐菜品和标签关联会保留用于历史和审计记录",
                 "produces": [
                     "application/json"
                 ],

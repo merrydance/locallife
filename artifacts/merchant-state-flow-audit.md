@@ -163,7 +163,7 @@ Primary backend scope:
 81. Managers can manually adjust customer stored-value balance because the member route group allows owner/manager. This may be intended, but it should be explicitly product-owned and tested as a high-impact permission boundary.
 82. Fixed 2026-06-06: combo create/update/toggle/direct-add write entrypoints now reject online combo writes when existing or requested child dishes are missing, soft-deleted, offline, unavailable, or empty. Offline drafts can still retain unavailable children until a publish attempt.
 83. Fixed 2026-06-06: public combo detail, public merchant combos, scan-table menu, search/recommendation readers, cart add/update, direct order creation, and reservation full-prepay validation now enforce combo child orderability, so historical online combos fail closed when child dish availability later drifts.
-84. Combo soft delete only updates `combo_sets.deleted_at`; association rows remain. This may be acceptable for audit/history, but the handler comment says cascade deletion and should be corrected or made true.
+84. Fixed 2026-06-06: combo delete is now explicitly documented as a soft delete. `combo_sets.deleted_at` hides the combo while `combo_dishes` and `combo_tags` association rows are deliberately retained for history/audit, and `TestDeleteComboSet` locks that persistence contract.
 85. Fixed 2026-06-06: category sort-only update now calls `UpdateMerchantDishCategoryOrder` and returns the persisted `merchant_dish_categories.sort_order`, so reload keeps the merchant's requested order.
 86. Category delete only unlinks the merchant category; existing dishes keep `dishes.category_id`. This can create hidden-category or uncategorized behavior depending on reader fallback.
 87. Combo tag creation is exposed in the merchant combo edit page, but backend `POST /v1/tags` is admin-only. The UI can present an action that ordinary merchant staff cannot complete.
@@ -258,7 +258,7 @@ Primary backend scope:
 68. Fixed 2026-06-06: category sort-only update persists `merchant_dish_categories.sort_order` through `UpdateMerchantDishCategoryOrder`, with API and sqlc regression coverage.
 69. Decide category delete semantics for dishes in the deleted category: block delete, migrate to uncategorized, or intentionally allow hidden category ids and update all readers/copy.
 70. Hide merchant combo tag creation or add a merchant-authorized tag-creation contract with role and duplicate-name tests.
-71. Correct the combo delete cascade comment or implement deliberate association cleanup/audit behavior.
+71. Fixed 2026-06-06: combo delete contract now documents soft-delete-with-retained-associations behavior and has sqlc regression coverage.
 72. Retire or realign direct combo-dish add/remove wrappers/routes with the supported full-combo update payload and tests.
 73. Make merchant review page access owner-aware, or relax backend review-management middleware deliberately to include managers with product sign-off.
 74. Decide merchant review reply history/clear semantics and add tests for repeated identical reply, concurrent update, and timestamp behavior.

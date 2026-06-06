@@ -959,7 +959,7 @@ type deleteComboSetRequest struct {
 
 // deleteComboSet godoc
 // @Summary 删除套餐
-// @Description 删除套餐（级联删除关联关系）
+// @Description 软删除套餐；套餐菜品和标签关联会保留用于历史和审计记录
 // @Tags 套餐管理
 // @Produce json
 // @Param id path int true "套餐ID"
@@ -1003,7 +1003,7 @@ func (server *Server) deleteComboSet(ctx *gin.Context) {
 		return
 	}
 
-	// 删除套餐（数据库会级联删除combo_dishes和combo_tags）
+	// 软删除套餐，保留combo_dishes和combo_tags关联用于历史和审计记录。
 	err = server.store.DeleteComboSet(ctx, req.ID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
