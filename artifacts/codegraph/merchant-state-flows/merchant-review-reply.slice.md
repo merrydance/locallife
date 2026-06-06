@@ -122,12 +122,12 @@ Observed tests:
 - API tests cover merchant reply happy path and content-safety call behavior.
 - SQL tests cover `UpdateMerchantReply`.
 - API tests cover merchant review list/count and review image URL enrichment.
+- Fixed 2026-06-06: API/sqlc tests cover hidden-review reply visibility, proving merchant owner all-list/reply includes hidden reviews, public merchant list stays visible-only, and the customer/user list retains the user's hidden review.
 
 Missing high-value tests:
 
 - Fixed 2026-06-06: Mini Program owner-access coverage in `weapp/scripts/check-merchant-review-owner-access.test.js` proves `merchant_staff` is denied by the page gate and `merchant_owner` is granted.
 - Repeated identical reply should be explicitly accepted as timestamp refresh or made idempotent.
-- Hidden-review reply visibility should be covered end to end: merchant can reply, public list still hides the review, user/owner views behave as intended.
 - Missing WeChat OpenID and content-safety provider failure should have product-copy expectations in the Mini Program.
 
 ## Gaps And Refactor Notes
@@ -147,4 +147,4 @@ Missing high-value tests:
 - Reader/consumer branches checked: merchant review list/count, public merchant review list, user review list, review image resolver, dashboard/stat counts if any, and customer-visible reply fields.
 - Authorization/tenant branches checked: Mini Program owner-aware review-management access, backend owner-only review management routes, merchant ownership check for reply, route merchant id validation for list, and content-safety check using merchant user's WeChat OpenID.
 - Zombie/unreachable branches checked: non-owner page entry drift is fixed; no clear/delete/history path despite reply edit UI; merchant hidden-review images use public URL resolver; managers' product permission remains owner-only unless product later changes backend middleware.
-- Test-proof gaps checked: existing tests cover reply happy path/content-safety call, SQL update, list/count, image enrichment, and Mini Program non-owner page denial. Missing proof remains for repeated identical reply semantics, hidden-review merchant/public/user visibility e2e, and missing OpenID/provider failure Mini Program copy.
+- Test-proof gaps checked: existing tests cover reply happy path/content-safety call, SQL update, list/count, image enrichment, Mini Program non-owner page denial, and hidden-review reply visibility across merchant/public/user readers. Missing proof remains for repeated identical reply semantics and missing OpenID/provider failure Mini Program copy.

@@ -483,6 +483,159 @@ func TestListMerchantReviewsAPI(t *testing.T) {
 	}
 }
 
+func TestReviewHiddenVisibilityAndReplyContractAPI(t *testing.T) {
+	owner, _ := randomUser(t)
+	merchant := randomMerchant(owner.ID)
+	visibleReview := randomReview(owner.ID+1, merchant.ID)
+	visibleReview.ID = 101
+	visibleReview.IsVisible = true
+	hiddenReview := randomReview(owner.ID+2, merchant.ID)
+	hiddenReview.ID = 102
+	hiddenReview.IsVisible = false
+
+	t.Run("public merchant list excludes hidden reviews", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		store := mockdb.NewMockStore(ctrl)
+		store.EXPECT().
+			ListReviewsByMerchant(gomock.Any(), gomock.Eq(db.ListReviewsByMerchantParams{
+				MerchantID: merchant.ID,
+				Limit:      10,
+				Offset:     0,
+			})).
+			Times(1).
+			Return([]db.Review{visibleReview}, nil)
+		store.EXPECT().
+			CountReviewsByMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
+			Times(1).
+			Return(int64(1), nil)
+		store.EXPECT().
+			ListReviewImagesByReviews(gomock.Any(), gomock.Any()).
+			Times(1).
+			Return([]db.ReviewImage{}, nil)
+
+		wechatClient := mockwechat.NewMockWechatClient(ctrl)
+		server := newTestServerWithWechat(t, store, wechatClient)
+		recorder := httptest.NewRecorder()
+
+		url := fmt.Sprintf("/v1/reviews/merchants/%d?page_id=1&page_size=10", merchant.ID)
+		request, err := http.NewRequest(http.MethodGet, url, nil)
+		require.NoError(t, err)
+		addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
+
+		server.router.ServeHTTP(recorder, request)
+		require.Equal(t, http.StatusOK, recorder.Code)
+
+		var response reviewListResponse
+		requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+		require.Equal(t, int64(1), response.Total)
+		require.Len(t, response.Reviews, 1)
+		require.Equal(t, visibleReview.ID, response.Reviews[0].ID)
+		require.True(t, response.Reviews[0].IsVisible)
+	})
+
+	t.Run("merchant all list includes hidden reviews", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		store := mockdb.NewMockStore(ctrl)
+		expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+		store.EXPECT().
+			ListAllReviewsByMerchant(gomock.Any(), gomock.Eq(db.ListAllReviewsByMerchantParams{
+				MerchantID: merchant.ID,
+				Limit:      10,
+				Offset:     0,
+			})).
+			Times(1).
+			Return([]db.Review{visibleReview, hiddenReview}, nil)
+		store.EXPECT().
+			CountAllReviewsByMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
+			Times(1).
+			Return(int64(2), nil)
+		store.EXPECT().
+			ListReviewImagesByReviews(gomock.Any(), gomock.Any()).
+			Times(1).
+			Return([]db.ReviewImage{}, nil)
+
+		wechatClient := mockwechat.NewMockWechatClient(ctrl)
+		server := newTestServerWithWechat(t, store, wechatClient)
+		recorder := httptest.NewRecorder()
+
+		url := fmt.Sprintf("/v1/reviews/merchants/%d/all?page_id=1&page_size=10", merchant.ID)
+		request, err := http.NewRequest(http.MethodGet, url, nil)
+		require.NoError(t, err)
+		addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
+
+		server.router.ServeHTTP(recorder, request)
+		require.Equal(t, http.StatusOK, recorder.Code)
+
+		var response reviewListResponse
+		requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+		require.Equal(t, int64(2), response.Total)
+		require.Len(t, response.Reviews, 2)
+		require.Equal(t, []int64{visibleReview.ID, hiddenReview.ID}, []int64{response.Reviews[0].ID, response.Reviews[1].ID})
+		require.False(t, response.Reviews[1].IsVisible)
+	})
+
+	t.Run("merchant can reply to hidden review without making it public", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		reply := "已联系顾客处理，会持续跟进。"
+		updatedHiddenReview := hiddenReview
+		updatedHiddenReview.MerchantReply = pgtype.Text{String: reply, Valid: true}
+		updatedHiddenReview.RepliedAt = pgtype.Timestamptz{Time: time.Now(), Valid: true}
+
+		store := mockdb.NewMockStore(ctrl)
+		expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+		store.EXPECT().
+			GetReview(gomock.Any(), gomock.Eq(hiddenReview.ID)).
+			Times(1).
+			Return(hiddenReview, nil)
+		store.EXPECT().
+			GetUser(gomock.Any(), gomock.Eq(owner.ID)).
+			Times(1).
+			Return(owner, nil)
+		store.EXPECT().
+			UpdateMerchantReply(gomock.Any(), gomock.Eq(db.UpdateMerchantReplyParams{
+				ID:            hiddenReview.ID,
+				MerchantReply: pgtype.Text{String: reply, Valid: true},
+			})).
+			Times(1).
+			Return(updatedHiddenReview, nil)
+		store.EXPECT().
+			ListReviewImages(gomock.Any(), gomock.Eq(hiddenReview.ID)).
+			Times(1).
+			Return([]db.ReviewImage{}, nil)
+
+		wechatClient := mockwechat.NewMockWechatClient(ctrl)
+		wechatClient.EXPECT().
+			MsgSecCheck(gomock.Any(), gomock.Eq(owner.WechatOpenid), gomock.Eq(2), gomock.Eq(reply)).
+			Times(1).
+			Return(nil)
+		server := newTestServerWithWechat(t, store, wechatClient)
+		recorder := httptest.NewRecorder()
+
+		data, err := json.Marshal(map[string]interface{}{"reply": reply})
+		require.NoError(t, err)
+		url := fmt.Sprintf("/v1/reviews/%d/reply", hiddenReview.ID)
+		request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(data))
+		require.NoError(t, err)
+		addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
+
+		server.router.ServeHTTP(recorder, request)
+		require.Equal(t, http.StatusOK, recorder.Code)
+
+		var response reviewResponse
+		requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+		require.Equal(t, hiddenReview.ID, response.ID)
+		require.False(t, response.IsVisible)
+		require.NotNil(t, response.MerchantReply)
+		require.Equal(t, reply, *response.MerchantReply)
+	})
+}
+
 func TestReplyReviewAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)

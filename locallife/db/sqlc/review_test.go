@@ -248,6 +248,61 @@ func TestListAllReviewsByMerchant(t *testing.T) {
 	require.Len(t, reviews, 5) // 所有5条
 }
 
+func TestHiddenReviewReplyVisibilityContract(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	user := createRandomUser(t)
+
+	visibleOrder := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
+	visibleReview := createRandomReview(t, visibleOrder.ID, user.ID, merchant.ID)
+
+	hiddenOrder := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
+	hiddenReview, err := testStore.CreateReview(context.Background(), CreateReviewParams{
+		OrderID:    hiddenOrder.ID,
+		UserID:     user.ID,
+		MerchantID: merchant.ID,
+		Content:    "该隐藏评价需要商户跟进",
+		IsVisible:  false,
+	})
+	require.NoError(t, err)
+
+	reply := pgtype.Text{String: "已联系顾客处理，会持续跟进。", Valid: true}
+	updatedHiddenReview, err := testStore.UpdateMerchantReply(context.Background(), UpdateMerchantReplyParams{
+		ID:            hiddenReview.ID,
+		MerchantReply: reply,
+	})
+	require.NoError(t, err)
+	require.False(t, updatedHiddenReview.IsVisible)
+	require.Equal(t, reply.String, updatedHiddenReview.MerchantReply.String)
+
+	publicReviews, err := testStore.ListReviewsByMerchant(context.Background(), ListReviewsByMerchantParams{
+		MerchantID: merchant.ID,
+		Limit:      10,
+		Offset:     0,
+	})
+	require.NoError(t, err)
+	require.Len(t, publicReviews, 1)
+	require.Equal(t, visibleReview.ID, publicReviews[0].ID)
+
+	allMerchantReviews, err := testStore.ListAllReviewsByMerchant(context.Background(), ListAllReviewsByMerchantParams{
+		MerchantID: merchant.ID,
+		Limit:      10,
+		Offset:     0,
+	})
+	require.NoError(t, err)
+	require.Len(t, allMerchantReviews, 2)
+	require.Contains(t, reviewIDs(allMerchantReviews), hiddenReview.ID)
+
+	userReviews, err := testStore.ListReviewsByUser(context.Background(), ListReviewsByUserParams{
+		UserID: user.ID,
+		Limit:  10,
+		Offset: 0,
+	})
+	require.NoError(t, err)
+	require.Len(t, userReviews, 2)
+	require.Contains(t, reviewRowIDs(userReviews), hiddenReview.ID)
+}
+
 func TestReviewListQueriesUseIDTieBreaker(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
@@ -301,6 +356,22 @@ func TestReviewListQueriesUseIDTieBreaker(t *testing.T) {
 	require.Len(t, allReviewsByMerchant, 2)
 	require.Equal(t, review3.ID, allReviewsByMerchant[0].ID)
 	require.Equal(t, review1.ID, allReviewsByMerchant[1].ID)
+}
+
+func reviewIDs(reviews []Review) []int64 {
+	ids := make([]int64, 0, len(reviews))
+	for _, review := range reviews {
+		ids = append(ids, review.ID)
+	}
+	return ids
+}
+
+func reviewRowIDs(reviews []ListReviewsByUserRow) []int64 {
+	ids := make([]int64, 0, len(reviews))
+	for _, review := range reviews {
+		ids = append(ids, review.ID)
+	}
+	return ids
 }
 
 // ==================== Count Tests ====================
