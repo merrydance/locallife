@@ -457,6 +457,61 @@ func TestUpdateMerchantReply(t *testing.T) {
 	require.True(t, updated.RepliedAt.Valid)
 }
 
+func TestUpdateMerchantReplyOverwriteAndTimestampContract(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	user := createRandomUser(t)
+
+	order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
+	review, err := testStore.CreateReview(context.Background(), CreateReviewParams{
+		OrderID:    order.ID,
+		UserID:     user.ID,
+		MerchantID: merchant.ID,
+		Content:    "该评价用于验证商户回复覆盖契约",
+		IsVisible:  false,
+	})
+	require.NoError(t, err)
+
+	reply := pgtype.Text{String: "已联系顾客处理，会持续跟进。", Valid: true}
+	first, err := testStore.UpdateMerchantReply(context.Background(), UpdateMerchantReplyParams{
+		ID:            review.ID,
+		MerchantReply: reply,
+	})
+	require.NoError(t, err)
+	require.False(t, first.IsVisible)
+	require.True(t, first.RepliedAt.Valid)
+	require.Equal(t, reply.String, first.MerchantReply.String)
+
+	time.Sleep(5 * time.Millisecond)
+
+	sameReply, err := testStore.UpdateMerchantReply(context.Background(), UpdateMerchantReplyParams{
+		ID:            review.ID,
+		MerchantReply: reply,
+	})
+	require.NoError(t, err)
+	require.False(t, sameReply.IsVisible)
+	require.Equal(t, reply.String, sameReply.MerchantReply.String)
+	require.True(t, sameReply.RepliedAt.Time.After(first.RepliedAt.Time))
+
+	time.Sleep(5 * time.Millisecond)
+
+	replacement := pgtype.Text{String: "已升级给店长复盘，并补发优惠券。", Valid: true}
+	replaced, err := testStore.UpdateMerchantReply(context.Background(), UpdateMerchantReplyParams{
+		ID:            review.ID,
+		MerchantReply: replacement,
+	})
+	require.NoError(t, err)
+	require.False(t, replaced.IsVisible)
+	require.Equal(t, replacement.String, replaced.MerchantReply.String)
+	require.True(t, replaced.RepliedAt.Time.After(sameReply.RepliedAt.Time))
+
+	persisted, err := testStore.GetReview(context.Background(), review.ID)
+	require.NoError(t, err)
+	require.False(t, persisted.IsVisible)
+	require.Equal(t, replacement.String, persisted.MerchantReply.String)
+	require.Equal(t, replaced.RepliedAt.Time, persisted.RepliedAt.Time)
+}
+
 func TestUpdateReviewContent(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
