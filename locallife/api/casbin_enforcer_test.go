@@ -248,6 +248,35 @@ func TestProductionCasbinPolicyIncludesOperatorBaofuSettlementAccount(t *testing
 	}
 }
 
+func TestProductionCasbinPolicyIncludesOperatorMerchantCapabilities(t *testing.T) {
+	_, currentFile, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+
+	casbinDir := filepath.Join(filepath.Dir(currentFile), "..", "casbin")
+	enforcer, err := NewCasbinEnforcer(
+		filepath.Join(casbinDir, "model.conf"),
+		filepath.Join(casbinDir, "policy.csv"),
+	)
+	require.NoError(t, err)
+
+	testCases := []struct {
+		name   string
+		path   string
+		method string
+	}{
+		{name: "operator can read merchant capabilities", path: "/v1/operator/merchants/81/capabilities", method: "GET"},
+		{name: "operator can update merchant capabilities", path: "/v1/operator/merchants/81/capabilities", method: "PATCH"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			allowed, err := enforcer.Enforce("operator", tc.path, tc.method)
+			require.NoError(t, err)
+			require.True(t, allowed)
+		})
+	}
+}
+
 func TestCasbinEnforceWithRoles(t *testing.T) {
 	enforcer, err := NewCasbinEnforcerFromString(testCasbinModel, testCasbinPolicy)
 	require.NoError(t, err)

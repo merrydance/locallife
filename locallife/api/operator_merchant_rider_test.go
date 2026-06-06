@@ -47,7 +47,7 @@ func TestListOperatorMerchantsAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				expectActiveOperatorAuth(store, user.ID, operator)
-				expectOperatorManagesRegion(store, operator, operator.RegionID, true)
+				expectOperatorManagedRegions(store, operator, operator.RegionID)
 
 				store.EXPECT().
 					ListMerchantsByRegion(gomock.Any(), db.ListMerchantsByRegionParams{
@@ -71,33 +71,105 @@ func TestListOperatorMerchantsAPI(t *testing.T) {
 			},
 		},
 		{
-			name:  "OK_WithStatusFilter",
+			name:  "OK_WithApprovedStatusFilterIncludesActiveMerchants",
 			query: "?status=approved",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				expectActiveOperatorAuth(store, user.ID, operator)
-				expectOperatorManagesRegion(store, operator, operator.RegionID, true)
+				expectOperatorManagedRegions(store, operator, operator.RegionID)
 
 				store.EXPECT().
 					ListMerchantsByRegionWithStatus(gomock.Any(), db.ListMerchantsByRegionWithStatusParams{
 						RegionID: operator.RegionID,
-						Column2:  "approved",
+						Column2:  db.MerchantStatusApproved,
 						Limit:    20,
 						Offset:   0,
 					}).
 					Return(merchants, nil)
 
+				activeMerchants := []db.Merchant{
+					func() db.Merchant {
+						m := randomMerchantInRegionForOp(operator.RegionID)
+						m.Status = db.MerchantStatusActive
+						return m
+					}(),
+				}
+				store.EXPECT().
+					ListMerchantsByRegionWithStatus(gomock.Any(), db.ListMerchantsByRegionWithStatusParams{
+						RegionID: operator.RegionID,
+						Column2:  db.MerchantStatusActive,
+						Limit:    20,
+						Offset:   0,
+					}).
+					Return(activeMerchants, nil)
+
 				store.EXPECT().
 					CountMerchantsByRegionWithStatus(gomock.Any(), db.CountMerchantsByRegionWithStatusParams{
 						RegionID: operator.RegionID,
-						Column2:  "approved",
+						Column2:  db.MerchantStatusApproved,
 					}).
 					Return(int64(2), nil)
+
+				store.EXPECT().
+					CountMerchantsByRegionWithStatus(gomock.Any(), db.CountMerchantsByRegionWithStatusParams{
+						RegionID: operator.RegionID,
+						Column2:  db.MerchantStatusActive,
+					}).
+					Return(int64(1), nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp listOperatorMerchantsResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Len(t, resp.Merchants, 3)
+				require.Equal(t, int64(3), resp.Total)
+			},
+		},
+		{
+			name:  "OK_AllManagedRegionsWithoutRegionFilter",
+			query: "",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				regionA := operator.RegionID
+				regionB := operator.RegionID + 1
+				regionBMerchant := randomMerchantInRegionForOp(regionB)
+				regionBMerchant.CreatedAt = time.Now().Add(time.Minute)
+
+				expectActiveOperatorAuth(store, user.ID, operator)
+				expectOperatorManagedRegions(store, operator, regionA, regionB)
+
+				store.EXPECT().
+					ListMerchantsByRegion(gomock.Any(), db.ListMerchantsByRegionParams{
+						RegionID: regionA,
+						Limit:    20,
+						Offset:   0,
+					}).
+					Return([]db.Merchant{}, nil)
+				store.EXPECT().
+					CountMerchantsByRegion(gomock.Any(), regionA).
+					Return(int64(0), nil)
+				store.EXPECT().
+					ListMerchantsByRegion(gomock.Any(), db.ListMerchantsByRegionParams{
+						RegionID: regionB,
+						Limit:    20,
+						Offset:   0,
+					}).
+					Return([]db.Merchant{regionBMerchant}, nil)
+				store.EXPECT().
+					CountMerchantsByRegion(gomock.Any(), regionB).
+					Return(int64(1), nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp listOperatorMerchantsResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Len(t, resp.Merchants, 1)
+				require.Equal(t, operator.RegionID+1, resp.Merchants[0].RegionID)
+				require.Equal(t, int64(1), resp.Total)
 			},
 		},
 		{

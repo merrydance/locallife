@@ -22405,9 +22405,10 @@ paths:
     get:
       consumes:
       - application/json
-      description: 运营商获取其管辖区域内的所有商户，支持按状态筛选
+      description: 运营商获取其管辖区域内的所有商户，支持按状态筛选；不传 region_id 时聚合全部可管区域，status=approved
+        会包含已激活商户
       parameters:
-      - description: 商户状态
+      - description: 商户状态；approved 表示正常商户，包含 approved 与 active
         enum:
         - pending
         - approved
@@ -22416,6 +22417,10 @@ paths:
         in: query
         name: status
         type: string
+      - description: 区域ID；不传时聚合当前运营商全部可管区域
+        in: query
+        name: region_id
+        type: integer
       - default: 1
         description: 页码
         in: query

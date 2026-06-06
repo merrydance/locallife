@@ -119,6 +119,8 @@ p, operator, /v1/operator/peak-hours/:id, DELETE
 # Merchant Management (List, Detail)
 p, operator, /v1/operator/merchants, GET
 p, operator, /v1/operator/merchants/:id, GET
+p, operator, /v1/operator/merchants/:id/capabilities, GET
+p, operator, /v1/operator/merchants/:id/capabilities, PATCH
 
 # Rider Management (List, Detail)
 p, operator, /v1/operator/riders, GET

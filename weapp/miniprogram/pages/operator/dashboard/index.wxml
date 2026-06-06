@@ -79,7 +79,7 @@
           </view>
           <text>数据分析</text>
         </navigator>
-        <navigator url="/pages/operator/merchants/index?region_id={{selectedRegionId}}" class="menu-item">
+        <navigator url="/pages/operator/merchants/index" class="menu-item">
           <view class="menu-icon-bg color-info">
             <t-icon name="shop" size="48rpx" />
           </view>

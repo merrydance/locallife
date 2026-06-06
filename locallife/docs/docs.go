@@ -17873,7 +17873,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "运营商获取其管辖区域内的所有商户，支持按状态筛选",
+                "description": "运营商获取其管辖区域内的所有商户，支持按状态筛选；不传 region_id 时聚合全部可管区域，status=approved 会包含已激活商户",
                 "consumes": [
                     "application/json"
                 ],
@@ -17893,8 +17893,14 @@ const docTemplate = `{
                             "suspended"
                         ],
                         "type": "string",
-                        "description": "商户状态",
+                        "description": "商户状态；approved 表示正常商户，包含 approved 与 active",
                         "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "区域ID；不传时聚合当前运营商全部可管区域",
+                        "name": "region_id",
                         "in": "query"
                     },
                     {

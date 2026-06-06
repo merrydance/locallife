@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -64,13 +65,105 @@ type operatorMerchantSummaryResponse struct {
 	Suspended int64 `json:"suspended"`
 }
 
+func operatorMerchantStatusFilters(status string) []string {
+	if status == "" {
+		return nil
+	}
+	if status == db.MerchantStatusApproved {
+		return []string{db.MerchantStatusApproved, db.MerchantStatusActive}
+	}
+	return []string{status}
+}
+
+func sortMerchantsNewestFirst(merchants []db.Merchant) {
+	sort.SliceStable(merchants, func(i, j int) bool {
+		if !merchants[i].CreatedAt.Equal(merchants[j].CreatedAt) {
+			return merchants[i].CreatedAt.After(merchants[j].CreatedAt)
+		}
+		return merchants[i].ID > merchants[j].ID
+	})
+}
+
+func sliceMerchantPage(merchants []db.Merchant, offset int32, limit int32) []db.Merchant {
+	start := int(offset)
+	if start >= len(merchants) {
+		return []db.Merchant{}
+	}
+	end := start + int(limit)
+	if end > len(merchants) {
+		end = len(merchants)
+	}
+	return merchants[start:end]
+}
+
+func (server *Server) listOperatorMerchantRows(
+	ctx *gin.Context,
+	regionIDs []int64,
+	statuses []string,
+	offset int32,
+	limit int32,
+) ([]db.Merchant, int64, error) {
+	fetchLimit := offset + limit
+	if fetchLimit <= 0 {
+		fetchLimit = limit
+	}
+
+	allMerchants := make([]db.Merchant, 0, limit)
+	var total int64
+
+	for _, regionID := range regionIDs {
+		if len(statuses) == 0 {
+			merchants, err := server.store.ListMerchantsByRegion(ctx, db.ListMerchantsByRegionParams{
+				RegionID: regionID,
+				Limit:    fetchLimit,
+				Offset:   0,
+			})
+			if err != nil {
+				return nil, 0, err
+			}
+			count, err := server.store.CountMerchantsByRegion(ctx, regionID)
+			if err != nil {
+				return nil, 0, err
+			}
+			allMerchants = append(allMerchants, merchants...)
+			total += count
+			continue
+		}
+
+		for _, status := range statuses {
+			merchants, err := server.store.ListMerchantsByRegionWithStatus(ctx, db.ListMerchantsByRegionWithStatusParams{
+				RegionID: regionID,
+				Column2:  status,
+				Limit:    fetchLimit,
+				Offset:   0,
+			})
+			if err != nil {
+				return nil, 0, err
+			}
+			count, err := server.store.CountMerchantsByRegionWithStatus(ctx, db.CountMerchantsByRegionWithStatusParams{
+				RegionID: regionID,
+				Column2:  status,
+			})
+			if err != nil {
+				return nil, 0, err
+			}
+			allMerchants = append(allMerchants, merchants...)
+			total += count
+		}
+	}
+
+	sortMerchantsNewestFirst(allMerchants)
+	return sliceMerchantPage(allMerchants, offset, limit), total, nil
+}
+
 // listOperatorMerchants 获取运营商管辖区域内的商户列表
 // @Summary 获取区域商户列表
-// @Description 运营商获取其管辖区域内的所有商户，支持按状态筛选
+// @Description 运营商获取其管辖区域内的所有商户，支持按状态筛选；不传 region_id 时聚合全部可管区域，status=approved 会包含已激活商户
 // @Tags 运营商-商户骑手管理
 // @Accept json
 // @Produce json
-// @Param status query string false "商户状态" Enums(pending, approved, rejected, suspended)
+// @Param status query string false "商户状态；approved 表示正常商户，包含 approved 与 active" Enums(pending, approved, rejected, suspended)
+// @Param region_id query int false "区域ID；不传时聚合当前运营商全部可管区域"
 // @Param page query int false "页码" default(1)
 // @Param limit query int false "每页数量" default(20) maximum(100)
 // @Success 200 {object} listOperatorMerchantsResponse
@@ -95,66 +188,15 @@ func (server *Server) listOperatorMerchants(ctx *gin.Context) {
 		req.Limit = 20
 	}
 
-	// 从中间件获取运营商信息
-	if _, ok := GetOperatorFromContext(ctx); !ok {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("operator not found in context")))
+	selection, err := resolveListOperatorMerchantRegionSelection(server, ctx, req.RegionID)
+	if err != nil {
+		server.respondOperatorRegionSelectionError(ctx, err)
 		return
 	}
 
-	// 确定目标区域 ID
-	targetRegionID := req.RegionID
-	if targetRegionID == 0 {
-		resolvedRegionID, err := server.getOperatorRegionID(ctx)
-		if err != nil {
-			ctx.JSON(http.StatusForbidden, errorResponse(err))
-			return
-		}
-		targetRegionID = resolvedRegionID
-	} else {
-		// 验证是否有权管理该特定区域
-		if _, err := server.checkOperatorManagesRegion(ctx, targetRegionID); err != nil {
-			ctx.JSON(http.StatusForbidden, errorResponse(err))
-			return
-		}
-	}
-
 	offset := pageOffset(req.Page, req.Limit)
-
-	// 查询商户列表
-	var merchants []db.Merchant
-	var total int64
-	var err error
-
-	if req.Status == "" {
-		merchants, err = server.store.ListMerchantsByRegion(ctx, db.ListMerchantsByRegionParams{
-			RegionID: targetRegionID,
-			Limit:    req.Limit,
-			Offset:   offset,
-		})
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-
-		total, err = server.store.CountMerchantsByRegion(ctx, targetRegionID)
-	} else {
-		merchants, err = server.store.ListMerchantsByRegionWithStatus(ctx, db.ListMerchantsByRegionWithStatusParams{
-			RegionID: targetRegionID,
-			Column2:  req.Status,
-			Limit:    req.Limit,
-			Offset:   offset,
-		})
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-
-		total, err = server.store.CountMerchantsByRegionWithStatus(ctx, db.CountMerchantsByRegionWithStatusParams{
-			RegionID: targetRegionID,
-			Column2:  req.Status,
-		})
-	}
-
+	statuses := operatorMerchantStatusFilters(req.Status)
+	merchants, total, err := server.listOperatorMerchantRows(ctx, selection.RegionIDs, statuses, offset, req.Limit)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
@@ -186,6 +228,16 @@ func (server *Server) listOperatorMerchants(ctx *gin.Context) {
 		Page:      req.Page,
 		Limit:     req.Limit,
 	})
+}
+
+func resolveListOperatorMerchantRegionSelection(server *Server, ctx *gin.Context, requestedRegionID int64) (operatorRegionSelection, error) {
+	if requestedRegionID > 0 {
+		if _, err := server.checkOperatorManagesRegion(ctx, requestedRegionID); err != nil {
+			return operatorRegionSelection{}, err
+		}
+		return operatorRegionSelection{RegionID: requestedRegionID, RegionIDs: []int64{requestedRegionID}}, nil
+	}
+	return server.resolveOperatorRegionSelection(ctx)
 }
 
 // getOperatorMerchantSummary 获取区域商户汇总
