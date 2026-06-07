@@ -52,6 +52,7 @@
             <text>{{item.label}}</text>
           </view>
         </view>
+        <view class="identity-note">提醒：只有营业执照的法人和结算收款人不一致时才使用个人开户。营业执照法人和结算收款人一致时使用营业执照开户-对私账户。</view>
       </view>
 
       <view hidden="{{accountOpeningMode !== 'business'}}">

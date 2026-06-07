@@ -83,12 +83,21 @@ func UpdateMembershipSettingsForOwner(ctx context.Context, store db.Store, input
 		return MembershipSettingsResult{}, NewRequestError(http.StatusForbidden, errors.New("merchant owner required"))
 	}
 
-	defaults := defaultMembershipSettings(merchant.ID)
-	balanceScenes := defaults.BalanceUsableScenes
-	bonusScenes := defaults.BonusUsableScenes
-	allowVoucher := defaults.AllowWithVoucher
-	allowDiscount := defaults.AllowWithDiscount
-	maxPercent := defaults.MaxDeductionPercent
+	current := defaultMembershipSettings(merchant.ID)
+	existing, err := store.GetMerchantMembershipSettings(ctx, merchant.ID)
+	if err != nil {
+		if !errors.Is(err, db.ErrRecordNotFound) {
+			return MembershipSettingsResult{}, err
+		}
+	} else {
+		current = settingsResultFromModel(existing)
+	}
+
+	balanceScenes := current.BalanceUsableScenes
+	bonusScenes := current.BonusUsableScenes
+	allowVoucher := current.AllowWithVoucher
+	allowDiscount := current.AllowWithDiscount
+	maxPercent := current.MaxDeductionPercent
 
 	if input.BalanceUsableScenes != nil {
 		balanceScenes = sanitizeMembershipUsableScenes(input.BalanceUsableScenes)
