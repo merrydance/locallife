@@ -165,7 +165,7 @@ Observed tests:
 
 - `locallife/api/security_authz_test.go` covers manager denial for PUT membership settings.
 - `locallife/logic/membership_payment_test.go` covers direct balance-payment validation, including explicit rejection for `takeout` and `reservation`.
-- `locallife/api/order_test.go` covers direct order creation with balance for dine-in, scene disallow, partial balance, voucher plus balance, and explicit `takeout` rejection.
+- `locallife/api/order_test.go` covers direct order creation with balance for dine-in and `takeaway`, scene disallow, partial balance, voucher plus balance, and explicit `takeout` rejection.
 - `locallife/logic/promotion_engine_test.go` covers membership scene/cap/stacking behavior using `takeaway`, and separately covers `curatePaymentBalance` hints for `takeout` and `reservation`.
 - `locallife/api/order_calculate_test.go` verifies `payment_assessment` is returned by order calculation response shape.
 - `weapp/scripts/check-merchant-membership-settings-scenes.test.js` verifies Mini Program membership scene type/options, backend binding/support helper, and migrations `000252/000253` default/CHECK/null-cleanup contract remain aligned to `dine_in/takeaway`.
@@ -174,7 +174,6 @@ Observed tests:
 Missing high-value tests:
 
 - Broader API tests for `GET/PUT /v1/merchants/me/membership-settings` successful owner flow and request validation beyond the partial PUT regression.
-- Direct-order API happy-path test for `takeaway` with `use_balance=true`, if backend product support is expected to remain first-class.
 - Migration/applied-schema test proving `000252/000253` clean historical `takeout/reservation` and null scene elements before adding constraints.
 - Mini Program user-reachable checkout proof for `takeaway` balance payment, if self-pickup users should pay with member balance from the current Mini Program.
 - Rules-engine `balance_scene_allowed` test covering the same scene semantics as the settings API.
@@ -182,7 +181,7 @@ Missing high-value tests:
 ## Gaps And Refactor Notes
 
 - Scene enum drift is fixed in this branch by choosing the product contract `dine_in/takeaway` and excluding `takeout/reservation` intentionally.
-- Backend direct order and transaction code can support `takeaway` as an order type, and promotion preview tests cover `takeaway` membership scenes. The current Mini Program trace still lacks a user-reachable `takeaway` balance checkout path that sends `use_balance`.
+- Backend direct order and transaction code now has API happy-path proof for `takeaway` with `use_balance=true`, and promotion preview tests cover `takeaway` membership scenes. The current Mini Program trace still lacks a user-reachable `takeaway` balance checkout path that sends `use_balance`.
 - The `reservation` branch in payment assessment remains a drift/zombie candidate for membership balance because direct membership payment rejects reservation before settings are consulted.
 - Runtime update now defines optional request fields as partial merge in logic while continuing to persist through the existing upsert. The unused generated partial-update SQL remains a cleanup candidate, not the runtime contract.
 - `CreateMerchantMembershipSettings` and `UpdateMerchantMembershipSettings` SQL methods are generated and appear unused by runtime. They are zombie candidates if no tests or migration helpers require them.
@@ -198,4 +197,4 @@ Missing high-value tests:
 - Reader/consumer branches checked: merchant settings page, cart/order preview, dine-in checkout payment selection, direct order creation, promotion engine `balance_scene_allowed`, membership payment validation, and customer-facing payment assessment.
 - Authorization/tenant branches checked: Mini Program merchant console access, owner-only GET/PUT via owned-merchant checks and owner middleware, backend-resolved merchant id, and downstream customer flows using authenticated user plus merchant/order context rather than client-provided settings.
 - Zombie/unreachable branches checked: generated `CreateMerchantMembershipSettings` and `UpdateMerchantMembershipSettings` SQL appear unused; `curatePaymentBalance` `takeout/reservation` branches are unreachable under current sanitizer/direct-payment rejection; original migration `000030` remains historical and is superseded by forward migrations `000252/000253`.
-- Test-proof gaps checked: existing tests cover manager denial, direct balance validation, dine-in order balance, scene disallow, takeout/reservation rejection, promotion engine takeaway behavior, payment assessment shape, local migration convergence through `000253`, partial PUT merge semantics including explicit empty arrays and missing-row default merge base, and the new frontend/backend/migration scene contract script. Missing proof remains for broader owner GET/PUT API contract, direct `takeaway` balance order creation, clean/dirty scratch migration fixtures, Mini Program `takeaway` checkout reachability, per-order-type preview/direct consistency, and rules-engine scene parity.
+- Test-proof gaps checked: existing tests cover manager denial, direct balance validation, dine-in and `takeaway` order balance, scene disallow, takeout/reservation rejection, promotion engine takeaway behavior, payment assessment shape, local migration convergence through `000253`, partial PUT merge semantics including explicit empty arrays and missing-row default merge base, and the new frontend/backend/migration scene contract script. Missing proof remains for broader owner GET/PUT API contract, clean/dirty scratch migration fixtures, Mini Program `takeaway` checkout reachability, per-order-type preview/direct consistency, and rules-engine scene parity.

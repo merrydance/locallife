@@ -5148,6 +5148,96 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 			},
 		},
 		{
+			name: "WithBalance_Takeaway_OK",
+			body: gin.H{
+				"merchant_id": merchant.ID,
+				"order_type":  "takeaway",
+				"use_balance": true,
+				"items": []gin.H{
+					{
+						"dish_id":  dish.ID,
+						"quantity": 2,
+					},
+				},
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchant(gomock.Any(), merchant.ID).
+					Times(1).
+					Return(merchant, nil)
+
+				store.EXPECT().
+					GetDish(gomock.Any(), dish.ID).
+					Times(1).
+					Return(dish, nil)
+
+				store.EXPECT().
+					GetDishWithCustomizations(gomock.Any(), dish.ID).
+					Times(1).
+					Return(dishWithCustomizationsFromDish(dish), nil)
+
+				store.EXPECT().
+					ListActiveDiscountRules(gomock.Any(), merchant.ID).
+					Times(1).
+					Return([]db.DiscountRule{}, nil)
+
+				store.EXPECT().
+					GetMembershipByMerchantAndUser(gomock.Any(), db.GetMembershipByMerchantAndUserParams{
+						MerchantID: merchant.ID,
+						UserID:     user.ID,
+					}).
+					Times(1).
+					Return(membership, nil)
+
+				store.EXPECT().
+					GetMerchantMembershipSettings(gomock.Any(), merchant.ID).
+					Times(1).
+					Return(membershipSettings, nil)
+
+				store.EXPECT().
+					CreateOrderTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(ctx interface{}, arg db.CreateOrderTxParams) (db.CreateOrderTxResult, error) {
+						require.Equal(t, "takeaway", arg.CreateOrderParams.OrderType)
+						require.False(t, arg.CreateOrderParams.AddressID.Valid)
+						require.False(t, arg.CreateOrderParams.TableID.Valid)
+						require.False(t, arg.CreateOrderParams.ReservationID.Valid)
+						require.NotNil(t, arg.MembershipID)
+						require.Equal(t, membership.ID, *arg.MembershipID)
+						require.Equal(t, dish.Price*2, arg.BalancePaid)
+						require.Equal(t, dish.Price*2, arg.CreateOrderParams.BalancePaid)
+						require.True(t, arg.CreateOrderParams.MembershipID.Valid)
+						require.Equal(t, membership.ID, arg.CreateOrderParams.MembershipID.Int64)
+						return db.CreateOrderTxResult{
+							Order: db.Order{
+								ID:          1,
+								OrderNo:     "20240101120000123457",
+								UserID:      user.ID,
+								MerchantID:  merchant.ID,
+								OrderType:   "takeaway",
+								Subtotal:    dish.Price * 2,
+								BalancePaid: dish.Price * 2,
+								TotalAmount: dish.Price * 2,
+								Status:      "pending",
+								CreatedAt:   time.Now(),
+							},
+						}, nil
+					})
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusCreated, recorder.Code)
+				var response orderResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Equal(t, "takeaway", response.OrderType)
+				require.Nil(t, response.AddressID)
+				require.Nil(t, response.TableID)
+				require.Nil(t, response.ReservationID)
+			},
+		},
+		{
 			name: "WithBalance_NotMember",
 			body: gin.H{
 				"merchant_id": merchant.ID,
