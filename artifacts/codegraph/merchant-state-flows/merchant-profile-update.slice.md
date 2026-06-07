@@ -1,7 +1,7 @@
 # Merchant Profile Update Slice
 
-Status: third merchant-state flow slice; category replacement and shop-image latest-row scoping fixes applied 2026-06-06; Logo conflict recovery applied 2026-06-07
-Risk class: G2 - merchant-visible profile state spans multiple truth sources, has media async recovery, optimistic locking, and remaining pending-sync/product-truth risks
+Status: third merchant-state flow slice; category replacement and shop-image latest-row scoping fixes applied 2026-06-06; Logo conflict recovery and shop-image pending-sync proof applied 2026-06-07
+Risk class: G2 - merchant-visible profile state spans multiple truth sources, has media async recovery, optimistic locking, and remaining product-truth schema risk
 Scope: merchant profile settings page and profile-images page -> profile/category/media/shop-image persistence -> public/storefront readers
 
 ## Variant Coverage
@@ -26,7 +26,7 @@ This slice does not cover:
 
 When a merchant changes shop-facing profile data, the backend durable truth must converge before the merchant-visible page claims success. Basic profile and logo changes must use the merchant version as an optimistic lock. Category replacement should be all-or-nothing. Storefront/environment images should update one authoritative record for the resolved merchant owner and must not drift between local pending state, media asset state, and public/search readers.
 
-Current implementation meets the optimistic-lock invariant for basic profile and logo. Fixed 2026-06-06: category replacement now rejects duplicate tag IDs before write and uses a store transaction that locks the merchant row before replacing tag rows. Fixed 2026-06-06: shop-image persistence now requires middleware-provided merchant context, writes through the resolved merchant owner, updates one latest editable application row, and search/category readers select one latest application image row. Fixed 2026-06-07: profile-images Logo PATCH conflicts now roll back to the previous trusted Logo, show conflict-specific retry copy, and force a latest profile reload with server Logo truth preferred and recovery refresh failures kept silent to avoid duplicate Toast feedback. Frontend pending-sync recovery proof and the product decision about whether live shop images belong on application records remain open.
+Current implementation meets the optimistic-lock invariant for basic profile and logo. Fixed 2026-06-06: category replacement now rejects duplicate tag IDs before write and uses a store transaction that locks the merchant row before replacing tag rows. Fixed 2026-06-06: shop-image persistence now requires middleware-provided merchant context, writes through the resolved merchant owner, updates one latest editable application row, and search/category readers select one latest application image row. Fixed 2026-06-07: profile-images Logo PATCH conflicts now roll back to the previous trusted Logo, show conflict-specific retry copy, and force a latest profile reload with server Logo truth preferred and recovery refresh failures kept silent to avoid duplicate Toast feedback. Fixed 2026-06-07: storefront/environment pending-sync recovery now has Mini Program proof for ambiguous persistence, missing server echo, reload retry, and media public-URL polling branches. The product decision about whether live shop images belong on application records remains open.
 
 ## Primary Forward Chain
 
@@ -146,10 +146,11 @@ Observed tests:
 - `locallife/db/sqlc/merchant_test.go` covers `UpdateMerchantApplicationShopImages` updating only the latest editable application row and leaving older application image JSON unchanged.
 - `locallife/db/sqlc/merchant_test.go` covers `GetMerchantApplicationDraft`, `SearchMerchants`, and `SearchMerchantsByTag` choosing one latest application row with `created_at DESC, id DESC`.
 - `weapp/scripts/check-merchant-profile-images-logo-conflict-recovery.test.js` covers Logo PATCH conflict detection, rollback to previous trusted Logo, conflict-specific copy, and forced profile refresh after conflict.
+- `weapp/scripts/check-merchant-profile-images-pending-sync-recovery.test.js` covers storefront/environment pending-sync recovery: ambiguous persistence keeps the local pending image and schedules retry, confirmed server echo clears pending markers, reload resumes retry when local asset ids are absent from server truth, and missing public URLs resume media polling.
 
 Missing high-value tests:
 
-- Frontend or integration test for pending shop-image persistence recovery after ambiguous network failure.
+- No missing frontend proof remains for the currently implemented profile-images recovery branches. Future tests should be added if product moves live shop-image truth from `merchant_applications` to a merchant-owned table/field.
 
 ## Gaps And Refactor Notes
 
@@ -158,6 +159,7 @@ Missing high-value tests:
 - Fixed 2026-06-06: shop-image handler now checks `json.Marshal` errors before storing image JSON.
 - Fixed 2026-06-06: `SearchMerchants` and `SearchMerchantsByTag` now use one latest editable application row, avoiding duplicate merchant rows or older storefront covers when a merchant owner has multiple application records.
 - Fixed 2026-06-07: Logo PATCH conflict after media upload now uses a dedicated Logo conflict mapper, restores the previous Logo state, shows retry guidance, and forces a latest profile reload so the optimistic version is refreshed.
+- Fixed 2026-06-07: storefront/environment pending-sync recovery proof now exercises helper behavior for unconfirmed persistence, confirmed server echo, reload retry, and public URL polling without changing production logic.
 - Storing approved merchant shop images on `merchant_applications` still couples live storefront assets to onboarding records. A merchant-owned image table or field would be clearer if product wants live images independent from application history.
 - Duplicated onboarding API files under multiple Mini Program role trees should be treated as drift candidates before changing shared upload behavior.
 
@@ -171,4 +173,4 @@ Missing high-value tests:
 - Reader/consumer branches checked: dashboard/current merchant cache, public merchant list/detail/search, dish/order/cart display of logo/name/address, profile images page, merchant application page, media readers, and tag/category displays.
 - Authorization/tenant branches checked: Mini Program merchant console access, backend owner/manager profile-write routes, server-side merchant resolution, media session owner checks, private/public media read distinction, shop-image route middleware plus fail-closed resolved owner-user update, and tag route current merchant resolution.
 - Zombie/unreachable branches checked: live storefront images are stored on application rows rather than merchant-owned state; `UpdateMerchantApplicationShopImages` latest-row scoping is fixed; duplicated onboarding APIs can drift.
-- Test-proof gaps checked: existing tests cover profile version/logo URL, invalid shop-image JSON, authz denial, media upload/moderation, tag SQL basics, transactional tag replacement, duplicate tag-id rejection, missing-merchant rejection, rollback on tag replacement failure, shop-image staff-owner resolution, fail-closed missing merchant context, latest-application-only shop-image update, latest-application-only search/category image reads, and Logo conflict rollback/copy/refresh. Missing proof remains for pending image recovery.
+- Test-proof gaps checked: existing tests cover profile version/logo URL, invalid shop-image JSON, authz denial, media upload/moderation, tag SQL basics, transactional tag replacement, duplicate tag-id rejection, missing-merchant rejection, rollback on tag replacement failure, shop-image staff-owner resolution, fail-closed missing merchant context, latest-application-only shop-image update, latest-application-only search/category image reads, Logo conflict rollback/copy/refresh, and storefront/environment pending-sync recovery. Remaining proof should follow any future product/schema move away from `merchant_applications`.
