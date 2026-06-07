@@ -1,5 +1,5 @@
-import { checkRegionAvailability } from '../../../api/location'
 import { globalStore } from '../../../utils/global-store'
+import { getCurrentRegionId, getLocalOperatorContactPhone, normalizeOperatorPhoneNumber } from '../../../utils/operator-contact'
 
 type MerchantRegisterIndexData = {
   navBarHeight: number
@@ -52,8 +52,7 @@ Page({
   },
 
   async loadLocalOperatorContact(regionIdParam?: number) {
-    const app = getApp<IAppOption>()
-    const regionId = Number(regionIdParam || app.globalData.currentRegion?.id || 0)
+    const regionId = Number(regionIdParam || getCurrentRegionId())
     if (!regionId) return
     this.requestedOperatorRegionId = regionId
     if (regionId !== this.loadedOperatorRegionId) {
@@ -61,10 +60,9 @@ Page({
     }
 
     try {
-      const result = await checkRegionAvailability(regionId)
+      const phone = await getLocalOperatorContactPhone(regionId)
       if (regionId !== this.requestedOperatorRegionId) return
 
-      const phone = (result.operator_contact_phone || '').trim()
       this.setData({ localOperatorPhone: phone })
       this.loadedOperatorRegionId = regionId
     } catch (_error) {
@@ -75,7 +73,7 @@ Page({
   },
 
   onCallOperator() {
-    const phoneNumber = this.data.localOperatorPhone.replace(/\s+/g, '')
+    const phoneNumber = normalizeOperatorPhoneNumber(this.data.localOperatorPhone)
     if (!phoneNumber) {
       wx.showToast({ title: '暂无运营商电话', icon: 'none' })
       return

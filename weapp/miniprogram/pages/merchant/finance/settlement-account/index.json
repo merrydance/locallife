@@ -1,6 +1,7 @@
 {
   "usingComponents": {
     "baofu-account-status-summary": "../../_components/baofu-account-status-summary/index",
+    "baofu-intent-confirmation-hint": "../../_components/baofu-intent-confirmation-hint/index",
     "baofu-onboarding-wait": "../../_components/baofu-onboarding-wait/index",
     "custom-navbar": "/components/custom-navbar/index",
     "t-button": "tdesign-miniprogram/button/button",

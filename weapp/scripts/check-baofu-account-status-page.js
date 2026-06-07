@@ -34,6 +34,46 @@ const roleViewModels = [
   'miniprogram/pages/rider/_main_shared/api/baofu-account-view.ts'
 ]
 
+const operatorContactUtil = read('miniprogram/utils/operator-contact.ts')
+assert(operatorContactUtil.includes('checkRegionAvailability'), 'operator contact utility must reuse the region availability API')
+assert(operatorContactUtil.includes('operator_contact_phone'), 'operator contact utility must read operator_contact_phone from backend truth')
+
+const merchantRegisterIndex = read('miniprogram/pages/register/merchant/index.ts')
+const merchantRegisterWxml = read('miniprogram/pages/register/merchant/index.wxml')
+assert(merchantRegisterIndex.includes('getLocalOperatorContactPhone'), 'merchant registration page must reuse the shared operator contact utility')
+assert(!merchantRegisterIndex.includes("from '../../../api/location'"), 'merchant registration page must not call checkRegionAvailability directly')
+assert(
+  merchantRegisterWxml.includes('open-type="contact"') && merchantRegisterWxml.includes('联系平台客服'),
+  'merchant registration page must expose a WeChat customer-service button near the operator contact entry'
+)
+assert(
+  merchantRegisterWxml.includes('<t-button theme="primary" block open-type="contact">'),
+  'merchant registration customer-service button must use the primary solid button style'
+)
+
+const merchantStatusWxml = read('miniprogram/pages/merchant/finance/settlement-account/index.wxml')
+const merchantStatusJson = read('miniprogram/pages/merchant/finance/settlement-account/index.json')
+assert(
+  merchantStatusJson.includes('baofu-intent-confirmation-hint'),
+  'merchant Baofoo status page must declare the intent confirmation hint component'
+)
+assert(
+  merchantStatusWxml.includes('wx:if="{{pageView.statusView.isReady}}"') &&
+    merchantStatusWxml.includes('<baofu-intent-confirmation-hint'),
+  'merchant Baofoo ready terminal state must render the WeChat Pay intent confirmation hint'
+)
+
+const intentHintTs = read('miniprogram/pages/merchant/_components/baofu-intent-confirmation-hint/index.ts')
+const intentHintWxml = read('miniprogram/pages/merchant/_components/baofu-intent-confirmation-hint/index.wxml')
+assert(
+  intentHintWxml.includes('请联系客服完成微信支付商户开户意愿确认。这是最后一步。'),
+  'intent confirmation hint must show the required static next-step copy'
+)
+assert(intentHintWxml.includes('运营商电话'), 'intent confirmation hint must show the operator phone label')
+assert(intentHintWxml.includes('open-type="contact"'), 'intent confirmation hint must expose a WeChat customer-service contact button')
+assert(intentHintTs.includes('getLocalOperatorContactPhone'), 'intent confirmation hint must reuse the shared operator contact utility')
+assert(intentHintTs.includes('wx.makePhoneCall'), 'intent confirmation hint must provide a call action when an operator phone exists')
+
 for (const pagePath of rolePages) {
   const wxml = read(`${pagePath}.wxml`)
   const json = read(`${pagePath}.json`)

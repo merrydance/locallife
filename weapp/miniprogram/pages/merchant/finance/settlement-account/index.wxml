@@ -61,6 +61,8 @@
         isReady="{{pageView.statusView.isReady}}"
       />
 
+      <baofu-intent-confirmation-hint wx:if="{{pageView.statusView.isReady}}" />
+
       <view class="form-actions" wx:if="{{pageView.primaryAction.type !== 'none'}}">
         <t-button
           theme="{{pageView.primaryAction.theme}}"

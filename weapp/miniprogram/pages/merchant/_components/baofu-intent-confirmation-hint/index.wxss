@@ -1,0 +1,60 @@
+.intent-confirmation-hint {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-sm);
+  padding: var(--spacer-md);
+  border: 1rpx solid var(--td-border-level-1-color);
+  border-radius: var(--radius-md);
+  background: var(--td-bg-color-container);
+  box-sizing: border-box;
+}
+
+.intent-confirmation-hint__header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacer-sm);
+}
+
+.intent-confirmation-hint__icon {
+  display: flex;
+  width: 64rpx;
+  height: 64rpx;
+  flex: 0 0 64rpx;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--td-warning-color);
+  background: var(--td-warning-color-1);
+}
+
+.intent-confirmation-hint__copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.intent-confirmation-hint__title {
+  color: var(--td-text-color-primary);
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.intent-confirmation-hint__desc {
+  margin-top: 8rpx;
+  color: var(--td-text-color-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
+.intent-confirmation-hint__contact {
+  display: block;
+  overflow: hidden;
+  border: 1rpx solid var(--td-border-level-1-color);
+  border-radius: var(--radius-sm);
+}
+
+.intent-confirmation-hint__actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-xs);
+}

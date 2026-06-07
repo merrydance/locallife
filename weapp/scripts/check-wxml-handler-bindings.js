@@ -33,10 +33,6 @@ const ALLOWLIST = {
     source: 'weapp/miniprogram/behaviors/baofu-settlement-submit.ts',
     handlers: ['onNavHeight', 'onRetry', 'onWaitPrimary']
   },
-  'weapp/miniprogram/pages/merchant/onboarding-v2/baofu-submit/index.wxml': {
-    source: 'weapp/miniprogram/behaviors/baofu-settlement-submit.ts',
-    handlers: ['onNavHeight', 'onRetry', 'onWaitPrimary', 'onBackToProgress']
-  },
   'weapp/miniprogram/pages/operator/finance/settlement-account/submit/index.wxml': {
     source: 'weapp/miniprogram/behaviors/baofu-settlement-submit.ts',
     handlers: ['onNavHeight', 'onRetry', 'onWaitPrimary']

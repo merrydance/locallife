@@ -84,8 +84,14 @@
   justify-content: center;
 }
 
-.operator-assist {
+.operator-contact {
   margin-top: 32rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.operator-assist {
   min-height: 112rpx;
   padding: 24rpx 32rpx;
   background: #FFFFFF;

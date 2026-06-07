@@ -1,0 +1,11 @@
+{
+  "purpose": "Merchant-only Baofoo ready-state hint for the final WeChat Pay merchant account intent confirmation step and local operator contact phone.",
+  "tdesignGroup": "data",
+  "tdesignCandidates": [
+    "cell",
+    "button",
+    "icon"
+  ],
+  "decision": "local-component",
+  "rationale": "The page needs a durable ready-state business hint plus current-region operator phone lookup and call handling. TDesign cell/button/icon primitives handle the visible controls while the component owns the merchant-only contact lookup boundary."
+}

@@ -1,0 +1,32 @@
+<view class="intent-confirmation-hint">
+  <view class="intent-confirmation-hint__header">
+    <view class="intent-confirmation-hint__icon">
+      <t-icon name="service" size="36rpx" />
+    </view>
+    <view class="intent-confirmation-hint__copy">
+      <view class="intent-confirmation-hint__title">微信支付商户开户意愿确认</view>
+      <view class="intent-confirmation-hint__desc">请联系客服完成微信支付商户开户意愿确认。这是最后一步。</view>
+    </view>
+  </view>
+
+  <t-cell-group class="intent-confirmation-hint__contact">
+    <t-cell title="运营商电话" note="{{operatorPhoneText}}" />
+  </t-cell-group>
+
+  <view class="intent-confirmation-hint__actions">
+    <t-button theme="primary" size="small" block open-type="contact">
+      联系客服
+    </t-button>
+    <t-button
+      wx:if="{{operatorPhone}}"
+      theme="default"
+      variant="outline"
+      size="small"
+      block
+      disabled="{{loadingPhone}}"
+      bindtap="onCallOperator"
+    >
+      拨打运营商电话
+    </t-button>
+  </view>
+</view>
