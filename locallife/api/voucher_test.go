@@ -405,6 +405,9 @@ func TestUpdateVoucherAPI(t *testing.T) {
 	merchantOwner, _ := randomUser(t)
 	merchant := randomMerchant(merchantOwner.ID)
 	voucher := randomVoucher(merchant.ID)
+	claimedVoucher := voucher
+	claimedVoucher.TotalQuantity = 10
+	claimedVoucher.ClaimedQuantity = 5
 	otherUser, _ := randomUser(t)
 
 	testCases := []struct {
@@ -464,6 +467,32 @@ func TestUpdateVoucherAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
+			},
+		},
+		{
+			name:       "BadRequest_TotalQuantityBelowClaimed",
+			merchantID: merchant.ID,
+			voucherID:  claimedVoucher.ID,
+			body: map[string]interface{}{
+				"total_quantity": claimedVoucher.ClaimedQuantity - 1,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+
+				store.EXPECT().
+					GetVoucher(gomock.Any(), gomock.Eq(claimedVoucher.ID)).
+					Times(1).
+					Return(claimedVoucher, nil)
+
+				store.EXPECT().
+					UpdateVoucher(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
 		},
 		{

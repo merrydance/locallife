@@ -377,6 +377,10 @@ func (server *Server) updateVoucher(ctx *gin.Context) {
 		arg.MinOrderAmount = pgtype.Int8{Int64: *req.MinOrderAmount, Valid: true}
 	}
 	if req.TotalQuantity != nil {
+		if *req.TotalQuantity < voucher.ClaimedQuantity {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("total_quantity cannot be less than claimed_quantity")))
+			return
+		}
 		arg.TotalQuantity = pgtype.Int4{Int32: *req.TotalQuantity, Valid: true}
 	}
 	if req.ValidFrom != nil {
