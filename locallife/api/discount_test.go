@@ -431,6 +431,76 @@ func TestGetBestDiscountRuleAPI(t *testing.T) {
 	}
 }
 
+func TestDiscountStaticRoutesReachable(t *testing.T) {
+	merchantOwner, _ := randomUser(t)
+	merchant := randomMerchant(merchantOwner.ID)
+
+	testCases := []struct {
+		name       string
+		path       string
+		wantStatus int
+		buildStubs func(store *mockdb.MockStore)
+	}{
+		{
+			name:       "Applicable",
+			path:       fmt.Sprintf("/v1/merchants/%d/discounts/applicable?order_amount=10000", merchant.ID),
+			wantStatus: http.StatusOK,
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetDiscountRule(gomock.Any(), gomock.Any()).
+					Times(0)
+				store.EXPECT().
+					GetApplicableDiscountRules(gomock.Any(), gomock.Eq(db.GetApplicableDiscountRulesParams{
+						MerchantID:     merchant.ID,
+						MinOrderAmount: 10000,
+					})).
+					Times(1).
+					Return([]db.DiscountRule{}, nil)
+			},
+		},
+		{
+			name:       "Best",
+			path:       fmt.Sprintf("/v1/merchants/%d/discounts/best?order_amount=10000", merchant.ID),
+			wantStatus: http.StatusNotFound,
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetDiscountRule(gomock.Any(), gomock.Any()).
+					Times(0)
+				store.EXPECT().
+					GetBestDiscountRule(gomock.Any(), gomock.Eq(db.GetBestDiscountRuleParams{
+						MerchantID:     merchant.ID,
+						MinOrderAmount: 10000,
+					})).
+					Times(1).
+					Return(db.DiscountRule{}, db.ErrRecordNotFound)
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+			tc.buildStubs(store)
+
+			server := newTestServer(t, store)
+			recorder := httptest.NewRecorder()
+
+			request, err := http.NewRequest(http.MethodGet, tc.path, nil)
+			require.NoError(t, err)
+			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
+
+			server.router.ServeHTTP(recorder, request)
+
+			require.Equal(t, tc.wantStatus, recorder.Code)
+		})
+	}
+}
+
 func TestUpdateDiscountRuleAPIRejectsInvalidEffectiveValues(t *testing.T) {
 	merchantOwner, _ := randomUser(t)
 	merchant := randomMerchant(merchantOwner.ID)
