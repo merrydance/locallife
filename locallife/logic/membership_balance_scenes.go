@@ -13,7 +13,7 @@ func IsMembershipBalanceSupportedOrderType(orderType string) bool {
 
 func sanitizeMembershipUsableScenes(scenes []string) []string {
 	if len(scenes) == 0 {
-		return nil
+		return []string{}
 	}
 
 	result := make([]string, 0, len(scenes))

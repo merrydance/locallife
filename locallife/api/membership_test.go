@@ -67,6 +67,150 @@ func TestBuildRechargeRuleStatusResponse(t *testing.T) {
 	}
 }
 
+func TestUpdateMembershipSettingsAPIPartialUpdatePreservesExistingFields(t *testing.T) {
+	owner, _ := randomUser(t)
+	merchant := randomMerchant(owner.ID)
+	merchant.Status = "active"
+	merchant.RegionID = 1
+
+	existing := db.MerchantMembershipSetting{
+		MerchantID:          merchant.ID,
+		BalanceUsableScenes: []string{"takeaway"},
+		BonusUsableScenes:   []string{},
+		AllowWithVoucher:    false,
+		AllowWithDiscount:   false,
+		MaxDeductionPercent: 60,
+	}
+	nextPercent := int32(80)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+	store.EXPECT().
+		GetMerchantByOwner(gomock.Any(), owner.ID).
+		Times(1).
+		Return(merchant, nil)
+	store.EXPECT().
+		GetMerchantMembershipSettings(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(existing, nil)
+	store.EXPECT().
+		UpsertMerchantMembershipSettings(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ any, arg db.UpsertMerchantMembershipSettingsParams) (db.MerchantMembershipSetting, error) {
+			require.Equal(t, merchant.ID, arg.MerchantID)
+			require.Equal(t, []string{"takeaway"}, arg.BalanceUsableScenes)
+			require.Empty(t, arg.BonusUsableScenes)
+			require.False(t, arg.AllowWithVoucher)
+			require.False(t, arg.AllowWithDiscount)
+			require.Equal(t, nextPercent, arg.MaxDeductionPercent)
+			return db.MerchantMembershipSetting{
+				MerchantID:          arg.MerchantID,
+				BalanceUsableScenes: arg.BalanceUsableScenes,
+				BonusUsableScenes:   arg.BonusUsableScenes,
+				AllowWithVoucher:    arg.AllowWithVoucher,
+				AllowWithDiscount:   arg.AllowWithDiscount,
+				MaxDeductionPercent: arg.MaxDeductionPercent,
+			}, nil
+		})
+
+	server := newTestServer(t, store)
+	body, err := json.Marshal(map[string]any{"max_deduction_percent": nextPercent})
+	require.NoError(t, err)
+	request, err := http.NewRequest(http.MethodPut, "/v1/merchants/me/membership-settings", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response membershipSettingsResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.Equal(t, []string{"takeaway"}, response.BalanceUsableScenes)
+	require.Empty(t, response.BonusUsableScenes)
+	require.False(t, response.AllowWithVoucher)
+	require.False(t, response.AllowWithDiscount)
+	require.Equal(t, nextPercent, response.MaxDeductionPercent)
+}
+
+func TestUpdateMembershipSettingsAPIExplicitEmptyScenesPreserved(t *testing.T) {
+	owner, _ := randomUser(t)
+	merchant := randomMerchant(owner.ID)
+	merchant.Status = "active"
+	merchant.RegionID = 1
+
+	existing := db.MerchantMembershipSetting{
+		MerchantID:          merchant.ID,
+		BalanceUsableScenes: []string{"dine_in", "takeaway"},
+		BonusUsableScenes:   []string{"dine_in"},
+		AllowWithVoucher:    true,
+		AllowWithDiscount:   true,
+		MaxDeductionPercent: 100,
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+	store.EXPECT().
+		GetMerchantByOwner(gomock.Any(), owner.ID).
+		Times(1).
+		Return(merchant, nil)
+	store.EXPECT().
+		GetMerchantMembershipSettings(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(existing, nil)
+	store.EXPECT().
+		UpsertMerchantMembershipSettings(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ any, arg db.UpsertMerchantMembershipSettingsParams) (db.MerchantMembershipSetting, error) {
+			require.Equal(t, merchant.ID, arg.MerchantID)
+			require.NotNil(t, arg.BalanceUsableScenes)
+			require.Empty(t, arg.BalanceUsableScenes)
+			require.NotNil(t, arg.BonusUsableScenes)
+			require.Empty(t, arg.BonusUsableScenes)
+			require.True(t, arg.AllowWithVoucher)
+			require.True(t, arg.AllowWithDiscount)
+			require.Equal(t, int32(100), arg.MaxDeductionPercent)
+			return db.MerchantMembershipSetting{
+				MerchantID:          arg.MerchantID,
+				BalanceUsableScenes: arg.BalanceUsableScenes,
+				BonusUsableScenes:   arg.BonusUsableScenes,
+				AllowWithVoucher:    arg.AllowWithVoucher,
+				AllowWithDiscount:   arg.AllowWithDiscount,
+				MaxDeductionPercent: arg.MaxDeductionPercent,
+			}, nil
+		})
+
+	server := newTestServer(t, store)
+	body, err := json.Marshal(map[string]any{
+		"balance_usable_scenes": []string{},
+		"bonus_usable_scenes":   []string{},
+	})
+	require.NoError(t, err)
+	request, err := http.NewRequest(http.MethodPut, "/v1/merchants/me/membership-settings", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response membershipSettingsResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.NotNil(t, response.BalanceUsableScenes)
+	require.Empty(t, response.BalanceUsableScenes)
+	require.NotNil(t, response.BonusUsableScenes)
+	require.Empty(t, response.BonusUsableScenes)
+	require.True(t, response.AllowWithVoucher)
+	require.True(t, response.AllowWithDiscount)
+	require.Equal(t, int32(100), response.MaxDeductionPercent)
+}
+
 func TestJoinMembershipAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
