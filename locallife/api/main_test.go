@@ -253,6 +253,12 @@ func newTestServerWithWechat(t *testing.T, store db.Store, wechatClient interfac
 	return server
 }
 
+func newTestServerForMediaWithWechat(t *testing.T, store db.Store, wechatClient interface{}) (*Server, string) {
+	server := newTestServerWithWechat(t, store, wechatClient)
+	tempDir := configureTestMediaStorage(t, server, store)
+	return server, tempDir
+}
+
 // newTestServerWithPayment creates a test server with a mock payment client
 func newTestServerWithPayment(t *testing.T, store db.Store, paymentClient wechat.DirectPaymentClientInterface) *Server {
 	config := util.Config{
@@ -330,8 +336,15 @@ func newTestServerForMedia(t *testing.T, store db.Store) (*Server, string) {
 	server.onboardingReviewService = nil
 	server.credentialGovernanceService = nil
 
+	tempDir := configureTestMediaStorage(t, server, store)
+	return server, tempDir
+}
+
+func configureTestMediaStorage(t *testing.T, server *Server, store db.Store) string {
+	t.Helper()
 	tempDir := t.TempDir()
 	ls := media.NewLocalStorage("http://testserver", tempDir)
+	server.mediaStorage = ls
 	server.mediaRegistry = media.NewRegistry(store, ls)
 	server.mediaResolver = media.NewURLResolver(media.ResolverConfig{
 		CDNPublicBaseURL: "https://cdn.test.example.com",
@@ -340,7 +353,7 @@ func newTestServerForMedia(t *testing.T, store db.Store) (*Server, string) {
 		DetailWidth:      960,
 	}, ls)
 
-	return server, tempDir
+	return tempDir
 }
 
 func TestMain(m *testing.M) {

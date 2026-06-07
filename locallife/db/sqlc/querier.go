@@ -48,7 +48,7 @@ type Querier interface {
 	AddUserBalance(ctx context.Context, arg AddUserBalanceParams) (UserBalance, error)
 	AllocateDailyPickupSequence(ctx context.Context, arg AllocateDailyPickupSequenceParams) (int32, error)
 	// 审核通过商户申请
-	ApproveMerchantApplication(ctx context.Context, id int64) (MerchantApplication, error)
+	ApproveMerchantApplication(ctx context.Context, arg ApproveMerchantApplicationParams) (MerchantApplication, error)
 	// 审核通过运营商申请（平台管理员操作）
 	ApproveOperatorApplication(ctx context.Context, arg ApproveOperatorApplicationParams) (OperatorApplication, error)
 	// 审批通过区域扩展申请
@@ -792,6 +792,7 @@ type Querier interface {
 	GetIngredient(ctx context.Context, id int64) (Ingredient, error)
 	GetInventoryStats(ctx context.Context, arg GetInventoryStatsParams) (GetInventoryStatsRow, error)
 	GetLatestActiveAppVersion(ctx context.Context, arg GetLatestActiveAppVersionParams) (AppVersion, error)
+	GetLatestApprovedMerchantApplicationByUser(ctx context.Context, userID int64) (MerchantApplication, error)
 	GetLatestBaofuAccountOpeningFlowByOwner(ctx context.Context, arg GetLatestBaofuAccountOpeningFlowByOwnerParams) (BaofuAccountOpeningFlow, error)
 	GetLatestBehaviorDecisionByClaimID(ctx context.Context, claimID pgtype.Int8) (BehaviorDecision, error)
 	GetLatestGroupApplicationByApplicant(ctx context.Context, applicantUserID int64) (MerchantGroupApplication, error)
@@ -874,6 +875,7 @@ type Querier interface {
 	GetMerchantOrderSourceStats(ctx context.Context, arg GetMerchantOrderSourceStatsParams) ([]GetMerchantOrderSourceStatsRow, error)
 	// 商户概览: 指定日期范围的汇总统计
 	GetMerchantOverview(ctx context.Context, arg GetMerchantOverviewParams) (GetMerchantOverviewRow, error)
+	GetMerchantOwnedByUser(ctx context.Context, ownerUserID int64) (Merchant, error)
 	GetMerchantPaymentConfig(ctx context.Context, merchantID int64) (MerchantPaymentConfig, error)
 	GetMerchantPaymentConfigBySubMchID(ctx context.Context, subMchID string) (MerchantPaymentConfig, error)
 	GetMerchantProfile(ctx context.Context, merchantID int64) (GetMerchantProfileRow, error)
@@ -1868,6 +1870,8 @@ type Querier interface {
 	UpdateMerchantPaymentConfigSettlementApplication(ctx context.Context, arg UpdateMerchantPaymentConfigSettlementApplicationParams) (MerchantPaymentConfig, error)
 	UpdateMerchantProfile(ctx context.Context, arg UpdateMerchantProfileParams) error
 	UpdateMerchantReply(ctx context.Context, arg UpdateMerchantReplyParams) (Review, error)
+	// 更新商户 live 门头照和环境照（已通过审核后的店铺展示图）
+	UpdateMerchantShopImages(ctx context.Context, arg UpdateMerchantShopImagesParams) (Merchant, error)
 	// 更新角色时同时激活员工（从 pending 变为 active）
 	UpdateMerchantStaffRole(ctx context.Context, arg UpdateMerchantStaffRoleParams) (MerchantStaff, error)
 	UpdateMerchantStaffStatus(ctx context.Context, arg UpdateMerchantStaffStatusParams) (MerchantStaff, error)

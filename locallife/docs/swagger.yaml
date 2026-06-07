@@ -5385,6 +5385,10 @@ definitions:
         type: string
       description:
         type: string
+      environment_images:
+        items:
+          type: string
+        type: array
       group_id:
         type: integer
       id:
@@ -5407,6 +5411,10 @@ definitions:
         type: integer
       status:
         type: string
+      storefront_images:
+        items:
+          type: string
+        type: array
       updated_at:
         type: string
       version:
@@ -21280,7 +21288,7 @@ paths:
           schema:
             $ref: '#/definitions/api.ErrorResponse'
         "404":
-          description: 申请记录不存在
+          description: 商户不存在
           schema:
             $ref: '#/definitions/api.ErrorResponse'
         "500":

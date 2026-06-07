@@ -18,13 +18,18 @@ SET
   status = 'approved',
   reviewed_at = now(),
   updated_at = now()
-WHERE id = $1 AND status = 'submitted'
+WHERE id = $1 AND user_id = $2 AND status = 'submitted'
 RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id, review_summary
 `
 
+type ApproveMerchantApplicationParams struct {
+	ID     int64 `json:"id"`
+	UserID int64 `json:"user_id"`
+}
+
 // 审核通过商户申请
-func (q *Queries) ApproveMerchantApplication(ctx context.Context, id int64) (MerchantApplication, error) {
-	row := q.db.QueryRow(ctx, approveMerchantApplication, id)
+func (q *Queries) ApproveMerchantApplication(ctx context.Context, arg ApproveMerchantApplicationParams) (MerchantApplication, error) {
+	row := q.db.QueryRow(ctx, approveMerchantApplication, arg.ID, arg.UserID)
 	var i MerchantApplication
 	err := row.Scan(
 		&i.ID,

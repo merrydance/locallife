@@ -87,3 +87,111 @@ func TestApproveMerchantApplicationTx_AssignsMerchantOwnerRoleAndOwnerStaff(t *t
 	require.Len(t, labels, 1)
 	require.Equal(t, SystemTagNoOpenKitchen, labels[0].Name)
 }
+
+func TestApproveMerchantApplicationTxCopiesApplicationImagesToMerchantTruth(t *testing.T) {
+	user := createRandomUser(t)
+	app := prepareSubmittedMerchantApplication(t, user.ID)
+	storefrontImages := []byte(`["uploads/merchant/application-storefront.jpg"]`)
+	environmentImages := []byte(`["uploads/merchant/application-environment.jpg"]`)
+
+	sqlStore, ok := testStore.(*SQLStore)
+	require.True(t, ok)
+	_, err := sqlStore.connPool.Exec(context.Background(), `
+		UPDATE merchant_applications
+		SET storefront_images = $1,
+		    environment_images = $2
+		WHERE id = $3
+	`, storefrontImages, environmentImages, app.ID)
+	require.NoError(t, err)
+
+	app, err = testStore.GetMerchantApplication(context.Background(), app.ID)
+	require.NoError(t, err)
+
+	result, err := testStore.ApproveMerchantApplicationTx(context.Background(), ApproveMerchantApplicationTxParams{
+		ApplicationID:     app.ID,
+		UserID:            user.ID,
+		MerchantName:      app.MerchantName,
+		Phone:             app.ContactPhone,
+		Address:           app.BusinessAddress,
+		Latitude:          app.Latitude,
+		Longitude:         app.Longitude,
+		RegionID:          app.RegionID.Int64,
+		AppData:           []byte(`{"source":"test"}`),
+		StorefrontImages:  app.StorefrontImages,
+		EnvironmentImages: app.EnvironmentImages,
+	})
+	require.NoError(t, err)
+	require.JSONEq(t, string(storefrontImages), string(result.Merchant.StorefrontImages))
+	require.JSONEq(t, string(environmentImages), string(result.Merchant.EnvironmentImages))
+
+	merchant, err := testStore.GetMerchant(context.Background(), result.Merchant.ID)
+	require.NoError(t, err)
+	require.JSONEq(t, string(storefrontImages), string(merchant.StorefrontImages))
+	require.JSONEq(t, string(environmentImages), string(merchant.EnvironmentImages))
+}
+
+func TestApproveMerchantApplicationTxIgnoresStaffAssociatedMerchant(t *testing.T) {
+	merchantOwner := createRandomUser(t)
+	applicant := createRandomUser(t)
+	staffMerchant := createRandomMerchantWithOwner(t, merchantOwner.ID)
+	app := prepareSubmittedMerchantApplication(t, applicant.ID)
+	storefrontImages := []byte(`["uploads/merchant/applicant-storefront.jpg"]`)
+
+	_, err := testStore.CreateMerchantStaff(context.Background(), CreateMerchantStaffParams{
+		MerchantID: staffMerchant.ID,
+		UserID:     applicant.ID,
+		Role:       "manager",
+		Status:     MerchantStaffStatusActive,
+		InvitedBy:  pgtype.Int8{Int64: merchantOwner.ID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	result, err := testStore.ApproveMerchantApplicationTx(context.Background(), ApproveMerchantApplicationTxParams{
+		ApplicationID:    app.ID,
+		UserID:           applicant.ID,
+		MerchantName:     app.MerchantName,
+		Phone:            app.ContactPhone,
+		Address:          app.BusinessAddress,
+		Latitude:         app.Latitude,
+		Longitude:        app.Longitude,
+		RegionID:         app.RegionID.Int64,
+		AppData:          []byte(`{"source":"test"}`),
+		StorefrontImages: storefrontImages,
+	})
+	require.NoError(t, err)
+	require.NotEqual(t, staffMerchant.ID, result.Merchant.ID)
+	require.Equal(t, applicant.ID, result.Merchant.OwnerUserID)
+	require.JSONEq(t, string(storefrontImages), string(result.Merchant.StorefrontImages))
+
+	unchangedStaffMerchant, err := testStore.GetMerchant(context.Background(), staffMerchant.ID)
+	require.NoError(t, err)
+	require.Equal(t, merchantOwner.ID, unchangedStaffMerchant.OwnerUserID)
+	require.Equal(t, staffMerchant.Name, unchangedStaffMerchant.Name)
+	require.Nil(t, unchangedStaffMerchant.StorefrontImages)
+}
+
+func TestApproveMerchantApplicationTxRejectsMismatchedApplicationOwner(t *testing.T) {
+	applicationOwner := createRandomUser(t)
+	wrongOwner := createRandomUser(t)
+	app := prepareSubmittedMerchantApplication(t, applicationOwner.ID)
+
+	_, err := testStore.ApproveMerchantApplicationTx(context.Background(), ApproveMerchantApplicationTxParams{
+		ApplicationID: app.ID,
+		UserID:        wrongOwner.ID,
+		MerchantName:  app.MerchantName,
+		Phone:         app.ContactPhone,
+		Address:       app.BusinessAddress,
+		Latitude:      app.Latitude,
+		Longitude:     app.Longitude,
+		RegionID:      app.RegionID.Int64,
+		AppData:       []byte(`{"source":"test"}`),
+	})
+	require.Error(t, err)
+
+	unchangedApp, appErr := testStore.GetMerchantApplication(context.Background(), app.ID)
+	require.NoError(t, appErr)
+	require.Equal(t, "submitted", unchangedApp.Status)
+
+	_, merchantErr := testStore.GetMerchantOwnedByUser(context.Background(), wrongOwner.ID)
+	require.ErrorIs(t, merchantErr, ErrRecordNotFound)
+}

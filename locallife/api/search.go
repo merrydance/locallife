@@ -1718,7 +1718,7 @@ func (server *Server) searchCategories(ctx *gin.Context) {
 	})
 }
 
-// extractCoverImageFromStorefrontImages 从 merchant_applications.storefront_images JSONB 字段提取第一张门头照 URL。
+// extractCoverImageFromStorefrontImages extracts the first merchant cover URL from live merchant images or approved-application fallback JSON.
 func (server *Server) extractCoverImageFromStorefrontImages(data []byte) string {
 	if len(data) == 0 {
 		return ""

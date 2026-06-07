@@ -106,27 +106,29 @@ func (server *Server) uploadMerchantImage(ctx *gin.Context) {
 // ==================== 商户管理 ====================
 
 type merchantResponse struct {
-	ID          int64     `json:"id"`
-	OwnerUserID int64     `json:"owner_user_id"`
-	RegionID    int64     `json:"region_id"`
-	Name        string    `json:"name"`
-	Description *string   `json:"description,omitempty"`
-	LogoAssetID *int64    `json:"-"`
-	LogoURL     string    `json:"logo_url,omitempty"`
-	Phone       string    `json:"phone"`
-	Address     string    `json:"address"`
-	Latitude    *string   `json:"latitude,omitempty"`
-	Longitude   *string   `json:"longitude,omitempty"`
-	Status      string    `json:"status"`
-	IsOpen      bool      `json:"is_open"`
-	Version     int32     `json:"version"`
-	GroupID     *int64    `json:"group_id,omitempty"`
-	BrandID     *int64    `json:"brand_id,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID                int64     `json:"id"`
+	OwnerUserID       int64     `json:"owner_user_id"`
+	RegionID          int64     `json:"region_id"`
+	Name              string    `json:"name"`
+	Description       *string   `json:"description,omitempty"`
+	LogoAssetID       *int64    `json:"-"`
+	LogoURL           string    `json:"logo_url,omitempty"`
+	Phone             string    `json:"phone"`
+	Address           string    `json:"address"`
+	Latitude          *string   `json:"latitude,omitempty"`
+	Longitude         *string   `json:"longitude,omitempty"`
+	Status            string    `json:"status"`
+	IsOpen            bool      `json:"is_open"`
+	Version           int32     `json:"version"`
+	GroupID           *int64    `json:"group_id,omitempty"`
+	BrandID           *int64    `json:"brand_id,omitempty"`
+	StorefrontImages  *[]string `json:"storefront_images,omitempty"`
+	EnvironmentImages *[]string `json:"environment_images,omitempty"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
 }
 
-func newMerchantResponse(merchant db.Merchant) merchantResponse {
+func (server *Server) newMerchantResponse(merchant db.Merchant) (merchantResponse, error) {
 	resp := merchantResponse{
 		ID:          merchant.ID,
 		OwnerUserID: merchant.OwnerUserID,
@@ -163,7 +165,28 @@ func newMerchantResponse(merchant db.Merchant) merchantResponse {
 		resp.BrandID = &merchant.BrandID.Int64
 	}
 
-	return resp
+	if merchant.StorefrontImages != nil {
+		images, err := decodeStoredMerchantApplicationImageList(merchant.ID, "storefront_images", merchant.StorefrontImages)
+		if err != nil {
+			return merchantResponse{}, err
+		}
+		for i, img := range images {
+			images[i] = server.resolvePublicUploadURLForClient(img)
+		}
+		resp.StorefrontImages = &images
+	}
+	if merchant.EnvironmentImages != nil {
+		images, err := decodeStoredMerchantApplicationImageList(merchant.ID, "environment_images", merchant.EnvironmentImages)
+		if err != nil {
+			return merchantResponse{}, err
+		}
+		for i, img := range images {
+			images[i] = server.resolvePublicUploadURLForClient(img)
+		}
+		resp.EnvironmentImages = &images
+	}
+
+	return resp, nil
 }
 
 // getCurrentMerchant godoc
@@ -195,7 +218,11 @@ func (server *Server) getCurrentMerchant(ctx *gin.Context) {
 		return
 	}
 
-	resp := newMerchantResponse(merchant)
+	resp, err := server.newMerchantResponse(merchant)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
 	resp.LogoURL = server.publicImageURL(ctx, resp.LogoAssetID, media.VariantCard)
 	ctx.JSON(http.StatusOK, resp)
 }
@@ -224,7 +251,12 @@ func (server *Server) listMyMerchants(ctx *gin.Context) {
 	// 转换为响应格式
 	responses := make([]merchantResponse, len(merchants))
 	for i, m := range merchants {
-		responses[i] = newMerchantResponse(m)
+		resp, err := server.newMerchantResponse(m)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		responses[i] = resp
 	}
 
 	logoAssetIDs := make([]int64, 0, len(responses))
@@ -380,7 +412,11 @@ func (server *Server) updateCurrentMerchant(ctx *gin.Context) {
 		return
 	}
 
-	resp := newMerchantResponse(updatedMerchant)
+	resp, err := server.newMerchantResponse(updatedMerchant)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
 	resp.LogoURL = server.publicImageURL(ctx, resp.LogoAssetID, media.VariantCard)
 	ctx.JSON(http.StatusOK, resp)
 }
@@ -407,7 +443,7 @@ type updateCurrentMerchantShopImagesResponse struct {
 // @Success 200 {object} updateCurrentMerchantShopImagesResponse "更新成功"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 401 {object} ErrorResponse "未授权"
-// @Failure 404 {object} ErrorResponse "申请记录不存在"
+// @Failure 404 {object} ErrorResponse "商户不存在"
 // @Failure 500 {object} ErrorResponse "服务器内部错误"
 // @Router /v1/merchants/me/shop-images [patch]
 // @Security BearerAuth
@@ -432,8 +468,8 @@ func (server *Server) updateCurrentMerchantShopImages(ctx *gin.Context) {
 		return
 	}
 
-	arg := db.UpdateMerchantApplicationShopImagesParams{
-		UserID: merchant.OwnerUserID,
+	arg := db.UpdateMerchantShopImagesParams{
+		ID: merchant.ID,
 	}
 	if req.StorefrontImages != nil {
 		for i, img := range req.StorefrontImages {
@@ -458,10 +494,10 @@ func (server *Server) updateCurrentMerchantShopImages(ctx *gin.Context) {
 		arg.EnvironmentImages = jsonData
 	}
 
-	updatedApp, err := server.store.UpdateMerchantApplicationShopImages(ctx, arg)
+	updatedMerchant, err := server.store.UpdateMerchantShopImages(ctx, arg)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(ErrApplicationNotFound))
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -469,8 +505,8 @@ func (server *Server) updateCurrentMerchantShopImages(ctx *gin.Context) {
 	}
 
 	resp := updateCurrentMerchantShopImagesResponse{}
-	if len(updatedApp.StorefrontImages) > 0 {
-		images, decodeErr := decodeStoredMerchantApplicationImageList(updatedApp.ID, "storefront_images", updatedApp.StorefrontImages)
+	if len(updatedMerchant.StorefrontImages) > 0 {
+		images, decodeErr := decodeStoredMerchantApplicationImageList(updatedMerchant.ID, "storefront_images", updatedMerchant.StorefrontImages)
 		if decodeErr != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, decodeErr))
 			return
@@ -480,8 +516,8 @@ func (server *Server) updateCurrentMerchantShopImages(ctx *gin.Context) {
 		}
 		resp.StorefrontImages = images
 	}
-	if len(updatedApp.EnvironmentImages) > 0 {
-		images, decodeErr := decodeStoredMerchantApplicationImageList(updatedApp.ID, "environment_images", updatedApp.EnvironmentImages)
+	if len(updatedMerchant.EnvironmentImages) > 0 {
+		images, decodeErr := decodeStoredMerchantApplicationImageList(updatedMerchant.ID, "environment_images", updatedMerchant.EnvironmentImages)
 		if decodeErr != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, decodeErr))
 			return
@@ -1248,9 +1284,23 @@ func (server *Server) getPublicMerchantDetail(ctx *gin.Context) {
 		}
 	}
 
-	// 门头照从 merchant_applications 活数据读取（lite 模式跳过额外的 DB 查询）
-	if !liteMode {
-		application, appErr := server.store.GetMerchantApplicationDraft(ctx, merchant.OwnerUserID)
+	if len(merchant.StorefrontImages) > 0 {
+		storefrontImages, decodeErr := decodeStoredMerchantApplicationImageList(merchant.ID, "storefront_images", merchant.StorefrontImages)
+		if decodeErr != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, decodeErr))
+			return
+		}
+		if len(storefrontImages) > 0 {
+			url := server.resolvePublicUploadURLForClient(storefrontImages[0])
+			if url != "" {
+				resp.CoverImage = &url
+			}
+		}
+	}
+
+	// 兼容迁移前尚未回填的商户：live 图为 NULL 时才回退最新申请图，空数组表示商户已明确清空。
+	if resp.CoverImage == nil && merchant.StorefrontImages == nil && !liteMode {
+		application, appErr := server.store.GetLatestApprovedMerchantApplicationByUser(ctx, merchant.OwnerUserID)
 		if appErr == nil && len(application.StorefrontImages) > 0 {
 			storefrontImages, decodeErr := decodeStoredMerchantApplicationImageList(application.ID, "storefront_images", application.StorefrontImages)
 			if decodeErr != nil {

@@ -440,6 +440,8 @@ func TestBuildMerchantApprovalTxParams_IncludesImagePayloads(t *testing.T) {
 	require.Equal(t, application.ID, arg.ApplicationID)
 	require.Equal(t, application.UserID, arg.UserID)
 	require.Equal(t, application.RegionID.Int64, arg.RegionID)
+	require.JSONEq(t, string(application.StorefrontImages), string(arg.StorefrontImages))
+	require.JSONEq(t, string(application.EnvironmentImages), string(arg.EnvironmentImages))
 
 	var payload map[string]any
 	require.NoError(t, json.Unmarshal(arg.AppData, &payload))
@@ -450,6 +452,22 @@ func TestBuildMerchantApprovalTxParams_IncludesImagePayloads(t *testing.T) {
 	require.Equal(t, float64(application.FoodPermitMediaAssetID.Int64), payload["food_permit_media_asset_id"])
 	require.Equal(t, []any{"storefront-a.jpg", "storefront-b.jpg"}, payload["storefront_images"])
 	require.Equal(t, []any{"environment-a.jpg"}, payload["environment_images"])
+}
+
+func TestBuildMerchantApprovalTxParams_DropsInvalidLegacyImagePayloads(t *testing.T) {
+	application := merchantReviewTestApplication()
+	application.StorefrontImages = []byte(`["storefront-a.jpg",null]`)
+	application.EnvironmentImages = []byte(`["env-a.jpg","env-b.jpg","env-c.jpg","env-d.jpg","env-e.jpg","env-f.jpg"]`)
+
+	arg, err := buildMerchantApprovalTxParams(application)
+	require.NoError(t, err)
+	require.Nil(t, arg.StorefrontImages)
+	require.Nil(t, arg.EnvironmentImages)
+
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(arg.AppData, &payload))
+	require.Equal(t, []any{}, payload["storefront_images"])
+	require.Equal(t, []any{}, payload["environment_images"])
 }
 
 func TestBuildMerchantApprovalTxParams_RequiresRegionID(t *testing.T) {

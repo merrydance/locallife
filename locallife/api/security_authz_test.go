@@ -186,7 +186,7 @@ func TestMerchantProfileWriteRoutesDenyLowPrivilegeStaff(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				expectStaffRole(store, user.ID, merchant, "cashier")
-				store.EXPECT().UpdateMerchantApplicationShopImages(gomock.Any(), gomock.Any()).Times(0)
+				store.EXPECT().UpdateMerchantShopImages(gomock.Any(), gomock.Any()).Times(0)
 			},
 		},
 		{

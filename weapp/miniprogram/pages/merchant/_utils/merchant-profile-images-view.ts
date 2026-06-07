@@ -7,6 +7,12 @@ export type ImageItem = { url: string, rawUrl?: string, assetId?: number, localF
 export type UploadFileItem = { url?: string | null }
 export type ShopImagesResponse = { storefront_images?: string[] | null, environment_images?: string[] | null }
 export type ShopImageKind = 'storefront' | 'environment'
+export type ShopImagesServerTruth = {
+  storefrontRawUrls: string[]
+  environmentRawUrls: string[]
+  hasMerchantStorefrontTruth: boolean
+  hasMerchantEnvironmentTruth: boolean
+}
 type CurrentMerchantCache = { id?: number, merchant_id?: number }
 export type PendingDeletedShopImagesStorageState = {
   storefrontRawUrls?: string[]
@@ -109,6 +115,30 @@ export function toNormalizedRawUrls(rawUrls?: Array<string | null | undefined> |
       .map((rawUrl) => normalizeImageRawUrl(rawUrl))
       .filter((rawUrl) => rawUrl.length > 0)
   ))
+}
+
+function chooseServerTruthImageArray(
+  merchantImages?: string[] | null,
+  applicationImages?: string[] | null
+): string[] {
+  if (Array.isArray(merchantImages)) {
+    return toNormalizedRawUrls(merchantImages)
+  }
+  return toNormalizedRawUrls(applicationImages)
+}
+
+export function resolveShopImagesServerTruth(
+  merchant: ShopImagesResponse,
+  application: ShopImagesResponse | null
+): ShopImagesServerTruth {
+  const hasMerchantStorefrontTruth = Array.isArray(merchant.storefront_images)
+  const hasMerchantEnvironmentTruth = Array.isArray(merchant.environment_images)
+  return {
+    storefrontRawUrls: chooseServerTruthImageArray(merchant.storefront_images, application?.storefront_images),
+    environmentRawUrls: chooseServerTruthImageArray(merchant.environment_images, application?.environment_images),
+    hasMerchantStorefrontTruth,
+    hasMerchantEnvironmentTruth
+  }
 }
 
 export function toMerchantPendingDeletedScope(merchantId: number): string {

@@ -373,18 +373,18 @@ func (mr *MockStoreMockRecorder) ApproveGroupJoinRequestTx(ctx, arg any) *gomock
 }
 
 // ApproveMerchantApplication mocks base method.
-func (m *MockStore) ApproveMerchantApplication(ctx context.Context, id int64) (db.MerchantApplication, error) {
+func (m *MockStore) ApproveMerchantApplication(ctx context.Context, arg db.ApproveMerchantApplicationParams) (db.MerchantApplication, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ApproveMerchantApplication", ctx, id)
+	ret := m.ctrl.Call(m, "ApproveMerchantApplication", ctx, arg)
 	ret0, _ := ret[0].(db.MerchantApplication)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ApproveMerchantApplication indicates an expected call of ApproveMerchantApplication.
-func (mr *MockStoreMockRecorder) ApproveMerchantApplication(ctx, id any) *gomock.Call {
+func (mr *MockStoreMockRecorder) ApproveMerchantApplication(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApproveMerchantApplication", reflect.TypeOf((*MockStore)(nil).ApproveMerchantApplication), ctx, id)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApproveMerchantApplication", reflect.TypeOf((*MockStore)(nil).ApproveMerchantApplication), ctx, arg)
 }
 
 // ApproveMerchantApplicationTx mocks base method.
@@ -8577,6 +8577,21 @@ func (mr *MockStoreMockRecorder) GetLatestActiveAppVersion(ctx, arg any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLatestActiveAppVersion", reflect.TypeOf((*MockStore)(nil).GetLatestActiveAppVersion), ctx, arg)
 }
 
+// GetLatestApprovedMerchantApplicationByUser mocks base method.
+func (m *MockStore) GetLatestApprovedMerchantApplicationByUser(ctx context.Context, userID int64) (db.MerchantApplication, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetLatestApprovedMerchantApplicationByUser", ctx, userID)
+	ret0, _ := ret[0].(db.MerchantApplication)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetLatestApprovedMerchantApplicationByUser indicates an expected call of GetLatestApprovedMerchantApplicationByUser.
+func (mr *MockStoreMockRecorder) GetLatestApprovedMerchantApplicationByUser(ctx, userID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLatestApprovedMerchantApplicationByUser", reflect.TypeOf((*MockStore)(nil).GetLatestApprovedMerchantApplicationByUser), ctx, userID)
+}
+
 // GetLatestBaofuAccountOpeningFlowByOwner mocks base method.
 func (m *MockStore) GetLatestBaofuAccountOpeningFlowByOwner(ctx context.Context, arg db.GetLatestBaofuAccountOpeningFlowByOwnerParams) (db.BaofuAccountOpeningFlow, error) {
 	m.ctrl.T.Helper()
@@ -9430,6 +9445,21 @@ func (m *MockStore) GetMerchantOverview(ctx context.Context, arg db.GetMerchantO
 func (mr *MockStoreMockRecorder) GetMerchantOverview(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMerchantOverview", reflect.TypeOf((*MockStore)(nil).GetMerchantOverview), ctx, arg)
+}
+
+// GetMerchantOwnedByUser mocks base method.
+func (m *MockStore) GetMerchantOwnedByUser(ctx context.Context, ownerUserID int64) (db.Merchant, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMerchantOwnedByUser", ctx, ownerUserID)
+	ret0, _ := ret[0].(db.Merchant)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMerchantOwnedByUser indicates an expected call of GetMerchantOwnedByUser.
+func (mr *MockStoreMockRecorder) GetMerchantOwnedByUser(ctx, ownerUserID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMerchantOwnedByUser", reflect.TypeOf((*MockStore)(nil).GetMerchantOwnedByUser), ctx, ownerUserID)
 }
 
 // GetMerchantPaymentConfig mocks base method.
@@ -21468,6 +21498,21 @@ func (m *MockStore) UpdateMerchantReply(ctx context.Context, arg db.UpdateMercha
 func (mr *MockStoreMockRecorder) UpdateMerchantReply(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMerchantReply", reflect.TypeOf((*MockStore)(nil).UpdateMerchantReply), ctx, arg)
+}
+
+// UpdateMerchantShopImages mocks base method.
+func (m *MockStore) UpdateMerchantShopImages(ctx context.Context, arg db.UpdateMerchantShopImagesParams) (db.Merchant, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateMerchantShopImages", ctx, arg)
+	ret0, _ := ret[0].(db.Merchant)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateMerchantShopImages indicates an expected call of UpdateMerchantShopImages.
+func (mr *MockStoreMockRecorder) UpdateMerchantShopImages(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMerchantShopImages", reflect.TypeOf((*MockStore)(nil).UpdateMerchantShopImages), ctx, arg)
 }
 
 // UpdateMerchantStaffRole mocks base method.

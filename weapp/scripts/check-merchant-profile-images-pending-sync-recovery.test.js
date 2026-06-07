@@ -150,6 +150,68 @@ function createPage(viewExports, storefrontImages = [], environmentImages = []) 
 }
 
 function assertRuntimeRecovery(viewExports, recoveryMethods) {
+  assert.strictEqual(
+    typeof viewExports.resolveShopImagesServerTruth,
+    'function',
+    'view helper must export resolveShopImagesServerTruth for live merchant image truth selection'
+  )
+
+  const liveTruth = viewExports.resolveShopImagesServerTruth({
+    storefront_images: ['media/live-storefront.jpg'],
+    environment_images: []
+  }, {
+    storefront_images: ['media/application-storefront.jpg'],
+    environment_images: ['media/application-environment.jpg']
+  })
+  assert.deepStrictEqual(
+    liveTruth.storefrontRawUrls,
+    ['media/live-storefront.jpg'],
+    'merchant live storefront images must take precedence over application images'
+  )
+  assert.deepStrictEqual(
+    liveTruth.environmentRawUrls,
+    [],
+    'empty merchant live environment images must not resurrect application images'
+  )
+  assert.strictEqual(
+    liveTruth.hasMerchantStorefrontTruth,
+    true,
+    'merchant live storefront array must mark storefront server truth available even if application fallback fails'
+  )
+  assert.strictEqual(
+    liveTruth.hasMerchantEnvironmentTruth,
+    true,
+    'empty merchant live environment array must still mark environment server truth available'
+  )
+
+  const fallbackTruth = viewExports.resolveShopImagesServerTruth({
+    storefront_images: null,
+    environment_images: undefined
+  }, {
+    storefront_images: ['media/application-storefront.jpg'],
+    environment_images: ['media/application-environment.jpg']
+  })
+  assert.deepStrictEqual(
+    fallbackTruth.storefrontRawUrls,
+    ['media/application-storefront.jpg'],
+    'null merchant storefront images should fall back to application images for compatibility'
+  )
+  assert.deepStrictEqual(
+    fallbackTruth.environmentRawUrls,
+    ['media/application-environment.jpg'],
+    'undefined merchant environment images should fall back to application images for compatibility'
+  )
+  assert.strictEqual(
+    fallbackTruth.hasMerchantStorefrontTruth,
+    false,
+    'null merchant storefront images must mark merchant storefront truth absent'
+  )
+  assert.strictEqual(
+    fallbackTruth.hasMerchantEnvironmentTruth,
+    false,
+    'undefined merchant environment images must mark merchant environment truth absent'
+  )
+
   const pendingStorefront = {
     url: 'https://cdn.example.test/storefront-a.jpg',
     rawUrl: 'media/storefront-a.jpg',
@@ -269,6 +331,13 @@ function assertStaticRecoveryContract() {
       /isAmbiguousSyncFailure\(persistErr\)[\s\S]+schedulePendingShopImagesPersistence\(\)/.test(pageSource) &&
       pageSource.includes('CONTINUE_SYNC_TOAST'),
     'upload page must keep ambiguous shop-image persistence visible and schedule retry with user copy'
+  )
+  assert(
+    pageSource.includes('hasMerchantLiveStorefrontTruth') &&
+      pageSource.includes('hasMerchantLiveEnvironmentTruth') &&
+      /applicationUnavailable[\s\S]+!hasMerchantLiveStorefrontTruth[\s\S]+toPersistedImageUrls\(latestStorefrontImages\)/.test(pageSource) &&
+      /applicationUnavailable[\s\S]+!hasMerchantLiveEnvironmentTruth[\s\S]+toPersistedImageUrls\(latestEnvironmentImages\)/.test(pageSource),
+    'loadData must still adopt merchant live shop images when the application fallback request fails'
   )
   assert(
     /while \(this\._shopImagesPersistRetryPending\)/.test(lifecycleSource) &&

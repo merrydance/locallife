@@ -182,14 +182,8 @@ func buildMerchantApprovalTxParams(application db.MerchantApplication) (db.Appro
 		return db.ApproveMerchantApplicationTxParams{}, fmt.Errorf("merchant application %d missing region_id", application.ID)
 	}
 
-	var storefrontImages []string
-	if len(application.StorefrontImages) > 0 {
-		_ = json.Unmarshal(application.StorefrontImages, &storefrontImages)
-	}
-	var environmentImages []string
-	if len(application.EnvironmentImages) > 0 {
-		_ = json.Unmarshal(application.EnvironmentImages, &environmentImages)
-	}
+	storefrontImages, merchantStorefrontImages := merchantApprovalImagePayload(application.StorefrontImages, 3)
+	environmentImages, merchantEnvironmentImages := merchantApprovalImagePayload(application.EnvironmentImages, 5)
 
 	appData, err := json.Marshal(map[string]any{
 		"business_license_number":         application.BusinessLicenseNumber,
@@ -207,16 +201,44 @@ func buildMerchantApprovalTxParams(application db.MerchantApplication) (db.Appro
 	}
 
 	return db.ApproveMerchantApplicationTxParams{
-		ApplicationID: application.ID,
-		UserID:        application.UserID,
-		MerchantName:  application.MerchantName,
-		Phone:         application.ContactPhone,
-		Address:       application.BusinessAddress,
-		Latitude:      application.Latitude,
-		Longitude:     application.Longitude,
-		RegionID:      application.RegionID.Int64,
-		AppData:       appData,
+		ApplicationID:     application.ID,
+		UserID:            application.UserID,
+		MerchantName:      application.MerchantName,
+		Phone:             application.ContactPhone,
+		Address:           application.BusinessAddress,
+		Latitude:          application.Latitude,
+		Longitude:         application.Longitude,
+		RegionID:          application.RegionID.Int64,
+		AppData:           appData,
+		StorefrontImages:  merchantStorefrontImages,
+		EnvironmentImages: merchantEnvironmentImages,
 	}, nil
+}
+
+func merchantApprovalImagePayload(raw []byte, maxCount int) ([]string, []byte) {
+	if len(raw) == 0 {
+		return []string{}, nil
+	}
+	var rawImages []json.RawMessage
+	if err := json.Unmarshal(raw, &rawImages); err != nil {
+		return []string{}, nil
+	}
+	if len(rawImages) > maxCount {
+		return []string{}, nil
+	}
+	images := make([]string, 0, len(rawImages))
+	for _, rawImage := range rawImages {
+		var image any
+		if err := json.Unmarshal(rawImage, &image); err != nil {
+			return []string{}, nil
+		}
+		imageString, ok := image.(string)
+		if !ok {
+			return []string{}, nil
+		}
+		images = append(images, imageString)
+	}
+	return images, raw
 }
 
 func buildMerchantCredentialActivationInputs(application db.MerchantApplication) ([]CredentialActivationInput, error) {

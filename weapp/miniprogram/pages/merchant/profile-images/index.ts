@@ -17,6 +17,7 @@ import {
   PROFILE_IMAGES_AUTO_REFRESH_WINDOW_MS,
   removeImageAt,
   replaceImageAt,
+  resolveShopImagesServerTruth,
   ShopImageKind,
   shouldAutoRefresh,
   toImageItems,
@@ -126,32 +127,33 @@ Page({
         this.schedulePendingShopImagesPersistenceWithBackoff()
       }
 
-      const reconciledShopImages = applicationUnavailable
-        ? null
-        : this.reconcilePendingDeletedShopImages(
-          application.storefront_images,
-          application.environment_images
-        )
+      const shopImagesServerTruth = resolveShopImagesServerTruth(merchant, application)
+      const reconciledShopImages = this.reconcilePendingDeletedShopImages(
+        shopImagesServerTruth.storefrontRawUrls,
+        shopImagesServerTruth.environmentRawUrls
+      )
+      const hasMerchantLiveStorefrontTruth = shopImagesServerTruth.hasMerchantStorefrontTruth
+      const hasMerchantLiveEnvironmentTruth = shopImagesServerTruth.hasMerchantEnvironmentTruth
 
       // 门头照
-      const persistedStorefrontImages = applicationUnavailable
+      const persistedStorefrontImages = applicationUnavailable && !hasMerchantLiveStorefrontTruth
         ? toImageItems(toPersistedImageUrls(latestStorefrontImages))
         : toImageItems(reconciledShopImages?.storefrontRawUrls)
 
       // 环境照
-      const persistedEnvironmentImages = applicationUnavailable
+      const persistedEnvironmentImages = applicationUnavailable && !hasMerchantLiveEnvironmentTruth
         ? toImageItems(toPersistedImageUrls(latestEnvironmentImages))
         : toImageItems(reconciledShopImages?.environmentRawUrls)
 
       const mergedLogoImage = mergeServerAndLocalLogo(logoImage, currentLogoImage)
       const mergedStorefrontImages = shopImagesGenerationChanged
         ? latestStorefrontImages
-        : applicationUnavailable
+        : applicationUnavailable && !hasMerchantLiveStorefrontTruth
           ? latestStorefrontImages
         : mergeServerAndLocalImages(persistedStorefrontImages, latestStorefrontImages)
       const mergedEnvironmentImages = shopImagesGenerationChanged
         ? latestEnvironmentImages
-        : applicationUnavailable
+        : applicationUnavailable && !hasMerchantLiveEnvironmentTruth
           ? latestEnvironmentImages
         : mergeServerAndLocalImages(persistedEnvironmentImages, latestEnvironmentImages)
 

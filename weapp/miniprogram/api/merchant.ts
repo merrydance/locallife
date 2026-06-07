@@ -438,6 +438,8 @@ export interface MerchantOperatorResponse {
   version: number
   group_id?: number
   brand_id?: number
+  storefront_images?: string[] | null
+  environment_images?: string[] | null
   created_at: string
   updated_at: string
 }

@@ -14388,7 +14388,7 @@ const docTemplate = `{
                         }
                     },
                     "404": {
-                        "description": "申请记录不存在",
+                        "description": "商户不存在",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -39581,6 +39581,12 @@ const docTemplate = `{
                 "description": {
                     "type": "string"
                 },
+                "environment_images": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "group_id": {
                     "type": "integer"
                 },
@@ -39613,6 +39619,12 @@ const docTemplate = `{
                 },
                 "status": {
                     "type": "string"
+                },
+                "storefront_images": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "updated_at": {
                     "type": "string"

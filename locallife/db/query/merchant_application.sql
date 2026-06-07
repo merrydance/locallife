@@ -148,7 +148,7 @@ SET
   status = 'approved',
   reviewed_at = now(),
   updated_at = now()
-WHERE id = $1 AND status = 'submitted'
+WHERE id = $1 AND user_id = $2 AND status = 'submitted'
 RETURNING *;
 
 -- name: RejectMerchantApplication :one

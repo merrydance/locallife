@@ -119,6 +119,41 @@ func TestGetCurrentMerchantAPI(t *testing.T) {
 	}
 }
 
+func TestGetCurrentMerchantReturnsResolvedLiveShopImageURLs(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	storefrontImages, err := json.Marshal([]string{"uploads/merchants/12/storefront/cover.jpg"})
+	require.NoError(t, err)
+	environmentImages, err := json.Marshal([]string{"uploads/merchants/12/environment/hall.jpg"})
+	require.NoError(t, err)
+	merchant.StorefrontImages = storefrontImages
+	merchant.EnvironmentImages = environmentImages
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+	server := newTestServer(t, store)
+	server.config.FileStorageProvider = "local"
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/merchants/me", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp merchantResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.NotNil(t, resp.StorefrontImages)
+	require.Equal(t, []string{"/dev/uploads/merchants/12/storefront/cover.jpg"}, *resp.StorefrontImages)
+	require.NotNil(t, resp.EnvironmentImages)
+	require.Equal(t, []string{"/dev/uploads/merchants/12/environment/hall.jpg"}, *resp.EnvironmentImages)
+}
+
 func TestUpdateCurrentMerchantAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
@@ -337,8 +372,7 @@ func TestGetPublicMerchantDetail_RewritesCoverImageInLocalMode(t *testing.T) {
 	merchant := randomMerchant(util.RandomInt(1, 1000))
 	storefrontImages, err := json.Marshal([]string{"uploads/merchants/12/storefront/cover.jpg"})
 	require.NoError(t, err)
-	application := randomMerchantAppDraft(merchant.OwnerUserID)
-	application.StorefrontImages = storefrontImages
+	merchant.StorefrontImages = storefrontImages
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -348,10 +382,6 @@ func TestGetPublicMerchantDetail_RewritesCoverImageInLocalMode(t *testing.T) {
 		GetMerchant(gomock.Any(), merchant.ID).
 		Times(1).
 		Return(merchant, nil)
-	store.EXPECT().
-		GetMerchantApplicationDraft(gomock.Any(), merchant.OwnerUserID).
-		Times(1).
-		Return(application, nil)
 	store.EXPECT().
 		ListMerchantTags(gomock.Any(), merchant.ID).
 		Times(1).
@@ -403,10 +433,14 @@ func TestGetPublicMerchantDetail_RewritesCoverImageInLocalMode(t *testing.T) {
 	require.Equal(t, []string{db.SystemTagNoOpenKitchen}, resp.SystemLabels)
 }
 
-func TestGetPublicMerchantDetail_ReturnsInternalServerErrorOnInvalidCoverImageJSON(t *testing.T) {
+func TestGetPublicMerchantDetailFallsBackToApprovedApplicationImagesWhenMerchantImagesAreNull(t *testing.T) {
 	merchant := randomMerchant(util.RandomInt(1, 1000))
+	merchant.StorefrontImages = nil
 	application := randomMerchantAppDraft(merchant.OwnerUserID)
-	application.StorefrontImages = []byte(`not-json`)
+	application.Status = "approved"
+	storefrontImages, err := json.Marshal([]string{"uploads/merchants/12/storefront/application-cover.jpg"})
+	require.NoError(t, err)
+	application.StorefrontImages = storefrontImages
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -417,9 +451,205 @@ func TestGetPublicMerchantDetail_ReturnsInternalServerErrorOnInvalidCoverImageJS
 		Times(1).
 		Return(merchant, nil)
 	store.EXPECT().
-		GetMerchantApplicationDraft(gomock.Any(), merchant.OwnerUserID).
+		GetLatestApprovedMerchantApplicationByUser(gomock.Any(), merchant.OwnerUserID).
 		Times(1).
 		Return(application, nil)
+	store.EXPECT().
+		ListMerchantTags(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.Tag{}, nil)
+	store.EXPECT().
+		ListMerchantSystemLabels(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.Tag{}, nil)
+	store.EXPECT().
+		GetMerchantProfile(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(db.GetMerchantProfileRow{}, nil)
+	store.EXPECT().
+		GetMerchantAvgPrepMinutes(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(int32(0), nil)
+	store.EXPECT().
+		ListMerchantBusinessHours(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.MerchantBusinessHour{}, nil)
+	store.EXPECT().
+		ListMerchantActiveDiscountRules(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.DiscountRule{}, nil)
+	store.EXPECT().
+		ListMerchantActiveVouchers(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.Voucher{}, nil)
+	store.EXPECT().
+		ListMerchantActiveDeliveryPromotions(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.MerchantDeliveryPromotion{}, nil)
+
+	server := newTestServer(t, store)
+	server.config.FileStorageProvider = "local"
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/public/merchants/"+strconv.FormatInt(merchant.ID, 10), nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, merchant.OwnerUserID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp publicMerchantDetailResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.NotNil(t, resp.CoverImage)
+	require.Equal(t, "/dev/uploads/merchants/12/storefront/application-cover.jpg", *resp.CoverImage)
+}
+
+func TestGetPublicMerchantDetailDoesNotFallbackToDraftApplicationImages(t *testing.T) {
+	merchant := randomMerchant(util.RandomInt(1, 1000))
+	merchant.StorefrontImages = nil
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(merchant, nil)
+	store.EXPECT().
+		GetLatestApprovedMerchantApplicationByUser(gomock.Any(), merchant.OwnerUserID).
+		Times(1).
+		Return(db.MerchantApplication{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		ListMerchantTags(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.Tag{}, nil)
+	store.EXPECT().
+		ListMerchantSystemLabels(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.Tag{}, nil)
+	store.EXPECT().
+		GetMerchantProfile(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(db.GetMerchantProfileRow{}, nil)
+	store.EXPECT().
+		GetMerchantAvgPrepMinutes(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(int32(0), nil)
+	store.EXPECT().
+		ListMerchantBusinessHours(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.MerchantBusinessHour{}, nil)
+	store.EXPECT().
+		ListMerchantActiveDiscountRules(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.DiscountRule{}, nil)
+	store.EXPECT().
+		ListMerchantActiveVouchers(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.Voucher{}, nil)
+	store.EXPECT().
+		ListMerchantActiveDeliveryPromotions(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.MerchantDeliveryPromotion{}, nil)
+
+	server := newTestServer(t, store)
+	server.config.FileStorageProvider = "local"
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/public/merchants/"+strconv.FormatInt(merchant.ID, 10), nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, merchant.OwnerUserID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp publicMerchantDetailResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Nil(t, resp.CoverImage)
+}
+
+func TestGetPublicMerchantDetailDoesNotFallbackWhenMerchantImagesAreEmpty(t *testing.T) {
+	merchant := randomMerchant(util.RandomInt(1, 1000))
+	emptyStorefrontImages, err := json.Marshal([]string{})
+	require.NoError(t, err)
+	merchant.StorefrontImages = emptyStorefrontImages
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(merchant, nil)
+	store.EXPECT().
+		GetLatestApprovedMerchantApplicationByUser(gomock.Any(), gomock.Any()).
+		Times(0)
+	store.EXPECT().
+		ListMerchantTags(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.Tag{}, nil)
+	store.EXPECT().
+		ListMerchantSystemLabels(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.Tag{}, nil)
+	store.EXPECT().
+		GetMerchantProfile(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(db.GetMerchantProfileRow{}, nil)
+	store.EXPECT().
+		GetMerchantAvgPrepMinutes(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(int32(0), nil)
+	store.EXPECT().
+		ListMerchantBusinessHours(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.MerchantBusinessHour{}, nil)
+	store.EXPECT().
+		ListMerchantActiveDiscountRules(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.DiscountRule{}, nil)
+	store.EXPECT().
+		ListMerchantActiveVouchers(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.Voucher{}, nil)
+	store.EXPECT().
+		ListMerchantActiveDeliveryPromotions(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.MerchantDeliveryPromotion{}, nil)
+
+	server := newTestServer(t, store)
+	server.config.FileStorageProvider = "local"
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/public/merchants/"+strconv.FormatInt(merchant.ID, 10), nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, merchant.OwnerUserID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp publicMerchantDetailResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Nil(t, resp.CoverImage)
+}
+
+func TestGetPublicMerchantDetail_ReturnsInternalServerErrorOnInvalidCoverImageJSON(t *testing.T) {
+	merchant := randomMerchant(util.RandomInt(1, 1000))
+	merchant.StorefrontImages = []byte(`not-json`)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(merchant, nil)
+	store.EXPECT().
+		ListMerchantTags(gomock.Any(), merchant.ID).
+		Times(0)
 
 	server := newTestServer(t, store)
 	recorder := httptest.NewRecorder()
@@ -700,10 +930,10 @@ func TestUpdateCurrentMerchantShopImages_ReturnsInternalServerErrorOnInvalidStor
 	merchant := randomMerchant(user.ID)
 	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 	store.EXPECT().
-		UpdateMerchantApplicationShopImages(gomock.Any(), gomock.Any()).
+		UpdateMerchantShopImages(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(db.MerchantApplication{
-			ID:               91,
+		Return(db.Merchant{
+			ID:               merchant.ID,
 			StorefrontImages: []byte(`not-json`),
 		}, nil)
 
@@ -736,7 +966,7 @@ func TestUpdateCurrentMerchantShopImagesFailsClosedWhenMerchantContextMissing(t 
 	store := mockdb.NewMockStore(ctrl)
 	expectNoMerchantAccessResolution(store)
 	store.EXPECT().
-		UpdateMerchantApplicationShopImages(gomock.Any(), gomock.Any()).
+		UpdateMerchantShopImages(gomock.Any(), gomock.Any()).
 		Times(0)
 
 	server := newTestServer(t, store)
@@ -760,7 +990,7 @@ func TestUpdateCurrentMerchantShopImagesFailsClosedWhenMerchantContextMissing(t 
 	require.Equal(t, "internal server error", resp.Error)
 }
 
-func TestUpdateCurrentMerchantShopImagesUsesResolvedMerchantOwnerForStaff(t *testing.T) {
+func TestUpdateCurrentMerchantShopImagesUsesResolvedMerchantForStaff(t *testing.T) {
 	manager, _ := randomUser(t)
 	merchant := randomMerchant(manager.ID + 1000)
 	merchant.Status = "active"
@@ -775,13 +1005,13 @@ func TestUpdateCurrentMerchantShopImagesUsesResolvedMerchantOwnerForStaff(t *tes
 	store := mockdb.NewMockStore(ctrl)
 	expectStaffRole(store, manager.ID, merchant, "manager")
 	store.EXPECT().
-		UpdateMerchantApplicationShopImages(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ any, arg db.UpdateMerchantApplicationShopImagesParams) (db.MerchantApplication, error) {
-			require.Equal(t, merchant.OwnerUserID, arg.UserID)
+		UpdateMerchantShopImages(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ any, arg db.UpdateMerchantShopImagesParams) (db.Merchant, error) {
+			require.Equal(t, merchant.ID, arg.ID)
 			require.JSONEq(t, string(storedStorefrontImages), string(arg.StorefrontImages))
-			return db.MerchantApplication{
-				ID:               91,
-				UserID:           merchant.OwnerUserID,
+			return db.Merchant{
+				ID:               merchant.ID,
+				OwnerUserID:      merchant.OwnerUserID,
 				StorefrontImages: storedStorefrontImages,
 			}, nil
 		})

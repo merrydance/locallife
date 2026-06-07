@@ -10,15 +10,17 @@ import (
 
 // ApproveMerchantApplicationTxParams contains input parameters for approving merchant application
 type ApproveMerchantApplicationTxParams struct {
-	ApplicationID int64
-	UserID        int64
-	MerchantName  string
-	Phone         string
-	Address       string
-	Latitude      pgtype.Numeric
-	Longitude     pgtype.Numeric
-	RegionID      int64
-	AppData       []byte // JSON 格式的申请数据
+	ApplicationID     int64
+	UserID            int64
+	MerchantName      string
+	Phone             string
+	Address           string
+	Latitude          pgtype.Numeric
+	Longitude         pgtype.Numeric
+	RegionID          int64
+	AppData           []byte // JSON 格式的申请数据
+	StorefrontImages  []byte
+	EnvironmentImages []byte
 }
 
 // ApproveMerchantApplicationTxResult contains the result of approval transaction
@@ -42,27 +44,32 @@ func (store *SQLStore) ApproveMerchantApplicationTx(ctx context.Context, arg App
 		var err error
 
 		// Step 1: 更新申请状态为 approved
-		result.Application, err = q.ApproveMerchantApplication(ctx, arg.ApplicationID)
+		result.Application, err = q.ApproveMerchantApplication(ctx, ApproveMerchantApplicationParams{
+			ID:     arg.ApplicationID,
+			UserID: arg.UserID,
+		})
 		if err != nil {
 			return fmt.Errorf("approve application: %w", err)
 		}
 
 		// Step 2: 创建或更新商户记录
-		existingMerchant, err := q.GetMerchantByOwner(ctx, arg.UserID)
+		existingMerchant, err := q.GetMerchantOwnedByUser(ctx, arg.UserID)
 		if err != nil {
 			if errors.Is(err, ErrRecordNotFound) {
 				// 创建新商户
 				result.Merchant, err = q.CreateMerchant(ctx, CreateMerchantParams{
-					OwnerUserID:     arg.UserID,
-					Name:            arg.MerchantName,
-					Description:     pgtype.Text{},
-					Phone:           arg.Phone,
-					Address:         arg.Address,
-					Latitude:        arg.Latitude,
-					Longitude:       arg.Longitude,
-					Status:          "approved",
-					ApplicationData: arg.AppData,
-					RegionID:        arg.RegionID,
+					OwnerUserID:       arg.UserID,
+					Name:              arg.MerchantName,
+					Description:       pgtype.Text{},
+					Phone:             arg.Phone,
+					Address:           arg.Address,
+					Latitude:          arg.Latitude,
+					Longitude:         arg.Longitude,
+					Status:            "approved",
+					ApplicationData:   arg.AppData,
+					RegionID:          arg.RegionID,
+					StorefrontImages:  arg.StorefrontImages,
+					EnvironmentImages: arg.EnvironmentImages,
 				})
 			} else {
 				return fmt.Errorf("get existing merchant: %w", err)
@@ -87,6 +94,13 @@ func (store *SQLStore) ApproveMerchantApplicationTx(ctx context.Context, arg App
 						Status: "approved",
 					})
 				}
+			}
+			if err == nil {
+				result.Merchant, err = q.UpdateMerchantShopImages(ctx, UpdateMerchantShopImagesParams{
+					ID:                result.Merchant.ID,
+					StorefrontImages:  arg.StorefrontImages,
+					EnvironmentImages: arg.EnvironmentImages,
+				})
 			}
 		}
 		if err != nil {

@@ -959,7 +959,7 @@ func TestGenerateTableQRCodeAPI(t *testing.T) {
 			wechatClient := mockwechat.NewMockWechatClient(ctrl)
 			tc.buildStubs(store, wechatClient)
 
-			server := newTestServerWithWechat(t, store, wechatClient)
+			server, _ := newTestServerForMediaWithWechat(t, store, wechatClient)
 
 			var url string
 			if tc.name == "InvalidTableID_NonNumeric" {

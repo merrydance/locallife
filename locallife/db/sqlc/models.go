@@ -1111,6 +1111,10 @@ type Merchant struct {
 	LogoMediaAssetID pgtype.Int8 `json:"logo_media_asset_id"`
 	// 是否按营业时间自动切换营业状态
 	AutoOpenByBusinessHours bool `json:"auto_open_by_business_hours"`
+	// Live merchant storefront image URL array JSON,最多3张
+	StorefrontImages []byte `json:"storefront_images"`
+	// Live merchant environment image URL array JSON,最多5张
+	EnvironmentImages []byte `json:"environment_images"`
 }
 
 // Android merchant app native push device registry
