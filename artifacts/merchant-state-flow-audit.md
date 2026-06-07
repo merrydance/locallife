@@ -248,11 +248,11 @@ Primary backend scope:
 57. Add backend media ownership/category validation for table image binding.
 58. Decide and enforce the future-reservation contract for table disable/update, matching or deliberately differing from delete behavior.
 59. Add end-to-end coverage for merchant reservation create/edit -> dining-session open -> table occupied -> close/manual release -> reservation completed and table available.
-60. Add a client/server idempotency contract for manual member balance adjustment, preferably aligned with merchant offline recharge's `Idempotency-Key` behavior, and return a durable `transaction_id`.
-61. Normalize membership transaction type display across backend and Mini Program: either map `adjustment_credit/debit` explicitly or change the backend contract to a stable product-level type plus direction.
-62. Fix merchant member list pagination metadata with a real total count or explicit `has_more`, then align the Mini Program list logic.
-63. Fix order cancellation membership rollback to preserve or reconstruct `principal_balance` and `bonus_balance`, then add a regression proving `balance = principal_balance + bonus_balance` after cancellation.
-64. Add focused API/logic/DB tests for manual balance adjustment success, insufficient-balance failure, concurrent adjustments, manager permission, and replay semantics.
+60. Fixed 2026-05-31 in `62839932`: manual member balance adjustment now has a client/server idempotency contract aligned with merchant offline recharge's `Idempotency-Key` behavior. Remaining optional enhancement: return the durable adjustment `transaction_id` from the adjustment response if the Mini Program needs to show an audit anchor immediately after success.
+61. Fixed 2026-05-31 in `62839932`: membership transaction type display now maps `adjustment_credit` and `adjustment_debit` in the Mini Program.
+62. Fixed 2026-05-31 in `62839932`: merchant member list pagination metadata now uses the backend full matched `total`, and the Mini Program derives `hasMore` from that total.
+63. Fixed 2026-05-31 in `62839932`: order cancellation membership rollback now preserves `principal_balance` and `bonus_balance`, with regression proof that `balance = principal_balance + bonus_balance` after cancellation.
+64. Fixed 2026-05-31 in `62839932`: focused API/logic/DB tests cover manual adjustment success, insufficient-balance failure, idempotency-key requirement, same-key replay, conflicting replay, and route-merchant authorization. Remaining product decision: whether managers should keep permission to manually mutate stored-value balance, and add/adjust tests if that policy changes.
 65. Retire or quarantine unused direct membership balance SQL writers unless a current runtime path needs them with ledger protection.
 66. Fixed 2026-06-06: combo create/update/toggle/direct-add, public detail/list/scan/search/recommendation readers, cart add/update, direct order creation, and reservation item validation enforce the orderable-child invariant for online combos.
 67. Fixed 2026-06-06: focused API, logic, and sqlc regressions prove customer-facing combo readers and validators do not expose/order missing, soft-deleted, offline, or unavailable child dishes.
