@@ -1800,7 +1800,7 @@ func TestBaofuAccountMerchantReportServiceRecoverTreatsRepeatBindAsSucceededWhen
 	require.Equal(t, db.MerchantStatusActive, store.merchants[88].Status)
 }
 
-func TestBaofuAccountMerchantReportServiceRecoverDoesNotTreatRepeatBindAsSucceededWithoutPreviousCommand(t *testing.T) {
+func TestBaofuAccountMerchantReportServiceRecoverTreatsRepeatBindAsSucceededAfterCurrentCommandIsRecorded(t *testing.T) {
 	store := newFakeBaofuAccountOnboardingStore()
 	flow := db.BaofuAccountOpeningFlow{
 		ID:               704,
@@ -1834,13 +1834,14 @@ func TestBaofuAccountMerchantReportServiceRecoverDoesNotTreatRepeatBindAsSucceed
 		Business:          "758-2",
 	})
 
-	_, err := service.RecoverMerchantReportFlow(context.Background(), flow)
+	updated, err := service.RecoverMerchantReportFlow(context.Background(), flow)
 
-	reqErr := assertRequestError(t, err)
-	require.Equal(t, http.StatusBadGateway, reqErr.Status)
-	require.EqualError(t, reqErr.Err, "微信支付授权目录绑定失败，请联系平台处理后重试")
-	require.Equal(t, db.BaofuMerchantReportAppletAuthStatePending, store.merchantReports[0].AppletAuthState)
-	require.Equal(t, db.MerchantStatusApproved, store.merchants[88].Status)
+	require.NoError(t, err)
+	require.Equal(t, db.BaofuAccountOpeningStateReady, updated.State)
+	require.Equal(t, db.BaofuMerchantReportAppletAuthStateSucceeded, store.merchantReports[0].AppletAuthState)
+	require.Equal(t, db.MerchantStatusActive, store.merchants[88].Status)
+	require.NotEmpty(t, store.commands)
+	require.Equal(t, db.ExternalPaymentCommandTypeBaofuBindSubConfig, store.commands[len(store.commands)-1].CommandType)
 }
 
 func TestBaofuAccountMerchantReportServiceRecoverProviderErrorReturnsSafeContext(t *testing.T) {

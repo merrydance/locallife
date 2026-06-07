@@ -112,6 +112,34 @@ func TestBaofuMerchantReportServiceRecoversProcessingReportAndBindsApplet(t *tes
 	require.Equal(t, "wx1234567890abcdef", client.bindRequest.AuthContent)
 }
 
+func TestBaofuMerchantReportServiceTreatsRepeatBindAsSucceededAfterCurrentCommandIsRecorded(t *testing.T) {
+	store := &fakeBaofuMerchantReportStore{
+		report: db.BaofuMerchantReport{
+			ID:              80,
+			OwnerType:       db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:         123,
+			ReportType:      db.BaofuMerchantReportTypeWechat,
+			ReportNo:        "MR202605040080",
+			BctMerID:        "CM202605040080",
+			ReportState:     db.BaofuMerchantReportStateSucceeded,
+			AppletAuthState: db.BaofuMerchantReportAppletAuthStatePending,
+			SubMchID:        pgtype.Text{String: "1900000180", Valid: true},
+		},
+	}
+	client := fakeMerchantReportClient{
+		bindErr: baofu.NewProviderBusinessError("bind_sub_config", "BIND_REPEAT_ERROR", "绑定关系已存在"),
+	}
+	service := NewBaofuMerchantReportService(store, &client, BaofuMerchantReportConfig{CollectMerchantID: "100000", CollectTerminalID: "200000", MiniProgramAppID: "wx1234567890abcdef"})
+
+	result, err := service.RecoverWechatMerchantReport(context.Background(), store.report)
+
+	require.NoError(t, err)
+	require.Equal(t, db.BaofuMerchantReportAppletAuthStateSucceeded, result.AppletAuthState)
+	require.Equal(t, "1900000180", client.bindRequest.SubMchID)
+	require.NotEmpty(t, store.commands)
+	require.Equal(t, db.ExternalPaymentCommandTypeBaofuBindSubConfig, store.commands[len(store.commands)-1].CommandType)
+}
+
 func TestMapBaofuMerchantReportProviderErrorKeepsRawTextOutOfPublicMessage(t *testing.T) {
 	providerErr := &baofu.ProviderError{
 		Operation:       "merchant_report",

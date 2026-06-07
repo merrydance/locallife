@@ -25,6 +25,8 @@ import (
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/worker"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -996,6 +998,40 @@ func TestBaofuPaymentCallbackQueriesBaofooWhenTradeNoOnlyIsNotPersisted(t *testi
 	require.Equal(t, []int64{603}, taskRecorder.applicationIDs)
 }
 
+func TestBaofuPaymentCallbackLogsProviderFieldsWhenFallbackQueryFails(t *testing.T) {
+	var logs bytes.Buffer
+	previousLogger := log.Logger
+	log.Logger = zerolog.New(&logs)
+	t.Cleanup(func() { log.Logger = previousLogger })
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	server.SetBaofuAggregatePaymentNotificationParserForTest(fakeBaofuPaymentTradeNoOnlyParser{})
+	queryClient := &fakeBaofuAggregateQueryClient{
+		paymentErr: baofu.NewProviderBusinessError("order_query", "ORDER_NOT_EXIST", "raw upstream card 6222020202020202"),
+	}
+	server.baofuAggregateClient = queryClient
+	server.config.BaofuCollectMerchantID = "102004465"
+	server.config.BaofuCollectTerminalID = "200005200"
+
+	store.EXPECT().GetPaymentOrderByTransactionId(gomock.Any(), pgtype.Text{String: "BFPAY_4002", Valid: true}).Return(db.PaymentOrder{}, db.ErrRecordNotFound)
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/v1/webhooks/baofu/payment", bytes.NewBufferString(`{"notifyId":"BFN_4002"}`))
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	body := logs.String()
+	require.Contains(t, body, `"provider_operation":"order_query"`)
+	require.Contains(t, body, `"provider_capability":"baofu"`)
+	require.Contains(t, body, `"upstream_code":"ORDER_NOT_EXIST"`)
+	require.Contains(t, body, `"upstream_message_sanitized"`)
+	require.NotContains(t, body, "6222020202020202")
+	require.Contains(t, body, "************0202")
+}
+
 func TestBaofuPaymentCallbackFallbackRejectsNotificationIdentityMismatch(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -1169,6 +1205,38 @@ func TestBaofuShareCallbackQueriesBaofooWhenOutTradeNoMissing(t *testing.T) {
 	require.Equal(t, "102004465", queryClient.lastShareQuery.MerchantID)
 	require.Equal(t, "200005200", queryClient.lastShareQuery.TerminalID)
 	require.Equal(t, []int64{803}, taskRecorder.applicationIDs)
+}
+
+func TestBaofuShareCallbackLogsProviderFieldsWhenFallbackQueryFails(t *testing.T) {
+	var logs bytes.Buffer
+	previousLogger := log.Logger
+	log.Logger = zerolog.New(&logs)
+	t.Cleanup(func() { log.Logger = previousLogger })
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	server.SetBaofuAggregatePaymentNotificationParserForTest(fakeBaofuShareTradeNoOnlyParser{})
+	queryClient := &fakeBaofuAggregateQueryClient{
+		shareErr: baofu.NewProviderBusinessError("share_query", "ORDER_NOT_EXIST", "raw upstream appid wx1234567890abcdef"),
+	}
+	server.baofuAggregateClient = queryClient
+	server.config.BaofuCollectMerchantID = "102004465"
+	server.config.BaofuCollectTerminalID = "200005200"
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/v1/webhooks/baofu/share", bytes.NewBufferString(`{"notifyId":"BFSN_3003"}`))
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	body := logs.String()
+	require.Contains(t, body, `"provider_operation":"share_query"`)
+	require.Contains(t, body, `"provider_capability":"baofu"`)
+	require.Contains(t, body, `"upstream_code":"ORDER_NOT_EXIST"`)
+	require.Contains(t, body, `"upstream_message_sanitized"`)
+	require.NotContains(t, body, "wx1234567890abcdef")
+	require.Contains(t, body, "appid=<redacted>")
 }
 
 func TestBaofuShareCallbackFallbackRejectsNotificationIdentityMismatch(t *testing.T) {
@@ -1780,6 +1848,8 @@ func (fakeBaofuShareTradeNoOnlyParser) ParseRefundNotification(body []byte) (*ba
 type fakeBaofuAggregateQueryClient struct {
 	outTradeNo       string
 	shareOutTradeNo  string
+	paymentErr       error
+	shareErr         error
 	lastPaymentQuery aggregatecontracts.PaymentQueryRequest
 	lastShareQuery   aggregatecontracts.ShareQueryRequest
 }
@@ -1790,6 +1860,9 @@ func (c *fakeBaofuAggregateQueryClient) CreateUnifiedOrder(context.Context, aggr
 
 func (c *fakeBaofuAggregateQueryClient) QueryPayment(_ context.Context, req aggregatecontracts.PaymentQueryRequest) (*aggregatecontracts.UnifiedOrderResult, error) {
 	c.lastPaymentQuery = req
+	if c.paymentErr != nil {
+		return nil, c.paymentErr
+	}
 	return &aggregatecontracts.UnifiedOrderResult{OutTradeNo: c.outTradeNo, TradeNo: req.TradeNo}, nil
 }
 
@@ -1799,6 +1872,9 @@ func (c *fakeBaofuAggregateQueryClient) CreateProfitSharing(context.Context, agg
 
 func (c *fakeBaofuAggregateQueryClient) QueryProfitSharing(_ context.Context, req aggregatecontracts.ShareQueryRequest) (*aggregatecontracts.ShareResult, error) {
 	c.lastShareQuery = req
+	if c.shareErr != nil {
+		return nil, c.shareErr
+	}
 	return &aggregatecontracts.ShareResult{OutTradeNo: c.shareOutTradeNo, TradeNo: req.TradeNo}, nil
 }
 
