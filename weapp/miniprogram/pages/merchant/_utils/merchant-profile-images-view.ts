@@ -33,6 +33,36 @@ export const SHOP_IMAGES_PERSIST_RETRY_BASE_DELAY_MS = 1500
 export const SHOP_IMAGES_PERSIST_RETRY_MAX_DELAY_MS = 30000
 export const getErrorMessage = getErrorUserMessage
 
+function getErrorStatusCode(error: unknown): number | undefined {
+  if (!error || typeof error !== 'object') {
+    return undefined
+  }
+
+  const knownError = error as ErrorWithSyncStatus
+  const candidates = [knownError.statusCode, knownError.code]
+
+  for (const candidate of candidates) {
+    const numericCode = typeof candidate === 'number' ? candidate : Number(candidate)
+    if (Number.isFinite(numericCode)) {
+      return numericCode >= 40900 && numericCode < 41000 ? 409 : numericCode
+    }
+  }
+
+  return undefined
+}
+
+export function isLogoVersionConflictError(error: unknown): boolean {
+  return getErrorStatusCode(error) === 409
+}
+
+export function getLogoPersistErrorMessage(error: unknown): string {
+  if (isLogoVersionConflictError(error)) {
+    return '资料已被其他操作更新，已恢复原 Logo，请重新上传'
+  }
+
+  return getErrorMessage(error, '上传失败，请重试')
+}
+
 export function normalizeImageRawUrl(rawUrl?: string | null): string {
   return typeof rawUrl === 'string' ? rawUrl.trim() : ''
 }

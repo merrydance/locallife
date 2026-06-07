@@ -6,10 +6,12 @@ import {
   buildUploadRenderImages,
   CONTINUE_SYNC_TOAST,
   getErrorMessage,
+  getLogoPersistErrorMessage,
   getPublicImageUrl,
   hasAnyImages,
   ImageItem,
   isAmbiguousSyncFailure,
+  isLogoVersionConflictError,
   mergeServerAndLocalImages,
   mergeServerAndLocalLogo,
   PROFILE_IMAGES_AUTO_REFRESH_WINDOW_MS,
@@ -72,7 +74,12 @@ Page({
 
   // ==================== 数据加载 ====================
 
-  async loadData(_showLoading = true, force = false, strictApplication = false) {
+  async loadData(
+    _showLoading = true,
+    force = false,
+    strictApplication = false,
+    options: { preferServerLogo?: boolean, suppressRefreshErrorToast?: boolean } = {}
+  ) {
     if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) {
       return
     }
@@ -86,9 +93,10 @@ Page({
       return
     }
 
+    const { preferServerLogo = false, suppressRefreshErrorToast = false } = options
     this.setData({ loading: true })
     try {
-      const currentLogoImage = this.data.logoImage
+      const currentLogoImage = preferServerLogo ? null : this.data.logoImage
       const requestShopImagesGeneration = this._shopImagesGeneration
       const applicationRequest = strictApplication
         ? getMerchantApplication()
@@ -181,6 +189,11 @@ Page({
           initialErrorMessage: message,
           loading: false
         })
+        return
+      }
+
+      if (suppressRefreshErrorToast) {
+        this.setData({ loading: false })
         return
       }
 
@@ -279,7 +292,11 @@ Page({
         hasAnyImages: hasAnyImages(previousLogoImage, this.data.storefrontImages, this.data.environmentImages)
       })
       logger.error('[ProfileImages] Logo 上传失败', err)
-      wx.showToast({ title: getErrorMessage(err, '上传失败，请重试'), icon: 'none' })
+      const shouldRefreshAfterConflict = isLogoVersionConflictError(err)
+      if (shouldRefreshAfterConflict) {
+        void this.loadData(false, true, false, { preferServerLogo: true, suppressRefreshErrorToast: true })
+      }
+      wx.showToast({ title: getLogoPersistErrorMessage(err), icon: 'none' })
     }
   },
 
