@@ -17,6 +17,12 @@ func TestMerchantOpenStatusScheduler_RunOnce(t *testing.T) {
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().AutoCloseMerchants(gomock.Any()).DoAndReturn(
+		func(ctx context.Context) ([]int64, error) {
+			require.NotNil(t, ctx)
+			return nil, nil
+		},
+	)
 	store.EXPECT().SyncMerchantOpenStatusByBusinessHours(gomock.Any()).DoAndReturn(
 		func(ctx context.Context) ([]int64, error) {
 			require.NotNil(t, ctx)
@@ -51,4 +57,33 @@ func (p *testMerchantStatusChangePublisher) PublishMerchantStatusChange(_ contex
 	p.isOpen = isOpen
 	p.source = source
 	return nil
+}
+
+func TestMerchantOpenStatusScheduler_RunOnceAutoClosesExpiredManualStatus(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().AutoCloseMerchants(gomock.Any()).DoAndReturn(
+		func(ctx context.Context) ([]int64, error) {
+			require.NotNil(t, ctx)
+			return []int64{1002}, nil
+		},
+	)
+	store.EXPECT().GetMerchantIsOpen(gomock.Any(), int64(1002)).DoAndReturn(
+		func(ctx context.Context, merchantID int64) (db.GetMerchantIsOpenRow, error) {
+			require.NotNil(t, ctx)
+			require.Equal(t, int64(1002), merchantID)
+			return db.GetMerchantIsOpenRow{ID: merchantID, IsOpen: false}, nil
+		},
+	)
+	store.EXPECT().SyncMerchantOpenStatusByBusinessHours(gomock.Any()).Return(nil, nil)
+
+	publisher := &testMerchantStatusChangePublisher{}
+
+	s := NewMerchantOpenStatusScheduler(store, publisher)
+	s.RunOnce()
+	require.Equal(t, int64(1002), publisher.merchantID)
+	require.False(t, publisher.isOpen)
+	require.Equal(t, "auto_close", publisher.source)
 }

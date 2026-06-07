@@ -1485,6 +1485,47 @@ func createBusinessHourForSyncTest(t *testing.T, merchantID int64, dayOfWeek int
 	return row
 }
 
+func TestAutoCloseMerchantsClosesExpiredManualOpenStatus(t *testing.T) {
+	ctx := context.Background()
+	expiredMerchant := createRandomMerchantForTest(t)
+	futureMerchant := createRandomMerchantForTest(t)
+
+	_, err := testStore.UpdateMerchantIsOpen(ctx, UpdateMerchantIsOpenParams{
+		ID:     expiredMerchant.ID,
+		IsOpen: true,
+		AutoCloseAt: pgtype.Timestamptz{
+			Time:  time.Now().Add(-time.Hour),
+			Valid: true,
+		},
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.UpdateMerchantIsOpen(ctx, UpdateMerchantIsOpenParams{
+		ID:     futureMerchant.ID,
+		IsOpen: true,
+		AutoCloseAt: pgtype.Timestamptz{
+			Time:  time.Now().Add(time.Hour),
+			Valid: true,
+		},
+	})
+	require.NoError(t, err)
+
+	closedMerchantIDs, err := testStore.AutoCloseMerchants(ctx)
+	require.NoError(t, err)
+	require.Contains(t, closedMerchantIDs, expiredMerchant.ID)
+	require.NotContains(t, closedMerchantIDs, futureMerchant.ID)
+
+	expiredStatus, err := testStore.GetMerchantIsOpen(ctx, expiredMerchant.ID)
+	require.NoError(t, err)
+	require.False(t, expiredStatus.IsOpen)
+	require.False(t, expiredStatus.AutoCloseAt.Valid)
+
+	futureStatus, err := testStore.GetMerchantIsOpen(ctx, futureMerchant.ID)
+	require.NoError(t, err)
+	require.True(t, futureStatus.IsOpen)
+	require.True(t, futureStatus.AutoCloseAt.Valid)
+}
+
 // ==================== Merchant Tags Tests ====================
 
 func TestAddMerchantTag(t *testing.T) {

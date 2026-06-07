@@ -13,7 +13,7 @@ import (
 
 const merchantOpenStatusCron = "0 * * * * *"
 
-// MerchantOpenStatusScheduler 根据营业时间自动切换显式开启自动模式的商户营业状态。
+// MerchantOpenStatusScheduler 收敛商户营业状态的定时变化。
 type MerchantOpenStatusScheduler struct {
 	cron      *cron.Cron
 	store     db.Store
@@ -58,20 +58,36 @@ func (s *MerchantOpenStatusScheduler) syncMerchantOpenStatus() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
+	autoClosedMerchantIDs, err := s.store.AutoCloseMerchants(ctx)
+	if err != nil {
+		log.Error().Err(err).Msg("failed to auto close merchants by manual auto_close_at")
+	} else {
+		s.publishMerchantStatusChanges(ctx, autoClosedMerchantIDs, "auto_close")
+	}
+
 	updatedMerchantIDs, err := s.store.SyncMerchantOpenStatusByBusinessHours(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to sync merchant open status by business hours")
 		return
 	}
 
-	if len(updatedMerchantIDs) == 0 {
+	s.publishMerchantStatusChanges(ctx, updatedMerchantIDs, "business_hours")
+
+	if len(autoClosedMerchantIDs) == 0 && len(updatedMerchantIDs) == 0 {
 		return
 	}
 
-	for _, merchantID := range updatedMerchantIDs {
+	log.Info().
+		Int("auto_closed_count", len(autoClosedMerchantIDs)).
+		Int("business_hours_updated_count", len(updatedMerchantIDs)).
+		Msg("synced merchant open status")
+}
+
+func (s *MerchantOpenStatusScheduler) publishMerchantStatusChanges(ctx context.Context, merchantIDs []int64, source string) {
+	for _, merchantID := range merchantIDs {
 		row, err := s.store.GetMerchantIsOpen(ctx, merchantID)
 		if err != nil {
-			log.Error().Err(err).Int64("merchant_id", merchantID).Msg("failed to load merchant status after sync")
+			log.Error().Err(err).Int64("merchant_id", merchantID).Str("source", source).Msg("failed to load merchant status after sync")
 			continue
 		}
 
@@ -81,11 +97,9 @@ func (s *MerchantOpenStatusScheduler) syncMerchantOpenStatus() {
 		}
 
 		if s.publisher != nil {
-			if err := s.publisher.PublishMerchantStatusChange(ctx, merchantID, row.IsOpen, autoCloseAt, "business_hours"); err != nil {
-				log.Error().Err(err).Int64("merchant_id", merchantID).Msg("failed to publish merchant status change after business-hour sync")
+			if err := s.publisher.PublishMerchantStatusChange(ctx, merchantID, row.IsOpen, autoCloseAt, source); err != nil {
+				log.Error().Err(err).Int64("merchant_id", merchantID).Str("source", source).Msg("failed to publish merchant status change after sync")
 			}
 		}
 	}
-
-	log.Info().Int("updated_count", len(updatedMerchantIDs)).Msg("synced merchant open status by business hours")
 }

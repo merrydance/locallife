@@ -21,13 +21,13 @@ This slice does not cover:
 - Business-hours automatic open/close scheduler, except as a second writer to `merchants.is_open`.
 - Order creation rejection when the merchant is closed.
 - Public merchant search/list display of `is_open`.
-- Fixing the discovered `auto_close_at` runtime gap.
+- Product precedence between manual status changes and `auto_open_by_business_hours=true`.
 
 ## Product Invariant
 
 When a merchant manually opens or closes the store, the backend must decide whether the transition is allowed and then write durable merchant state. Opening must be blocked when the merchant is suspended or cannot receive payments. Closing should always be allowed for the resolved merchant. Dashboard state should refresh from backend truth or websocket-triggered reloads.
 
-If `auto_close_at` is accepted as a contract, a runtime scheduler must eventually close the merchant at that time. Current code has the SQL for this but no discovered runtime caller.
+If `auto_close_at` is accepted as a contract, a runtime scheduler must eventually close the merchant at that time. Fixed 2026-06-07: the existing merchant open-status scheduler now calls `AutoCloseMerchants`, reads back changed rows, and publishes `merchant_status_change` with source `auto_close`.
 
 ## Primary Forward Chain
 
@@ -79,7 +79,7 @@ If `auto_close_at` is accepted as a contract, a runtime scheduler must eventuall
 ## Reverse-Reference Findings
 
 - `merchants.is_open` is also written by `SyncMerchantOpenStatusByBusinessHours`, so manual open/close can be overwritten by automatic business-hours mode.
-- `AutoCloseMerchants` SQL exists and mutates `is_open=false` where `auto_close_at <= now()`, but no runtime caller was found outside generated sqlc/mock code.
+- Fixed 2026-06-07: `AutoCloseMerchants` mutates `is_open=false` where `auto_close_at <= now()` and is now called by `MerchantOpenStatusScheduler` before business-hours sync.
 - `GET /status` includes settlement readiness, while `PATCH /status` only returns open status fields and message.
 - Kitchen page subscribes to merchant status websocket and also reads `GET /status`, so it is an important downstream reader.
 - Flutter merchant App uses the same backend truth to gate websocket connection, polling, foreground service, and order list visibility. Its copy calls the closed state "离线打烊" and "当前处于打烊状态".
@@ -90,7 +90,7 @@ If `auto_close_at` is accepted as a contract, a runtime scheduler must eventuall
 - `merchants.auto_close_at`: optional future close time accepted by PATCH.
 - `merchants.auto_open_by_business_hours`: read by `GetMerchantIsOpen`; automatic scheduler uses it to decide whether to control `is_open`.
 - `UpdateMerchantIsOpen`: manual writer for `is_open` and `auto_close_at`.
-- `AutoCloseMerchants`: orphan/incomplete async writer candidate for timed manual close.
+- `AutoCloseMerchants`: timed manual close writer, called by `MerchantOpenStatusScheduler`.
 - `SyncMerchantOpenStatusByBusinessHours`: automatic writer for `is_open` and clears `auto_close_at`.
 
 ## Trust, Authorization, And Tenant Checks
@@ -115,8 +115,8 @@ If `auto_close_at` is accepted as a contract, a runtime scheduler must eventuall
 - Dashboard handles partial refresh failure by retaining previous trusted status.
 - Flutter App collapses status sync requests through `_syncFuture`, ignores stale generations, and resets local working status on logout.
 - Manual mutation publishes websocket source `manual`; dashboard reloads on matching merchant id.
-- `auto_close_at` has no discovered runtime scheduler. If a client sends it, the value can be persisted and returned, but no found job closes the merchant at that time.
-- Business-hours scheduler can clear `auto_close_at` while syncing automatic state.
+- Fixed 2026-06-07: expired `auto_close_at` rows are closed by `MerchantOpenStatusScheduler`, then websocket events are published with source `auto_close`.
+- Business-hours scheduler still runs after timed auto-close in the same scheduler pass and can clear `auto_close_at` while syncing automatic state.
 
 ## Frontend Draft And Backend Rehydration
 
@@ -133,18 +133,19 @@ Observed tests:
 - API tests block opening when Baofoo account/payment channel is not ready.
 - API test verifies GET status includes settlement readiness without leaking contract details.
 - API tests verify websocket publish for manual close and manual open with `auto_close_at`.
+- Scheduler tests cover expired manual `auto_close_at` auto-close publish and business-hours publish.
+- SQLC tests cover `AutoCloseMerchants` closing expired rows, clearing `auto_close_at`, and preserving future auto-close rows.
 - Authorization test denies unauthorized PATCH.
 
 Missing high-value tests:
 
-- Runtime test for `auto_close_at` timed close, currently blocked by no discovered scheduler.
 - Test for manual open while `auto_open_by_business_hours` is enabled and scheduler later disagrees.
 - Frontend/unit coverage for dashboard switch reverting or preserving state on failed PATCH.
 - Flutter tests cover some working-status sync behavior, but this slice did not find a focused test that proves Mini Program and Flutter App status controls converge through the same backend truth.
 
 ## Gaps And Refactor Notes
 
-- `AutoCloseMerchants` is likely zombie or incomplete. Decide whether to wire a scheduler, remove the contract, or remove the API field.
+- Fixed 2026-06-07: `AutoCloseMerchants` is no longer zombie; it is wired into `MerchantOpenStatusScheduler`.
 - Dashboard precheck for payment readiness only runs when `canManageMerchantApplyment` is true; backend still enforces readiness for all opens. This is safe but can lead to a backend-only toast for some roles.
 - Manual and automatic writers should have explicit product semantics: does manual override automatic mode, or does automatic mode always win within the next minute?
 - The Flutter App's "上线营业后才能接收新订单和断线补单" copy is correct only if backend readiness gates, automatic-business-hours overrides, and App polling/websocket state all remain aligned.
@@ -152,11 +153,11 @@ Missing high-value tests:
 ## Branch Exhaustion
 
 - Entry branches checked: Mini Program dashboard switch, dashboard refresh/websocket status handling, kitchen status reader, Flutter App order-list status switch, Flutter offline empty-state open button, App status sync on startup/order receiving, and backend automatic business-hours writer adjacency.
-- Request branches checked: `GET/PATCH /v1/merchants/me/status`, frontend Mini Program wrappers, Flutter `WorkingStatusNotifier.syncFromBackend/setStatus`, backend readiness checks, websocket publish, and orphan `AutoCloseMerchants` SQL.
+- Request branches checked: `GET/PATCH /v1/merchants/me/status`, frontend Mini Program wrappers, Flutter `WorkingStatusNotifier.syncFromBackend/setStatus`, backend readiness checks, websocket publish, and scheduler-called `AutoCloseMerchants` SQL.
 - Backend state branches checked: manual `is_open` write, optional `auto_close_at`, closing path, opening path with food-safety suspension and Baofoo payment readiness, automatic scheduler overwrite, `auto_open_by_business_hours` reader field, and status response readiness fields.
-- Async branches checked: manual websocket source `manual`, dashboard reload on matching event, Flutter sync generation suppression, App order fetch on open, App order clear on close, and automatic scheduler source `business_hours`. No runtime auto-close scheduler was found.
+- Async branches checked: manual websocket source `manual`, timed auto-close scheduler source `auto_close`, dashboard reload on matching event, Flutter sync generation suppression, App order fetch on open, App order clear on close, and automatic scheduler source `business_hours`.
 - Failure/retry branches checked: duplicate dashboard switch guard, Flutter `_updateFuture` guard, last-write-wins PATCH, failed opening readiness precheck/backend error, partial status refresh retaining trusted data, stale Flutter sync generation, logout reset, and automatic scheduler race after manual write.
 - Reader/consumer branches checked: dashboard, kitchen, Flutter order receiving/polling/websocket, public/order availability readers, business-hours scheduler, and settlement readiness prechecks.
 - Authorization/tenant branches checked: Mini Program console access, backend owner/manager profile-write middleware, server-side merchant resolution, readiness enforced on backend opening for all roles, and close allowed without payment readiness.
-- Zombie/unreachable branches checked: `AutoCloseMerchants` mutates `is_open=false` but has no discovered caller; `auto_close_at` can be accepted/returned without runtime close; dashboard readiness precheck is role-gated while backend enforces universally.
-- Test-proof gaps checked: existing tests cover readiness gates, status GET readiness fields, websocket publish, and auth denial. Missing proof remains for timed `auto_close_at`, manual-open versus auto scheduler semantics, dashboard failure-state UI, and cross-client Mini Program/App convergence.
+- Zombie/unreachable branches checked: `AutoCloseMerchants` was repaired on 2026-06-07 and is now called by the scheduler; dashboard readiness precheck remains role-gated while backend enforces universally.
+- Test-proof gaps checked: existing tests cover readiness gates, status GET readiness fields, websocket publish, auth denial, timed `auto_close_at` scheduler publish, and `AutoCloseMerchants` SQL semantics. Missing proof remains for manual-open versus auto scheduler semantics, dashboard failure-state UI, and cross-client Mini Program/App convergence.
