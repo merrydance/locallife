@@ -123,14 +123,19 @@ export function buildCheckoutCartView(cart: CheckoutCartResponse): CartView {
   }
 }
 
-export function buildPaymentMethods(memberBalance: number, memberBalanceDisplay: string): PaymentMethodView[] {
+export function buildPaymentMethods(
+  memberBalance: number,
+  memberBalanceDisplay: string,
+  paymentAssessment?: PaymentAssessmentItem | null
+): PaymentMethodView[] {
+  const balanceDisabled = memberBalance <= 0 || paymentAssessment?.is_balance_payable === false
   return [
     { id: 'wechat_pay', name: '微信支付', icon: 'logo-wechat', disabled: false },
     {
       id: 'balance',
       name: `储值支付 (¥${memberBalanceDisplay})`,
       icon: 'wallet',
-      disabled: memberBalance <= 0
+      disabled: balanceDisabled
     }
   ]
 }
@@ -145,7 +150,13 @@ export function buildCheckoutRenderState(params: {
 }) {
   const processedCalculation = buildCalculationView(params.calculation)
   const processedCart = buildCheckoutCartView(params.cart)
+  const balanceMethodDisabled =
+    params.memberBalance <= 0 || processedCalculation.payment_assessment?.is_balance_payable === false
   const balanceInsufficient = params.memberBalance < params.calculation.total_amount
+  const selectedPaymentMethod =
+    params.selectedPaymentMethod === 'balance' && (balanceMethodDisabled || balanceInsufficient)
+      ? 'wechat_pay'
+      : params.selectedPaymentMethod
 
   return {
     merchantInfo: {
@@ -155,7 +166,7 @@ export function buildCheckoutRenderState(params: {
     cart: processedCart,
     calculation: processedCalculation,
     balanceInsufficient,
-    paymentMethods: buildPaymentMethods(params.memberBalance, params.memberBalanceDisplay),
-    selectedPaymentMethod: balanceInsufficient ? 'wechat_pay' : params.selectedPaymentMethod
+    paymentMethods: buildPaymentMethods(params.memberBalance, params.memberBalanceDisplay, processedCalculation.payment_assessment),
+    selectedPaymentMethod
   }
 }
