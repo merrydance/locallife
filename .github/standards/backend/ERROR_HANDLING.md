@@ -250,6 +250,6 @@ Did the failure originate in logic/?
 - [ ] No `NewRequestError(http.StatusInternalServerError, ...)` or `NewRequestError(http.StatusServiceUnavailable, ...)` in `logic/`
 - [ ] No `ctx.JSON(5xx, errorResponse(...))` in `api/` — must use `internalError(ctx, err)` for all 5xx
 - [ ] For `502`/`503`, no `errorResponse(err)` with raw internal/provider errors — use `loggedServerError(...)` with a stable public message
-- [ ] No upstream error text (vendor API, third-party service) concatenated into client-visible strings
+- [ ] No raw or unstable upstream error text (vendor API, third-party service) concatenated into client-visible strings; user-actionable provider validation reasons are exposed only through an explicit classifier/sanitizer
 - [ ] No `log.Error/Warn` in logic/ followed immediately by `return ..., err` for the same error (double logging)
 - [ ] Workers use `log.Error` at the decision point and return the error to the Asynq framework for retry handling

@@ -125,7 +125,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 | 退款状态 | `refundState/state` | `SUCCESS/REFUND/REFUND_ERROR/ABNORMAL` | `success/processing/failed/unknown` | 查询结果未知值归 `unknown`；回调 `refundState` 缺省时按必填 `resultCode=SUCCESS/FAIL` 归一，非官方枚举拒绝解析 | `TestNormalizeRefundTerminalStatus`、`TestParserParseRefundNotificationFallsBackToOfficialResultCodeWhenStateAbsent` |
 | 聚合商户报备状态 | `reportState` | `SUCCESS/FAIL/PROCESSING` | `succeeded/failed/processing` | 未知值归 `unknown`，不得进入支付 readiness | `TestNormalizeMerchantReportState`、`TestBaofuPaymentReadinessRequiresMerchantSubMchIDAndAppletAuth` |
 | 绑定授权目录 | `resultCode/errCode/errMsg` 与本地 `applet_auth_state` | `SUCCESS` 成功，其余失败/待确认 | 成功才写 `applet_auth_state=succeeded`；失败写 failed 并保留脱敏 code/message | 未成功不允许 `unified_order`，只返回产品语义“微信支付通道待开通” | `TestBaofuMerchantReportServiceBindsAppletAfterReportSuccess`、`TestPaymentOrderServiceCreatePaymentOrder_BaofuWechatChannelNotReadyFailsBeforeClientCall` |
-| 错误码前端语义 | `ProviderError.UpstreamCode/UpstreamMessage` | 官方错误码、未知错误码、HTTP/解析错误 | `ClassifyBaofuError` 归类为资料需修改、平台配置、可重试、人工处理 | `UpstreamMessage` 只留在 `ProviderError` 供日志/运营诊断，`Frontend.Message` 不拼接上游原文 | `TestClassifyBaofuOfficialErrorTables`、`TestProviderErrorKeepsUpstreamMessageOutOfFrontendGuidance` |
+| 错误码前端语义 | `ProviderError.UpstreamCode/UpstreamMessage` | 官方错误码、未知错误码、HTTP/解析错误 | `ClassifyBaofuError` 归类为资料需修改、平台配置、可重试、人工处理 | `UpstreamMessage` 保留在 `ProviderError` 供日志/运营诊断；用户可处理错误可通过统一 classifier/sanitizer 拼入 `Frontend.Message`，但不得暴露证件、银行卡、手机号、loginNo、contractNo、merId/terId/memberId/subMchId、appid 或 raw payload | `TestClassifyBaofuOfficialErrorTables`、`TestBaofuUserVisibleMessageIncludesActionableProviderReason`、`TestBaofuUserVisibleMessageRedactsSensitiveProviderReason`、`TestBaofuUserVisibleUpstreamReasonRejectsInternalIdentifiers` |
 
 ## 3. 官方入口地址
 
@@ -487,7 +487,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 
 | 文档 | 地址 | 本地覆盖 | 缺口 |
 | --- | --- | --- | --- |
-| 账户错误码 | https://doc.mandao.com/docs/bct/bct-1fjpm4fpns79f | C3：已把官方页列出的开户参数错误、业务异常错误码、开户异步通知错误码按安全前端语义归类，并对 union-gw `retCode` 业务失败做 `ProviderError` fail-closed；生产曾观测到非官方 `BF0020`，本地只作为 drift evidence 保留诊断快照，不把它列入官方错误码真值。 | 资料字段级修复指引和沙箱错误样例仍待补；C4 前不得宣称真实错误码已验证；再次出现 `BF0020` 时需用 `raw_snapshot.provider_diagnostic.source_path`、`ret_code`、`top_error_code`、`sys_resp_code` 向宝付确认来源。 |
+| 账户错误码 | https://doc.mandao.com/docs/bct/bct-1fjpm4fpns79f | C3：已把官方页列出的开户参数错误、业务异常错误码、开户异步通知错误码按安全前端语义归类，并对 union-gw `retCode` 业务失败做 `ProviderError` fail-closed；生产曾观测到非官方 `BF0020`，本地按用户可处理的资料错误分类并保留脱敏诊断快照，同时仍把它作为 drift evidence，不把它列入官方错误码真值。 | 资料字段级修复指引和沙箱错误样例仍待补；C4 前不得宣称真实错误码已验证；再次出现 `BF0020` 时需用 `raw_snapshot.provider_diagnostic.source_path`、`ret_code`、`top_error_code`、`sys_resp_code` 和脱敏后的上游失败原因向宝付确认来源。 |
 | 聚合支付错误码 | https://doc.mandao.com/docs/bct/bct-1f9qrfsj2fcbu | C3：已把官方页列出的 `INVALID_PARAMETER/SYSTEM_BUSY/UNOPENED_PRODUCT/ORDER_EXIST/MERCHANT_NOT_REPORT/RISK_REFUSED` 等错误码归类，并对聚合支付/报备 public envelope `resultCode != SUCCESS` 做 `ProviderError` fail-closed | 沙箱错误样例、响应验签/数字信封和真实渠道错误组合仍待补。 |
 | 产品类型 | https://doc.mandao.com/docs/bct/bct-1f9qrdjnaqra5 | C1：`SHARING` | 未限制其他产品类型。 |
 | 支付方式 | https://doc.mandao.com/docs/bct/bct-1f9qrdro3gtv1 | C1：`WECHAT_JSAPI` | 未建完整支付方式枚举和条件必填矩阵。 |
@@ -577,7 +577,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 | C-007 | 已本地修复，sandbox 已验证请求形态 | `locallife/logic/baofu_payment_order_route.go` 已通过 `merchantBaofuReadinessForPayment` 取商户报备 `sub_mch_id`；`CreateBaofuWechatJSAPIOrderInput` 字段已改 `MerchantSubMchID` | 旧普通服务商 `txResult.SubMchID` 来源已移除，API/logic readiness 不再读取 `baofu_account_bindings.wechat_sub_mch_id`；sandbox 已验证报备返回 `subMchId`、APPLET 绑定和按环境省略 wire `subMchId` 的统一下单形态，真实支付仍需生产首单 | 生产环境继续强制使用报备返回的 `unified_order.subMchId`。 |
 | C-008 | C3 本地修复，待沙箱 | 已新增 `order_refund`、`refund_query`、`order_close` DTO/client、退款通知 parser、退款状态映射、API callback、退款查询恢复 scheduler 和分账前退款业务接入 | 首版“分账前退款、分账后不退款”已在本地 fail-closed；fake `order_refund` 沙箱探针暴露并修复 `resultCode=SUCCESS` + `errCode=ORDER_NOT_EXIST` 误判成功问题；仍缺真实验签/数字信封、真实退款查询/回调证据 | Task 12/C4 补沙箱/生产首单证据；响应验签/数字信封在 C-004/C-011 跟进。 |
 | C-009 | 部分修复，待 service/client 切换 | 已新增 `YuanStringToFen` / `FenToYuanString` 并覆盖 2 位小数校验 | 转换 helper 已在契约包，余额/提现真实 client 仍需集中调用 | Task 8/提现服务切换时禁止业务层散落金额转换。 |
-| C-010 | C3 本地修复，待沙箱样例 | `locallife/baofu/errors.go` 已覆盖官方账户错误码页和聚合支付错误码页；`locallife/baofu/client.go` 已在账户 `retCode` 失败、聚合支付/报备 `resultCode != SUCCESS` 时返回 `ProviderError`，并保留上游原文只在 provider error/log 边界 | 前端可获得安全中文语义，不暴露上游原文、证件、银行卡、手机号、`contractNo`、`sharingMerId`、`subMchId` 或 raw payload；沙箱错误样例和真实渠道组合仍待补 | Task 12/C4 补真实错误样例、API handler 边界日志验证和 evidence。 |
+| C-010 | C3 本地修复，待沙箱样例 | `locallife/baofu/errors.go` 已覆盖官方账户错误码页和聚合支付错误码页；`locallife/baofu/client.go` 已在账户 `retCode` 失败、聚合支付/报备 `resultCode != SUCCESS` 时返回 `ProviderError`；上游失败原因内部以脱敏字段记录，用户可处理原因经统一 classifier/sanitizer 后可进入 `Frontend.Message` 或开户失败状态 | 前端可获得安全中文语义和可处理的具体原因；仍不得暴露 raw payload、证件、银行卡、手机号、`loginNo`、`contractNo`、`sharingMerId`、`subMchId`、`merId/terId/memberId`、`appid` 等内部或敏感字段；沙箱错误样例和真实渠道组合仍待补 | Task 12/C4 补真实错误样例、API handler 边界日志验证和 evidence。 |
 | C-011 | C3 局部，部分正向沙箱 smoke | `locallife/baofu/account/client.go` 已用 union-gw 官方 URL/query/encrypted content；`aggregatepay`、`merchantreport` concrete HTTP client 已有；账户查询/余额、报备/授权、`unified_order` 和 `order_query` 已打到测试地址并解析脱敏响应；主业务 API runtime/worker/scheduler 已防止宝付启用时回退普通服务商 | 提现真实资金动作、支付/分账/退款回调、真实分账/退款和聚合/报备响应验签/数字信封完整验证仍待补 | C4 前继续补回调证据、真实错误样例和生产首单真实支付链路。 |
 | C-012 | 已本地修复，待产品验收 | `merchantBaofuReadinessForPayment` 已返回“商户微信支付通道待开通，暂不能创建微信生态支付订单”，API runtime 切换测试覆盖主业务宝付与直连支付边界 | 旧“微信特约商户进件”语义已移除；仍需前端/运营最终文案验收 | 沙箱联调和上线前检查中继续确认用户侧只看到产品语义，不暴露 report/auth/subMchId 内部细节。 |
 | C-013 | C3 本地修复，待沙箱 | 整体文档复核发现 `merchant_report.reportInfo.address_info` 官方字段为 `province_code/city_code/district_code/address`，`bankcard_info` 官方字段为 `card_no/card_name/bank_branch_name` 且 `bank_branch_name` 可选；本地曾误用 `province/city/district/locationPoint` 与 `account_name/account_no/bank_name` 并强制分行必填 | 若不修复，真实 `merchant_report` 可能因字段名漂移被宝付/渠道拒绝，或错误要求用户补充分行信息 | 已修复 DTO JSON tag、必填校验、序列化测试和静态漂移 guard；下一步用沙箱 `merchant_report` 验证真实报备。 |
@@ -592,7 +592,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 4. `sharing_mer_id` 只能由官方开户/查询结果解析出的开户返回二级商户号写入；业务层不得用 `subMchId/openid/collect merchant id/db contract_no` 兜底写入，任何新增兜底都必须有失败测试。
 5. `subMchId` 只能由聚合商户报备成功结果写入支付通道 readiness；支付创建只读取“最终选定 subMchId”，不得从普通服务商 `txResult.SubMchID` 继承。
 6. 回调 parser 必须用官方字段名和 ACK 形态测试；重复通知必须先落 fact 再幂等应用。
-7. 错误日志只在一个边界记录上游代码、接口名、脱敏流水号和内部原因；前端只收到安全中文语义，不暴露 `reportNo/bctMerId/subMchId/sharingMerId/contractNo` 原值、证件、银行卡、手机号、签名或 raw payload。
+7. 错误日志只在一个边界记录上游代码、接口名、脱敏流水号和内部原因；前端只收到安全中文语义。用户可处理错误可以展示经统一 classifier/sanitizer 处理后的具体原因，但不得暴露 `reportNo/bctMerId/subMchId/sharingMerId/contractNo` 原值、证件、银行卡、手机号、签名或 raw payload。
 8. 沙箱联调完成后把请求摘要、响应摘要、回调样例、查询恢复样例、错误样例和测试流水号补回本审计文档；没有证据仍标记“未做宝付测试地址联调”。
 
 ## 13. 测试地址联调状态

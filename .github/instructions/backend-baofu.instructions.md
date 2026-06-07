@@ -25,7 +25,7 @@ Before implementing or reviewing any Baofoo/Baofu account, aggregate payment, me
 ## Integration Boundary
 
 - Keep Baofoo provider transport, envelope, signing, DTOs, parsers, provider error mapping, and provider-specific validation inside `locallife/baofu/**`.
-- Do not let Baofoo DTOs, raw upstream payloads, signatures, certificate material, full identifiers, bank cards, identity numbers, or provider error text leak into logic, API responses, frontend state, or unsafe logs.
+- Do not let Baofoo DTOs, raw upstream payloads, signatures, certificate material, full identifiers, bank cards, identity numbers, or unsafe provider error text leak into logic, API responses, frontend state, or unsafe logs. User-actionable provider failure reasons may reach frontend semantics only after `locallife/baofu` classification and sanitization; raw payloads, internal IDs, credentials, and unstable diagnostics must remain internal.
 - Treat official docs as contract truth. Sandbox, production logs, Java demo code, and smoke scripts are evidence only unless the domain source matrix records a provider-confirmed rule.
 - Do not implement by analogy from WeChat payment, old Baofoo demos, or nearby DTOs. Check the official page row and field matrix first.
 - When adding or changing a provider field, update DTO/parser/validator tests and the matrix row in the same change.

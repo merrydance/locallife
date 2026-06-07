@@ -94,7 +94,7 @@ Provider errors must be classified and mapped deliberately.
 
 - Unexpected provider failures, malformed payloads, signature failures, unknown enums, timeout, and 5xx/transport failures must reach one structured logging boundary with enough context to diagnose the provider, endpoint, capability group, correlation id, local object id, and error class.
 - Logs must not include secrets, full credentials, certificate material, raw sensitive payloads, identity numbers, bank cards, tokens, or provider fields that domain standards mark as sensitive.
-- Public API responses must use stable LocalLife semantics. Do not expose raw provider text, SQL errors, Go driver errors, stack traces, untranslated English diagnostics, or unstable provider payloads to frontend surfaces.
+- Public API responses must use stable LocalLife semantics. Do not expose raw provider text, SQL errors, Go driver errors, stack traces, untranslated English diagnostics, or unstable provider payloads to frontend surfaces. When a provider returns a user-actionable validation reason, expose it only through a deliberate classifier/sanitizer that removes sensitive/internal fields and preserves a clear next step.
 - Frontend-visible failures must give semantically clear guidance: what failed, whether retry is possible, whether the operator must wait, re-submit, verify configuration, contact support, or check provider-side processing.
 - Business validation errors can map to stable 4xx semantics. Infrastructure, provider, timeout, or malformed-provider-data failures must remain observable and must not be converted into vague business success.
 

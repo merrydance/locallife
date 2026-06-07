@@ -45,7 +45,7 @@ Use `CAPABILITY_GROUP_INDEX.md` to separate current production capability groups
 
 - Baofoo provider contracts live under `locallife/baofu/**`.
 - Business orchestration lives in `locallife/logic/**`, workers, schedulers, callbacks, and persistence.
-- Provider DTOs, upstream error strings, signatures, raw payloads, certificate material, full contract numbers, full secondary merchant IDs, bank cards, identity numbers, and phones must not leak into frontend-visible responses or unsafe logs.
+- Provider DTOs, raw upstream payloads, signatures, certificate material, full contract numbers, full secondary merchant IDs, bank cards, identity numbers, and phones must not leak into frontend-visible responses or unsafe logs. Provider failure reasons may be recorded internally in sanitized form, and user-actionable reasons may be shown to users only through the Baofoo error classifier and sanitizer.
 - Provider request builders must encode the current operating mode explicitly. Do not silently add optional or conditional Baofoo fields because they exist in an official page.
 - If a contract row changes, update the corresponding DTO/parser/validator tests and `make check-baofu-contract` when the drift is mechanically guardable.
 
