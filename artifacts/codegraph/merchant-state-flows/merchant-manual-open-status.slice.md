@@ -136,12 +136,13 @@ Observed tests:
 - Scheduler tests cover expired manual `auto_close_at` auto-close publish and business-hours publish.
 - SQLC tests cover `AutoCloseMerchants` closing expired rows, clearing `auto_close_at`, and preserving future auto-close rows.
 - Authorization test denies unauthorized PATCH.
+- `check:merchant-open-status-cross-client-contract` covers the cross-client Mini Program/App convergence contract: backend `GET/PATCH /v1/merchants/me/status`, shared `is_open` payload/response, Mini Program dashboard wrapper/switch/readback, Flutter `WorkingStatusNotifier.syncFromBackend/setStatus`, Flutter order-list status actions, and Flutter login sync all point at the same backend truth.
+- Flutter `working_status_provider_test.dart` and `working_status_sync_manager_test.dart` cover route/payload/readback behavior for App status sync, status writes, stale in-flight responses, and login-time status sync.
 
 Missing high-value tests:
 
 - Test for manual open while `auto_open_by_business_hours` is enabled and scheduler later disagrees.
 - Frontend/unit coverage for dashboard switch reverting or preserving state on failed PATCH.
-- Flutter tests cover some working-status sync behavior, but this slice did not find a focused test that proves Mini Program and Flutter App status controls converge through the same backend truth.
 
 ## Gaps And Refactor Notes
 
@@ -160,4 +161,4 @@ Missing high-value tests:
 - Reader/consumer branches checked: dashboard, kitchen, Flutter order receiving/polling/websocket, public/order availability readers, business-hours scheduler, and settlement readiness prechecks.
 - Authorization/tenant branches checked: Mini Program console access, backend owner/manager profile-write middleware, server-side merchant resolution, readiness enforced on backend opening for all roles, and close allowed without payment readiness.
 - Zombie/unreachable branches checked: `AutoCloseMerchants` was repaired on 2026-06-07 and is now called by the scheduler; dashboard readiness precheck remains role-gated while backend enforces universally.
-- Test-proof gaps checked: existing tests cover readiness gates, status GET readiness fields, websocket publish, auth denial, timed `auto_close_at` scheduler publish, and `AutoCloseMerchants` SQL semantics. Missing proof remains for manual-open versus auto scheduler semantics, dashboard failure-state UI, and cross-client Mini Program/App convergence.
+- Test-proof gaps checked: existing tests cover readiness gates, status GET readiness fields, websocket publish, auth denial, timed `auto_close_at` scheduler publish, `AutoCloseMerchants` SQL semantics, and cross-client Mini Program/App status-route convergence. Missing proof remains for manual-open versus auto scheduler semantics and dashboard failure-state UI.
