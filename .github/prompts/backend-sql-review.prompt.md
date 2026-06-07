@@ -36,6 +36,10 @@ Request:
 - Review whether schema or migration changes remain forward-compatible and are reflected in callers, tests, and rollout expectations
 - Call out destructive changes, unsafe backfills, lock-risk operations, or rollback assumptions that are not supported by the implementation evidence
 - Flag any migration or schema change that should have been treated as higher risk because it affects production data semantics, locking, or access scope
+- For fixes to an already-applied migration, constraint, index, default, backfill, or schema drift, check that the change uses a new forward migration instead of relying on editing the same version number
+- Require actual database evidence, not only migration source text: `schema_migrations` plus `pg_constraint`, `pg_indexes`, `information_schema`, `pg_get_constraintdef()`, or the matching schema catalog for the changed object
+- Verify both migration paths when relevant: a clean database running all migrations through latest, and an old/weak-schema database continuing with incremental `migrate.Up()`
+- For constraint or data-cleanup migrations, verify that historical dirty data migrates successfully, valid data is preserved, invalid historical data is cleaned or isolated as designed, and new invalid writes are rejected after the migration
 
 Optional context:
 

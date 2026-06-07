@@ -110,6 +110,15 @@
 - 一次性数据修复脚本、回填逻辑或审计工具若需要落在代码库，应明确边界、幂等性、目标数据范围与执行顺序。
 - 不要把临时修复逻辑偷偷塞进常驻 handler、logic 或 query 中掩盖 schema 问题。
 
+### 4.4 已应用 Migration 与真实 Schema 验证
+
+- 不要把“migration 文件当前内容正确”当作“已应用环境已经正确”。`golang-migrate` 按版本号记录，某个版本一旦在测试库、预发或生产应用过，修改同号 migration 文件不会让该环境重放这段 SQL。
+- 如果缺陷涉及已应用 migration、约束、索引、默认值、回填或 schema 漂移，默认使用下一号 forward migration 收敛真实环境；不要依赖编辑同号 migration 来修复已部署或已应用数据库。
+- 提交前必须验证真实数据库状态，而不只读源码文件。至少检查 `schema_migrations`，并按变更类型检查 `pg_constraint`、`pg_indexes`、`information_schema.columns`、`pg_get_constraintdef()` 或等价实际 schema 证据。
+- Migration 验证至少覆盖两条路径：空库从头跑到最新版本；已经应用旧版本或旧弱 schema 的数据库继续执行增量 `migrate.Up()`。如果 bug 来自已应用版本漂移，必须模拟该旧状态或在隔离测试库里复现。
+- 约束或数据清洗类 migration 必须验证：历史脏数据能迁移成功，合法数据被保留，非法历史值按设计清理或隔离，迁移后新的非法写入会被数据库约束拒绝。
+- 不要用手动 reset/drop 本地测试库证明修复。reset 只能证明空库路径，不能证明已应用环境的 forward 收敛路径。
+
 ## 5. 事务、并发与锁
 
 - 多表写入、余额/库存/状态迁移等需要原子性的路径，统一放在 `db/sqlc/tx_*.go` 或明确的 store 事务方法里。
@@ -251,6 +260,7 @@ LIMIT $4;
 - 是否引入了不带作用域的写入、遗漏租户边界或遗漏状态前置条件。
 - 新访问路径是否需要索引、约束或额外事务保护。
 - migration 是否保持前向兼容，是否说明了上线顺序与恢复方式。
+- 若修复已应用 migration 或 schema 漂移，是否新增 forward migration，是否用真实 DB schema 证据验证了空库全量路径和旧库增量路径。
 
 ## 9. 禁止事项
 
