@@ -817,9 +817,9 @@ type createDeliveryPromotionRequest struct {
 }
 
 type updateDeliveryPromotionRequest struct {
-	Name           *string `json:"name"`
-	MinOrderAmount *int64  `json:"min_order_amount"`
-	DiscountAmount *int64  `json:"discount_amount"`
+	Name           *string `json:"name" binding:"omitempty,min=1,max=50"`
+	MinOrderAmount *int64  `json:"min_order_amount" binding:"omitempty,gte=0,lte=100000000"`
+	DiscountAmount *int64  `json:"discount_amount" binding:"omitempty,gt=0,lte=10000000"`
 	ValidFrom      *string `json:"valid_from"`
 	ValidUntil     *string `json:"valid_until"`
 	IsActive       *bool   `json:"is_active"`
@@ -937,14 +937,8 @@ func (server *Server) createDeliveryPromotion(ctx *gin.Context) {
 		return
 	}
 
-	if validUntil.Before(validFrom) {
-		ctx.JSON(http.StatusBadRequest, errorResponse(ErrValidUntilBeforeValidFrom))
-		return
-	}
-
-	// 业务规则：折扣金额不能超过最低订单金额
-	if req.DiscountAmount > req.MinOrderAmount && req.MinOrderAmount > 0 {
-		ctx.JSON(http.StatusBadRequest, errorResponse(ErrDiscountExceedsMinOrder))
+	if err := validateDeliveryPromotionValues(validFrom, validUntil, req.MinOrderAmount, req.DiscountAmount); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
 
@@ -1177,14 +1171,20 @@ func (server *Server) updateDeliveryPromotion(ctx *gin.Context) {
 	arg := db.UpdateDeliveryPromotionParams{
 		ID: uri.ID,
 	}
+	effectiveValidFrom := existingPromo.ValidFrom
+	effectiveValidUntil := existingPromo.ValidUntil
+	effectiveMinOrderAmount := existingPromo.MinOrderAmount
+	effectiveDiscountAmount := existingPromo.DiscountAmount
 
 	if req.Name != nil {
 		arg.Name = pgtype.Text{String: *req.Name, Valid: true}
 	}
 	if req.MinOrderAmount != nil {
+		effectiveMinOrderAmount = *req.MinOrderAmount
 		arg.MinOrderAmount = pgtype.Int8{Int64: *req.MinOrderAmount, Valid: true}
 	}
 	if req.DiscountAmount != nil {
+		effectiveDiscountAmount = *req.DiscountAmount
 		arg.DiscountAmount = pgtype.Int8{Int64: *req.DiscountAmount, Valid: true}
 	}
 	if req.ValidFrom != nil {
@@ -1193,6 +1193,7 @@ func (server *Server) updateDeliveryPromotion(ctx *gin.Context) {
 			ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidValidFromFormat))
 			return
 		}
+		effectiveValidFrom = t
 		arg.ValidFrom = pgtype.Timestamptz{Time: t, Valid: true}
 	}
 	if req.ValidUntil != nil {
@@ -1201,10 +1202,16 @@ func (server *Server) updateDeliveryPromotion(ctx *gin.Context) {
 			ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidValidUntilFormat))
 			return
 		}
+		effectiveValidUntil = t
 		arg.ValidUntil = pgtype.Timestamptz{Time: t, Valid: true}
 	}
 	if req.IsActive != nil {
 		arg.IsActive = pgtype.Bool{Bool: *req.IsActive, Valid: true}
+	}
+
+	if err := validateDeliveryPromotionValues(effectiveValidFrom, effectiveValidUntil, effectiveMinOrderAmount, effectiveDiscountAmount); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
 	}
 
 	promo, err := server.store.UpdateDeliveryPromotion(ctx, arg)
@@ -1247,6 +1254,16 @@ func (server *Server) updateDeliveryPromotion(ctx *gin.Context) {
 	})
 
 	ctx.JSON(http.StatusOK, newDeliveryPromotionResponse(promo))
+}
+
+func validateDeliveryPromotionValues(validFrom, validUntil time.Time, minOrderAmount, discountAmount int64) error {
+	if validUntil.Before(validFrom) {
+		return ErrValidUntilBeforeValidFrom
+	}
+	if discountAmount > minOrderAmount && minOrderAmount > 0 {
+		return ErrDiscountExceedsMinOrder
+	}
+	return nil
 }
 
 // ============================================================================

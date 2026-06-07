@@ -1473,3 +1473,130 @@ func TestDeleteDeliveryPromotionAPI(t *testing.T) {
 		})
 	}
 }
+
+func TestUpdateDeliveryPromotionAPIRejectsInvalidEffectiveValues(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchantForPromo(user.ID)
+	promo := randomDeliveryPromotion(merchant.ID)
+	promo.MinOrderAmount = 2000
+	promo.DiscountAmount = 500
+	promo.ValidFrom = time.Date(2026, 2, 12, 12, 0, 0, 0, time.UTC)
+	promo.ValidUntil = promo.ValidFrom.Add(2 * time.Hour)
+	invalidUntil := promo.ValidFrom.Add(-time.Minute)
+
+	testCases := []struct {
+		name string
+		body gin.H
+	}{
+		{
+			name: "InvalidMergedDateRange",
+			body: gin.H{
+				"valid_until": invalidUntil.Format(time.RFC3339),
+			},
+		},
+		{
+			name: "InvalidMergedDiscountAmount",
+			body: gin.H{
+				"discount_amount": promo.MinOrderAmount + 1,
+			},
+		},
+		{
+			name: "InvalidMergedMinimumAmount",
+			body: gin.H{
+				"min_order_amount": promo.DiscountAmount - 1,
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+			store.EXPECT().
+				GetDeliveryPromotion(gomock.Any(), promo.ID).
+				Times(1).
+				Return(promo, nil)
+			store.EXPECT().
+				UpdateDeliveryPromotion(gomock.Any(), gomock.Any()).
+				Times(0)
+
+			server := newTestServer(t, store)
+			recorder := httptest.NewRecorder()
+
+			data, err := json.Marshal(tc.body)
+			require.NoError(t, err)
+
+			url := fmt.Sprintf("/v1/delivery-fee/merchants/%d/promotions/%d", merchant.ID, promo.ID)
+			request, err := http.NewRequest(http.MethodPatch, url, bytes.NewReader(data))
+			require.NoError(t, err)
+			request.Header.Set("Content-Type", "application/json")
+			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+			server.router.ServeHTTP(recorder, request)
+
+			require.Equal(t, http.StatusBadRequest, recorder.Code)
+		})
+	}
+}
+
+func TestUpdateDeliveryPromotionAPIAcceptsValidEffectiveValues(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchantForPromo(user.ID)
+	promo := randomDeliveryPromotion(merchant.ID)
+	promo.MinOrderAmount = 2000
+	promo.DiscountAmount = 500
+	promo.ValidFrom = time.Date(2026, 2, 12, 12, 0, 0, 0, time.UTC)
+	promo.ValidUntil = promo.ValidFrom.Add(2 * time.Hour)
+	newDiscountAmount := int64(1200)
+	newValidUntil := promo.ValidFrom.Add(4 * time.Hour)
+	updated := promo
+	updated.DiscountAmount = newDiscountAmount
+	updated.ValidUntil = newValidUntil
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetDeliveryPromotion(gomock.Any(), promo.ID).
+		Times(1).
+		Return(promo, nil)
+	store.EXPECT().
+		UpdateDeliveryPromotion(gomock.Any(), gomock.Any()).
+		Times(1).
+		DoAndReturn(func(_ context.Context, arg db.UpdateDeliveryPromotionParams) (db.MerchantDeliveryPromotion, error) {
+			require.Equal(t, promo.ID, arg.ID)
+			require.False(t, arg.MinOrderAmount.Valid)
+			require.True(t, arg.DiscountAmount.Valid)
+			require.Equal(t, newDiscountAmount, arg.DiscountAmount.Int64)
+			require.False(t, arg.ValidFrom.Valid)
+			require.True(t, arg.ValidUntil.Valid)
+			require.Equal(t, newValidUntil, arg.ValidUntil.Time)
+			return updated, nil
+		})
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	body := gin.H{
+		"discount_amount": newDiscountAmount,
+		"valid_until":     newValidUntil.Format(time.RFC3339),
+	}
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	url := fmt.Sprintf("/v1/delivery-fee/merchants/%d/promotions/%d", merchant.ID, promo.ID)
+	request, err := http.NewRequest(http.MethodPatch, url, bytes.NewReader(data))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+}

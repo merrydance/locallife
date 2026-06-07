@@ -31,7 +31,7 @@ Merchant marketing rules must converge to one backend truth before they influenc
 - Voucher lifecycle semantics must be explicit: disabling or deleting a voucher template should either stop only future claims, or also stop future use of already issued user vouchers.
 - Pagination metadata on merchant rule pages should be real backend truth, not a current-page count that requires client probing.
 
-Current implementation still violates the first invariant for delivery promotions and leaves voucher template disable/delete semantics implicit. Fixed 2026-06-08: discount-rule update now merges existing rule values with partial PATCH fields and applies the same create-level value validation before writing.
+Fixed 2026-06-08: discount-rule and delivery-promotion updates now merge existing rule values with partial PATCH fields and apply create-level value validation before writing. Voucher template disable/delete semantics remain implicit, voucher quantity-update product errors still need a stable 4xx contract, and list pagination still needs truthful metadata.
 
 ## Primary Forward Chain
 
@@ -95,8 +95,8 @@ Current implementation still violates the first invariant for delivery promotion
 20. Delivery wrappers call `/v1/delivery-fee/merchants/:merchant_id/promotions`.
     Evidence: `weapp/miniprogram/pages/merchant/_main_shared/api/delivery-fee.ts:260`, `weapp/miniprogram/pages/merchant/_main_shared/api/delivery-fee.ts:270`, `weapp/miniprogram/pages/merchant/_main_shared/api/delivery-fee.ts:281`, `weapp/miniprogram/pages/merchant/_main_shared/api/delivery-fee.ts:292`.
 
-21. Delivery-promotion create validates time and `discount_amount <= min_order_amount`, but update only parses incoming fields and writes them through partial SQL.
-    Evidence: `locallife/api/delivery_fee.go:900`, `locallife/api/delivery_fee.go:940`, `locallife/api/delivery_fee.go:945`, `locallife/api/delivery_fee.go:1134`, `locallife/api/delivery_fee.go:1184`, `locallife/api/delivery_fee.go:1210`, `locallife/db/query/delivery_promotion.sql:42`.
+21. Fixed 2026-06-08: delivery-promotion create/update share value validation; update parses incoming fields, merges them with the existing row, and rejects an invalid effective time range or `discount_amount > min_order_amount` before writing partial SQL.
+    Evidence: `locallife/api/delivery_fee.go:900`, `locallife/api/delivery_fee.go:940`, `locallife/api/delivery_fee.go:1134`, `locallife/api/delivery_fee.go:1171`, `locallife/api/delivery_fee.go:1211`, `locallife/api/delivery_fee.go:1259`, `locallife/db/query/delivery_promotion.sql:42`.
 
 22. Delivery-fee calculation reads active merchant delivery promotions and applies the maximum discount as an order-total discount, not as a rider-fee reduction.
     Evidence: `locallife/api/delivery_fee.go:1356`, `locallife/api/delivery_fee.go:1373`, `locallife/api/delivery_fee.go:1489`, `locallife/api/delivery_fee.go:1491`, `locallife/api/delivery_fee.go:1502`.
@@ -188,14 +188,12 @@ Observed tests:
 - Recharge-rule logic/API tests cover create/update/delete/list authz and update invalid dates.
 - Membership recharge tests cover matching active recharge rules and idempotent merchant recharge behavior.
 - Discount-rule API/logic tests cover applicable and best rule lookups, update invalid effective values, and create/update shared value validation; order-pricing tests cover discount stacking with vouchers.
-- Delivery-fee sqlc tests cover delivery promotion create/list/active/delete.
+- Delivery-fee API/sqlc tests cover delivery promotion create/list/active/delete, invalid merged update values, and valid partial update parameter mapping.
 - Merchant public detail tests cover active discount/voucher/delivery promotion response assembly.
 - Order calculation and promotion engine tests cover voucher trials, merchant discount stacking, and payment assessment interactions.
 
 Missing high-value tests:
 
-- Delivery-promotion update rejects effective `valid_until < valid_from`.
-- Delivery-promotion update rejects effective `discount_amount > min_order_amount`.
 - Voucher update returns product-level 4xx for `total_quantity < claimed_quantity` instead of an internal DB error.
 - Merchant voucher and discount list pagination exposes full count or explicit `has_more`.
 - Discount `/applicable` and `/best` route reachability is locked by a focused route test.
@@ -204,12 +202,12 @@ Missing high-value tests:
 ## Gaps And Refactor Notes
 
 - Fixed 2026-06-08: discount-rule update computes effective merged values and applies the same business validation as create before SQL update, including positive amounts, date range, and discount threshold checks.
-- Delivery-promotion update should compute effective merged values and apply the same business validation as create before SQL update.
+- Fixed 2026-06-08: delivery-promotion update computes effective merged values and applies the same business validation as create before SQL update at the handler boundary.
 - Voucher template disable/delete semantics need a durable product decision. Current behavior is closer to "disable/delete stops future claims but already issued user vouchers can remain usable until user-voucher expiry."
 - Backend list `total` contract should be corrected before relying on list pages for precise counts; frontend probe logic is a workaround, not product truth.
 - Discount static routes should be registered before `/:id` or verified by a route test.
 - Recharge-rule physical delete is technically protected by `ON DELETE SET NULL`, but deactivation would preserve stronger audit provenance for transactions.
-- Delivery promotions have no DB check constraints for valid period or discount/threshold relation. Fixing only the handler still leaves direct SQL or future writers able to persist invalid rows.
+- Delivery promotions still have no DB check constraints for valid period or discount/threshold relation. The handler now rejects invalid create/update requests, but direct SQL or future writers remain able to persist invalid rows unless DB constraints are added.
 
 ## Branch Exhaustion
 
@@ -217,8 +215,8 @@ Missing high-value tests:
 - Request branches checked: merchant voucher CRUD/status/list/detail-by-scan workaround, discount CRUD/applicable/best, delivery promotion CRUD/active/list, recharge-rule CRUD/list, member recharge, customer voucher claim/list, cart/order preview, direct order, cancellation rollback, and public promotion assembly.
 - Backend state branches checked: voucher templates and issued `user_vouchers`, discount rules, delivery promotions, recharge rules, membership transaction rule link, order persisted pricing fields, active/expired/soft-deleted states, issued-voucher usability after template change, and route ordering for static discount endpoints.
 - Async branches checked: rule CRUD is synchronous; voucher expiry runs in cleanup scheduler; order cancellation can roll voucher state back; cart/order preview re-reads active rules; no repair worker exists for already-invalid rule rows.
-- Failure/retry branches checked: local submit/toggle guards, no CRUD idempotency/version, list total drift with frontend lookahead probe, voucher update quantity below claimed quantity, delivery update missing effective merged validation, discount route shadowing risk, physical recharge-rule delete with historical transactions, and invalid direct SQL/future writers without DB constraints.
+- Failure/retry branches checked: local submit/toggle guards, no CRUD idempotency/version, list total drift with frontend lookahead probe, voucher update quantity below claimed quantity, discount route shadowing risk, physical recharge-rule delete with historical transactions, and invalid direct SQL/future writers without DB constraints.
 - Reader/consumer branches checked: merchant marketing pages, member recharge, customer voucher center, public merchant detail, cart/order preview, direct order creation, promotion engine, order cancellation, and settlement/order pricing fields.
 - Authorization/tenant branches checked: owner/manager merchant route groups, merchant match checks, recharge current merchant check, discount ownership checks, customer voucher ownership validation, and downstream order/cart using authenticated/derived merchant/user context.
 - Zombie/unreachable branches checked: voucher/discount frontend list probe compensates for backend total drift; voucher edit scans list pages instead of detail truth; discount `/applicable` and `/best` route reachability needs proof; recharge-rule delete may erase live rule provenance from UI while DB only preserves nullable transaction reference.
-- Test-proof gaps checked: existing tests cover voucher claim/use/rollback, recharge-rule CRUD/idempotent recharge, discount lookup/order pricing, discount update merged validation, delivery SQL, public promotion assembly, and promotion engine. Missing proof remains for delivery update merged validation, voucher update product 4xx, precise pagination contract, discount static route reachability, issued voucher after template disable/delete, and delivery DB constraints.
+- Test-proof gaps checked: existing tests cover voucher claim/use/rollback, recharge-rule CRUD/idempotent recharge, discount lookup/order pricing, discount update merged validation, delivery update merged validation, delivery SQL, public promotion assembly, and promotion engine. Missing proof remains for voucher update product 4xx, precise pagination contract, discount static route reachability, issued voucher after template disable/delete, and delivery DB constraints.
