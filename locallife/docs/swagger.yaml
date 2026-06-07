@@ -8925,6 +8925,8 @@ definitions:
     type: object
   api.searchCategoryItem:
     properties:
+      icon:
+        type: string
       id:
         type: integer
       merchant_count:
@@ -9260,6 +9262,8 @@ definitions:
     type: object
   api.tagDetailResponse:
     properties:
+      icon:
+        type: string
       id:
         type: integer
       name:
@@ -10029,6 +10033,25 @@ definitions:
         type: string
     required:
     - status
+    type: object
+  api.updateTagRequest:
+    properties:
+      icon:
+        maxLength: 16
+        type: string
+      name:
+        maxLength: 50
+        minLength: 1
+        type: string
+      sort_order:
+        maximum: 999
+        minimum: 0
+        type: integer
+      status:
+        enum:
+        - active
+        - inactive
+        type: string
     type: object
   api.updateUserAddressRequest:
     properties:
@@ -31064,6 +31087,54 @@ paths:
       security:
       - BearerAuth: []
       summary: 删除标签（管理员）
+      tags:
+      - 标签管理
+    patch:
+      consumes:
+      - application/json
+      description: 更新标签名称、排序、状态或图标，需要管理员权限
+      parameters:
+      - description: 标签ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 标签更新信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.updateTagRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 更新后的标签
+          schema:
+            $ref: '#/definitions/api.tagDetailResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 标签不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 更新标签（管理员）
       tags:
       - 标签管理
   /v1/users/me:

@@ -4,8 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
 )
@@ -18,6 +20,28 @@ type tagDetailResponse struct {
 	Name      string `json:"name"`
 	Type      string `json:"type"`
 	SortOrder int16  `json:"sort_order"`
+	Icon      string `json:"icon,omitempty"`
+}
+
+func buildTagDetailResponse(tag db.Tag) tagDetailResponse {
+	resp := tagDetailResponse{
+		ID:        tag.ID,
+		Name:      tag.Name,
+		Type:      tag.Type,
+		SortOrder: tag.SortOrder,
+	}
+	if tag.Icon.Valid {
+		resp.Icon = tag.Icon.String
+	}
+	return resp
+}
+
+func optionalTagIcon(value string) pgtype.Text {
+	icon := strings.TrimSpace(value)
+	if icon == "" {
+		return pgtype.Text{}
+	}
+	return pgtype.Text{String: icon, Valid: true}
 }
 
 type listTagsRequest struct {
@@ -61,12 +85,7 @@ func (server *Server) listTags(ctx *gin.Context) {
 	// 转换响应
 	result := make([]tagDetailResponse, len(tags))
 	for i, tag := range tags {
-		result[i] = tagDetailResponse{
-			ID:        tag.ID,
-			Name:      tag.Name,
-			Type:      tag.Type,
-			SortOrder: tag.SortOrder,
-		}
+		result[i] = buildTagDetailResponse(tag)
 	}
 
 	ctx.JSON(http.StatusOK, listTagsResponse{Tags: result})
@@ -90,9 +109,21 @@ type createTagRequest struct {
 	Name      string `json:"name" binding:"required,min=1,max=50"`                                  // 标签名称
 	Type      string `json:"type" binding:"required,oneof=dish merchant combo table customization"` // 标签类型
 	SortOrder int16  `json:"sort_order" binding:"min=0,max=999"`                                    // 排序
+	Icon      string `json:"icon,omitempty" binding:"omitempty,max=16"`                             // 图标
 }
 
 type deleteTagRequest struct {
+	ID int64 `uri:"id" binding:"required,min=1"`
+}
+
+type updateTagRequest struct {
+	Name      *string `json:"name,omitempty" binding:"omitempty,min=1,max=50"`
+	SortOrder *int16  `json:"sort_order,omitempty" binding:"omitempty,min=0,max=999"`
+	Status    *string `json:"status,omitempty" binding:"omitempty,oneof=active inactive"`
+	Icon      *string `json:"icon,omitempty" binding:"omitempty,max=16"`
+}
+
+type updateTagURIRequest struct {
 	ID int64 `uri:"id" binding:"required,min=1"`
 }
 
@@ -103,27 +134,90 @@ func (server *Server) createTag(ctx *gin.Context) {
 		return
 	}
 
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("name is required")))
+		return
+	}
+
 	// 验证用户已登录（后续可添加管理员权限检查）
 	_ = ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 创建标签
 	tag, err := server.store.CreateTag(ctx, db.CreateTagParams{
-		Name:      req.Name,
+		Name:      name,
 		Type:      req.Type,
 		SortOrder: req.SortOrder,
 		Status:    "active",
+		Icon:      optionalTagIcon(req.Icon),
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	ctx.JSON(http.StatusCreated, tagDetailResponse{
-		ID:        tag.ID,
-		Name:      tag.Name,
-		Type:      tag.Type,
-		SortOrder: tag.SortOrder,
-	})
+	ctx.JSON(http.StatusCreated, buildTagDetailResponse(tag))
+}
+
+// updateTag godoc
+// @Summary 更新标签（管理员）
+// @Description 更新标签名称、排序、状态或图标，需要管理员权限
+// @Tags 标签管理
+// @Accept json
+// @Produce json
+// @Param id path int true "标签ID"
+// @Param request body updateTagRequest true "标签更新信息"
+// @Success 200 {object} tagDetailResponse "更新后的标签"
+// @Failure 400 {object} ErrorResponse "参数错误"
+// @Failure 401 {object} ErrorResponse "未认证"
+// @Failure 403 {object} ErrorResponse "权限不足"
+// @Failure 404 {object} ErrorResponse "标签不存在"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/tags/{id} [patch]
+// @Security BearerAuth
+func (server *Server) updateTag(ctx *gin.Context) {
+	var uriReq updateTagURIRequest
+	if err := ctx.ShouldBindUri(&uriReq); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	var req updateTagRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	arg := db.UpdateTagParams{ID: uriReq.ID}
+	if req.Name != nil {
+		name := strings.TrimSpace(*req.Name)
+		if name == "" {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("name is required")))
+			return
+		}
+		arg.Name = pgtype.Text{String: name, Valid: true}
+	}
+	if req.SortOrder != nil {
+		arg.SortOrder = pgtype.Int2{Int16: *req.SortOrder, Valid: true}
+	}
+	if req.Status != nil {
+		arg.Status = pgtype.Text{String: *req.Status, Valid: true}
+	}
+	if req.Icon != nil {
+		arg.Icon = optionalTagIcon(*req.Icon)
+	}
+
+	tag, err := server.store.UpdateTag(ctx, arg)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("tag not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, buildTagDetailResponse(tag))
 }
 
 // deleteTag godoc
@@ -214,12 +308,7 @@ func (server *Server) getMerchantTags(ctx *gin.Context) {
 
 	result := make([]tagDetailResponse, len(tags))
 	for i, t := range tags {
-		result[i] = tagDetailResponse{
-			ID:        t.ID,
-			Name:      t.Name,
-			Type:      t.Type,
-			SortOrder: t.SortOrder,
-		}
+		result[i] = buildTagDetailResponse(t)
 	}
 	ctx.JSON(http.StatusOK, merchantTagsResponse{Tags: result})
 }
@@ -294,12 +383,7 @@ func (server *Server) setMerchantTags(ctx *gin.Context) {
 
 	tags := make([]tagDetailResponse, len(result.Tags))
 	for i, t := range result.Tags {
-		tags[i] = tagDetailResponse{
-			ID:        t.ID,
-			Name:      t.Name,
-			Type:      t.Type,
-			SortOrder: t.SortOrder,
-		}
+		tags[i] = buildTagDetailResponse(t)
 	}
 	ctx.JSON(http.StatusOK, merchantTagsResponse{Tags: tags})
 }

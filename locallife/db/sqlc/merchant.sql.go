@@ -1559,7 +1559,7 @@ func (q *Queries) ListMerchantSpecialHours(ctx context.Context, merchantID int64
 }
 
 const listMerchantTags = `-- name: ListMerchantTags :many
-SELECT t.id, t.name, t.type, t.sort_order, t.status, t.created_at FROM tags t
+SELECT t.id, t.name, t.type, t.sort_order, t.status, t.created_at, t.icon FROM tags t
 INNER JOIN merchant_tags mt ON t.id = mt.tag_id
 WHERE mt.merchant_id = $1
 ORDER BY t.name
@@ -1581,6 +1581,7 @@ func (q *Queries) ListMerchantTags(ctx context.Context, merchantID int64) ([]Tag
 			&i.SortOrder,
 			&i.Status,
 			&i.CreatedAt,
+			&i.Icon,
 		); err != nil {
 			return nil, err
 		}

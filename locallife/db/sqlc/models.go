@@ -2543,10 +2543,11 @@ type Tag struct {
 	ID   int64  `json:"id"`
 	Name string `json:"name"`
 	// merchant, product, service, etc.
-	Type      string    `json:"type"`
-	SortOrder int16     `json:"sort_order"`
-	Status    string    `json:"status"`
-	CreatedAt time.Time `json:"created_at"`
+	Type      string      `json:"type"`
+	SortOrder int16       `json:"sort_order"`
+	Status    string      `json:"status"`
+	CreatedAt time.Time   `json:"created_at"`
+	Icon      pgtype.Text `json:"icon"`
 }
 
 type User struct {

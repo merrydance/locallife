@@ -57,7 +57,7 @@ func (q *Queries) GetDishSales(ctx context.Context, dishID pgtype.Int8) (int32, 
 }
 
 const getSystemTagByName = `-- name: GetSystemTagByName :one
-SELECT id, name, type, sort_order, status, created_at FROM tags WHERE name = $1 AND type = 'system' LIMIT 1
+SELECT id, name, type, sort_order, status, created_at, icon FROM tags WHERE name = $1 AND type = 'system' LIMIT 1
 `
 
 // 根据名称获取系统标签
@@ -71,6 +71,7 @@ func (q *Queries) GetSystemTagByName(ctx context.Context, name string) (Tag, err
 		&i.SortOrder,
 		&i.Status,
 		&i.CreatedAt,
+		&i.Icon,
 	)
 	return i, err
 }

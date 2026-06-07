@@ -11,6 +11,7 @@ export interface TakeoutCategoryGridItem {
 
 const CATEGORY_EMOJI_MAP: [string, string][] = [
   ['火锅', '🍲'],
+  ['砂锅', '🥘'],
   ['烧烤', '🔥'],
   ['烤', '🔥'],
   ['日料', '🍱'],
@@ -27,8 +28,12 @@ const CATEGORY_EMOJI_MAP: [string, string][] = [
   ['咖啡', '☕'],
   ['面', '🍜'],
   ['粉', '🍜'],
+  ['炒饼', '🥞'],
+  ['饼', '🥞'],
+  ['粥', '🥣'],
   ['海鲜', '🦐'],
   ['螃蟹', '🦀'],
+  ['鱼', '🐟'],
   ['湘', '🌶️'],
   ['川', '🌶️'],
   ['辣', '🌶️'],
@@ -52,7 +57,7 @@ function formatMerchantCount(merchantCount: number, isAll: boolean): string {
   return `${merchantCount}家在售`
 }
 
-function buildIconEmoji(name: string): string {
+export function buildCategoryIconEmoji(name: string): string {
   if (!name.trim()) return '🍴'
   for (const [keyword, emoji] of CATEGORY_EMOJI_MAP) {
     if (name.includes(keyword)) return emoji
@@ -80,7 +85,7 @@ export function buildTakeoutCategoryGridItems(
     id: String(category.id),
     name: category.name,
     description: formatMerchantCount(category.merchant_count, false),
-    iconText: buildIconEmoji(category.name),
+    iconText: category.icon || buildCategoryIconEmoji(category.name),
     iconStyle: '',
     selected: normalizedActiveCategoryId === String(category.id)
   }))

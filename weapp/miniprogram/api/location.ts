@@ -120,6 +120,7 @@ export function getBicyclingDirection(params: { from: string, to: string }): Pro
 export interface ActiveCategory {
     id: number
     name: string
+    icon?: string
     merchant_count: number
 }
 

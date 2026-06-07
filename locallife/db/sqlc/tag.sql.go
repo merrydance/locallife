@@ -16,18 +16,20 @@ INSERT INTO tags (
   name,
   type,
   sort_order,
-  status
+  status,
+  icon
 ) VALUES (
-  $1, $2, $3, $4
+  $1, $2, $3, $4, $5
 )
-RETURNING id, name, type, sort_order, status, created_at
+RETURNING id, name, type, sort_order, status, created_at, icon
 `
 
 type CreateTagParams struct {
-	Name      string `json:"name"`
-	Type      string `json:"type"`
-	SortOrder int16  `json:"sort_order"`
-	Status    string `json:"status"`
+	Name      string      `json:"name"`
+	Type      string      `json:"type"`
+	SortOrder int16       `json:"sort_order"`
+	Status    string      `json:"status"`
+	Icon      pgtype.Text `json:"icon"`
 }
 
 func (q *Queries) CreateTag(ctx context.Context, arg CreateTagParams) (Tag, error) {
@@ -36,6 +38,7 @@ func (q *Queries) CreateTag(ctx context.Context, arg CreateTagParams) (Tag, erro
 		arg.Type,
 		arg.SortOrder,
 		arg.Status,
+		arg.Icon,
 	)
 	var i Tag
 	err := row.Scan(
@@ -45,6 +48,7 @@ func (q *Queries) CreateTag(ctx context.Context, arg CreateTagParams) (Tag, erro
 		&i.SortOrder,
 		&i.Status,
 		&i.CreatedAt,
+		&i.Icon,
 	)
 	return i, err
 }
@@ -60,7 +64,7 @@ func (q *Queries) DeleteTag(ctx context.Context, id int64) error {
 }
 
 const getActiveCategoriesByRegion = `-- name: GetActiveCategoriesByRegion :many
-SELECT t.id, t.name, t.sort_order, COUNT(DISTINCT mt.merchant_id)::int AS merchant_count
+SELECT t.id, t.name, t.sort_order, t.icon, COUNT(DISTINCT mt.merchant_id)::int AS merchant_count
 FROM tags t
 INNER JOIN merchant_tags mt ON t.id = mt.tag_id
 INNER JOIN merchants m ON mt.merchant_id = m.id
@@ -69,16 +73,17 @@ WHERE m.region_id = $1
   AND m.deleted_at IS NULL
   AND t.type = 'merchant'
   AND t.status = 'active'
-GROUP BY t.id, t.name, t.sort_order
+GROUP BY t.id, t.name, t.sort_order, t.icon
 HAVING COUNT(DISTINCT mt.merchant_id) > 0
 ORDER BY COUNT(DISTINCT mt.merchant_id) DESC, t.sort_order ASC
 `
 
 type GetActiveCategoriesByRegionRow struct {
-	ID            int64  `json:"id"`
-	Name          string `json:"name"`
-	SortOrder     int16  `json:"sort_order"`
-	MerchantCount int32  `json:"merchant_count"`
+	ID            int64       `json:"id"`
+	Name          string      `json:"name"`
+	SortOrder     int16       `json:"sort_order"`
+	Icon          pgtype.Text `json:"icon"`
+	MerchantCount int32       `json:"merchant_count"`
 }
 
 // 返回指定区域内有商户覆盖的品类标签，按商户数量降序
@@ -95,6 +100,7 @@ func (q *Queries) GetActiveCategoriesByRegion(ctx context.Context, regionID int6
 			&i.ID,
 			&i.Name,
 			&i.SortOrder,
+			&i.Icon,
 			&i.MerchantCount,
 		); err != nil {
 			return nil, err
@@ -108,7 +114,7 @@ func (q *Queries) GetActiveCategoriesByRegion(ctx context.Context, regionID int6
 }
 
 const getTag = `-- name: GetTag :one
-SELECT id, name, type, sort_order, status, created_at FROM tags
+SELECT id, name, type, sort_order, status, created_at, icon FROM tags
 WHERE id = $1 LIMIT 1
 `
 
@@ -122,12 +128,13 @@ func (q *Queries) GetTag(ctx context.Context, id int64) (Tag, error) {
 		&i.SortOrder,
 		&i.Status,
 		&i.CreatedAt,
+		&i.Icon,
 	)
 	return i, err
 }
 
 const listAllTagsByType = `-- name: ListAllTagsByType :many
-SELECT id, name, type, sort_order, status, created_at FROM tags
+SELECT id, name, type, sort_order, status, created_at, icon FROM tags
 WHERE type = $1 AND status = 'active'
 ORDER BY sort_order ASC, name ASC
 `
@@ -148,6 +155,7 @@ func (q *Queries) ListAllTagsByType(ctx context.Context, type_ string) ([]Tag, e
 			&i.SortOrder,
 			&i.Status,
 			&i.CreatedAt,
+			&i.Icon,
 		); err != nil {
 			return nil, err
 		}
@@ -160,7 +168,7 @@ func (q *Queries) ListAllTagsByType(ctx context.Context, type_ string) ([]Tag, e
 }
 
 const listTags = `-- name: ListTags :many
-SELECT id, name, type, sort_order, status, created_at FROM tags
+SELECT id, name, type, sort_order, status, created_at, icon FROM tags
 WHERE type = $1 AND status = 'active'
 ORDER BY sort_order ASC, name ASC
 LIMIT $2 OFFSET $3
@@ -188,6 +196,7 @@ func (q *Queries) ListTags(ctx context.Context, arg ListTagsParams) ([]Tag, erro
 			&i.SortOrder,
 			&i.Status,
 			&i.CreatedAt,
+			&i.Icon,
 		); err != nil {
 			return nil, err
 		}
@@ -200,7 +209,7 @@ func (q *Queries) ListTags(ctx context.Context, arg ListTagsParams) ([]Tag, erro
 }
 
 const searchTags = `-- name: SearchTags :many
-SELECT id, name, type, sort_order, status, created_at FROM tags
+SELECT id, name, type, sort_order, status, created_at, icon FROM tags
 WHERE type = $1
   AND name ILIKE '%' || $2 || '%'
 ORDER BY name
@@ -235,6 +244,7 @@ func (q *Queries) SearchTags(ctx context.Context, arg SearchTagsParams) ([]Tag, 
 			&i.SortOrder,
 			&i.Status,
 			&i.CreatedAt,
+			&i.Icon,
 		); err != nil {
 			return nil, err
 		}
@@ -251,15 +261,17 @@ UPDATE tags
 SET
   name = COALESCE($1, name),
   sort_order = COALESCE($2, sort_order),
-  status = COALESCE($3, status)
-WHERE id = $4
-RETURNING id, name, type, sort_order, status, created_at
+  status = COALESCE($3, status),
+  icon = COALESCE($4, icon)
+WHERE id = $5
+RETURNING id, name, type, sort_order, status, created_at, icon
 `
 
 type UpdateTagParams struct {
 	Name      pgtype.Text `json:"name"`
 	SortOrder pgtype.Int2 `json:"sort_order"`
 	Status    pgtype.Text `json:"status"`
+	Icon      pgtype.Text `json:"icon"`
 	ID        int64       `json:"id"`
 }
 
@@ -268,6 +280,7 @@ func (q *Queries) UpdateTag(ctx context.Context, arg UpdateTagParams) (Tag, erro
 		arg.Name,
 		arg.SortOrder,
 		arg.Status,
+		arg.Icon,
 		arg.ID,
 	)
 	var i Tag
@@ -278,6 +291,7 @@ func (q *Queries) UpdateTag(ctx context.Context, arg UpdateTagParams) (Tag, erro
 		&i.SortOrder,
 		&i.Status,
 		&i.CreatedAt,
+		&i.Icon,
 	)
 	return i, err
 }

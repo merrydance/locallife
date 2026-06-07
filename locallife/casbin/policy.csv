@@ -78,6 +78,7 @@ p, admin, /v1/admin/operators/region-applications/:id/reject, POST
 
 # Tag Management
 p, admin, /v1/tags, POST
+p, admin, /v1/tags/:id, PATCH
 
 # Claims & Risk Management (admin-only actions)
 p, admin, /v1/food-safety/merchants/:id/suspend, PATCH

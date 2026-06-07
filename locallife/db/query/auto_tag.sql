@@ -15,7 +15,7 @@ WHERE oi.dish_id = $1 AND o.status = 'completed';
 
 -- name: GetSystemTagByName :one
 -- 根据名称获取系统标签
-SELECT id, name, type, sort_order, status, created_at FROM tags WHERE name = $1 AND type = 'system' LIMIT 1;
+SELECT id, name, type, sort_order, status, created_at, icon FROM tags WHERE name = $1 AND type = 'system' LIMIT 1;
 
 -- name: UpsertDishTag :exec
 -- 添加或更新菜品标签关联

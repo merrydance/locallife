@@ -303,7 +303,7 @@ DELETE FROM merchant_tags
 WHERE merchant_id = $1 AND tag_id = $2;
 
 -- name: ListMerchantTags :many
-SELECT t.id, t.name, t.type, t.sort_order, t.status, t.created_at FROM tags t
+SELECT t.id, t.name, t.type, t.sort_order, t.status, t.created_at, t.icon FROM tags t
 INNER JOIN merchant_tags mt ON t.id = mt.tag_id
 WHERE mt.merchant_id = $1
 ORDER BY t.name;

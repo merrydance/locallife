@@ -67,29 +67,29 @@
           </t-cell-group>
         </merchant-section-card>
 
-        <merchant-section-card title="经营类目" subtitle="已选 {{selectedCategoryCount}}/5" bodyPadding="default" wx:if="{{categoryLoading && !tags.length}}">
+        <merchant-section-card title="经营品类" subtitle="已选 {{selectedCategoryCount}}/5" bodyPadding="default" wx:if="{{categoryLoading && !tags.length}}">
           <view class="section-state">
-            <t-loading theme="circular" size="40rpx" text="加载经营类目中..." vertical />
+            <t-loading theme="circular" size="40rpx" text="加载经营品类中..." vertical />
           </view>
         </merchant-section-card>
 
-        <merchant-section-card title="经营类目" subtitle="已选 {{selectedCategoryCount}}/5" bodyPadding="default" wx:elif="{{categoryErrorMessage && !tags.length}}">
+        <merchant-section-card title="经营品类" subtitle="已选 {{selectedCategoryCount}}/5" bodyPadding="default" wx:elif="{{categoryErrorMessage && !tags.length}}">
           <view class="section-state">
             <t-empty description="{{categoryErrorMessage}}" />
             <t-button theme="primary" bind:tap="onRetryCategories">重试</t-button>
           </view>
         </merchant-section-card>
 
-        <merchant-section-card title="经营类目" subtitle="已选 {{selectedCategoryCount}}/5" bodyPadding="default" wx:elif="{{!tags.length}}">
+        <merchant-section-card title="经营品类" subtitle="已选 {{selectedCategoryCount}}/5" bodyPadding="default" wx:elif="{{!tags.length}}">
           <view class="section-state">
-            <t-empty description="暂无可选经营类目" />
+            <t-empty description="暂无可选经营品类" />
           </view>
         </merchant-section-card>
 
-        <merchant-section-card title="经营类目" subtitle="已选 {{selectedCategoryCount}}/5" bodyPadding="none" wx:else>
+        <merchant-section-card title="经营品类" subtitle="已选 {{selectedCategoryCount}}/5" bodyPadding="none" wx:else>
           <t-cell-group>
             <t-cell
-              title="添加经营类目"
+              title="添加经营品类"
               note="{{categoryPickerTriggerText}}"
               hover
               arrow
@@ -129,7 +129,7 @@
           <t-picker
             visible="{{categoryPickerVisible}}"
             value="{{[categoryPickerValue || (categoryPickerOptions.length ? categoryPickerOptions[0].value : '')]}}"
-            title="选择经营类目"
+            title="选择品类"
             cancelBtn="取消"
             confirmBtn="确定"
             bind:confirm="onCategoryPickerConfirm"

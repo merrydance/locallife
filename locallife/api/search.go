@@ -107,6 +107,7 @@ type searchSuggestionsListResponse struct {
 type searchCategoryItem struct {
 	ID            int64  `json:"id"`
 	Name          string `json:"name"`
+	Icon          string `json:"icon,omitempty"`
 	MerchantCount int32  `json:"merchant_count"`
 }
 
@@ -1709,6 +1710,7 @@ func (server *Server) searchCategories(ctx *gin.Context) {
 		result[i] = searchCategoryItem{
 			ID:            c.ID,
 			Name:          c.Name,
+			Icon:          c.Icon.String,
 			MerchantCount: c.MerchantCount,
 		}
 	}

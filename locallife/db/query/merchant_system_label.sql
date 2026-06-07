@@ -31,7 +31,7 @@ ON CONFLICT (merchant_id) DO UPDATE SET
 RETURNING *;
 
 -- name: ListMerchantSystemLabels :many
-SELECT t.id, t.name, t.type, t.sort_order, t.status, t.created_at
+SELECT t.id, t.name, t.type, t.sort_order, t.status, t.created_at, t.icon
 FROM tags t
 INNER JOIN merchant_system_labels msl ON t.id = msl.tag_id
 WHERE msl.merchant_id = $1

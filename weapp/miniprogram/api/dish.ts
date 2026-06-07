@@ -98,6 +98,7 @@ export interface Ingredient {
 export interface TagInfo {
     id: number                                   // 标签ID
     name: string                                 // 标签名称
+    icon?: string                                // 图标
 }
 
 /**
@@ -509,10 +510,22 @@ export class TagService {
      * 创建标签
      * POST /v1/tags
      */
-    static async createTag(data: { name: string, type: string }): Promise<TagInfo> {
+    static async createTag(data: { name: string, type: string, icon?: string }): Promise<TagInfo> {
         return await request<TagInfo>({
             url: '/v1/tags',
             method: 'POST',
+            data
+        })
+    }
+
+    /**
+     * 更新标签
+     * PATCH /v1/tags/:id
+     */
+    static async updateTag(id: number, data: { name?: string, icon?: string }): Promise<TagInfo> {
+        return await request<TagInfo>({
+            url: `/v1/tags/${id}`,
+            method: 'PATCH',
             data
         })
     }

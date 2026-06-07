@@ -298,6 +298,13 @@ function buildEntryGroups(): PlatformDashboardEntryGroup[] {
                     desc: '佣金与骑手押金',
                     icon: 'setting',
                     url: '/pages/platform/operational-configs/index'
+                },
+                {
+                    id: 'merchant-categories',
+                    title: '经营品类',
+                    desc: '首页筛选品类',
+                    icon: 'root-list',
+                    url: '/pages/platform/categories/index'
                 }
             ]
         }

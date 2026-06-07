@@ -890,7 +890,8 @@ SELECT
   t.type,
   t.sort_order,
   t.status,
-  t.created_at
+  t.created_at,
+  t.icon
 FROM tags t
 JOIN combo_tags ct ON t.id = ct.tag_id
 WHERE ct.combo_id = $1
@@ -913,6 +914,7 @@ func (q *Queries) ListComboTags(ctx context.Context, comboID int64) ([]Tag, erro
 			&i.SortOrder,
 			&i.Status,
 			&i.CreatedAt,
+			&i.Icon,
 		); err != nil {
 			return nil, err
 		}

@@ -1,0 +1,2 @@
+ALTER TABLE "tags"
+DROP COLUMN IF EXISTS "icon";

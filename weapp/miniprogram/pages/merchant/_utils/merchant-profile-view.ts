@@ -124,10 +124,10 @@ export function buildCategoryViewState(tags: TagItem[], persistedTagIds: number[
     categoryPickerTriggerText: selectedCategoryIds.length >= 5
       ? '已选满 5 项'
       : categoryPickerOptions.length
-        ? '选择类目'
+        ? '选择品类'
         : selectedCategoryIds.length
           ? '无更多可选项'
-          : '暂无可选类目',
+          : '暂无可选品类',
     hasCategoryChanges
   }
 }
@@ -303,8 +303,8 @@ export function isVersionConflictError(error: unknown): boolean {
 export function confirmClearMerchantCategories() {
   return new Promise<boolean>((resolve) => {
     wx.showModal({
-      title: '确认清除类目？',
-      content: '未选择任何类目将导致店铺不出现在分类筛选中，继续吗？',
+      title: '确认清除品类？',
+      content: '未选择任何品类将导致店铺不出现在分类筛选中，继续吗？',
       confirmText: '确认清除',
       cancelText: '取消',
       success: (result) => resolve(!!result.confirm),

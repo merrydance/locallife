@@ -90,6 +90,7 @@
         "riders/detail",
         "merchants/index",
         "merchants/detail",
+        "categories/index",
         "tables/tags/index",
         "groups/index",
         "groups/detail"

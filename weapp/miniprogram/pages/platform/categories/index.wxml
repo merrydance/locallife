@@ -1,0 +1,100 @@
+<custom-navbar title="经营品类管理" show-back="{{true}}" show-location="{{false}}" bind:navheight="onNavHeight" />
+
+<view
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
+  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 0rpx;"
+>
+  <scroll-view
+    class="category-scroll"
+    scroll-y
+    refresher-enabled
+    refresher-triggered="{{refreshing}}"
+    bindrefresherrefresh="onRefresh"
+  >
+    <view wx:if="{{initialLoading}}" class="state-block">
+      <t-loading theme="circular" size="40rpx" text="加载经营品类中..." vertical />
+    </view>
+
+    <view wx:elif="{{initialError}}" class="state-block">
+      <t-empty icon="error-circle" description="{{initialErrorMessage || '经营品类加载失败，请重试'}}" />
+      <t-button theme="primary" bind:tap="onRetry">重试</t-button>
+    </view>
+
+    <view wx:else class="page-content">
+      <view wx:if="{{refreshErrorMessage}}" class="notice-banner">
+        <t-notice-bar theme="error" visible="{{true}}" content="{{refreshErrorMessage}}">
+          <text slot="operation" class="notice-banner-operation" bind:tap="onRetryRefresh">重试</text>
+        </t-notice-bar>
+      </view>
+
+      <view class="list-section">
+        <view class="list-header">
+          <view class="list-heading">
+            <text class="list-title">当前经营品类</text>
+            <text class="list-caption">影响首页筛选与商户资料选择。</text>
+          </view>
+          <t-button size="small" theme="primary" icon="add" bind:tap="onCreateCategory">新建品类</t-button>
+        </view>
+
+        <view wx:if="{{!categories.length}}" class="section-empty">
+          <t-empty icon="info-circle" description="暂无经营品类" />
+        </view>
+
+        <view wx:else class="category-chip-list">
+          <t-tag
+            wx:for="{{categories}}"
+            wx:key="id"
+            t-class="category-chip"
+            size="large"
+            theme="default"
+            variant="outline"
+            shape="round"
+            closable="{{true}}"
+            disabled="{{pendingDeleteId === item.id}}"
+            data-id="{{item.id}}"
+            bind:click="onEditCategory"
+            bind:close="onDeleteCategory"
+          >
+            <text slot="icon" class="category-chip-icon">{{item.iconText}}</text>
+            <text class="category-chip-name">{{item.name}}</text>
+          </t-tag>
+        </view>
+      </view>
+    </view>
+  </scroll-view>
+
+  <t-dialog
+    visible="{{createDialogVisible}}"
+    title="{{editingCategoryId ? '编辑品类' : '新建品类'}}"
+    confirm-btn="{{ { content: '确定', loading: submitting } }}"
+    cancel-btn="取消"
+    bind:confirm="onConfirmCreateCategoryDialog"
+    bind:cancel="onCloseCreateCategoryDialog"
+  >
+    <view slot="content" class="dialog-form">
+      <view class="dialog-icon-preview">
+        <text class="category-icon-preview category-icon-preview--large">{{selectedIcon}}</text>
+        <text class="dialog-icon-copy">首页图标预览</text>
+      </view>
+      <view class="icon-picker">
+        <view
+          wx:for="{{iconOptions}}"
+          wx:for-item="icon"
+          wx:key="*this"
+          class="icon-picker-item {{selectedIcon === icon ? 'icon-picker-item--active' : ''}}"
+          data-icon="{{icon}}"
+          bind:tap="onSelectIcon"
+        >
+          <text>{{icon}}</text>
+        </view>
+      </view>
+      <t-input
+        label="品类名称"
+        value="{{createInputValue}}"
+        placeholder="例如 家常菜"
+        maxlength="50"
+        bind:change="onCreateInputChange"
+      />
+    </view>
+  </t-dialog>
+</view>

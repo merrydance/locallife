@@ -1591,7 +1591,8 @@ SELECT
   t.type,
   t.sort_order,
   t.status,
-  t.created_at
+  t.created_at,
+  t.icon
 FROM tags t
 JOIN dish_tags dt ON t.id = dt.tag_id
 WHERE dt.dish_id = $1
@@ -1614,6 +1615,7 @@ func (q *Queries) ListDishTags(ctx context.Context, dishID int64) ([]Tag, error)
 			&i.SortOrder,
 			&i.Status,
 			&i.CreatedAt,
+			&i.Icon,
 		); err != nil {
 			return nil, err
 		}

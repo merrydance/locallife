@@ -51,8 +51,9 @@ export function installPromptFeedbackGuards(): void {
 
   wx.showModal = ((options: ModalOptions) => {
     const title = normalizePromptText(options?.title, '提示')
-    const content = normalizePromptText(options?.content, '请稍后再试')
-    const signature = `${title}:${content}`
+    const shouldKeepEditableContentEmpty = !!options?.editable && typeof options?.content !== 'string'
+    const content = shouldKeepEditableContentEmpty ? undefined : normalizePromptText(options?.content, '请稍后再试')
+    const signature = `${title}:${content || ''}`
 
     wx.hideToast()
 
@@ -65,7 +66,7 @@ export function installPromptFeedbackGuards(): void {
     return rawShowModal({
       ...options,
       title,
-      content
+      ...(content === undefined ? {} : { content })
     })
   }) as typeof wx.showModal
 }

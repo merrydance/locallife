@@ -53,6 +53,8 @@ p, admin, /v1/platform/finance/*, POST
 p, admin, /v1/platform/finance/*, PUT
 p, admin, /v1/platform/finance/*, DELETE
 p, admin, /v1/platform/refunds/*, POST
+p, admin, /v1/tags, POST
+p, admin, /v1/tags/:id, PATCH
 p, admin, /v1/admin/*, GET
 p, admin, /v1/admin/*, POST
 p, admin, /v1/groups, POST

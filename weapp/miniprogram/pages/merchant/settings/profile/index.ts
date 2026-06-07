@@ -62,7 +62,7 @@ Page({
     categoryPickerVisible: false,
     categoryPickerOptions: [] as CategoryPickerOption[],
     categoryPickerValue: '',
-    categoryPickerTriggerText: '暂无可选类目',
+    categoryPickerTriggerText: '暂无可选品类',
     form: { ...EMPTY_FORM } as MerchantProfileForm,
     initialForm: { ...EMPTY_FORM } as MerchantProfileForm,
     hasProfileChanges: false,
@@ -220,7 +220,7 @@ Page({
       })
     } catch (err: unknown) {
       logger.error('Load merchant profile categories failed', err)
-      const message = getErrorMessage(err, '经营类目加载失败，请重试')
+      const message = getErrorMessage(err, '经营品类加载失败，请重试')
 
       this.setData({
         categoryErrorMessage: this.data.tags.length > 0 ? `${message}，当前已保留上次同步结果` : message
@@ -257,12 +257,12 @@ Page({
     }
 
     if (this.data.selectedCategoryCount >= 5) {
-      wx.showToast({ title: '最多选 5 个类目', icon: 'none' })
+      wx.showToast({ title: '最多选 5 个品类', icon: 'none' })
       return
     }
 
     if (!this.data.categoryPickerOptions.length) {
-      wx.showToast({ title: this.data.selectedCategoryCount ? '没有更多可选类目' : '暂无可选类目', icon: 'none' })
+      wx.showToast({ title: this.data.selectedCategoryCount ? '没有更多可选品类' : '暂无可选品类', icon: 'none' })
       return
     }
 
@@ -293,7 +293,7 @@ Page({
     const nextSelectedIds = [...this.data.selectedCategoryIds]
     if (!nextSelectedIds.includes(pickedId)) {
       if (nextSelectedIds.length >= 5) {
-        wx.showToast({ title: '最多选 5 个类目', icon: 'none' })
+        wx.showToast({ title: '最多选 5 个品类', icon: 'none' })
         this.setData({ categoryPickerVisible: false })
         return
       }
@@ -506,12 +506,12 @@ Page({
 
       if (profileSaved && hadCategoryChanges) {
         logger.error('Save merchant profile categories failed after profile update', err)
-        wx.showToast({ title: '基础资料已保存，经营类目保存失败，请重试', icon: 'none' })
+        wx.showToast({ title: '基础资料已保存，经营品类保存失败，请重试', icon: 'none' })
         return
       }
 
       logger.error('Save merchant profile settings failed', err)
-      const message = getErrorMessage(err, hadCategoryChanges ? '经营类目保存失败，请稍后重试' : '保存失败，请稍后重试')
+      const message = getErrorMessage(err, hadCategoryChanges ? '经营品类保存失败，请重试' : '保存失败，请重试')
       wx.showToast({ title: message, icon: 'none' })
     } finally {
       wx.hideLoading()

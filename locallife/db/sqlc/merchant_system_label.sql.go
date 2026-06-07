@@ -66,7 +66,7 @@ func (q *Queries) ListMerchantSystemLabelLinks(ctx context.Context, merchantID i
 }
 
 const listMerchantSystemLabels = `-- name: ListMerchantSystemLabels :many
-SELECT t.id, t.name, t.type, t.sort_order, t.status, t.created_at
+SELECT t.id, t.name, t.type, t.sort_order, t.status, t.created_at, t.icon
 FROM tags t
 INNER JOIN merchant_system_labels msl ON t.id = msl.tag_id
 WHERE msl.merchant_id = $1
@@ -91,6 +91,7 @@ func (q *Queries) ListMerchantSystemLabels(ctx context.Context, merchantID int64
 			&i.SortOrder,
 			&i.Status,
 			&i.CreatedAt,
+			&i.Icon,
 		); err != nil {
 			return nil, err
 		}
