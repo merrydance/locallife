@@ -148,8 +148,9 @@ func createRandomPaymentOrder(t *testing.T, userID int64) PaymentOrder {
 func createRandomPaymentOrderWithOrder(t *testing.T, userID int64, orderID *int64) PaymentOrder {
 	outTradeNo := util.RandomString(32)
 	amount := util.RandomMoney()
-	if amount <= 0 {
-		amount = 1
+	if amount < 4 {
+		// Some ledger tests derive refund amounts with amount/4.
+		amount = 4
 	}
 
 	arg := CreatePaymentOrderParams{
