@@ -73,11 +73,8 @@ type DeleteDiscountRuleInput struct {
 }
 
 func CreateDiscountRule(ctx context.Context, store db.Store, input CreateDiscountRuleInput) (db.DiscountRule, error) {
-	if input.ValidUntil.Before(input.ValidFrom) {
-		return db.DiscountRule{}, NewRequestError(http.StatusBadRequest, errors.New("valid_until must be after valid_from"))
-	}
-	if input.DiscountAmount >= input.MinOrderAmount {
-		return db.DiscountRule{}, NewRequestError(http.StatusBadRequest, errors.New("discount_amount must be less than min_order_amount"))
+	if err := validateDiscountRuleValues(input.ValidFrom, input.ValidUntil, input.MinOrderAmount, input.DiscountAmount); err != nil {
+		return db.DiscountRule{}, err
 	}
 
 	description := pgtype.Text{String: input.Description, Valid: input.Description != ""}
@@ -200,6 +197,26 @@ func UpdateDiscountRuleForMerchant(ctx context.Context, store db.Store, input Up
 		return db.DiscountRule{}, NewRequestError(http.StatusForbidden, errors.New("not authorized"))
 	}
 
+	effectiveValidFrom := rule.ValidFrom
+	effectiveValidUntil := rule.ValidUntil
+	effectiveMinOrderAmount := rule.MinOrderAmount
+	effectiveDiscountAmount := rule.DiscountAmount
+	if input.ValidFrom != nil {
+		effectiveValidFrom = *input.ValidFrom
+	}
+	if input.ValidUntil != nil {
+		effectiveValidUntil = *input.ValidUntil
+	}
+	if input.MinOrderAmount != nil {
+		effectiveMinOrderAmount = *input.MinOrderAmount
+	}
+	if input.DiscountAmount != nil {
+		effectiveDiscountAmount = *input.DiscountAmount
+	}
+	if err := validateDiscountRuleValues(effectiveValidFrom, effectiveValidUntil, effectiveMinOrderAmount, effectiveDiscountAmount); err != nil {
+		return db.DiscountRule{}, err
+	}
+
 	arg := db.UpdateDiscountRuleParams{ID: input.RuleID}
 	if input.Name != nil {
 		arg.Name = pgtype.Text{String: *input.Name, Valid: true}
@@ -257,5 +274,21 @@ func DeleteDiscountRuleForMerchant(ctx context.Context, store db.Store, input De
 		return err
 	}
 
+	return nil
+}
+
+func validateDiscountRuleValues(validFrom, validUntil time.Time, minOrderAmount, discountAmount int64) error {
+	if minOrderAmount <= 0 {
+		return NewRequestError(http.StatusBadRequest, errors.New("min_order_amount must be greater than zero"))
+	}
+	if discountAmount <= 0 {
+		return NewRequestError(http.StatusBadRequest, errors.New("discount_amount must be greater than zero"))
+	}
+	if !validUntil.After(validFrom) {
+		return NewRequestError(http.StatusBadRequest, errors.New("valid_until must be after valid_from"))
+	}
+	if discountAmount >= minOrderAmount {
+		return NewRequestError(http.StatusBadRequest, errors.New("discount_amount must be less than min_order_amount"))
+	}
 	return nil
 }

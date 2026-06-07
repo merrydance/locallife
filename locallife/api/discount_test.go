@@ -430,3 +430,52 @@ func TestGetBestDiscountRuleAPI(t *testing.T) {
 		})
 	}
 }
+
+func TestUpdateDiscountRuleAPIRejectsInvalidEffectiveValues(t *testing.T) {
+	merchantOwner, _ := randomUser(t)
+	merchant := randomMerchant(merchantOwner.ID)
+	ruleID := int64(20)
+	validFrom := time.Date(2026, 2, 12, 12, 0, 0, 0, time.UTC)
+	validUntil := validFrom.Add(2 * time.Hour)
+	invalidUntil := validFrom.Add(-time.Minute)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+	store.EXPECT().
+		GetDiscountRule(gomock.Any(), ruleID).
+		Times(1).
+		Return(db.DiscountRule{
+			ID:             ruleID,
+			MerchantID:     merchant.ID,
+			MinOrderAmount: 10000,
+			DiscountAmount: 2000,
+			ValidFrom:      validFrom,
+			ValidUntil:     validUntil,
+		}, nil)
+	store.EXPECT().
+		UpdateDiscountRule(gomock.Any(), gomock.Any()).
+		Times(0)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	body := map[string]interface{}{
+		"id":          ruleID,
+		"valid_until": invalidUntil.Format(time.RFC3339),
+	}
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	url := fmt.Sprintf("/v1/merchants/%d/discounts/%d", merchant.ID, ruleID)
+	request, err := http.NewRequest(http.MethodPatch, url, bytes.NewReader(data))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+}

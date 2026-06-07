@@ -35,6 +35,24 @@ func TestCreateDiscountRuleValidation(t *testing.T) {
 			code:  400,
 		},
 		{
+			name:  "InvalidEqualDateRange",
+			input: func() CreateDiscountRuleInput { v := base; v.ValidUntil = v.ValidFrom; return v }(),
+			err:   "valid_until must be after valid_from",
+			code:  400,
+		},
+		{
+			name:  "InvalidMinOrderAmount",
+			input: func() CreateDiscountRuleInput { v := base; v.MinOrderAmount = 0; return v }(),
+			err:   "min_order_amount must be greater than zero",
+			code:  400,
+		},
+		{
+			name:  "InvalidNonPositiveDiscountAmount",
+			input: func() CreateDiscountRuleInput { v := base; v.DiscountAmount = 0; return v }(),
+			err:   "discount_amount must be greater than zero",
+			code:  400,
+		},
+		{
 			name:  "InvalidDiscountAmount",
 			input: func() CreateDiscountRuleInput { v := base; v.DiscountAmount = 100; return v }(),
 			err:   "discount_amount must be less than min_order_amount",
@@ -254,6 +272,127 @@ func TestUpdateDiscountRuleForMerchant(t *testing.T) {
 	})
 
 	require.NoError(t, err)
+}
+
+func TestUpdateDiscountRuleForMerchantRejectsInvalidEffectiveValues(t *testing.T) {
+	merchantID := int64(10)
+	ruleID := int64(20)
+	validFrom := time.Date(2026, 2, 12, 12, 0, 0, 0, time.UTC)
+	validUntil := validFrom.Add(2 * time.Hour)
+
+	cases := []struct {
+		name  string
+		input UpdateDiscountRuleInput
+		err   string
+	}{
+		{
+			name: "InvalidMergedDateRange",
+			input: func() UpdateDiscountRuleInput {
+				invalidUntil := validFrom.Add(-time.Minute)
+				return UpdateDiscountRuleInput{
+					MerchantID: merchantID,
+					RuleID:     ruleID,
+					ValidUntil: &invalidUntil,
+				}
+			}(),
+			err: "valid_until must be after valid_from",
+		},
+		{
+			name: "InvalidMergedEqualDateRange",
+			input: func() UpdateDiscountRuleInput {
+				return UpdateDiscountRuleInput{
+					MerchantID: merchantID,
+					RuleID:     ruleID,
+					ValidUntil: &validFrom,
+				}
+			}(),
+			err: "valid_until must be after valid_from",
+		},
+		{
+			name: "InvalidMergedDiscountAmount",
+			input: func() UpdateDiscountRuleInput {
+				discountAmount := int64(100)
+				return UpdateDiscountRuleInput{
+					MerchantID:     merchantID,
+					RuleID:         ruleID,
+					DiscountAmount: &discountAmount,
+				}
+			}(),
+			err: "discount_amount must be less than min_order_amount",
+		},
+		{
+			name: "InvalidMergedMinimumAmount",
+			input: func() UpdateDiscountRuleInput {
+				minAmount := int64(10)
+				return UpdateDiscountRuleInput{
+					MerchantID:     merchantID,
+					RuleID:         ruleID,
+					MinOrderAmount: &minAmount,
+				}
+			}(),
+			err: "discount_amount must be less than min_order_amount",
+		},
+		{
+			name: "InvalidNonPositiveMinimumAmount",
+			input: func() UpdateDiscountRuleInput {
+				minAmount := int64(0)
+				return UpdateDiscountRuleInput{
+					MerchantID:     merchantID,
+					RuleID:         ruleID,
+					MinOrderAmount: &minAmount,
+				}
+			}(),
+			err: "min_order_amount must be greater than zero",
+		},
+		{
+			name: "InvalidNonPositiveDiscountAmount",
+			input: func() UpdateDiscountRuleInput {
+				discountAmount := int64(0)
+				return UpdateDiscountRuleInput{
+					MerchantID:     merchantID,
+					RuleID:         ruleID,
+					DiscountAmount: &discountAmount,
+				}
+			}(),
+			err: "discount_amount must be greater than zero",
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			updateCalled := false
+			store.EXPECT().
+				GetDiscountRule(gomock.Any(), ruleID).
+				Times(1).
+				Return(db.DiscountRule{
+					ID:             ruleID,
+					MerchantID:     merchantID,
+					MinOrderAmount: 100,
+					DiscountAmount: 20,
+					ValidFrom:      validFrom,
+					ValidUntil:     validUntil,
+				}, nil)
+			store.EXPECT().
+				UpdateDiscountRule(gomock.Any(), gomock.Any()).
+				AnyTimes().
+				DoAndReturn(func(context.Context, db.UpdateDiscountRuleParams) (db.DiscountRule, error) {
+					updateCalled = true
+					return db.DiscountRule{ID: ruleID, MerchantID: merchantID}, nil
+				})
+
+			_, err := UpdateDiscountRuleForMerchant(context.Background(), store, tc.input)
+
+			reqErr := assertRequestError(t, err)
+			require.Equal(t, 400, reqErr.Status)
+			require.Equal(t, tc.err, reqErr.Err.Error())
+			require.False(t, updateCalled)
+		})
+	}
 }
 
 func TestDeleteDiscountRuleForMerchant(t *testing.T) {
