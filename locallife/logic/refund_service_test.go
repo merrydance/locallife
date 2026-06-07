@@ -378,7 +378,7 @@ func TestCreateRefundOrder_BaofuPreShareRefundRejectedRecordsGuidanceFromRefundR
 			TotalAmountFen:   300,
 			ResultCode:       aggregatecontracts.BusinessResultCodeFail,
 			ErrorCode:        "REFUND_AMT_EXCEEDS",
-			ErrorMessage:     "raw upstream refund amount detail",
+			ErrorMessage:     "退款金额超过可退金额",
 			RefundState:      aggregatecontracts.RefundStateError,
 			SuccessAmountFen: 0,
 		},
@@ -451,12 +451,11 @@ func TestCreateRefundOrder_BaofuPreShareRefundRejectedRecordsGuidanceFromRefundR
 		require.True(t, arg.LastErrorCode.Valid)
 		require.Equal(t, "REFUND_AMT_EXCEEDS", arg.LastErrorCode.String)
 		require.True(t, arg.LastErrorMessage.Valid)
-		require.Equal(t, "资料信息不完整，请核对后重新提交，check_and_resubmit", arg.LastErrorMessage.String)
-		require.NotContains(t, arg.LastErrorMessage.String, "raw upstream")
+		require.Equal(t, "资料信息不完整，请核对后重新提交：退款金额超过可退金额，check_and_resubmit", arg.LastErrorMessage.String)
 		require.Contains(t, string(arg.ResponseSnapshot), `"error_present":true`)
+		require.Contains(t, string(arg.ResponseSnapshot), `"error_message_sanitized":"退款金额超过可退金额"`)
 		require.Contains(t, string(arg.ResponseSnapshot), refundOrder.OutRefundNo)
 		require.Contains(t, string(arg.ResponseSnapshot), "REFUND_AMT_EXCEEDS")
-		require.NotContains(t, string(arg.ResponseSnapshot), "raw upstream")
 		return db.ExternalPaymentCommand{ID: 9905}, nil
 	})
 
@@ -650,8 +649,8 @@ func TestCreateRefundOrder_BaofuPreShareRefundProviderErrorRecordsCommandRejecte
 		refundErr: &baofu.ProviderError{
 			Operation:       "order_refund",
 			UpstreamCode:    "REFUND_AMT_EXCEEDS",
-			UpstreamMessage: "raw upstream refund amount detail",
-			Frontend:        baofu.ClassifyBaofuError("REFUND_AMT_EXCEEDS", "raw upstream refund amount detail").FrontendGuidance(),
+			UpstreamMessage: "退款金额超过可退金额",
+			Frontend:        baofu.ClassifyBaofuError("REFUND_AMT_EXCEEDS", "退款金额超过可退金额").FrontendGuidance(),
 		},
 	}
 	service := NewRefundService(
@@ -722,11 +721,10 @@ func TestCreateRefundOrder_BaofuPreShareRefundProviderErrorRecordsCommandRejecte
 		require.True(t, arg.LastErrorCode.Valid)
 		require.Equal(t, "REFUND_AMT_EXCEEDS", arg.LastErrorCode.String)
 		require.True(t, arg.LastErrorMessage.Valid)
-		require.Equal(t, "资料信息不完整，请核对后重新提交，check_and_resubmit", arg.LastErrorMessage.String)
-		require.NotContains(t, arg.LastErrorMessage.String, "raw upstream")
+		require.Equal(t, "资料信息不完整，请核对后重新提交：退款金额超过可退金额，check_and_resubmit", arg.LastErrorMessage.String)
 		require.Contains(t, string(arg.ResponseSnapshot), refundOrder.OutRefundNo)
 		require.Contains(t, string(arg.ResponseSnapshot), "REFUND_AMT_EXCEEDS")
-		require.NotContains(t, string(arg.ResponseSnapshot), "raw upstream")
+		require.Contains(t, string(arg.ResponseSnapshot), `"error_message_sanitized":"退款金额超过可退金额"`)
 		return db.ExternalPaymentCommand{ID: 9904}, nil
 	})
 
@@ -745,8 +743,8 @@ func TestCreateRefundOrder_BaofuRetryableProviderErrorDoesNotFailRefund(t *testi
 		refundErr: &baofu.ProviderError{
 			Operation:       "order_refund",
 			UpstreamCode:    "SYSTEM_BUSY",
-			UpstreamMessage: "raw upstream retryable detail",
-			Frontend:        baofu.ClassifyBaofuError("SYSTEM_BUSY", "raw upstream retryable detail").FrontendGuidance(),
+			UpstreamMessage: "系统繁忙，请稍后重试",
+			Frontend:        baofu.ClassifyBaofuError("SYSTEM_BUSY", "系统繁忙，请稍后重试").FrontendGuidance(),
 		},
 	}
 	service := NewRefundService(
@@ -817,10 +815,10 @@ func TestCreateRefundOrder_BaofuRetryableProviderErrorDoesNotFailRefund(t *testi
 		require.Equal(t, "SYSTEM_BUSY", arg.LastErrorCode.String)
 		require.True(t, arg.LastErrorMessage.Valid)
 		require.Equal(t, "支付通道处理中，请稍后重试，retry_later", arg.LastErrorMessage.String)
-		require.NotContains(t, arg.LastErrorMessage.String, "raw upstream")
+		require.NotContains(t, arg.LastErrorMessage.String, "系统繁忙")
 		require.Contains(t, string(arg.ResponseSnapshot), refundOrder.OutRefundNo)
 		require.Contains(t, string(arg.ResponseSnapshot), "SYSTEM_BUSY")
-		require.NotContains(t, string(arg.ResponseSnapshot), "raw upstream")
+		require.Contains(t, string(arg.ResponseSnapshot), `"error_message_sanitized":"系统繁忙，请稍后重试"`)
 		return db.ExternalPaymentCommand{ID: 9905}, nil
 	})
 
@@ -839,8 +837,8 @@ func TestCreateRefundOrder_BaofuOrderExistMarksProcessingForQueryRecovery(t *tes
 		refundErr: &baofu.ProviderError{
 			Operation:       "order_refund",
 			UpstreamCode:    "ORDER_EXIST",
-			UpstreamMessage: "raw upstream duplicate detail",
-			Frontend:        baofu.ClassifyBaofuError("ORDER_EXIST", "raw upstream duplicate detail").FrontendGuidance(),
+			UpstreamMessage: "订单已存在，请查询原单",
+			Frontend:        baofu.ClassifyBaofuError("ORDER_EXIST", "订单已存在，请查询原单").FrontendGuidance(),
 		},
 	}
 	service := NewRefundService(

@@ -573,6 +573,74 @@ func TestBaofuAccountOpenCallbackMarksAbnormalBeforeAck(t *testing.T) {
 	require.Equal(t, "OK", recorder.Body.String())
 }
 
+func TestBaofuAccountOpenCallbackPersistsFailureReasonBeforeAck(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	server.SetBaofuAccountNotificationParserForTest(fakeBaofuFailedAccountParser{})
+	server.config.BaofuCollectMerchantID = "102004465"
+	server.config.BaofuCollectTerminalID = "200005200"
+
+	flow := db.BaofuAccountOpeningFlow{
+		ID:                7104,
+		OwnerType:         db.BaofuAccountOwnerTypeRider,
+		OwnerID:           14,
+		AccountType:       db.BaofuAccountTypePersonal,
+		State:             db.BaofuAccountOpeningStateOpeningProcessing,
+		OpenTransSerialNo: pgtype.Text{String: "OPEN_FAILED", Valid: true},
+		LoginNo:           pgtype.Text{String: "LLBFOR0000000014", Valid: true},
+	}
+	binding := db.BaofuAccountBinding{
+		ID:          6104,
+		OwnerType:   db.BaofuAccountOwnerTypeRider,
+		OwnerID:     14,
+		OpenState:   db.BaofuAccountOpenStateProcessing,
+		AccountType: db.BaofuAccountTypePersonal,
+	}
+	store.EXPECT().GetBaofuAccountOpeningFlowByOpenTransSerialNo(gomock.Any(), pgtype.Text{String: "OPEN_FAILED", Valid: true}).Return(flow, nil)
+	store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
+		OwnerType: db.BaofuAccountOwnerTypeRider,
+		OwnerID:   14,
+	}).Return(binding, nil)
+	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
+			require.Equal(t, pgtype.Text{String: db.BaofuAccountOwnerTypeRider, Valid: true}, arg.BusinessOwner)
+			require.Equal(t, pgtype.Text{String: "baofu_account_opening_flow", Valid: true}, arg.BusinessObjectType)
+			require.Equal(t, pgtype.Int8{Int64: 7104, Valid: true}, arg.BusinessObjectID)
+			require.Equal(t, db.ExternalPaymentTerminalStatusFailed, arg.TerminalStatus)
+			require.True(t, arg.IsTerminal)
+			require.Equal(t, "0", arg.UpstreamState)
+			return db.ExternalPaymentFact{ID: 90, DedupeKey: arg.DedupeKey}, nil
+		})
+	store.EXPECT().MarkBaofuAccountBindingFailed(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.MarkBaofuAccountBindingFailedParams) (db.BaofuAccountBinding, error) {
+			require.Equal(t, int64(6104), arg.ID)
+			require.JSONEq(t, `{"state":"failed","failure_code":"ID_CARD_CHECK_FAILED","provider_diagnostic":{"provider":"baofu","capability":"account","source_path":"body.errorCode","result_state":"0","result_error_code":"ID_CARD_CHECK_FAILED","result_error_message_sanitized":"身份证号码不合法","result_error_message_present":true}}`, string(arg.RawSnapshot))
+			require.Contains(t, string(arg.RawSnapshot), "身份证号码不合法")
+			return db.BaofuAccountBinding{ID: arg.ID, OpenState: db.BaofuAccountOpenStateFailed}, nil
+		})
+	store.EXPECT().MarkBaofuAccountOpeningFlowFailed(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.MarkBaofuAccountOpeningFlowFailedParams) (db.BaofuAccountOpeningFlow, error) {
+			require.Equal(t, int64(7104), arg.ID)
+			require.Equal(t, pgtype.Text{String: "ID_CARD_CHECK_FAILED", Valid: true}, arg.FailureCode)
+			require.Equal(t, pgtype.Text{String: "身份证号码不合法", Valid: true}, arg.FailureMessage)
+			require.JSONEq(t, `{"state":"failed","failure_code":"ID_CARD_CHECK_FAILED","provider_diagnostic":{"provider":"baofu","capability":"account","source_path":"body.errorCode","result_state":"0","result_error_code":"ID_CARD_CHECK_FAILED","result_error_message_sanitized":"身份证号码不合法","result_error_message_present":true}}`, string(arg.RawSnapshot))
+			require.Contains(t, string(arg.RawSnapshot), "身份证号码不合法")
+			flow.State = db.BaofuAccountOpeningStateFailed
+			flow.FailureCode = arg.FailureCode
+			flow.FailureMessage = arg.FailureMessage
+			return flow, nil
+		})
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/v1/webhooks/baofu/account/open", bytes.NewBufferString(`{"encrypted":true}`))
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, "OK", recorder.Body.String())
+}
+
 func TestBaofuAccountOpenCallbackRejectsCollectIdentityMismatch(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -1385,6 +1453,26 @@ func (fakeBaofuAbnormalAccountParser) ParseOpenAccountNotification(body []byte) 
 }
 
 func (fakeBaofuAbnormalAccountParser) ParseWithdrawNotification(body []byte) (*baofunotification.WithdrawNotification, error) {
+	return fakeBaofuOpenAccountParser{}.ParseWithdrawNotification(body)
+}
+
+type fakeBaofuFailedAccountParser struct{}
+
+func (fakeBaofuFailedAccountParser) ParseOpenAccountNotification(body []byte) (*baofunotification.AccountNotification, error) {
+	return &baofunotification.AccountNotification{
+		MemberID:      "102004465",
+		TerminalID:    "200005200",
+		OutRequestNo:  "OPEN_FAILED",
+		UpstreamState: "0",
+		OpenState:     db.BaofuAccountOpenStateFailed,
+		FailCode:      "ID_CARD_CHECK_FAILED",
+		FailMessage:   "身份证号码不合法",
+		OccurredAt:    time.Now().UTC(),
+		Raw:           []byte(`{"transSerialNo":"OPEN_FAILED","state":"0","errorCode":"ID_CARD_CHECK_FAILED","errorMsg":"身份证号码不合法"}`),
+	}, nil
+}
+
+func (fakeBaofuFailedAccountParser) ParseWithdrawNotification(body []byte) (*baofunotification.WithdrawNotification, error) {
 	return fakeBaofuOpenAccountParser{}.ParseWithdrawNotification(body)
 }
 

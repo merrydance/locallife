@@ -1765,7 +1765,8 @@ func TestBaofuSettlementAccountRequestErrorLogIncludesMerchantReportContext(t *t
 	require.Contains(t, logs.String(), `"owner_id":88`)
 	require.Contains(t, logs.String(), `"provider_method":"bind_sub_config"`)
 	require.Contains(t, logs.String(), `"upstream_code":"NO_AUTH"`)
-	require.NotContains(t, logs.String(), providerErr.UpstreamMessage)
+	require.Contains(t, logs.String(), `"upstream_message_sanitized"`)
+	require.NotContains(t, logs.String(), "appid wx123456")
 }
 
 func TestBaofuSettlementAccountRequestErrorLogIncludesSanitizedProviderMessage(t *testing.T) {
@@ -2358,6 +2359,63 @@ func TestBaofuSettlementAccountOperatorFailedFlowReturnsClassifiedSafeGuidance(t
 	require.NotContains(t, recorder.Body.String(), "该子商户已开户")
 	require.NotContains(t, recorder.Body.String(), "LLBFOO0000000999")
 	require.NotContains(t, recorder.Body.String(), "BF00060")
+}
+
+func TestBaofuSettlementAccountOperatorFailedFlowReturnsPersistedOpenAccountFailureReason(t *testing.T) {
+	user, _ := randomUser(t)
+	operator := randomOperator(user.ID)
+	flow := db.BaofuAccountOpeningFlow{
+		ID:                199,
+		OwnerType:         db.BaofuAccountOwnerTypeOperator,
+		OwnerID:           operator.ID,
+		AccountType:       db.BaofuAccountTypePersonal,
+		State:             db.BaofuAccountOpeningStateFailed,
+		OpenTransSerialNo: pgtype.Text{String: "BFO_INVALID_PROFILE_CURRENT", Valid: true},
+		FailureCode:       pgtype.Text{String: "BF0020", Valid: true},
+		FailureMessage:    pgtype.Text{String: "统一社会信用代码格式不正确", Valid: true},
+		CreatedAt:         time.Now(),
+		UpdatedAt:         time.Now(),
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectActiveOperatorAuth(store, user.ID, operator)
+	store.EXPECT().
+		GetBaofuAccountBindingByOwner(gomock.Any(), gomock.Eq(db.GetBaofuAccountBindingByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeOperator,
+			OwnerID:   operator.ID,
+		})).
+		Return(db.BaofuAccountBinding{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetBaofuAccountOpeningProfileByOwner(gomock.Any(), gomock.Eq(db.GetBaofuAccountOpeningProfileByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeOperator,
+			OwnerID:   operator.ID,
+		})).
+		Return(db.BaofuAccountOpeningProfile{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetLatestBaofuAccountOpeningFlowByOwner(gomock.Any(), gomock.Eq(db.GetLatestBaofuAccountOpeningFlowByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeOperator,
+			OwnerID:   operator.ID,
+		})).
+		Return(flow, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodGet, "/v1/operators/me/settlement-account", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response baofuSettlementAccountResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.Equal(t, db.BaofuAccountOpeningStateFailed, response.Status)
+	require.Equal(t, "统一社会信用代码格式不正确", response.StatusDesc)
+	require.Contains(t, recorder.Body.String(), "统一社会信用代码格式不正确")
+	require.NotContains(t, recorder.Body.String(), "BF0020")
 }
 
 func TestBaofuSettlementAccountOperatorRejectsClientControlledFieldsBeforeServiceCall(t *testing.T) {

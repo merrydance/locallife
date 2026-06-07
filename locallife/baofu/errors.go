@@ -1,6 +1,9 @@
 package baofu
 
-import "strings"
+import (
+	"regexp"
+	"strings"
+)
 
 type BaofuErrorCategory string
 
@@ -55,6 +58,7 @@ var baofuOfficialErrorRules = map[string]baofuErrorRule{
 	"PARAMETER_VALID_NOT_PASS":  {category: BaofuErrorCategoryUserActionRequired, message: baofuMessageCheckAndResubmit, action: baofuActionCheckAndResubmit},
 	"PARAMETER_VALID":           {category: BaofuErrorCategoryUserActionRequired, message: baofuMessageCheckAndResubmit, action: baofuActionCheckAndResubmit},
 	"BF0001":                    {category: BaofuErrorCategoryUserActionRequired, message: baofuMessageCheckAndResubmit, action: baofuActionCheckAndResubmit},
+	"BF0020":                    {category: BaofuErrorCategoryUserActionRequired, message: baofuMessageCheckAndResubmit, action: baofuActionCheckAndResubmit},
 	"BF00062":                   {category: BaofuErrorCategoryUserActionRequired, message: baofuMessageCheckAndResubmit, action: baofuActionCheckAndResubmit},
 	"BF00064":                   {category: BaofuErrorCategoryManualReview, message: baofuMessagePaymentProcessing, action: baofuActionQueryLater},
 	"BF00107":                   {category: BaofuErrorCategoryUserActionRequired, message: baofuMessageCheckAndResubmit, action: baofuActionCheckAndResubmit},
@@ -72,6 +76,7 @@ var baofuOfficialErrorRules = map[string]baofuErrorRule{
 	"ORDER_NOT_SUPPORT_REFUNDS": {category: BaofuErrorCategoryUserActionRequired, message: baofuMessageCheckAndResubmit, action: baofuActionCheckAndResubmit},
 	"NOT_SUPPORT_CONCURRENT":    {category: BaofuErrorCategoryUserActionRequired, message: baofuMessageCheckAndResubmit, action: baofuActionCheckAndResubmit},
 	"ID_CARD_CHECK_FAILED":      {category: BaofuErrorCategoryUserActionRequired, message: baofuMessageIdentityCheckFailed, action: baofuActionCheckAndResubmit},
+	"VERIFY_FAILED":             {category: BaofuErrorCategoryUserActionRequired, message: baofuMessageIdentityCheckFailed, action: baofuActionCheckAndResubmit},
 	"BF00105":                   {category: BaofuErrorCategoryUserActionRequired, message: baofuMessageIdentityCheckFailed, action: baofuActionCheckAndResubmit},
 	"BF00063":                   {category: BaofuErrorCategoryUserActionRequired, message: baofuMessageIdentityCheckFailed, action: baofuActionCheckAndResubmit},
 	"BF00111":                   {category: BaofuErrorCategoryUserActionRequired, message: baofuMessageIdentityCheckFailed, action: baofuActionCheckAndResubmit},
@@ -125,7 +130,6 @@ var baofuOfficialErrorRules = map[string]baofuErrorRule{
 }
 
 func ClassifyBaofuError(code string, upstreamMessage string) ClassifiedError {
-	_ = upstreamMessage
 	canonical := strings.ToUpper(strings.TrimSpace(code))
 	classified := ClassifiedError{Code: canonical}
 	if rule, ok := baofuOfficialErrorRules[canonical]; ok {
@@ -133,12 +137,136 @@ func ClassifyBaofuError(code string, upstreamMessage string) ClassifiedError {
 		classified.PublicMessage = rule.message
 		classified.PublicAction = rule.action
 		classified.Retryable = rule.retry
+		classified.PublicMessage = baofuPublicMessageWithReason(canonical, classified.PublicMessage, upstreamMessage)
 		return classified
 	}
 	classified.Category = BaofuErrorCategoryManualReview
 	classified.PublicMessage = baofuMessagePaymentChannelAbnormal
 	classified.PublicAction = baofuActionContactPlatform
 	return classified
+}
+
+var (
+	baofuUpstreamIDCardPattern       = regexp.MustCompile(`([1-9]\d{5})(\d{8})(\d{3}[0-9Xx])`)
+	baofuUpstreamMobilePattern       = regexp.MustCompile(`\b(1[3-9]\d)(\d{4})(\d{4})\b`)
+	baofuUpstreamBankPattern         = regexp.MustCompile(`\b\d{12,25}\b`)
+	baofuUpstreamLoginNoPattern      = regexp.MustCompile(`(?i)\b(login[_-]?no)\s*[:=：]\s*[A-Za-z0-9_-]+`)
+	baofuUpstreamContractNoPattern   = regexp.MustCompile(`(?i)\b(contract[_-]?no)\s*[:=：]\s*[A-Za-z0-9_-]+`)
+	baofuUpstreamCertificatePattern  = regexp.MustCompile(`(?i)\b(certificate[_-]?no|cert[_-]?no|id[_-]?card[_-]?no)\s*[:=：]\s*[A-Za-z0-9_-]+`)
+	baofuUpstreamAppIDPattern        = regexp.MustCompile(`(?i)\b(app[_-]?id)\s*[:=： ]\s*[A-Za-z0-9_-]+`)
+	baofuUpstreamMerchantIDPattern   = regexp.MustCompile(`(?i)\b(mer[_-]?id|ter[_-]?id|member[_-]?id|merchant[_-]?id|terminal[_-]?id|sub[_-]?mch[_-]?id)\s*[:=：]\s*[A-Za-z0-9_-]+`)
+	baofuUpstreamLongTokenPattern    = regexp.MustCompile(`\b(?:LLBFO[A-Za-z0-9_-]*|CP_[A-Za-z0-9_-]+)\b`)
+	baofuUpstreamWhitespacePattern   = regexp.MustCompile(`\s+`)
+	baofuUpstreamRedactedOnlyPattern = regexp.MustCompile(`(?i)^([A-Za-z_ -]+)?<?redacted>?$`)
+)
+
+func SanitizeUpstreamMessageForRecord(message string) string {
+	trimmed := strings.TrimSpace(message)
+	if trimmed == "" {
+		return ""
+	}
+	sanitized := baofuUpstreamIDCardPattern.ReplaceAllString(trimmed, `$1********$3`)
+	sanitized = baofuUpstreamMobilePattern.ReplaceAllString(sanitized, `$1****$3`)
+	sanitized = baofuUpstreamBankPattern.ReplaceAllStringFunc(sanitized, func(value string) string {
+		if len(value) <= 4 {
+			return strings.Repeat("*", len(value))
+		}
+		return strings.Repeat("*", len(value)-4) + value[len(value)-4:]
+	})
+	sanitized = baofuUpstreamLoginNoPattern.ReplaceAllString(sanitized, `$1=<redacted>`)
+	sanitized = baofuUpstreamContractNoPattern.ReplaceAllString(sanitized, `$1=<redacted>`)
+	sanitized = baofuUpstreamCertificatePattern.ReplaceAllString(sanitized, `$1=<redacted>`)
+	sanitized = baofuUpstreamAppIDPattern.ReplaceAllString(sanitized, `$1=<redacted>`)
+	sanitized = baofuUpstreamMerchantIDPattern.ReplaceAllString(sanitized, `$1=<redacted>`)
+	sanitized = baofuUpstreamLongTokenPattern.ReplaceAllString(sanitized, `<redacted>`)
+	sanitized = baofuUpstreamWhitespacePattern.ReplaceAllString(sanitized, " ")
+	return strings.TrimSpace(sanitized)
+}
+
+// UserVisibleUpstreamReason returns a sanitized provider reason only for user-actionable Baofoo errors.
+func UserVisibleUpstreamReason(code string, upstreamMessage string) string {
+	return baofuUserVisibleUpstreamReason(code, upstreamMessage)
+}
+
+func baofuPublicMessageWithReason(code string, message string, upstreamMessage string) string {
+	base := strings.TrimSpace(message)
+	reason := baofuUserVisibleUpstreamReason(code, upstreamMessage)
+	if base == "" {
+		return reason
+	}
+	if reason == "" {
+		return base
+	}
+	if strings.Contains(base, reason) {
+		return base
+	}
+	for _, rule := range baofuOfficialErrorRules {
+		localPrefix := strings.TrimSpace(rule.message) + "："
+		if localPrefix != "：" && strings.HasPrefix(reason, localPrefix) {
+			return reason
+		}
+	}
+	return base + "：" + reason
+}
+
+func baofuUserVisibleUpstreamReason(code string, upstreamMessage string) string {
+	canonical := strings.ToUpper(strings.TrimSpace(code))
+	if !baofuCanExposeUpstreamReasonForCode(canonical) {
+		return ""
+	}
+	reason := SanitizeUpstreamMessageForRecord(upstreamMessage)
+	if !baofuSanitizedUpstreamReasonLooksUserSafe(reason) {
+		return ""
+	}
+	return reason
+}
+
+func baofuCanExposeUpstreamReasonForCode(code string) bool {
+	switch strings.ToUpper(strings.TrimSpace(code)) {
+	case "", "EXISTED_LOGIN_NO", "BF00060":
+		return false
+	}
+	rule, ok := baofuOfficialErrorRules[strings.ToUpper(strings.TrimSpace(code))]
+	return ok && rule.category == BaofuErrorCategoryUserActionRequired && rule.action == baofuActionCheckAndResubmit
+}
+
+func baofuSanitizedUpstreamReasonLooksUserSafe(reason string) bool {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return false
+	}
+	if baofuUpstreamRedactedOnlyPattern.MatchString(reason) {
+		return false
+	}
+	lower := strings.ToLower(reason)
+	for _, unsafe := range []string{
+		"private key",
+		"secret",
+		"token",
+		"appid",
+		"app_id",
+		"login_no",
+		"loginno",
+		"mer_id",
+		"merid",
+		"ter_id",
+		"terid",
+		"member_id",
+		"memberid",
+		"sub_mch_id",
+		"submchid",
+		"contract_no",
+		"contractno",
+		"merchant_id",
+		"merchantid",
+		"terminal_id",
+		"terminalid",
+	} {
+		if strings.Contains(lower, unsafe) {
+			return false
+		}
+	}
+	return true
 }
 
 func BaofuCommandMessage(code string, upstreamMessage string) string {

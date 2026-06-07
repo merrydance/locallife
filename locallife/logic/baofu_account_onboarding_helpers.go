@@ -398,7 +398,7 @@ func baofuCorporateCertType(accountType string) string {
 func baofuOpeningResult(flow db.BaofuAccountOpeningFlow, profile db.BaofuAccountOpeningProfile) BaofuAccountOpeningResult {
 	result := BaofuAccountOpeningResult{State: strings.TrimSpace(flow.State), Label: baofuOnboardingStateLabel(flow.State), Flow: flow, Profile: profile}
 	if strings.TrimSpace(result.State) == db.BaofuAccountOpeningStateFailed {
-		result.StatusDesc = BaofuAccountOpeningFailureStatusDesc(result.Flow.FailureCode.String)
+		result.StatusDesc = BaofuAccountOpeningFailureStatusDesc(result.Flow.FailureCode.String, result.Flow.FailureMessage.String)
 	} else if strings.TrimSpace(result.State) == db.BaofuAccountOpeningStateProfilePending ||
 		strings.TrimSpace(profile.ProfileStatus) != db.BaofuAccountOpeningProfileStatusComplete {
 		result.MissingFields = BaofuAccountOpeningProfileMissingFields(profile)
@@ -407,8 +407,13 @@ func baofuOpeningResult(flow db.BaofuAccountOpeningFlow, profile db.BaofuAccount
 	return result
 }
 
-func BaofuAccountOpeningFailureStatusDesc(failureCode string) string {
+func BaofuAccountOpeningFailureStatusDesc(failureCode string, failureMessage ...string) string {
 	code := strings.TrimSpace(failureCode)
+	for _, message := range failureMessage {
+		if text := baofu.UserVisibleUpstreamReason(code, message); text != "" {
+			return text
+		}
+	}
 	if code == "" {
 		return "开户未通过，请核对资料后重试"
 	}
@@ -460,9 +465,11 @@ func baofuOpeningProviderDiagnostic(raw []byte) map[string]any {
 		"source_path",
 		"ret_code",
 		"top_error_code",
+		"top_error_message_sanitized",
 		"top_error_message_present",
 		"result_state",
 		"result_error_code",
+		"result_error_message_sanitized",
 		"result_error_message_present",
 	} {
 		if value, ok := payload[key]; ok {
@@ -494,6 +501,12 @@ func baofuSafeDiagnosticValue(key string, value any) (any, bool) {
 	case "operation", "sys_resp_code", "ret_code", "top_error_code", "result_state", "result_error_code":
 		if text, ok := baofuSafeDiagnosticString(value); ok && baofuSafeDiagnosticToken(text) {
 			return text, true
+		}
+	case "top_error_message_sanitized", "result_error_message_sanitized":
+		if text, ok := baofuSafeDiagnosticString(value); ok {
+			if sanitized := baofu.SanitizeUpstreamMessageForRecord(text); sanitized != "" {
+				return sanitized, true
+			}
 		}
 	case "http_status":
 		if number, ok := baofuSafeDiagnosticNumber(value); ok && number >= 100 && number < 600 {

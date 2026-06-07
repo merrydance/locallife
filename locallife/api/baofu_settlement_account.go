@@ -3,7 +3,6 @@ package api
 import (
 	"errors"
 	"net/http"
-	"regexp"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -388,35 +387,10 @@ func writeBaofuSettlementAccountProviderErrorLogFields(event *zerolog.Event, err
 	if cause := errors.Unwrap(providerErr); cause != nil {
 		event = event.Str("provider_error_cause", strings.TrimSpace(cause.Error()))
 	}
-	if sanitized := baofuProviderUpstreamMessageForLog(providerErr.UpstreamMessage); sanitized != "" {
+	if sanitized := baofu.SanitizeUpstreamMessageForRecord(providerErr.UpstreamMessage); sanitized != "" {
 		event = event.Str("upstream_message_sanitized", sanitized)
 	}
 	return event
-}
-
-var (
-	baofuProviderIDCardPattern = regexp.MustCompile(`([1-9]\d{5})(\d{8})(\d{3}[0-9Xx])`)
-	baofuProviderMobilePattern = regexp.MustCompile(`\b(1[3-9]\d)(\d{4})(\d{4})\b`)
-	baofuProviderBankPattern   = regexp.MustCompile(`\b\d{12,25}\b`)
-)
-
-func baofuProviderUpstreamMessageForLog(message string) string {
-	trimmed := strings.TrimSpace(message)
-	if trimmed == "" {
-		return ""
-	}
-	sanitized := baofuProviderIDCardPattern.ReplaceAllString(trimmed, `$1********$3`)
-	sanitized = baofuProviderMobilePattern.ReplaceAllString(sanitized, `$1****$3`)
-	sanitized = baofuProviderBankPattern.ReplaceAllStringFunc(sanitized, func(value string) string {
-		if len(value) <= 4 {
-			return strings.Repeat("*", len(value))
-		}
-		return strings.Repeat("*", len(value)-4) + value[len(value)-4:]
-	})
-	if sanitized == trimmed {
-		return ""
-	}
-	return sanitized
 }
 
 func loggedBaofuSettlementAccountServerError(ctx *gin.Context, err error, scope baofuSettlementAccountScope, publicMessage string, logMessage string) ErrorResponse {

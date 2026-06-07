@@ -270,6 +270,9 @@ func baofuSafeAccountSnapshot(raw []byte) []byte {
 			safe["source_path"] = "body.result[0]"
 		}
 		if message, ok := safeString(result["errorMsg"]); ok && strings.TrimSpace(message) != "" {
+			if sanitized := baofu.SanitizeUpstreamMessageForRecord(message); sanitized != "" {
+				safe["result_error_message_sanitized"] = sanitized
+			}
 			safe["result_error_message_present"] = true
 		}
 	} else {
@@ -282,6 +285,9 @@ func baofuSafeAccountSnapshot(raw []byte) []byte {
 			safe["result_error_code"] = value
 		}
 		if message, ok := safeString(payload["errorMsg"]); ok && strings.TrimSpace(message) != "" {
+			if sanitized := baofu.SanitizeUpstreamMessageForRecord(message); sanitized != "" {
+				safe["result_error_message_sanitized"] = sanitized
+			}
 			safe["result_error_message_present"] = true
 		}
 	}
@@ -298,6 +304,7 @@ func baofuAccountSnapshotWhitelist(payload map[string]any) map[string]any {
 		"ret_code",
 		"result_state",
 		"result_error_code",
+		"result_error_message_sanitized",
 		"result_error_message_present",
 	} {
 		if value, ok := payload[key]; ok {
@@ -345,7 +352,12 @@ func safeString(value any) (string, bool) {
 	}
 }
 
-func baofuAccountSafeFailureMessage(code string) pgtype.Text {
+func baofuAccountSafeFailureMessage(code string, upstreamMessages ...string) pgtype.Text {
+	for _, upstreamMessage := range upstreamMessages {
+		if message := baofu.UserVisibleUpstreamReason(code, upstreamMessage); message != "" {
+			return pgtype.Text{String: message, Valid: true}
+		}
+	}
 	classified := baofu.ClassifyBaofuError(code, "")
 	message := strings.TrimSpace(classified.PublicMessage)
 	return pgtype.Text{String: message, Valid: message != ""}

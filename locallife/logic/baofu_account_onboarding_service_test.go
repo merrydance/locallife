@@ -22,6 +22,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestBaofuAccountOpeningFailureStatusDescUsesSafeProviderReason(t *testing.T) {
+	require.Equal(t,
+		"统一社会信用代码格式不正确",
+		BaofuAccountOpeningFailureStatusDesc("BF0020", "统一社会信用代码格式不正确"),
+	)
+	require.Equal(t,
+		"身份证号码 110101********0011 不合法",
+		BaofuAccountOpeningFailureStatusDesc("ID_CARD_CHECK_FAILED", "身份证号码 110101199001010011 不合法"),
+	)
+	require.Equal(t,
+		"资料信息不完整，请核对后重新提交",
+		BaofuAccountOpeningFailureStatusDesc("PARAM_ERROR", "merId=102004465 terId=200005200 参数错误"),
+	)
+}
+
 func TestBaofuAccountOnboardingServiceStart_MissingProfileDoesNotCallBaofu(t *testing.T) {
 	store := newFakeBaofuAccountOnboardingStore()
 	service := NewBaofuAccountOnboardingService(store, &fakeBaofuOnboardingAccountClient{}, nil, nil, BaofuAccountOnboardingConfig{
@@ -63,7 +78,7 @@ func TestBaofuAccountOnboardingServiceStart_ProviderOpenErrorBecomesSafeRequestE
 		Operation:       "open_account",
 		Capability:      "baofu_account_open",
 		UpstreamCode:    "BF00061",
-		UpstreamMessage: "raw upstream id card failure: 110101199001010011",
+		UpstreamMessage: "身份证号码 110101199001010011 不合法",
 	}
 	accountClient := &fakeBaofuOnboardingAccountClient{err: providerErr}
 	service := NewBaofuAccountOnboardingService(store, accountClient, nil, nil, BaofuAccountOnboardingConfig{
@@ -91,14 +106,15 @@ func TestBaofuAccountOnboardingServiceStart_ProviderOpenErrorBecomesSafeRequestE
 
 	reqErr := assertRequestError(t, err)
 	require.Equal(t, 400, reqErr.Status)
-	require.EqualError(t, reqErr.Err, "身份或银行卡信息核验未通过，请核对后重新提交")
+	require.EqualError(t, reqErr.Err, "身份或银行卡信息核验未通过，请核对后重新提交：身份证号码 110101********0011 不合法")
+	require.NotContains(t, reqErr.Err.Error(), "110101199001010011")
 	require.Same(t, providerErr, LoggableError(err))
 	require.Equal(t, 1, accountClient.openCalls)
 }
 
 func TestBaofuAccountOnboardingServiceStart_ProviderOpenErrorMarksFlowFailed(t *testing.T) {
 	store := newFakeBaofuAccountOnboardingStore()
-	providerErr := baofu.NewProviderBusinessError("T-1001-013-01", "BF0001", "raw upstream missing field")
+	providerErr := baofu.NewProviderBusinessError("T-1001-013-01", "BF0001", "资料缺失")
 	accountClient := &fakeBaofuOnboardingAccountClient{err: providerErr}
 	service := NewBaofuAccountOnboardingService(store, accountClient, nil, nil, BaofuAccountOnboardingConfig{
 		VerifyFeeFen: 200,
@@ -129,16 +145,16 @@ func TestBaofuAccountOnboardingServiceStart_ProviderOpenErrorMarksFlowFailed(t *
 	require.Len(t, store.flows, 1)
 	require.Equal(t, db.BaofuAccountOpeningStateFailed, store.flows[0].State)
 	require.Equal(t, "BF0001", store.flows[0].FailureCode.String)
-	require.Equal(t, "资料信息不完整，请核对后重新提交", store.flows[0].FailureMessage.String)
+	require.Equal(t, "资料缺失", store.flows[0].FailureMessage.String)
 	require.Equal(t, db.BaofuAccountBinding{}, store.activeBinding)
 }
 
-func TestBaofuAccountOnboardingServiceStart_ProviderOpenErrorPersistsSafeDiagnosticSnapshot(t *testing.T) {
+func TestBaofuAccountOnboardingServiceStart_ProviderOpenErrorPersistsSafeFailureGuidance(t *testing.T) {
 	store := newFakeBaofuAccountOnboardingStore()
-	providerErr := baofu.NewProviderBusinessError("T-1001-013-01", "BF0020", "通道返回身份证 110101199001010011 银行卡 6222020202020202 手机 13800138000")
+	providerErr := baofu.NewProviderBusinessError("T-1001-013-01", "BF0020", "统一社会信用代码格式不正确")
 	var baofuProviderErr *baofu.ProviderError
 	require.ErrorAs(t, providerErr, &baofuProviderErr)
-	baofuProviderErr.DiagnosticSnapshot = []byte(`{"provider":"baofu","capability":"account","operation":"T-1001-013-01","http_status":200,"sys_resp_code":"S_0000","business_failure":true,"source_path":"body.errorCode","ret_code":"0","top_error_code":"BF0020","top_error_message_present":true}`)
+	baofuProviderErr.DiagnosticSnapshot = []byte(`{"provider":"baofu","capability":"account","operation":"T-1001-013-01","http_status":200,"sys_resp_code":"S_0000","business_failure":true,"source_path":"body.errorCode","ret_code":"0","top_error_code":"BF0020","top_error_message_sanitized":"统一社会信用代码格式不正确","top_error_message_present":true}`)
 	accountClient := &fakeBaofuOnboardingAccountClient{err: providerErr}
 	service := NewBaofuAccountOnboardingService(store, accountClient, nil, nil, BaofuAccountOnboardingConfig{
 		VerifyFeeFen: 200,
@@ -164,10 +180,11 @@ func TestBaofuAccountOnboardingServiceStart_ProviderOpenErrorPersistsSafeDiagnos
 	})
 
 	reqErr := assertRequestError(t, err)
-	require.Equal(t, http.StatusBadGateway, reqErr.Status)
+	require.Equal(t, http.StatusBadRequest, reqErr.Status)
 	require.Len(t, store.flows, 1)
 	require.Equal(t, db.BaofuAccountOpeningStateFailed, store.flows[0].State)
 	require.Equal(t, "BF0020", store.flows[0].FailureCode.String)
+	require.Equal(t, "统一社会信用代码格式不正确", store.flows[0].FailureMessage.String)
 	require.JSONEq(t, `{
 		"state":"failed",
 		"failure_code":"BF0020",
@@ -179,14 +196,13 @@ func TestBaofuAccountOnboardingServiceStart_ProviderOpenErrorPersistsSafeDiagnos
 			"sys_resp_code":"S_0000",
 			"business_failure":true,
 			"source_path":"body.errorCode",
-			"ret_code":"0",
-			"top_error_code":"BF0020",
-			"top_error_message_present":true
-		}
-	}`, string(store.flows[0].RawSnapshot))
-	require.NotContains(t, string(store.flows[0].RawSnapshot), "110101199001010011")
-	require.NotContains(t, string(store.flows[0].RawSnapshot), "6222020202020202")
-	require.NotContains(t, string(store.flows[0].RawSnapshot), "13800138000")
+				"ret_code":"0",
+				"top_error_code":"BF0020",
+				"top_error_message_sanitized":"统一社会信用代码格式不正确",
+				"top_error_message_present":true
+			}
+		}`, string(store.flows[0].RawSnapshot))
+	require.Contains(t, string(store.flows[0].RawSnapshot), "统一社会信用代码格式不正确")
 }
 
 func TestBaofuAccountOnboardingServiceStart_BusinessPrivateCardRequiresCorporateMobile(t *testing.T) {
@@ -1442,14 +1458,14 @@ func TestBaofuAccountOnboardingServiceApplyAccountOpenResult_DoesNotPersistUnsaf
 		OpenState:     db.BaofuAccountOpenStateFailed,
 		UpstreamState: "0",
 		FailCode:      "BF0020",
-		FailMessage:   "通道返回身份证 110101199001010011 银行卡 6222020202020202 手机 13800138000",
-		Raw:           []byte(`{"retCode":1,"result":[{"state":0,"errorCode":"BF0020","errorMsg":"通道返回身份证 110101199001010011 银行卡 6222020202020202 手机 13800138000","customerName":"测试用户","loginNo":"LLBFOO0000000999","contractNo":"CP_SECRET_123"}]}`),
+		FailMessage:   "统一社会信用代码格式不正确",
+		Raw:           []byte(`{"retCode":1,"result":[{"state":0,"errorCode":"BF0020","errorMsg":"统一社会信用代码格式不正确","customerName":"测试用户","loginNo":"LLBFOO0000000999","contractNo":"CP_SECRET_123"}]}`),
 	})
 
 	require.NoError(t, err)
 	require.Equal(t, db.BaofuAccountOpeningStateFailed, applied.Flow.State)
 	require.Equal(t, "BF0020", applied.Flow.FailureCode.String)
-	require.Equal(t, "支付通道异常，请联系平台处理", applied.Flow.FailureMessage.String)
+	require.Equal(t, "统一社会信用代码格式不正确", applied.Flow.FailureMessage.String)
 	require.JSONEq(t, `{
 		"state":"failed",
 		"failure_code":"BF0020",
@@ -1457,12 +1473,16 @@ func TestBaofuAccountOnboardingServiceApplyAccountOpenResult_DoesNotPersistUnsaf
 			"provider":"baofu",
 			"capability":"account",
 			"source_path":"body.result[0].errorCode",
-			"ret_code":"1",
-			"result_state":"0",
-			"result_error_code":"BF0020",
-			"result_error_message_present":true
-		}
-	}`, string(applied.Flow.RawSnapshot))
+				"ret_code":"1",
+				"result_state":"0",
+				"result_error_code":"BF0020",
+				"result_error_message_sanitized":"统一社会信用代码格式不正确",
+				"result_error_message_present":true
+			}
+		}`, string(applied.Flow.RawSnapshot))
+	result := baofuOpeningResult(applied.Flow, db.BaofuAccountOpeningProfile{ProfileStatus: db.BaofuAccountOpeningProfileStatusComplete})
+	require.Equal(t, "统一社会信用代码格式不正确", result.StatusDesc)
+	require.Contains(t, string(applied.Flow.RawSnapshot), "统一社会信用代码格式不正确")
 	require.NotContains(t, string(applied.Flow.RawSnapshot), "测试用户")
 	require.NotContains(t, string(applied.Flow.RawSnapshot), "110101199001010011")
 	require.NotContains(t, string(applied.Flow.RawSnapshot), "6222020202020202")

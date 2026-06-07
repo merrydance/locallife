@@ -242,8 +242,8 @@ func TestProcessTaskInitiateRefund_OrderRefundBaofuOrderExistMarksProcessingForQ
 		err: &baofu.ProviderError{
 			Operation:       "order_refund",
 			UpstreamCode:    "ORDER_EXIST",
-			UpstreamMessage: "raw upstream duplicate detail",
-			Frontend:        baofu.ClassifyBaofuError("ORDER_EXIST", "raw upstream duplicate detail").FrontendGuidance(),
+			UpstreamMessage: "订单已存在，请查询原单",
+			Frontend:        baofu.ClassifyBaofuError("ORDER_EXIST", "订单已存在，请查询原单").FrontendGuidance(),
 		},
 	}
 

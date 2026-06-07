@@ -114,7 +114,7 @@ func (s *BaofuAccountOnboardingService) applyAccountOpenResult(ctx context.Conte
 		updated, err := s.store.MarkBaofuAccountOpeningFlowFailed(ctx, db.MarkBaofuAccountOpeningFlowFailedParams{
 			ID:             flow.ID,
 			FailureCode:    pgText(normalized.FailCode),
-			FailureMessage: baofuAccountSafeFailureMessage(normalized.FailCode),
+			FailureMessage: baofuAccountSafeFailureMessage(normalized.FailCode, normalized.FailMessage),
 			RawSnapshot:    baofuAccountOpenResultFailureSnapshot(normalized.FailCode, normalized.Raw),
 		})
 		if err != nil {

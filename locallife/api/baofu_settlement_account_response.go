@@ -69,7 +69,7 @@ func (resp *baofuSettlementAccountResponse) applyFlowState(state string) {
 func (resp *baofuSettlementAccountResponse) applyFlowFailure(flow db.BaofuAccountOpeningFlow) {
 	resp.applyFlowState(flow.State)
 	if strings.TrimSpace(flow.State) == db.BaofuAccountOpeningStateFailed {
-		resp.StatusDesc = logic.BaofuAccountOpeningFailureStatusDesc(flow.FailureCode.String)
+		resp.StatusDesc = logic.BaofuAccountOpeningFailureStatusDesc(flow.FailureCode.String, flow.FailureMessage.String)
 	}
 }
 

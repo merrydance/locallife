@@ -74,7 +74,7 @@ func (s *BaofuAccountOnboardingService) markFlowFailedFromProviderError(ctx cont
 	return s.store.MarkBaofuAccountOpeningFlowFailed(ctx, db.MarkBaofuAccountOpeningFlowFailedParams{
 		ID:             flow.ID,
 		FailureCode:    pgtype.Text{String: classified.Code, Valid: classified.Code != ""},
-		FailureMessage: pgtype.Text{String: classified.PublicMessage, Valid: strings.TrimSpace(classified.PublicMessage) != ""},
+		FailureMessage: baofuAccountSafeFailureMessage(classified.Code, providerErr.UpstreamMessage),
 		RawSnapshot:    rawSnapshot,
 	})
 }

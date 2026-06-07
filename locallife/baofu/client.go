@@ -278,20 +278,33 @@ func providerResponseErrorWithDiagnostic(operation string, statusCode int, upstr
 	}
 }
 
+func baofuFirstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
 type accountBusinessFailureDiagnostic struct {
-	Operation                 string        `json:"operation,omitempty"`
-	HTTPStatus                int           `json:"http_status,omitempty"`
-	Header                    UnionGWHeader `json:"-"`
-	Code                      string        `json:"-"`
-	Message                   string        `json:"-"`
-	Failed                    bool          `json:"-"`
-	SourcePath                string        `json:"source_path,omitempty"`
-	RetCode                   string        `json:"ret_code,omitempty"`
-	TopErrorCode              string        `json:"top_error_code,omitempty"`
-	TopErrorMessagePresent    bool          `json:"top_error_message_present,omitempty"`
-	ResultState               string        `json:"result_state,omitempty"`
-	ResultErrorCode           string        `json:"result_error_code,omitempty"`
-	ResultErrorMessagePresent bool          `json:"result_error_message_present,omitempty"`
+	Operation                   string        `json:"operation,omitempty"`
+	HTTPStatus                  int           `json:"http_status,omitempty"`
+	Header                      UnionGWHeader `json:"-"`
+	Code                        string        `json:"-"`
+	Message                     string        `json:"-"`
+	Failed                      bool          `json:"-"`
+	SourcePath                  string        `json:"source_path,omitempty"`
+	RetCode                     string        `json:"ret_code,omitempty"`
+	TopErrorCode                string        `json:"top_error_code,omitempty"`
+	TopErrorMessage             string        `json:"-"`
+	TopErrorMessageSanitized    string        `json:"top_error_message_sanitized,omitempty"`
+	TopErrorMessagePresent      bool          `json:"top_error_message_present,omitempty"`
+	ResultState                 string        `json:"result_state,omitempty"`
+	ResultErrorCode             string        `json:"result_error_code,omitempty"`
+	ResultErrorMessage          string        `json:"-"`
+	ResultErrorMessageSanitized string        `json:"result_error_message_sanitized,omitempty"`
+	ResultErrorMessagePresent   bool          `json:"result_error_message_present,omitempty"`
 }
 
 func (d accountBusinessFailureDiagnostic) SafeDiagnosticSnapshot() []byte {
@@ -321,7 +334,10 @@ func (d accountBusinessFailureDiagnostic) SafeDiagnosticSnapshot() []byte {
 	if v := strings.TrimSpace(d.TopErrorCode); v != "" {
 		snapshot["top_error_code"] = v
 	}
-	if d.TopErrorMessagePresent {
+	if v := strings.TrimSpace(baofuFirstNonEmpty(d.TopErrorMessageSanitized, SanitizeUpstreamMessageForRecord(d.TopErrorMessage))); v != "" {
+		snapshot["top_error_message_sanitized"] = v
+	}
+	if strings.TrimSpace(d.TopErrorMessage) != "" || d.TopErrorMessagePresent {
 		snapshot["top_error_message_present"] = true
 	}
 	if v := strings.TrimSpace(d.ResultState); v != "" {
@@ -330,7 +346,10 @@ func (d accountBusinessFailureDiagnostic) SafeDiagnosticSnapshot() []byte {
 	if v := strings.TrimSpace(d.ResultErrorCode); v != "" {
 		snapshot["result_error_code"] = v
 	}
-	if d.ResultErrorMessagePresent {
+	if v := strings.TrimSpace(baofuFirstNonEmpty(d.ResultErrorMessageSanitized, SanitizeUpstreamMessageForRecord(d.ResultErrorMessage))); v != "" {
+		snapshot["result_error_message_sanitized"] = v
+	}
+	if strings.TrimSpace(d.ResultErrorMessage) != "" || d.ResultErrorMessagePresent {
 		snapshot["result_error_message_present"] = true
 	}
 	raw, err := json.Marshal(snapshot)
@@ -350,12 +369,16 @@ func accountBusinessFailure(raw json.RawMessage) accountBusinessFailureDiagnosti
 	errorMessage := jsonScalarString(payload["errorMsg"])
 	item := accountFirstResultItem(payload["result"])
 	diagnostic := accountBusinessFailureDiagnostic{
-		RetCode:                   retCode,
-		TopErrorCode:              errorCode,
-		TopErrorMessagePresent:    strings.TrimSpace(errorMessage) != "",
-		ResultState:               item.State,
-		ResultErrorCode:           item.ErrorCode,
-		ResultErrorMessagePresent: strings.TrimSpace(item.ErrorMessage) != "",
+		RetCode:                     retCode,
+		TopErrorCode:                errorCode,
+		TopErrorMessage:             errorMessage,
+		TopErrorMessageSanitized:    SanitizeUpstreamMessageForRecord(errorMessage),
+		TopErrorMessagePresent:      strings.TrimSpace(errorMessage) != "",
+		ResultState:                 item.State,
+		ResultErrorCode:             item.ErrorCode,
+		ResultErrorMessage:          item.ErrorMessage,
+		ResultErrorMessageSanitized: SanitizeUpstreamMessageForRecord(item.ErrorMessage),
+		ResultErrorMessagePresent:   strings.TrimSpace(item.ErrorMessage) != "",
 	}
 	if retCode == "" {
 		code := errorCode

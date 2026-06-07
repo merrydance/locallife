@@ -467,9 +467,10 @@ func recordReplaceReservationRefundCommandRejected(ctx context.Context, store db
 		errorCode,
 		errorMessage,
 		replaceReservationRefundCommandSnapshot(map[string]string{
-			"out_refund_no": outRefundNo,
-			"error_code":    stringValue(errorCode),
-			"error_message": stringValue(errorMessage),
+			"out_refund_no":           outRefundNo,
+			"error_code":              stringValue(errorCode),
+			"error_message":           stringValue(errorMessage),
+			"error_message_sanitized": baofu.SanitizeUpstreamMessageForRecord(stringValue(errorMessage)),
 		}),
 	))
 	if err != nil {

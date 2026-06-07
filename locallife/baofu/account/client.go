@@ -326,6 +326,9 @@ func (r officialAccountResult) safeDiagnosticSnapshot(item officialAccountResult
 	if resultCode != "" && !isOfficialSuccessCode(resultCode) {
 		snapshot["source_path"] = "body.result[0].errorCode"
 		snapshot["result_error_code"] = resultCode
+		if message := baofu.SanitizeUpstreamMessageForRecord(item.ErrorMessage.String()); message != "" {
+			snapshot["result_error_message_sanitized"] = message
+		}
 		if strings.TrimSpace(item.ErrorMessage.String()) != "" {
 			snapshot["result_error_message_present"] = true
 		}

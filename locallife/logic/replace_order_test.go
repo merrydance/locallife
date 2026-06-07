@@ -105,7 +105,7 @@ func TestProcessReplaceOrderRefundWithBaofuRejectsBaofooFailResult(t *testing.T)
 			TotalAmountFen:  900,
 			ResultCode:      aggregatecontracts.BusinessResultCodeFail,
 			ErrorCode:       "REFUND_AMT_EXCEEDS",
-			ErrorMessage:    "raw upstream refund amount detail",
+			ErrorMessage:    "退款金额超过可退金额",
 			RefundState:     aggregatecontracts.RefundStateError,
 		},
 	}
@@ -131,8 +131,7 @@ func TestProcessReplaceOrderRefundWithBaofuRejectsBaofooFailResult(t *testing.T)
 	require.NotNil(t, errorCode)
 	require.Equal(t, "REFUND_AMT_EXCEEDS", *errorCode)
 	require.NotNil(t, errorMessage)
-	require.Equal(t, "资料信息不完整，请核对后重新提交，check_and_resubmit", *errorMessage)
-	require.NotContains(t, *errorMessage, "raw upstream")
+	require.Equal(t, "资料信息不完整，请核对后重新提交：退款金额超过可退金额，check_and_resubmit", *errorMessage)
 }
 
 func TestCreateReplaceOrderBaofuPaymentRequiresClientIP(t *testing.T) {

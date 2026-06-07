@@ -1517,12 +1517,13 @@ func recordWorkerBaofuRefundCommand(ctx context.Context, store db.Store, payment
 		workerStringPtrIfNotEmpty(errorCode),
 		workerStringPtrIfNotEmpty(errorMessage),
 		workerBaofuRefundCommandSnapshot(map[string]string{
-			"out_refund_no": refundOrder.OutRefundNo,
-			"refund_id":     refundID,
-			"result_code":   resultCode,
-			"refund_state":  refundState,
-			"error_code":    errorCode,
-			"error_message": errorMessage,
+			"out_refund_no":           refundOrder.OutRefundNo,
+			"refund_id":               refundID,
+			"result_code":             resultCode,
+			"refund_state":            refundState,
+			"error_code":              errorCode,
+			"error_message":           errorMessage,
+			"error_message_sanitized": baofu.SanitizeUpstreamMessageForRecord(errorMessage),
 		}),
 	))
 	if err != nil {

@@ -191,7 +191,7 @@ func TestOrderServiceRejectMerchantOrder_RetryableBaofuRefundErrorNeedsRecovery(
 		baofuRefundErr: &baofu.ProviderError{
 			Operation:       "order_refund",
 			UpstreamCode:    "SYSTEM_BUSY",
-			UpstreamMessage: "raw upstream retryable detail",
+			UpstreamMessage: "系统繁忙，请稍后重试",
 		},
 	}
 	service := NewOrderService(store, nil, nil, nil, nil, nil, nil, facade, nil, nil, nil)
@@ -268,7 +268,7 @@ func TestOrderServiceRejectMerchantOrder_BaofuOrderExistReturnsAcceptedForQueryR
 		baofuRefundErr: &baofu.ProviderError{
 			Operation:       "order_refund",
 			UpstreamCode:    "ORDER_EXIST",
-			UpstreamMessage: "raw upstream duplicate detail",
+			UpstreamMessage: "订单已存在，请查询原单",
 		},
 	}
 	service := NewOrderService(store, nil, nil, nil, nil, nil, nil, facade, nil, nil, nil)

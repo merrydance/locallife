@@ -537,25 +537,25 @@ func TestAccountClientQueryBalanceUsesPersonalAccountType(t *testing.T) {
 }
 
 func TestAccountClientReturnsProviderErrorForBusinessFailure(t *testing.T) {
-	doer := &accountRecordingDoer{responseBody: map[string]any{"retCode": 0, "errorCode": "BF00061", "errorMsg": "上游原始四要素错误"}}
+	doer := &accountRecordingDoer{responseBody: map[string]any{"retCode": 0, "errorCode": "BF00061", "errorMsg": "银行卡校验失败"}}
 	client := NewClient(testBaofuRootClient(t, doer))
 
 	_, err := client.QueryBalance(context.Background(), contracts.BalanceQueryRequest{MerchantID: "102004465", TerminalID: "200005200", ContractNo: "CM202605040001"})
 
 	require.Error(t, err)
-	require.NotContains(t, err.Error(), "上游原始四要素错误")
+	require.NotContains(t, err.Error(), "银行卡校验失败")
 	var providerErr *baofu.ProviderError
 	require.ErrorAs(t, err, &providerErr)
 	require.Equal(t, "BF00061", providerErr.UpstreamCode)
-	require.Equal(t, "上游原始四要素错误", providerErr.UpstreamMessage)
-	require.Equal(t, "身份或银行卡信息核验未通过，请核对后重新提交", providerErr.Frontend.Message)
+	require.Equal(t, "银行卡校验失败", providerErr.UpstreamMessage)
+	require.Equal(t, "身份或银行卡信息核验未通过，请核对后重新提交：银行卡校验失败", providerErr.Frontend.Message)
 }
 
-func TestAccountClientProviderErrorIncludesSafeAccountFailureDiagnostic(t *testing.T) {
+func TestAccountClientProviderErrorMarksOpenAccountFailureMessagePresent(t *testing.T) {
 	doer := &accountRecordingDoer{responseBody: map[string]any{
 		"retCode":   0,
 		"errorCode": "BF0020",
-		"errorMsg":  "通道返回身份证 110101199001010011 银行卡 6222020202020202 手机 13800138000",
+		"errorMsg":  "统一社会信用代码格式不正确",
 	}}
 	client := NewClient(testBaofuRootClient(t, doer))
 
@@ -582,6 +582,7 @@ func TestAccountClientProviderErrorIncludesSafeAccountFailureDiagnostic(t *testi
 	var providerErr *baofu.ProviderError
 	require.ErrorAs(t, err, &providerErr)
 	require.Equal(t, "BF0020", providerErr.UpstreamCode)
+	require.Equal(t, "统一社会信用代码格式不正确", providerErr.UpstreamMessage)
 	require.JSONEq(t, `{
 		"provider":"baofu",
 		"capability":"account",
@@ -592,11 +593,10 @@ func TestAccountClientProviderErrorIncludesSafeAccountFailureDiagnostic(t *testi
 		"source_path":"body.errorCode",
 		"ret_code":"0",
 		"top_error_code":"BF0020",
+		"top_error_message_sanitized":"统一社会信用代码格式不正确",
 		"top_error_message_present":true
 	}`, string(providerErr.DiagnosticSnapshot))
-	require.NotContains(t, string(providerErr.DiagnosticSnapshot), "110101199001010011")
-	require.NotContains(t, string(providerErr.DiagnosticSnapshot), "6222020202020202")
-	require.NotContains(t, string(providerErr.DiagnosticSnapshot), "13800138000")
+	require.Contains(t, string(providerErr.DiagnosticSnapshot), "统一社会信用代码格式不正确")
 }
 
 func TestAccountClientOpenAccountResultKeepsSafeDiagnosticSnapshot(t *testing.T) {
@@ -629,7 +629,7 @@ func TestAccountClientOpenAccountResultKeepsSafeDiagnosticSnapshot(t *testing.T)
 	require.NotContains(t, string(result.Raw), "13800138000")
 }
 
-func TestAccountClientOpenAccountResultDiagnosticCapturesResultFailureSource(t *testing.T) {
+func TestAccountClientOpenAccountResultDiagnosticMarksResultFailureMessagePresent(t *testing.T) {
 	doer := &accountRecordingDoer{responseBody: map[string]any{
 		"retCode": 1,
 		"result": []map[string]any{{
@@ -638,7 +638,7 @@ func TestAccountClientOpenAccountResultDiagnosticCapturesResultFailureSource(t *
 			"customerName":  "测试用户",
 			"state":         0,
 			"errorCode":     "BF0020",
-			"errorMsg":      "通道返回身份证 110101199001010011 银行卡 6222020202020202 手机 13800138000",
+			"errorMsg":      "统一社会信用代码格式不正确",
 		}},
 	}}
 	client := NewClient(testBaofuRootClient(t, doer))
@@ -656,6 +656,7 @@ func TestAccountClientOpenAccountResultDiagnosticCapturesResultFailureSource(t *
 	require.NoError(t, err)
 	require.Equal(t, contracts.OpenStateFailed, result.OpenState)
 	require.Equal(t, "BF0020", result.FailCode)
+	require.Equal(t, "统一社会信用代码格式不正确", result.FailMessage)
 	require.JSONEq(t, `{
 		"provider":"baofu",
 		"capability":"account",
@@ -664,8 +665,10 @@ func TestAccountClientOpenAccountResultDiagnosticCapturesResultFailureSource(t *
 		"ret_code":"1",
 		"result_state":"0",
 		"result_error_code":"BF0020",
+		"result_error_message_sanitized":"统一社会信用代码格式不正确",
 		"result_error_message_present":true
 	}`, string(result.Raw))
+	require.Contains(t, string(result.Raw), "统一社会信用代码格式不正确")
 	require.NotContains(t, string(result.Raw), "测试用户")
 	require.NotContains(t, string(result.Raw), "110101199001010011")
 	require.NotContains(t, string(result.Raw), "6222020202020202")

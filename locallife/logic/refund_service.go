@@ -536,6 +536,7 @@ func buildBaofuRefundCommandSnapshot(refundOrder db.RefundOrder, refundResp *agg
 		RefundState  string `json:"refund_state,omitempty"`
 		ResultCode   string `json:"result_code,omitempty"`
 		ErrorCode    string `json:"error_code,omitempty"`
+		ErrorMessage string `json:"error_message_sanitized,omitempty"`
 		ErrorPresent bool   `json:"error_present,omitempty"`
 	}{
 		Provider:    db.ExternalPaymentProviderBaofu,
@@ -547,6 +548,7 @@ func buildBaofuRefundCommandSnapshot(refundOrder db.RefundOrder, refundResp *agg
 		snapshot.RefundState = strings.TrimSpace(refundResp.RefundState)
 		snapshot.ResultCode = strings.TrimSpace(refundResp.ResultCode)
 		snapshot.ErrorCode = strings.TrimSpace(refundResp.ErrorCode)
+		snapshot.ErrorMessage = baofu.SanitizeUpstreamMessageForRecord(refundResp.ErrorMessage)
 		if strings.EqualFold(strings.TrimSpace(refundResp.ResultCode), aggregatecontracts.BusinessResultCodeFail) ||
 			strings.TrimSpace(refundResp.ErrorCode) != "" ||
 			strings.TrimSpace(refundResp.ErrorMessage) != "" {
@@ -558,6 +560,7 @@ func buildBaofuRefundCommandSnapshot(refundOrder db.RefundOrder, refundResp *agg
 		var providerErr *baofu.ProviderError
 		if errors.As(cause, &providerErr) {
 			snapshot.ErrorCode = strings.TrimSpace(providerErr.UpstreamCode)
+			snapshot.ErrorMessage = baofu.SanitizeUpstreamMessageForRecord(providerErr.UpstreamMessage)
 		}
 	}
 	raw, err := json.Marshal(snapshot)

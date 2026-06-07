@@ -98,6 +98,9 @@ func LogProviderError(logger zerolog.Logger, err error, metadata RequestMetadata
 		if providerErr.StatusCode != 0 {
 			event = event.Int("http_status", providerErr.StatusCode)
 		}
+		if upstreamMessage := SanitizeUpstreamMessageForRecord(providerErr.UpstreamMessage); upstreamMessage != "" {
+			event = event.Str("upstream_message_sanitized", upstreamMessage)
+		}
 	}
 	event.Msg("baofu request failed")
 }
