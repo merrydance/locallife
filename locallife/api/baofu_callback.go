@@ -11,12 +11,14 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/merrydance/locallife/baofu"
 	baofunotification "github.com/merrydance/locallife/baofu/account/notification"
 	aggregatecontracts "github.com/merrydance/locallife/baofu/aggregatepay/contracts"
 	baofuaggregatenotification "github.com/merrydance/locallife/baofu/aggregatepay/notification"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/worker"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
 
@@ -217,9 +219,10 @@ func (server *Server) handleBaofuPaymentNotify(ctx *gin.Context) {
 	}
 	paymentOrder, err := server.loadBaofuPaymentOrderForCallback(ctx.Request.Context(), notification)
 	if err != nil {
-		log.Error().Err(err).
+		event := log.Error().Err(err).
 			Str("out_trade_no", strings.TrimSpace(notification.Fact.OutTradeNo)).
-			Str("baofu_trade_no", strings.TrimSpace(notification.Fact.TradeNo)).
+			Str("baofu_trade_no", strings.TrimSpace(notification.Fact.TradeNo))
+		writeBaofuCallbackProviderErrorLogFields(event, err).
 			Msg("load baofu payment order for callback failed")
 		ctx.JSON(http.StatusInternalServerError, baofuCallbackResponse{Code: "FAIL", Message: "persist callback failed"})
 		return
@@ -299,6 +302,26 @@ func (server *Server) queryBaofuPaymentOutTradeNoForCallback(ctx context.Context
 	return strings.TrimSpace(queryResult.OutTradeNo), nil
 }
 
+func writeBaofuCallbackProviderErrorLogFields(event *zerolog.Event, err error) *zerolog.Event {
+	var providerErr *baofu.ProviderError
+	if !errors.As(err, &providerErr) || providerErr == nil {
+		return event
+	}
+	event = event.
+		Str("provider_operation", strings.TrimSpace(providerErr.Operation)).
+		Str("provider_capability", strings.TrimSpace(providerErr.Capability)).
+		Str("upstream_code", strings.TrimSpace(providerErr.UpstreamCode)).
+		Str("frontend_code", strings.TrimSpace(providerErr.Frontend.Code)).
+		Bool("retryable", providerErr.Frontend.Retryable)
+	if providerErr.StatusCode != 0 {
+		event = event.Int("http_status", providerErr.StatusCode)
+	}
+	if sanitized := baofu.SanitizeUpstreamMessageForRecord(providerErr.UpstreamMessage); sanitized != "" {
+		event = event.Str("upstream_message_sanitized", sanitized)
+	}
+	return event
+}
+
 func (server *Server) handleBaofuShareNotify(ctx *gin.Context) {
 	if server.baofuPaymentNotificationParser == nil {
 		log.Error().Msg("baofu share callback received but parser is not configured")
@@ -329,7 +352,11 @@ func (server *Server) handleBaofuShareNotify(ctx *gin.Context) {
 	}
 	profitSharingOrder, err := server.loadBaofuProfitSharingOrderForCallback(ctx.Request.Context(), notification)
 	if err != nil {
-		log.Error().Err(err).Str("out_order_no", strings.TrimSpace(notification.Fact.OutTradeNo)).Msg("load baofu profit sharing order for callback failed")
+		event := log.Error().Err(err).
+			Str("out_order_no", strings.TrimSpace(notification.Fact.OutTradeNo)).
+			Str("baofu_share_trade_no", strings.TrimSpace(notification.Fact.TradeNo))
+		writeBaofuCallbackProviderErrorLogFields(event, err).
+			Msg("load baofu profit sharing order for callback failed")
 		ctx.JSON(http.StatusInternalServerError, baofuCallbackResponse{Code: "FAIL", Message: "persist callback failed"})
 		return
 	}

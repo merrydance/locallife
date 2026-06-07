@@ -268,7 +268,7 @@ func (s *BaofuMerchantReportService) bindApplet(ctx context.Context, report db.B
 	if previousCommandErr != nil && !errors.Is(previousCommandErr, db.ErrRecordNotFound) {
 		return db.BaofuMerchantReport{}, previousCommandErr
 	}
-	if _, err := s.store.CreateExternalPaymentCommand(ctx, db.CreateExternalPaymentCommandParams{
+	createdCommand, err := s.store.CreateExternalPaymentCommand(ctx, db.CreateExternalPaymentCommandParams{
 		Provider:           db.ExternalPaymentProviderBaofu,
 		Channel:            db.PaymentChannelBaofuAggregate,
 		Capability:         db.ExternalPaymentCapabilityBaofuMerchantReport,
@@ -281,19 +281,24 @@ func (s *BaofuMerchantReportService) bindApplet(ctx context.Context, report db.B
 		CommandStatus:      db.ExternalPaymentCommandStatusSubmitted,
 		SubmittedAt:        s.now().UTC(),
 		ResponseSnapshot:   baofuBindSubConfigCommandSnapshot(subMchID),
-	}); err != nil {
+	})
+	if err != nil {
 		return db.BaofuMerchantReport{}, err
 	}
 	result, err := s.client.BindSubConfig(ctx, bindReq)
 	if err != nil {
-		if s.isIdempotentBindSubConfigRepeat(err, previousCommandErr) {
+		if isIdempotentBindSubConfigRepeat(err) {
+			commandID := createdCommand.ID
+			if previousCommandErr == nil && previousCommand.ID != 0 {
+				commandID = previousCommand.ID
+			}
 			log.Warn().
 				Err(err).
 				Int64("baofu_merchant_report_id", report.ID).
 				Int64("owner_id", report.OwnerID).
-				Int64("external_payment_command_id", previousCommand.ID).
+				Int64("external_payment_command_id", commandID).
 				Str("sub_mch_id_mask", maskSensitiveTail(subMchID, 4)).
-				Msg("baofu bind_sub_config repeat accepted from existing local command")
+				Msg("baofu bind_sub_config repeat accepted as idempotent success")
 			return s.store.MarkBaofuMerchantReportAppletAuthSucceeded(ctx, report.ID)
 		}
 		return report, err
@@ -315,10 +320,7 @@ func (s *BaofuMerchantReportService) existingBindSubConfigCommand(ctx context.Co
 	})
 }
 
-func (s *BaofuMerchantReportService) isIdempotentBindSubConfigRepeat(err error, previousCommandErr error) bool {
-	if previousCommandErr != nil {
-		return false
-	}
+func isIdempotentBindSubConfigRepeat(err error) bool {
 	var providerErr *baofu.ProviderError
 	if !errors.As(err, &providerErr) {
 		return false
