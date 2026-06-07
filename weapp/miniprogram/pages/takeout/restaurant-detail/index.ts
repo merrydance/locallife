@@ -74,6 +74,7 @@ type RestaurantPageOptions = {
   id?: string
   scene?: string
   activeTab?: 'dishes' | 'combos' | 'rooms'
+  order_type?: 'takeout' | 'takeaway'
 }
 
 function resolveRestaurantId(options: RestaurantPageOptions): string {
@@ -103,6 +104,7 @@ Page({
   data: {
     restaurantId: '',
     restaurant: null as RestaurantViewModel | null,
+    orderType: 'takeout' as 'takeout' | 'takeaway',
     activeTab: 'dishes' as 'dishes' | 'combos' | 'rooms',
     activeCategoryId: '' as string | number,
     categories: [] as CustomerDishCategory[],
@@ -140,6 +142,7 @@ Page({
     }
     this.setData({
       restaurantId,
+      orderType: options.order_type === 'takeaway' ? 'takeaway' : 'takeout',
       activeTab: options.activeTab && ['dishes', 'combos', 'rooms'].includes(options.activeTab)
         ? options.activeTab
         : 'dishes'
@@ -375,7 +378,7 @@ Page({
       return
     }
     const id = e.currentTarget.dataset.id
-    wx.navigateTo({ url: `/pages/takeout/dish-detail/index?id=${id}&merchant_id=${this.data.restaurantId}` })
+    wx.navigateTo({ url: `/pages/takeout/dish-detail/index?id=${id}&merchant_id=${this.data.restaurantId}&order_type=${this.data.orderType}` })
   },
 
   onComboTap(e: WechatMiniprogram.CustomEvent) {
@@ -389,7 +392,8 @@ Page({
       Navigation.toComboDetail(String(id), {
         shopName: this.data.restaurant.name,
         monthSales: this.data.restaurant.monthly_sales,
-        estimatedDeliveryTime: this.data.restaurant.avg_prep_minutes
+        estimatedDeliveryTime: this.data.restaurant.avg_prep_minutes,
+        orderType: this.data.orderType
       })
     } else {
       Navigation.toComboDetail(String(id))
@@ -407,7 +411,8 @@ Page({
     if (dish && restaurant) {
       const success = await CartService.addItem({
         merchantId: restaurant.id,
-        dishId: dish.id
+        dishId: dish.id,
+        orderType: this.data.orderType
       })
 
       if (success) {
@@ -428,7 +433,8 @@ Page({
     if (combo && restaurant) {
       const success = await CartService.addItem({
         merchantId: restaurant.id,
-        comboId: combo.id
+        comboId: combo.id,
+        orderType: this.data.orderType
       })
 
       if (success) {
@@ -441,7 +447,7 @@ Page({
   async updateCartDisplay() {
     try {
       // 使用与外卖首页相同的方式获取购物车状态
-      const userCarts = await loadTakeoutCartSummary()
+      const userCarts = await loadTakeoutCartSummary(this.data.orderType)
       const totalCount = userCarts.summary?.total_items || 0
       const totalPrice = userCarts.summary?.total_amount || 0
 
@@ -464,7 +470,7 @@ Page({
     if (!this.canPlaceOrder()) {
       return
     }
-    Navigation.toCart()
+    Navigation.toCart({ orderType: this.data.orderType })
   },
 
   onCartTap() {
@@ -472,7 +478,16 @@ Page({
       return
     }
     // 点击购物车栏跳转到购物车页面
-    Navigation.toCart()
+    Navigation.toCart({ orderType: this.data.orderType })
+  },
+
+  onOrderTypeChange(e: WechatMiniprogram.CustomEvent<{ value: 'takeout' | 'takeaway' }>) {
+    const orderType = e.detail.value === 'takeaway' ? 'takeaway' : 'takeout'
+    if (orderType === this.data.orderType) {
+      return
+    }
+    this.setData({ orderType, cartCount: 0, cartPrice: 0, cartPriceDisplay: '0.00' })
+    this.updateCartDisplay()
   },
 
   onCall() {

@@ -1,0 +1,11 @@
+{
+  "purpose": "Checkout payment method selector for WeChat and member stored-value balance payment.",
+  "tdesignGroup": "form",
+  "tdesignCandidates": [
+    "radio",
+    "radio-group",
+    "icon"
+  ],
+  "decision": "local-component",
+  "rationale": "Payment selection owns a compact but distinct checkout ViewState region. Extracting it keeps the order confirmation page shell under the page complexity gate while retaining page-owned payment orchestration."
+}

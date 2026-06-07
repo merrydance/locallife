@@ -86,6 +86,7 @@ Page({
   data: {
     dishId: '',
     merchantId: '',
+    orderType: 'takeout' as 'takeout' | 'takeaway',
     dish: null as DishViewModel | null,
     selectedSpecs: {} as Record<string, string>,
     quantity: 1,
@@ -107,6 +108,7 @@ Page({
 
     const dishId = options.id
     const merchantId = options.merchant_id || ''
+    const orderType = options.order_type === 'takeaway' ? 'takeaway' : 'takeout'
     // 从列表页传递过来的额外信息
     const shopName = decodeURIComponent(options.shop_name || '')
     const monthSales = parseInt(options.month_sales || '0')
@@ -122,6 +124,7 @@ Page({
     this.setData({
       dishId,
       merchantId,
+      orderType,
       extraInfo: { shopName, monthSales, distanceMeters, estimatedDeliveryTime }
     })
     this.loadDishDetail()
@@ -315,7 +318,7 @@ Page({
   },
 
   async onAddToCart(options?: { silentSuccess?: boolean }) {
-    const { dish, selectedSpecs, quantity, totalPrice } = this.data
+    const { dish, selectedSpecs, quantity, totalPrice, orderType } = this.data
     if (!dish) return false
 
     // 构建规格描述
@@ -344,6 +347,7 @@ Page({
       price: totalPrice,
       priceDisplay: `¥${(totalPrice / 100).toFixed(2)}`,
       quantity,
+      orderType: this.data.orderType,
       customizations: Object.keys(customizations).length > 0 ? customizations : undefined
     })
 
@@ -355,6 +359,7 @@ Page({
       shop_id: dish.shop_id,
       quantity,
       price: totalPrice,
+      order_type: orderType,
       tags: dish.tags
     })
 
@@ -368,13 +373,13 @@ Page({
   async onBuyNow() {
     const success = await this.onAddToCart({ silentSuccess: true })
     if (!success) return
-    wx.navigateTo({ url: '/pages/takeout/cart/index' })
+    wx.navigateTo({ url: `/pages/takeout/cart/index?order_type=${this.data.orderType}` })
   },
 
   onShopTap() {
     const { dish } = this.data
     if (dish && dish.shop_id) {
-      wx.navigateTo({ url: `/pages/takeout/restaurant-detail/index?id=${dish.shop_id}` })
+      wx.navigateTo({ url: `/pages/takeout/restaurant-detail/index?id=${dish.shop_id}&order_type=${this.data.orderType}` })
     }
   },
 
@@ -385,7 +390,7 @@ Page({
     }
     return {
       title: dish?.name ? `${dish.name} — 好吃到停不下来！` : '发现一道美食，快来尝尝！',
-      path: `/pages/takeout/dish-detail/index?id=${dish?.id}&merchant_id=${dish?.shop_id}`,
+      path: `/pages/takeout/dish-detail/index?id=${dish?.id}&merchant_id=${dish?.shop_id}&order_type=${this.data.orderType}`,
       imageUrl: dish?.images?.[0] || ''
     }
   },

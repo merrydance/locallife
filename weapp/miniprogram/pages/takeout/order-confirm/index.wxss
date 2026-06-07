@@ -149,16 +149,8 @@
   padding: var(--spacer-sm) 0;
 }
 
-.payment-method-row {
-  display: flex;
-  align-items: center;
-  gap: var(--spacer-sm);
-  min-height: 72rpx;
-}
-
-.payment-method-name {
-  font-size: var(--font-size-base);
-  color: var(--td-text-color-primary);
+.self-pickup-section {
+  align-items: flex-start;
 }
 
 /* 代取时间 */

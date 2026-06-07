@@ -95,6 +95,13 @@
 
     <merchant-coupon-strip coupons="{{coupons}}" claiming-coupon-id="{{claimingCouponId}}" bind:claim="onClaimCoupon" />
 
+    <view wx:if="{{activeTab !== 'rooms'}}" class="order-type-switch">
+      <t-radio-group value="{{orderType}}" bind:change="onOrderTypeChange" borderless="{{true}}" icon="line">
+        <t-radio value="takeout" label="外卖代取" block="{{true}}" />
+        <t-radio value="takeaway" label="到店自取" block="{{true}}" />
+      </t-radio-group>
+    </view>
+
     <!-- 菜品列表 Tab -->
     <view wx:if="{{activeTab === 'dishes'}}" class="dishes-tab">
       <view class="dishes-container">

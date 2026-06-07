@@ -14,6 +14,7 @@ export class Navigation {
     monthSales?: number
     distance?: number
     estimatedDeliveryTime?: number
+    orderType?: 'takeout' | 'takeaway'
   }) {
     let url = `/pages/takeout/dish-detail/index?id=${dishId}`
     if (extraInfo) {
@@ -21,6 +22,7 @@ export class Navigation {
       if (extraInfo.monthSales) url += `&month_sales=${extraInfo.monthSales}`
       if (extraInfo.distance) url += `&distance=${extraInfo.distance}`
       if (extraInfo.estimatedDeliveryTime) url += `&estimated_delivery_time=${extraInfo.estimatedDeliveryTime}`
+      if (extraInfo.orderType) url += `&order_type=${extraInfo.orderType}`
     }
     wx.navigateTo({ url })
   }
@@ -44,6 +46,7 @@ export class Navigation {
     monthSales?: number
     distance?: number
     estimatedDeliveryTime?: number
+    orderType?: 'takeout' | 'takeaway'
   }) {
     let url = `/pages/takeout/combo-detail/index?id=${comboId}`
     if (extraInfo) {
@@ -51,6 +54,7 @@ export class Navigation {
       if (extraInfo.monthSales) url += `&month_sales=${extraInfo.monthSales}`
       if (extraInfo.distance) url += `&distance=${extraInfo.distance}`
       if (extraInfo.estimatedDeliveryTime) url += `&estimated_delivery_time=${extraInfo.estimatedDeliveryTime}`
+      if (extraInfo.orderType) url += `&order_type=${extraInfo.orderType}`
     }
     wx.navigateTo({ url })
   }
@@ -58,9 +62,12 @@ export class Navigation {
   /**
      * 跳转到购物车页
      */
-  static toCart() {
+  static toCart(options?: { orderType?: 'takeout' | 'takeaway' }) {
+    const url = options?.orderType
+      ? `/pages/takeout/cart/index?order_type=${options.orderType}`
+      : '/pages/takeout/cart/index'
     wx.navigateTo({
-      url: '/pages/takeout/cart/index'
+      url
     })
   }
 

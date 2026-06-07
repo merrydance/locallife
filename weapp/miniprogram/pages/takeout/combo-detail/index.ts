@@ -56,6 +56,7 @@ Page({
   data: {
     comboId: '',
     merchantId: '',
+    orderType: 'takeout' as 'takeout' | 'takeaway',
     combo: null as ComboViewModel | null,
     quantity: 1,
     loading: true,
@@ -77,6 +78,7 @@ Page({
 
     const comboId = options.id
     const merchantId = options.merchant_id || options.shop_id || options.merchantId || ''
+    const orderType = options.order_type === 'takeaway' ? 'takeaway' : 'takeout'
     const merchantName = decodeURIComponent(options.merchant_name || options.shop_name || options.merchantName || '')
     const monthSales = parseInt(options.month_sales || '0')
     const distanceMeters = parseInt(options.distance || '0')
@@ -91,6 +93,7 @@ Page({
     this.setData({
       comboId,
       merchantId,
+      orderType,
       extraInfo: {
         merchantName,
         monthSales,
@@ -210,7 +213,7 @@ Page({
   },
 
   async onAddToCart(options?: { silentSuccess?: boolean }) {
-    const { combo, quantity, totalPrice } = this.data
+    const { combo, quantity, totalPrice, orderType } = this.data
     if (!combo) return false
 
     const CartService = require('../../../services/cart').default
@@ -224,7 +227,8 @@ Page({
     const success = await CartService.addItem({
       merchantId: combo.merchant_id,
       comboId: combo.id,
-      quantity
+      quantity,
+      orderType: this.data.orderType
     })
 
     if (!success) return false
@@ -233,7 +237,8 @@ Page({
       is_combo: true,
       shop_id: combo.merchant_id, // Keep shop_id for tracker for now, as it might be an external system requirement
       quantity,
-      price: totalPrice
+      price: totalPrice,
+      order_type: orderType
     })
 
     if (!options?.silentSuccess) {
@@ -246,7 +251,7 @@ Page({
   async onBuyNow() {
     const success = await this.onAddToCart({ silentSuccess: true })
     if (!success) return
-    wx.navigateTo({ url: '/pages/takeout/cart/index' })
+    wx.navigateTo({ url: `/pages/takeout/cart/index?order_type=${this.data.orderType}` })
   },
 
   onShopTap() {
@@ -256,7 +261,7 @@ Page({
     console.log('[ComboDetail] onShopTap called', { combo, merchantId, targetId })
     
     if (targetId) {
-      const url = `/pages/takeout/restaurant-detail/index?id=${targetId}`
+      const url = `/pages/takeout/restaurant-detail/index?id=${targetId}&order_type=${this.data.orderType}`
       console.log('[ComboDetail] Navigating to:', url)
       wx.navigateTo({ 
         url,
@@ -275,7 +280,7 @@ Page({
     const dishId = (e.currentTarget.dataset as { id?: number }).id
     const merchantId = this.data.combo?.merchant_id || this.data.merchantId
     if (dishId && merchantId) {
-      wx.navigateTo({ url: `/pages/takeout/dish-detail/index?id=${dishId}&merchant_id=${merchantId}` })
+      wx.navigateTo({ url: `/pages/takeout/dish-detail/index?id=${dishId}&merchant_id=${merchantId}&order_type=${this.data.orderType}` })
     }
   },
 
@@ -317,7 +322,7 @@ Page({
     
     return {
       title: `${combo.name} - 只要 ¥${combo.comboPriceDisplay}`,
-      path: `/pages/takeout/combo-detail/index?id=${combo.id}&merchant_id=${combo.merchant_id}&merchant_name=${encodeURIComponent(combo.merchant_name)}`,
+      path: `/pages/takeout/combo-detail/index?id=${combo.id}&merchant_id=${combo.merchant_id}&merchant_name=${encodeURIComponent(combo.merchant_name)}&order_type=${this.data.orderType}`,
       imageUrl: combo.image_url
     }
   },
@@ -328,7 +333,7 @@ Page({
 
     return {
       title: `${combo.name} - 套餐推荐`,
-      query: `id=${combo.id}&merchant_id=${combo.merchant_id}`,
+      query: `id=${combo.id}&merchant_id=${combo.merchant_id}&order_type=${this.data.orderType}`,
       imageUrl: combo.image_url
     }
   }

@@ -494,7 +494,7 @@ Page({
         }
 
         wx.hideLoading()
-        wx.navigateTo({ url: '/pages/takeout/cart/index' })
+        Navigation.toCart({ orderType: orderType === 'takeaway' ? 'takeaway' : 'takeout' })
       } catch (error) {
         wx.hideLoading()
         logger.error('再次购买失败', error, 'List.onReorder')

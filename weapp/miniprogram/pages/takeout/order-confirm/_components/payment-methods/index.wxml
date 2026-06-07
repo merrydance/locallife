@@ -1,0 +1,17 @@
+<view class="payment-methods">
+  <t-radio-group value="{{selected}}" bind:change="onPaymentMethodChange">
+    <view
+      wx:for="{{methods || []}}"
+      wx:key="id"
+      class="payment-method-row {{item.disabled ? 'payment-method-row--disabled' : ''}}"
+    >
+      <t-icon name="{{item.icon}}" size="40rpx" color="{{item.iconColor}}" />
+      <text class="payment-method-name">{{item.name}}</text>
+      <t-radio value="{{item.id}}" icon="circle" disabled="{{item.disabled}}" />
+    </view>
+  </t-radio-group>
+  <view wx:if="{{balanceInsufficient}}" class="balance-warning">
+    <t-icon name="error-circle-filled" size="32rpx" color="#FA5151" />
+    <text>当前余额不足，请使用微信支付或联系商户充值。</text>
+  </view>
+</view>

@@ -94,6 +94,7 @@ class CartService {
     merchantId: string | number
     dishId?: string | number
     comboId?: string | number
+    orderType?: string
     quantity?: number
     customizations?: Record<string, unknown>
   }, options?: { loading?: boolean }): Promise<boolean> {
@@ -101,8 +102,18 @@ class CartService {
       const merchantId = Number(item.merchantId)
       const quantity = item.quantity || 1
 
-      // 确保有明确的订单类型，避免传递 undefined
-      this.currentOrderType = this.currentOrderType ?? 'takeout'
+      // 确保有明确的订单类型，避免复用单例里上一次的堂食/预订上下文。
+      if (item.orderType) {
+        this.currentOrderType = item.orderType
+        if (item.orderType !== 'dine_in') {
+          this.currentTableId = null
+        }
+        if (item.orderType !== 'reservation') {
+          this.currentReservationId = null
+        }
+      } else {
+        this.currentOrderType = this.currentOrderType ?? 'takeout'
+      }
 
       const req: AddCartItemRequest = {
         merchant_id: merchantId,

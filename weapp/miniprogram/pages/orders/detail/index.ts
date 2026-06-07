@@ -340,7 +340,7 @@ Page({
         wx.showToast({ title: '部分商品可能已下架', icon: 'none' })
       }
 
-      Navigation.toCart()
+      Navigation.toCart({ orderType: orderType === 'takeaway' ? 'takeaway' : 'takeout' })
     } catch (error) {
       logger.error('再次购买失败', error, 'Detail.onReorder')
       wx.showToast({ title: '操作失败', icon: 'error' })

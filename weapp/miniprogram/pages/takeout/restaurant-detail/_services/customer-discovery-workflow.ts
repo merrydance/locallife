@@ -78,6 +78,6 @@ export async function claimCustomerCoupon(couponId: number) {
   return CouponService.claimCoupon(couponId)
 }
 
-export async function loadTakeoutCartSummary() {
-  return getUserCarts('takeout')
+export async function loadTakeoutCartSummary(orderType: 'takeout' | 'takeaway' = 'takeout') {
+  return getUserCarts(orderType)
 }

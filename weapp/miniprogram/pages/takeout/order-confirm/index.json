@@ -9,6 +9,7 @@
     "t-empty": "tdesign-miniprogram/empty/empty",
     "remark-input": "./_components/remark-input/index",
     "merchant-promos": "./_components/merchant-promos/index",
+    "payment-methods": "./_components/payment-methods/index",
     "t-toast": "tdesign-miniprogram/toast/toast"
   },
   "navigationStyle": "custom"

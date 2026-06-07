@@ -473,7 +473,8 @@ Page({
 
     const success = await CartService.addItem({
       merchantId: String(merchantId),
-      dishId: String(dishId)
+      dishId: String(dishId),
+      orderType: 'takeout'
     })
 
     if (success) {

@@ -38,6 +38,7 @@ export interface MerchantCartGroup {
   subtotal: number
   subtotalDisplay: string
   deliveryFee: number
+  deliveryFeeLabel: string
   deliveryFeeDisplay: string
   totalAmount: number
   totalAmountDisplay: string
@@ -46,6 +47,14 @@ export interface MerchantCartGroup {
   packagingRequired: boolean
   selected: boolean
   errorStatus?: string
+}
+
+export function isTakeawayCartGroup(group: Pick<MerchantCartGroup, 'orderType'>): boolean {
+  return group.orderType === 'takeaway'
+}
+
+export function getDeliveryFeeLabel(group: Pick<MerchantCartGroup, 'orderType'>): string {
+  return isTakeawayCartGroup(group) ? '自取费用' : '代取费'
 }
 
 export function isAbortLikeError(error: unknown): boolean {
@@ -130,6 +139,7 @@ export function buildMerchantGroup(merchantCart: MerchantCartResponse, cartDetai
     subtotal,
     subtotalDisplay: formatCurrency(subtotal),
     deliveryFee: 0,
+    deliveryFeeLabel: getDeliveryFeeLabel({ orderType }),
     deliveryFeeDisplay: '待计算',
     totalAmount: subtotal,
     totalAmountDisplay: formatCurrency(subtotal),
@@ -145,7 +155,10 @@ export function buildUpdatedGroupWithDeliveryFee(group: MerchantCartGroup, deliv
   return {
     ...group,
     deliveryFee,
-    deliveryFeeDisplay: deliveryFee > 0 ? formatCurrency(deliveryFee) : '免代取费',
+    deliveryFeeLabel: getDeliveryFeeLabel(group),
+    deliveryFeeDisplay: isTakeawayCartGroup(group)
+      ? '无需代取费'
+      : (deliveryFee > 0 ? formatCurrency(deliveryFee) : '免代取费'),
     totalAmount,
     totalAmountDisplay: formatCurrency(totalAmount),
     errorStatus: ''

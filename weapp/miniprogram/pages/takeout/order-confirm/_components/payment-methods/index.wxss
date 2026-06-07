@@ -1,0 +1,33 @@
+:host {
+  display: block;
+}
+
+.payment-methods {
+  padding: var(--spacer-sm) 0;
+}
+
+.payment-method-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacer-sm);
+  min-height: 72rpx;
+}
+
+.payment-method-row--disabled {
+  opacity: 0.5;
+}
+
+.payment-method-name {
+  font-size: var(--font-size-base);
+  color: var(--td-text-color-primary);
+  flex: 1;
+}
+
+.balance-warning {
+  margin-top: var(--spacer-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--spacer-xs);
+  color: var(--td-error-color);
+  font-size: var(--font-size-sm);
+}

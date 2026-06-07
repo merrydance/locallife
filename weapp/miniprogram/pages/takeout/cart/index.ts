@@ -10,6 +10,7 @@ import {
   getPackagingCheckoutBlocker,
   getTotalCount,
   isAbortLikeError,
+  isTakeawayCartGroup,
   type MerchantCartGroup
 } from './_utils/takeout-cart-view'
 
@@ -20,6 +21,7 @@ const SINGLE_MERCHANT_CHECKOUT_NOTICE = '暂不支持多商户一起支付，请
 Page({
   data: {
     loading: true,
+    orderType: 'takeout' as 'takeout' | 'takeaway',
     merchantGroups: [] as MerchantCartGroup[],
     summary: {
       cartCount: 0,
@@ -37,7 +39,10 @@ Page({
     removingUnavailableItemIds: {} as Record<string, boolean>
   },
 
-  onLoad() {
+  onLoad(options: { order_type?: 'takeout' | 'takeaway' }) {
+    if (options.order_type === 'takeaway') {
+      this.setData({ orderType: 'takeaway' })
+    }
     this.loadAllCarts()
   },
 
@@ -67,7 +72,7 @@ Page({
         this.setData({ loading: true })
 
         // 获取用户所有购物车汇总
-        const userCarts = await CartAPI.getUserCarts('takeout')
+        const userCarts = await CartAPI.getUserCarts(this.data.orderType)
 
         if (!userCarts.carts || userCarts.carts.length === 0) {
           this.setData({
@@ -168,7 +173,7 @@ Page({
     const merchantGroups = groups || this.data.merchantGroups
     if (merchantGroups.length === 0) return []
 
-    // 获取用户地址或当前位置用于计算代取费
+    // 获取用户地址或当前位置用于计算代取费；到店自取仍试算购物车，以拿到后端金额约束。
     const app = getApp()
     const addressId = app.globalData?.selectedAddressId || app.globalData?.defaultAddressId
     const latitude = app.globalData?.latitude
@@ -179,15 +184,16 @@ Page({
     // 并行计算以提高速度
     await Promise.all(updatedGroups.map(async (group, i) => {
       try {
-        // 优先使用 address_id，fallback 到当前位置坐标
+        const requiresAddress = !isTakeawayCartGroup(group)
+
         const result = await CartAPI.calculateCart({
           merchant_id: group.merchantId,
           order_type: group.orderType,
           table_id: group.tableId,
           reservation_id: group.reservationId,
-          address_id: addressId || undefined,
-          latitude: !addressId && latitude ? latitude : undefined,
-          longitude: !addressId && longitude ? longitude : undefined
+          address_id: requiresAddress ? addressId || undefined : undefined,
+          latitude: requiresAddress && !addressId && latitude ? latitude : undefined,
+          longitude: requiresAddress && !addressId && longitude ? longitude : undefined
         }, { loading: !silent })
 
         // 更新代取费信息
@@ -618,7 +624,7 @@ Page({
       }))
 
     wx.navigateTo({
-      url: `/pages/takeout/order-confirm/index?cart_ids=${selectedCartIds.join(',')}`,
+      url: `/pages/takeout/order-confirm/index?cart_ids=${selectedCartIds.join(',')}&order_type=${this.data.orderType}`,
       success: (res) => {
         res.eventChannel.emit('checkoutContext', {
           cartIds: selectedCartIds,

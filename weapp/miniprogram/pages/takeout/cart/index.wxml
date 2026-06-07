@@ -100,7 +100,7 @@
           <text class="fee-value">{{item.subtotalDisplay}}</text>
         </view>
         <view class="fee-row">
-          <text class="fee-label">代取费</text>
+          <text class="fee-label">{{item.deliveryFeeLabel}}</text>
           <text class="fee-value">{{item.deliveryFeeDisplay}}</text>
         </view>
       </view>

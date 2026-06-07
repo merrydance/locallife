@@ -87,6 +87,7 @@ const TRACKABLE_ORDER_STATUSES = new Set<OrderStatus>(['delivering', 'rider_deli
 const COMPLETED_ORDER_STATUSES = new Set<OrderStatus>(['completed'])
 const CANCELLED_ORDER_STATUSES = new Set<OrderStatus>(['cancelled'])
 const PENDING_ORDER_STATUSES = new Set<OrderStatus>(['pending'])
+const PAID_ORDER_STATUSES = new Set<OrderStatus>(['paid'])
 const READY_ORDER_STATUSES = new Set<OrderStatus>(['ready'])
 const DELIVERING_ORDER_STATUSES = new Set<OrderStatus>(['delivering'])
 const FOOD_SAFETY_REPORTABLE_TAKEOUT_STATUSES = new Set<OrderStatus>(['rider_delivered', 'user_delivered', 'completed'])
@@ -171,6 +172,10 @@ export function isCancelledOrderStatus(status?: string): boolean {
 
 export function isPendingOrderStatus(status?: string): boolean {
   return !!status && PENDING_ORDER_STATUSES.has(status as OrderStatus)
+}
+
+export function isPaidOrderStatus(status?: string): boolean {
+  return !!status && PAID_ORDER_STATUSES.has(status as OrderStatus)
 }
 
 export function isPreparingOrderStatus(status?: string): boolean {

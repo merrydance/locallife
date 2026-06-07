@@ -43,6 +43,17 @@
   align-items: center;
 }
 
+.order-type-switch {
+  padding: var(--spacer-sm) var(--spacer-md) 0;
+  background: var(--td-bg-color-container);
+}
+
+.order-type-switch t-radio-group {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: var(--spacer-sm);
+}
+
 /* Tab切换 - 设计系统适配 */
 .tabs-section {
   position: fixed;

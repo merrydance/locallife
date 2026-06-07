@@ -34,6 +34,7 @@ export interface MerchantCartView {
   subtotal: number
   subtotalDisplay: string
   deliveryFee: number
+  deliveryFeeLabel: string
   deliveryFeeDisplay: string
   deliveryFeeDiscount: number
   deliveryDistance: number
@@ -47,6 +48,7 @@ export interface MerchantCartView {
   ladderPromotions: Array<{ name: string, thresholdDisplay: string, discountDisplay: string, currentHit: boolean, missingNeedDisplay: string }>
   voucherTrials: Array<{ voucherName: string, amountDisplay: string, trialPayableDisplay: string }>
   paymentHint: string
+  paymentAssessment: PaymentAssessmentView | null
   feeBreakdownView: CustomerOrderFeeBreakdownView
 }
 
@@ -82,19 +84,49 @@ export interface CheckoutSnapshotPayload {
 }
 
 type PricingResult = {
+  subtotal?: number
   delivery_fee?: number
   delivery_fee_discount?: number
   delivery_distance?: number
   total_amount?: number
   delivery_eta_minutes?: number
+  prepare_minutes?: number
   applied_promotions?: Array<{ title?: string, amount?: number, type?: string }>
   ladder_promotions?: Array<{ name?: string, threshold?: number, discount?: number, current_hit?: boolean, missing_need?: number }>
   voucher_trials?: Array<{ voucher_name?: string, amount?: number, trial_payable?: number }>
-  payment_assessment?: { payment_hint?: string }
+  payment_assessment?: PaymentAssessmentView
   fee_breakdown?: OrderFeeBreakdown
 }
 
 export const ORDER_CONFIRM_CONCURRENCY = 3
+
+export interface PaymentAssessmentView {
+  is_balance_payable: boolean
+  usable_balance: number
+  principal_part: number
+  bonus_part: number
+  payment_hint: string
+}
+
+export interface CheckoutPaymentMethodView {
+  id: 'wechat_pay' | 'balance'
+  name: string
+  icon: string
+  iconColor: string
+  disabled: boolean
+}
+
+export function isTakeawayOrderType(orderType?: string): boolean {
+  return orderType === 'takeaway'
+}
+
+export function getDeliveryFeeLabel(orderType?: string): string {
+  return isTakeawayOrderType(orderType) ? '自取费用' : '代取费'
+}
+
+export function checkoutRequiresAddress(carts: Array<Pick<MerchantCartView, 'orderType'>>): boolean {
+  return (carts || []).some((cart) => !isTakeawayOrderType(cart.orderType))
+}
 
 export const isWechatPayCancelled = (error: unknown): boolean => {
   const wxError = error as { errMsg?: string }
@@ -174,6 +206,7 @@ export function buildCheckoutSnapshotPatch(payload: CheckoutSnapshotPayload, cur
       subtotal: cart.subtotal,
       subtotalDisplay: formatPriceNoSymbol(cart.subtotal),
       deliveryFee: 0,
+      deliveryFeeLabel: getDeliveryFeeLabel(cart.orderType),
       deliveryFeeDisplay: '待计算',
       deliveryFeeDiscount: 0,
       deliveryDistance: 0,
@@ -187,6 +220,7 @@ export function buildCheckoutSnapshotPatch(payload: CheckoutSnapshotPayload, cur
       ladderPromotions: [],
       voucherTrials: [],
       paymentHint: '',
+      paymentAssessment: null,
       feeBreakdownView: buildCustomerOrderFeeBreakdownView()
     }
   })
@@ -249,6 +283,7 @@ export function buildOrderConfirmCartViews(
         subtotal: cartDetail.subtotal,
         subtotalDisplay: formatPriceNoSymbol(cartDetail.subtotal),
         deliveryFee: 0,
+        deliveryFeeLabel: getDeliveryFeeLabel((merchantCart.order_type || 'takeout') as OrderType),
         deliveryFeeDisplay: '待计算',
         deliveryFeeDiscount: 0,
         deliveryDistance: 0,
@@ -262,6 +297,7 @@ export function buildOrderConfirmCartViews(
         ladderPromotions: [],
         voucherTrials: [],
         paymentHint: '',
+        paymentAssessment: null,
         feeBreakdownView: buildCustomerOrderFeeBreakdownView()
       }
     })
@@ -285,15 +321,19 @@ export function buildTodaySlots(startHour: number, endHour: number, stepMinutes:
 }
 
 export function buildPricingKey(address: CheckoutAddress | null, carts: MerchantCartView[]) {
-  if (!address?.id || !carts || carts.length === 0) {
+  if (!carts || carts.length === 0) {
+    return ''
+  }
+  const requiresAddress = checkoutRequiresAddress(carts)
+  if (requiresAddress && !address?.id) {
     return ''
   }
 
   const cartKey = carts
-    .map((cart) => `${cart.merchantId}:${cart.items.map((item) => item.id).join('-')}`)
+    .map((cart) => `${cart.merchantId}:${cart.orderType}:${cart.items.map((item) => `${item.id}:${item.quantity}`).join('-')}`)
     .join('|')
 
-  return `${address.id}:${cartKey}`
+  return `${requiresAddress ? address?.id : 'self-pickup'}:${cartKey}`
 }
 
 function formatTime(date: Date): string {
@@ -332,6 +372,7 @@ export function buildPricingSuccessPatch(
   const updated = calcResults
     .filter(({ result }) => !!result)
     .map(({ cart, result }) => {
+      const isTakeaway = isTakeawayOrderType(cart.orderType)
       const deliveryFee = result.delivery_fee || 0
       const deliveryFeeDiscount = result.delivery_fee_discount || 0
       const finalDeliveryFee = Math.max(0, deliveryFee - deliveryFeeDiscount)
@@ -347,7 +388,10 @@ export function buildPricingSuccessPatch(
       return {
         ...cart,
         deliveryFee,
-        deliveryFeeDisplay: finalDeliveryFee > 0 ? `¥${formatPriceNoSymbol(finalDeliveryFee)}` : '免代取费',
+        deliveryFeeLabel: getDeliveryFeeLabel(cart.orderType),
+        deliveryFeeDisplay: isTakeaway
+          ? '无需代取费'
+          : (finalDeliveryFee > 0 ? `¥${formatPriceNoSymbol(finalDeliveryFee)}` : '免代取费'),
         deliveryFeeDiscount,
         deliveryDistance: result.delivery_distance || 0,
         orderTotal,
@@ -370,6 +414,7 @@ export function buildPricingSuccessPatch(
           trialPayableDisplay: formatPriceNoSymbol(trial.trial_payable || 0)
         })),
         paymentHint: result.payment_assessment?.payment_hint || '',
+        paymentAssessment: result.payment_assessment || null,
         feeBreakdownView: buildCustomerOrderFeeBreakdownView(result.fee_breakdown)
       }
     })
@@ -385,22 +430,27 @@ export function buildPricingSuccessPatch(
     0
   )
   const totalOrderAmount = updated.reduce((sum, cart) => sum + (cart.orderTotal || 0), 0)
+  const allTakeaway = updated.length > 0 && updated.every((cart) => isTakeawayOrderType(cart.orderType))
 
   return {
     carts: updated,
     pricingError: '',
     summarySubtotalDisplay: formatPriceNoSymbol(summarySubtotal),
-    summaryDeliveryDisplay: summaryDelivery > 0 ? `¥${formatPriceNoSymbol(summaryDelivery)}` : '免代取费',
+    summaryDeliveryLabel: allTakeaway ? '自取费用' : '代取总费',
+    summaryDeliveryDisplay: allTakeaway
+      ? '无需代取费'
+      : (summaryDelivery > 0 ? `¥${formatPriceNoSymbol(summaryDelivery)}` : '免代取费'),
     orderTotalDisplay: formatPriceNoSymbol(totalOrderAmount)
   }
 }
 
 export function buildTakeoutCreateOrderRequest(params: {
   cart: MerchantCartView
-  addressId: number
+  addressId?: number
   note: string
+  useBalance?: boolean
 }): CreateOrderRequest {
-  return {
+  const request: CreateOrderRequest = {
     merchant_id: params.cart.merchantId,
     items: params.cart.items.map((item) => {
       const orderItem: OrderItemRequest = { quantity: item.quantity }
@@ -416,10 +466,65 @@ export function buildTakeoutCreateOrderRequest(params: {
       return orderItem
     }),
     order_type: params.cart.orderType,
-    address_id: params.addressId,
-    notes: params.note,
-    delivery_fee: params.cart.deliveryFee,
-    delivery_fee_discount: params.cart.deliveryFeeDiscount,
-    delivery_distance: params.cart.deliveryDistance
+    notes: params.note
   }
+
+  if (params.useBalance) {
+    request.use_balance = true
+  }
+
+  if (!isTakeawayOrderType(params.cart.orderType)) {
+    request.address_id = params.addressId
+    request.delivery_fee = params.cart.deliveryFee
+    request.delivery_fee_discount = params.cart.deliveryFeeDiscount
+    request.delivery_distance = params.cart.deliveryDistance
+  }
+
+  return request
+}
+
+export function buildCheckoutPaymentMethods(
+  cart: MerchantCartView | null | undefined,
+  memberBalances: Record<number, number>
+): CheckoutPaymentMethodView[] {
+  const methods: CheckoutPaymentMethodView[] = [
+    { id: 'wechat_pay', name: '微信支付', icon: 'logo-wechat', iconColor: '#07C160', disabled: false }
+  ]
+
+  if (!cart || !isTakeawayOrderType(cart.orderType)) {
+    return methods
+  }
+
+  const balance = memberBalances[cart.merchantId] || 0
+  const disabled =
+    balance <= 0 ||
+    balance < (cart.orderTotal || 0) ||
+    cart.paymentAssessment?.is_balance_payable !== true
+  methods.push({
+    id: 'balance',
+    name: `储值支付 (¥${formatPriceNoSymbol(balance)})`,
+    icon: 'wallet',
+    iconColor: 'var(--td-brand-color)',
+    disabled
+  })
+
+  return methods
+}
+
+export function resolveSelectedPaymentMethod(
+  cart: MerchantCartView | null | undefined,
+  memberBalances: Record<number, number>,
+  selectedPaymentMethod: string
+): 'wechat_pay' | 'balance' {
+  if (selectedPaymentMethod !== 'balance') {
+    return 'wechat_pay'
+  }
+  if (!cart || !isTakeawayOrderType(cart.orderType)) {
+    return 'wechat_pay'
+  }
+
+  const balance = memberBalances[cart.merchantId] || 0
+  const balanceDisabled = balance <= 0 || cart.paymentAssessment?.is_balance_payable !== true
+  const balanceInsufficient = balance < (cart.orderTotal || 0)
+  return balanceDisabled || balanceInsufficient ? 'wechat_pay' : 'balance'
 }

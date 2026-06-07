@@ -1,6 +1,6 @@
 import * as CartAPI from '../../../api/cart'
 import { logger } from '../../../utils/logger'
-import { createOrder, OrderType } from './_main_shared/api/order'
+import { createOrder, isPaidOrderStatus, OrderResponse, OrderType } from './_main_shared/api/order'
 import { createOrderPayment } from './_main_shared/api/payment'
 import { completePaymentWorkflow } from './_main_shared/services/payment-workflow'
 import Navigation from '../../../utils/navigation'
@@ -14,15 +14,17 @@ import {
 import {
   buildAddressSyncKey,
   buildCheckoutSnapshotPatch,
+  buildCheckoutPaymentMethods,
+  checkoutRequiresAddress,
   buildOrderConfirmCartViews,
   buildPricingKey,
   buildPricingSuccessPatch,
   buildTakeoutCreateOrderRequest,
-  buildTodaySlots,
   CheckoutSnapshotPayload,
   mapWithConcurrency,
   MerchantCartView,
   ORDER_CONFIRM_CONCURRENCY,
+  resolveSelectedPaymentMethod,
   syncTakeoutCartSummary
 } from './_utils/takeout-order-confirm-support'
 import { getTakeoutPaymentCreateFailedContent } from './_utils/takeout-payment-error-copy'
@@ -31,8 +33,13 @@ Page({
   data: {
     carts: [] as MerchantCartView[],
     cartIds: [] as number[],
+    orderType: 'takeout' as 'takeout' | 'takeaway',
     address: null as CheckoutAddress | null,
     remarks: {} as Record<number, string>,
+    selectedPaymentMethod: 'wechat_pay' as 'wechat_pay' | 'balance',
+    paymentMethods: buildCheckoutPaymentMethods(null, {}),
+    requiresAddress: true,
+    balanceInsufficient: false,
     navBarHeight: 88,
     initLoading: true, // 页面初始化加载标志（用于骨架屏）
     loading: false,    // 按钮提交加载标志
@@ -40,6 +47,7 @@ Page({
     pricingError: '',
     orderTotalDisplay: '0.00',
     summarySubtotalDisplay: '0.00',
+    summaryDeliveryLabel: '代取总费',
     summaryDeliveryDisplay: '待计算',
     singleMerchantCheckoutNotice: '',
     
@@ -56,7 +64,11 @@ Page({
   _defaultAddressLoaded: false,
   _snapshotFallbackTimer: 0 as number | 0,
 
-  onLoad(options: { cart_ids?: string, data?: string }) {
+  onLoad(options: { cart_ids?: string, data?: string, order_type?: 'takeout' | 'takeaway' }) {
+    if (options.order_type === 'takeaway') {
+      this.setData({ orderType: 'takeaway' })
+    }
+
     // 解析URL中的cart_ids参数
     if (options.cart_ids) {
       const cartIds = options.cart_ids.split(',').map(Number).filter((id) => !isNaN(id))
@@ -91,7 +103,9 @@ Page({
       }, 120)
     }
 
-    this.loadDefaultAddress()
+    if (this.data.orderType === 'takeout') {
+      this.loadDefaultAddress()
+    }
   },
 
   onUnload() {
@@ -135,7 +149,15 @@ Page({
       this._snapshotFallbackTimer = 0
     }
 
-    this.setData(buildCheckoutSnapshotPatch(payload, this.data.cartIds))
+    const patch = buildCheckoutSnapshotPatch(payload, this.data.cartIds)
+    const nextCarts = patch.carts || []
+    const requiresAddress = checkoutRequiresAddress(nextCarts)
+    this.setData({
+      ...patch,
+      orderType: nextCarts[0]?.orderType === 'takeaway' ? 'takeaway' : this.data.orderType,
+      requiresAddress
+    })
+    this.updatePaymentState()
 
     this.requestPricingRefresh(true)
     void this.loadMemberships()
@@ -154,8 +176,7 @@ Page({
     try {
       this.setData({ initLoading: true, loadError: '', pricingError: '' })
 
-      // Step 1: 获取外卖类型的购物车列表
-      const userCarts = await CartAPI.getUserCarts('takeout')
+      const userCarts = await CartAPI.getUserCarts(this.data.orderType)
       
       if (!userCarts.carts || userCarts.carts.length === 0) {
         wx.showToast({ title: '购物车为空', icon: 'none' })
@@ -184,7 +205,12 @@ Page({
 
       const cartViews = buildOrderConfirmCartViews(rawResults)
 
-      this.setData({ carts: cartViews, initLoading: false })
+      this.setData({
+        carts: cartViews,
+        initLoading: false,
+        requiresAddress: checkoutRequiresAddress(cartViews)
+      })
+      this.updatePaymentState()
 
       // 根据地址计算每个商户代取费。通过 key 去重，避免 onLoad 并发加载购物车与默认地址时重复试算。
       this.requestPricingRefresh(true)
@@ -210,13 +236,14 @@ Page({
 
     try {
       this.setData(await loadTakeoutMembershipState(carts.map((cart) => cart.merchantId)))
+      this.updatePaymentState()
     } catch (error) {
       logger.error('Load memberships failed', error, 'Order-confirm')
     }
   },
 
   async loadDefaultAddress() {
-    if (this._defaultAddressLoaded) {
+    if (this.data.orderType === 'takeaway' || !this.data.requiresAddress || this._defaultAddressLoaded) {
       return
     }
 
@@ -247,6 +274,9 @@ Page({
   },
 
   onSelectAddress() {
+    if (!this.data.requiresAddress) {
+      return
+    }
     Navigation.toAddressSelector()
   },
 
@@ -258,32 +288,6 @@ Page({
     this.setData({ remarks })
   },
 
-  onDeliveryTimeChange() {},
-
-  /**
-   * 选择预约时间（仅当天，默认营业时段 10:00-22:00，30 分钟粒度）
-   */
-  async chooseScheduleSlot() {
-    const slots = buildTodaySlots(10, 22, 30)
-    if (slots.length === 0) {
-      wx.showToast({ title: '今日无可选时间', icon: 'none' })
-      this.setData({ deliveryTime: 'ASAP', scheduleSlot: '' })
-      return
-    }
-
-    try {
-      const res = await wx.showActionSheet({ itemList: slots })
-      const picked = slots[res.tapIndex]
-      this.setData({ deliveryTime: 'SCHEDULED', scheduleSlot: picked })
-    } catch (err) {
-      // 取消选择则回退到尽快送达
-      this.setData({ deliveryTime: 'ASAP', scheduleSlot: '' })
-    }
-  },
-
-  /**
-   * 构建当天可选时间段
-   */
   requestPricingRefresh(silent: boolean = false) {
     const pricingKey = buildPricingKey(this.data.address, this.data.carts)
     if (pricingKey && this._pricingInFlight && pricingKey === this._activePricingKey) {
@@ -307,7 +311,7 @@ Page({
    * 计算代取费并更新应付总额
    */
   async calculateDeliveryFee(_silent: boolean = false) {
-    const { address } = this.data
+    const { address, requiresAddress } = this.data
     const currentCarts = this.data.carts
     if (!currentCarts || currentCarts.length === 0) {
       this._pricingInFlight = false
@@ -319,12 +323,12 @@ Page({
     const pricingKey = buildPricingKey(address, currentCarts)
     this._pricingInFlight = !!pricingKey
 
-    if (!address) {
+    if (requiresAddress && !address) {
       if (requestVersion !== this._pricingRequestVersion) return
       this.setData({
         pricingError: '',
         summaryDeliveryDisplay: '待选择地址',
-        orderTotalDisplay: currentCarts.reduce((sum, cart) => sum + (cart.subtotal || 0), 0).toString()
+        orderTotalDisplay: (currentCarts.reduce((sum, cart) => sum + (cart.subtotal || 0), 0) / 100).toFixed(2)
       })
       this._pricingInFlight = false
       this._activePricingKey = ''
@@ -336,9 +340,9 @@ Page({
         const result = await CartAPI.calculateCart({
           merchant_id: cart.merchantId,
           order_type: cart.orderType,
-          address_id: address.id,
-          latitude: address.latitude ? Number(address.latitude) : undefined,
-          longitude: address.longitude ? Number(address.longitude) : undefined
+          address_id: requiresAddress ? address?.id : undefined,
+          latitude: requiresAddress && address?.latitude ? Number(address.latitude) : undefined,
+          longitude: requiresAddress && address?.longitude ? Number(address.longitude) : undefined
         }, { loading: false })
         return { cart, result }
       })
@@ -348,6 +352,7 @@ Page({
       }
 
       this.setData(buildPricingSuccessPatch(calcResults))
+      this.updatePaymentState()
     } catch (error) {
       logger.error('Calculate delivery fee failed', error, 'Order-confirm')
       if (requestVersion !== this._pricingRequestVersion) {
@@ -373,6 +378,30 @@ Page({
     this.requestPricingRefresh()
   },
 
+  getPrimaryCart(): MerchantCartView | null {
+    return this.data.carts && this.data.carts.length === 1 ? this.data.carts[0] : null
+  },
+
+  updatePaymentState() {
+    const cart = this.getPrimaryCart()
+    const selectedPaymentMethod = resolveSelectedPaymentMethod(
+      cart,
+      this.data.memberBalances,
+      this.data.selectedPaymentMethod
+    )
+    const memberBalance = cart ? (this.data.memberBalances[cart.merchantId] || 0) : 0
+    this.setData({
+      paymentMethods: buildCheckoutPaymentMethods(cart, this.data.memberBalances),
+      selectedPaymentMethod,
+      balanceInsufficient: !!cart && memberBalance > 0 && memberBalance < (cart.orderTotal || 0)
+    })
+  },
+
+  onPaymentMethodChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
+    this.setData({ selectedPaymentMethod: e.detail.value === 'balance' ? 'balance' : 'wechat_pay' })
+    this.updatePaymentState()
+  },
+
   getSelectedMerchantIds(carts: MerchantCartView[]): number[] {
     return Array.from(new Set((carts || []).map((cart) => cart.merchantId).filter(Boolean)))
   },
@@ -396,7 +425,7 @@ Page({
       return
     }
 
-    const { carts, address, remarks, loadError, pricingError } = this.data
+    const { carts, address, remarks, loadError, pricingError, requiresAddress, selectedPaymentMethod } = this.data
 
     if (loadError) {
       wx.showToast({ title: '请先重试加载购物车', icon: 'none' })
@@ -408,7 +437,7 @@ Page({
       return
     }
 
-    if (!address || !address.id) {
+    if (requiresAddress && (!address || !address.id)) {
       wx.showToast({ title: '请选择收货地址', icon: 'none' })
       return
     }
@@ -426,14 +455,17 @@ Page({
 
     this.setData({ loading: true })
     const ordersCreated: number[] = []
+    let createdOrder: OrderResponse | null = null
 
     try {
       for (const cart of carts) {
         const order = await createOrder(buildTakeoutCreateOrderRequest({
           cart,
-          addressId: address.id,
-          note: remarks[cart.merchantId] || ''
+          addressId: address?.id,
+          note: remarks[cart.merchantId] || '',
+          useBalance: selectedPaymentMethod === 'balance'
         }))
+        createdOrder = order
         ordersCreated.push(order.id)
 
         // 按商户清空购物车，避免下单后按商品逐个删除导致请求数线性放大。
@@ -454,7 +486,10 @@ Page({
       // 确保外卖首页 / 购物车页的下次 onShow 拿到空购物车，而不是脏缓存。
       this.syncGlobalCartSummary([])
 
-      await this.handlePayment(ordersCreated[0])
+      if (!createdOrder) {
+        throw new Error('订单创建结果缺失')
+      }
+      await this.handlePayment(createdOrder)
     } catch (error) {
       logger.error('Create order failed:', error, 'Order-confirm')
 
@@ -485,12 +520,25 @@ Page({
       content,
       showCancel: false,
       confirmText: '查看订单',
-      success: () => Navigation.redirectToOrderList({ orderType: 'takeout' })
+      success: () => Navigation.redirectToOrderList({ orderType: carts[0]?.orderType || 'takeout' })
     })
   },
 
-  async handlePayment(orderId: number) {
+  async handlePayment(order: OrderResponse) {
+    const orderId = order.id
+    const paidBalanceOrder = isPaidOrderStatus(order.status) && order.payment_method === 'balance'
     try {
+      if (paidBalanceOrder) {
+        Navigation.toPaymentResult({
+          status: 'paid',
+          businessId: orderId,
+          businessType: 'order',
+          orderNo: String(orderId),
+          amount: this.data.orderTotalDisplay
+        })
+        return
+      }
+
       const paymentResult = await completePaymentWorkflow(await createOrderPayment(orderId), { context: this })
       Navigation.toPaymentResult({
         status: paymentResult.status,
