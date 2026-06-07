@@ -273,6 +273,15 @@ func (server *Server) handleMiniProgramMediaCheckNotify(ctx *gin.Context) {
 		ctx.String(http.StatusBadRequest, "appid mismatch")
 		return
 	}
+	if !payload.isMediaCheckCallback() {
+		log.Info().
+			Str("appid", payloadAppID).
+			Str("msg_type", payload.normalizedMsgType()).
+			Str("event", payload.normalizedEvent()).
+			Msg("non-media-check mini program message acknowledged")
+		ctx.String(http.StatusOK, "success")
+		return
+	}
 	if payload.TraceID == "" {
 		log.Warn().
 			Str("appid", payloadAppID).
@@ -370,6 +379,36 @@ func (payload miniProgramMediaCheckXML) appID() string {
 		return strings.TrimSpace(payload.AppID)
 	}
 	return strings.TrimSpace(payload.AppIDV2)
+}
+
+func (payload miniProgramMediaCheckXML) normalizedMsgType() string {
+	return strings.ToLower(strings.TrimSpace(payload.MsgType))
+}
+
+func (payload miniProgramMediaCheckXML) normalizedEvent() string {
+	return strings.ToLower(strings.TrimSpace(payload.Event))
+}
+
+func (payload miniProgramMediaCheckXML) isMediaCheckCallback() bool {
+	if strings.TrimSpace(payload.TraceID) != "" {
+		return true
+	}
+	if payload.normalizedEvent() == "wxa_media_check" {
+		return true
+	}
+	if payload.callbackErrCode() != "" || payload.callbackErrMsg() != "" {
+		return true
+	}
+	if strings.TrimSpace(payload.Result.Suggest) != "" || strings.TrimSpace(payload.Result.Label) != "" {
+		return true
+	}
+	if len(payload.Details) > 0 {
+		return true
+	}
+	if payload.riskyFlag() != "" {
+		return true
+	}
+	return false
 }
 
 func (payload miniProgramMediaCheckXML) riskyFlag() string {

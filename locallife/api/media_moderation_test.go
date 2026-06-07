@@ -345,6 +345,63 @@ func TestMiniProgramMediaCheckNotify(t *testing.T) {
 	require.Equal(t, "success", recorder.Body.String())
 }
 
+func TestMiniProgramMediaCheckNotify_AcknowledgesOrdinaryMiniProgramMessages(t *testing.T) {
+	testCases := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "text message",
+			body: `<xml>
+<ToUserName><![CDATA[gh_50bd8db2c6be]]></ToUserName>
+<FromUserName><![CDATA[openid-user]]></FromUserName>
+<CreateTime>1780828301</CreateTime>
+<MsgType><![CDATA[text]]></MsgType>
+<Content><![CDATA[超市能入住吗]]></Content>
+<MsgId>25495331247649341</MsgId>
+</xml>`,
+		},
+		{
+			name: "customer service temporary session event",
+			body: `<xml>
+<ToUserName><![CDATA[gh_50bd8db2c6be]]></ToUserName>
+<FromUserName><![CDATA[openid-user]]></FromUserName>
+<CreateTime>1780828313</CreateTime>
+<MsgType><![CDATA[event]]></MsgType>
+<Event><![CDATA[user_enter_tempsession]]></Event>
+<SessionFrom><![CDATA[]]></SessionFrom>
+</xml>`,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			server, _ := newTestServerForMedia(t, store)
+			server.config.WechatMiniAppID = "wx-test-app"
+			server.config.WechatMiniAppMessageToken = "mini-token"
+
+			timestamp := "1780828302"
+			nonce := "nonce-ordinary-message"
+			signature := signMiniProgramCallback(server.config.WechatMiniAppMessageToken, timestamp, nonce)
+
+			recorder := httptest.NewRecorder()
+			url := fmt.Sprintf("/v1/webhooks/wechat-miniprogram/media-check?signature=%s&timestamp=%s&nonce=%s", signature, timestamp, nonce)
+			req, err := http.NewRequest(http.MethodPost, url, bytes.NewBufferString(tc.body))
+			require.NoError(t, err)
+			req.Header.Set("Content-Type", "application/xml")
+
+			server.router.ServeHTTP(recorder, req)
+
+			require.Equal(t, http.StatusOK, recorder.Code)
+			require.Equal(t, "success", recorder.Body.String())
+		})
+	}
+}
+
 func TestMiniProgramMediaCheckNotify_ApprovedEnqueuesPendingOCRJobs(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
