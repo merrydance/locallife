@@ -432,7 +432,7 @@ func mapBaofuRefundCreateError(err error) error {
 	if !errors.As(err, &providerErr) {
 		return err
 	}
-	classified := baofu.ClassifyBaofuError(providerErr.UpstreamCode, providerErr.UpstreamMessage)
+	classified := baofu.ClassifyBaofuErrorForOperation(providerErr.Operation, providerErr.UpstreamCode, providerErr.UpstreamMessage)
 	status := http.StatusBadGateway
 	switch classified.Category {
 	case baofu.BaofuErrorCategoryUserActionRequired:

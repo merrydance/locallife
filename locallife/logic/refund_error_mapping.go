@@ -95,7 +95,7 @@ func ClassifyBaofuRefundCreateFailure(err error) BaofuRefundCreateFailureDisposi
 		}
 	}
 
-	classified := baofu.ClassifyBaofuError(providerErr.UpstreamCode, providerErr.UpstreamMessage)
+	classified := baofu.ClassifyBaofuErrorForOperation(providerErr.Operation, providerErr.UpstreamCode, providerErr.UpstreamMessage)
 	if classified.Category == baofu.BaofuErrorCategoryRetryable || baofuRefundCreateRequestFailureIsRetryable(providerErr) {
 		return BaofuRefundCreateFailureDisposition{
 			CommandStatus: db.ExternalPaymentCommandStatusUnknown,

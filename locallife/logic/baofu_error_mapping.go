@@ -106,7 +106,7 @@ func mapBaofuMerchantReportError(err error, context BaofuProviderErrorContext) e
 		return err
 	}
 	status := http.StatusBadGateway
-	classified := baofu.ClassifyBaofuError(providerErr.UpstreamCode, providerErr.UpstreamMessage)
+	classified := baofu.ClassifyBaofuErrorForOperation(providerErr.Operation, providerErr.UpstreamCode, providerErr.UpstreamMessage)
 	switch classified.Category {
 	case baofu.BaofuErrorCategoryUserActionRequired:
 		status = http.StatusBadRequest
@@ -127,6 +127,14 @@ func baofuMerchantReportPublicMessage(context BaofuProviderErrorContext, provide
 	switch operation {
 	case "bind_sub_config":
 		return "微信支付授权目录绑定失败，请联系平台处理后重试"
+	case "merchant_report":
+		if providerErr != nil {
+			classified := baofu.ClassifyBaofuErrorForOperation(operation, providerErr.UpstreamCode, providerErr.UpstreamMessage)
+			if classified.Category == baofu.BaofuErrorCategoryUserActionRequired && strings.TrimSpace(classified.PublicMessage) != "" {
+				return "微信支付商户报备失败，" + strings.TrimSpace(classified.PublicMessage)
+			}
+		}
+		return "微信支付商户报备失败，请核对商户资料后重试；如持续失败请联系平台处理"
 	default:
 		return "微信支付商户报备失败，请核对商户资料后重试；如持续失败请联系平台处理"
 	}
@@ -143,7 +151,7 @@ func mapBaofuPaymentCreateError(err error) error {
 	if !errors.As(err, &providerErr) {
 		return err
 	}
-	classified := baofu.ClassifyBaofuError(providerErr.UpstreamCode, providerErr.UpstreamMessage)
+	classified := baofu.ClassifyBaofuErrorForOperation(providerErr.Operation, providerErr.UpstreamCode, providerErr.UpstreamMessage)
 	status := http.StatusBadGateway
 	switch classified.Category {
 	case baofu.BaofuErrorCategoryUserActionRequired:

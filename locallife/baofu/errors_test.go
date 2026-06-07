@@ -102,6 +102,56 @@ func TestBaofuUserVisibleMessageIncludesActionableProviderReason(t *testing.T) {
 	require.Equal(t, "资料信息不完整，请核对后重新提交：统一社会信用代码格式不正确，check_and_resubmit", BaofuCommandMessage("BF0020", "统一社会信用代码格式不正确"))
 }
 
+func TestClassifyBaofuErrorForOperationKeepsProviderContextBoundaries(t *testing.T) {
+	tests := []struct {
+		name            string
+		operation       string
+		code            string
+		upstreamMessage string
+		wantCategory    BaofuErrorCategory
+		wantMessage     string
+		notContains     []string
+	}{
+		{
+			name:            "aggregate envelope failure is platform configuration",
+			operation:       "order_query",
+			code:            PublicEnvelopeReturnCodeFail,
+			upstreamMessage: "上游签名证书不匹配",
+			wantCategory:    BaofuErrorCategoryPlatformConfiguration,
+			wantMessage:     "支付通道配置异常，请联系平台处理",
+			notContains:     []string{"核对后重新提交", "上游签名证书不匹配"},
+		},
+		{
+			name:            "merchant report material failure remains user actionable",
+			operation:       "merchant_report",
+			code:            "INVALID_PARAMETER",
+			upstreamMessage: "上游原始参数错误",
+			wantCategory:    BaofuErrorCategoryUserActionRequired,
+			wantMessage:     "资料信息不完整，请核对后重新提交：上游原始参数错误",
+		},
+		{
+			name:            "applet auth failure does not expose appid",
+			operation:       "bind_sub_config",
+			code:            "INVALID_PARAMETER",
+			upstreamMessage: "appid wx123456 授权目录错误",
+			wantCategory:    BaofuErrorCategoryUserActionRequired,
+			wantMessage:     "资料信息不完整，请核对后重新提交",
+			notContains:     []string{"wx123456", "授权目录"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ClassifyBaofuErrorForOperation(tc.operation, tc.code, tc.upstreamMessage)
+
+			require.Equal(t, tc.wantCategory, got.Category)
+			require.Equal(t, tc.wantMessage, got.PublicMessage)
+			for _, forbidden := range tc.notContains {
+				require.NotContains(t, got.PublicMessage, forbidden)
+			}
+		})
+	}
+}
+
 func TestBaofuUserVisibleMessageRedactsSensitiveProviderReason(t *testing.T) {
 	got := ClassifyBaofuError("ID_CARD_CHECK_FAILED", "身份证号码 110101199001010011 不合法")
 

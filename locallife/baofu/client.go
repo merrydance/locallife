@@ -265,7 +265,7 @@ func providerResponseError(operation string, statusCode int, upstreamCode string
 }
 
 func providerResponseErrorWithDiagnostic(operation string, statusCode int, upstreamCode string, upstreamMessage string, diagnostic []byte, cause error) error {
-	classified := ClassifyBaofuError(upstreamCode, upstreamMessage)
+	classified := ClassifyBaofuErrorForOperation(operation, upstreamCode, upstreamMessage)
 	return &ProviderError{
 		Operation:          strings.TrimSpace(operation),
 		Capability:         "baofu",

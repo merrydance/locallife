@@ -54,3 +54,37 @@ func TestMapBaofuPaymentCreateErrorUsesSafeChineseProviderMessage(t *testing.T) 
 	require.NotContains(t, reqErr.Err.Error(), "raw upstream")
 	require.Same(t, providerErr, LoggableError(err))
 }
+
+func TestMapBaofuPaymentCreateErrorTreatsEnvelopeFailAsPlatformConfiguration(t *testing.T) {
+	providerErr := &baofu.ProviderError{
+		Operation:       "order_query",
+		UpstreamCode:    baofu.PublicEnvelopeReturnCodeFail,
+		UpstreamMessage: "上游签名证书不匹配",
+	}
+
+	err := mapBaofuPaymentCreateError(providerErr)
+	reqErr := assertRequestError(t, err)
+
+	require.Equal(t, http.StatusServiceUnavailable, reqErr.Status)
+	require.EqualError(t, reqErr.Err, "支付通道配置异常，请联系平台处理")
+	require.NotContains(t, reqErr.Err.Error(), "核对后重新提交")
+	require.NotContains(t, reqErr.Err.Error(), "上游签名证书不匹配")
+	require.Same(t, providerErr, LoggableError(err))
+}
+
+func TestMapBaofuRefundCreateErrorTreatsEnvelopeFailAsPlatformConfiguration(t *testing.T) {
+	providerErr := &baofu.ProviderError{
+		Operation:       "refund_query",
+		UpstreamCode:    baofu.PublicEnvelopeReturnCodeFail,
+		UpstreamMessage: "上游签名证书不匹配",
+	}
+
+	err := mapBaofuRefundCreateError(providerErr)
+	reqErr := assertRequestError(t, err)
+
+	require.Equal(t, http.StatusServiceUnavailable, reqErr.Status)
+	require.EqualError(t, reqErr.Err, "支付通道配置异常，请联系平台处理")
+	require.NotContains(t, reqErr.Err.Error(), "核对后重新提交")
+	require.NotContains(t, reqErr.Err.Error(), "上游签名证书不匹配")
+	require.Same(t, providerErr, LoggableError(err))
+}

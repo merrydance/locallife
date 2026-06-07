@@ -179,6 +179,31 @@ func TestMapBaofuMerchantReportProviderErrorKeepsRawTextOutOfPublicMessage(t *te
 	require.Equal(t, "merchant_report", ctx.ProviderOperation)
 }
 
+func TestMapBaofuMerchantReportProviderErrorIncludesSafeActionableReason(t *testing.T) {
+	providerErr := &baofu.ProviderError{
+		Operation:       "merchant_report",
+		Capability:      "baofu_merchant_report",
+		UpstreamCode:    "INVALID_PARAMETER",
+		UpstreamMessage: "上游原始参数错误",
+	}
+
+	err := mapBaofuMerchantReportError(providerErr, BaofuProviderErrorContext{
+		FlowID:             703,
+		OwnerType:          db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:            88,
+		CurrentState:       db.BaofuAccountOpeningStateMerchantReportProcessing,
+		MerchantReportID:   903,
+		MerchantReportNo:   "MR202605090703",
+		ProviderOperation:  "merchant_report",
+		ProviderCapability: "baofu_merchant_report",
+	})
+
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, http.StatusBadRequest, reqErr.Status)
+	require.Contains(t, reqErr.Err.Error(), "微信支付商户报备失败")
+	require.Contains(t, reqErr.Err.Error(), "资料信息不完整，请核对后重新提交：上游原始参数错误")
+}
+
 func TestMapBaofuMerchantReportAppletAuthProviderErrorReturnsSpecificGuidance(t *testing.T) {
 	providerErr := &baofu.ProviderError{
 		Operation:       "bind_sub_config",
@@ -202,6 +227,7 @@ func TestMapBaofuMerchantReportAppletAuthProviderErrorReturnsSpecificGuidance(t 
 	require.Equal(t, http.StatusServiceUnavailable, reqErr.Status)
 	require.EqualError(t, reqErr.Err, "微信支付授权目录绑定失败，请联系平台处理后重试")
 	require.NotContains(t, reqErr.Err.Error(), providerErr.UpstreamMessage)
+	require.NotContains(t, reqErr.Err.Error(), "wx123456")
 	var provider *baofu.ProviderError
 	require.True(t, errors.As(LoggableError(err), &provider))
 	require.Same(t, providerErr, provider)

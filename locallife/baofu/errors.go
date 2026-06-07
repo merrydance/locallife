@@ -34,6 +34,7 @@ const (
 	baofuMessageIdentityCheckFailed    = "身份或银行卡信息核验未通过，请核对后重新提交"
 	baofuMessagePaymentChannelPending  = "商户微信支付通道待开通，请联系平台处理"
 	baofuMessagePaymentConfigPending   = "支付通道配置待开通，请联系平台处理"
+	baofuMessagePaymentConfigAbnormal  = "支付通道配置异常，请联系平台处理"
 	baofuMessagePaymentProcessing      = "支付通道处理中，请稍后重试"
 	baofuMessageTradeResultProcessing  = "交易结果处理中，请稍后查询"
 	baofuMessageOrderCreated           = "支付订单已创建，请返回订单页查看支付状态"
@@ -144,6 +145,34 @@ func ClassifyBaofuError(code string, upstreamMessage string) ClassifiedError {
 	classified.PublicMessage = baofuMessagePaymentChannelAbnormal
 	classified.PublicAction = baofuActionContactPlatform
 	return classified
+}
+
+func ClassifyBaofuErrorForOperation(operation string, code string, upstreamMessage string) ClassifiedError {
+	canonicalCode := strings.ToUpper(strings.TrimSpace(code))
+	if canonicalCode == PublicEnvelopeReturnCodeFail && baofuOperationUsesAggregatePaymentEnvelope(operation) {
+		return ClassifiedError{
+			Code:          canonicalCode,
+			Category:      BaofuErrorCategoryPlatformConfiguration,
+			PublicMessage: baofuMessagePaymentConfigAbnormal,
+			PublicAction:  baofuActionContactPlatform,
+		}
+	}
+	return ClassifyBaofuError(code, upstreamMessage)
+}
+
+func baofuOperationUsesAggregatePaymentEnvelope(operation string) bool {
+	switch strings.TrimSpace(operation) {
+	case "unified_order",
+		"order_query",
+		"share_after_pay",
+		"share_query",
+		"order_refund",
+		"refund_query",
+		"order_close":
+		return true
+	default:
+		return false
+	}
 }
 
 var (
