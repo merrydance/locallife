@@ -1094,11 +1094,18 @@ func TestUpdateMerchantShopImagesTargetsMerchantOnly(t *testing.T) {
 
 func TestUpdateMerchantShopImagesRejectsNonStringImageArrays(t *testing.T) {
 	owner := createRandomUser(t)
-	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	storefrontMerchant := createRandomMerchantWithOwner(t, owner.ID)
 
 	_, err := testStore.UpdateMerchantShopImages(context.Background(), UpdateMerchantShopImagesParams{
-		ID:               merchant.ID,
+		ID:               storefrontMerchant.ID,
 		StorefrontImages: []byte(`["uploads/merchant/storefront.jpg", 123]`),
+	})
+	require.Error(t, err)
+
+	environmentMerchant := createRandomMerchantWithOwner(t, owner.ID)
+	_, err = testStore.UpdateMerchantShopImages(context.Background(), UpdateMerchantShopImagesParams{
+		ID:                environmentMerchant.ID,
+		EnvironmentImages: []byte(`["uploads/merchant/environment.jpg", false]`),
 	})
 	require.Error(t, err)
 }
