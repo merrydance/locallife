@@ -488,7 +488,7 @@ export interface UpdateMerchantBusinessHoursRequest {
   }>
 }
 
-export type MerchantMembershipScene = 'dine_in' | 'takeout' | 'reservation'
+export type MerchantMembershipScene = 'dine_in' | 'takeaway'
 
 export interface MerchantMembershipSettingsResponse {
   merchant_id: number

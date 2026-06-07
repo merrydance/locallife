@@ -18,9 +18,8 @@ interface MembershipFormState {
 }
 
 const SCENE_OPTIONS: Array<{ key: MerchantMembershipScene, label: string, desc: string }> = [
-  { key: 'takeout', label: '外卖订单', desc: '顾客在外卖下单时可使用会员余额或赠送金' },
   { key: 'dine_in', label: '堂食订单', desc: '顾客在线下桌台或堂食下单时可使用' },
-  { key: 'reservation', label: '预订订单', desc: '顾客支付预订或预订加菜时可使用' }
+  { key: 'takeaway', label: '外带自取', desc: '顾客到店自取下单时可使用会员余额或赠送金' }
 ]
 
 const MEMBERSHIP_AUTO_REFRESH_WINDOW_MS = 60 * 1000
@@ -28,9 +27,8 @@ const MEMBERSHIP_AUTO_REFRESH_WINDOW_MS = 60 * 1000
 function createSceneState(selected: MerchantMembershipScene[]) {
   const selectedSet = new Set(selected)
   return {
-    takeout: selectedSet.has('takeout'),
     dine_in: selectedSet.has('dine_in'),
-    reservation: selectedSet.has('reservation')
+    takeaway: selectedSet.has('takeaway')
   }
 }
 
