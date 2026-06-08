@@ -35,6 +35,11 @@ type ListMerchantDiscountRulesInput struct {
 	Offset           int32
 }
 
+type CountMerchantDiscountRulesInput struct {
+	MerchantID       int64
+	TargetMerchantID int64
+}
+
 type ListActiveDiscountRulesInput struct {
 	MerchantID       int64
 	TargetMerchantID int64
@@ -134,6 +139,19 @@ func ListMerchantDiscountRules(ctx context.Context, store db.Store, input ListMe
 	}
 
 	return rules, nil
+}
+
+func CountMerchantDiscountRules(ctx context.Context, store db.Store, input CountMerchantDiscountRulesInput) (int64, error) {
+	if input.TargetMerchantID != input.MerchantID {
+		return 0, NewRequestError(http.StatusForbidden, errors.New("insufficient permissions for this merchant"))
+	}
+
+	count, err := store.CountMerchantDiscountRules(ctx, input.TargetMerchantID)
+	if err != nil {
+		return 0, err
+	}
+
+	return count, nil
 }
 
 func ListActiveDiscountRules(ctx context.Context, store db.Store, input ListActiveDiscountRulesInput) ([]db.DiscountRule, error) {

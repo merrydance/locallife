@@ -28,6 +28,18 @@ func (q *Queries) CountActiveDiscountRules(ctx context.Context, merchantID int64
 	return count, err
 }
 
+const countMerchantDiscountRules = `-- name: CountMerchantDiscountRules :one
+SELECT COUNT(*) FROM discount_rules
+WHERE merchant_id = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) CountMerchantDiscountRules(ctx context.Context, merchantID int64) (int64, error) {
+	row := q.db.QueryRow(ctx, countMerchantDiscountRules, merchantID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createDiscountRule = `-- name: CreateDiscountRule :one
 
 INSERT INTO discount_rules (

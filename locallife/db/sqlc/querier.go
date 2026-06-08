@@ -184,6 +184,7 @@ type Querier interface {
 	CountMerchantClaimsForMerchant(ctx context.Context, arg CountMerchantClaimsForMerchantParams) (int64, error)
 	// 统计商户的顾客总数
 	CountMerchantCustomers(ctx context.Context, merchantID int64) (int32, error)
+	CountMerchantDiscountRules(ctx context.Context, merchantID int64) (int64, error)
 	CountMerchantFinanceOrders(ctx context.Context, arg CountMerchantFinanceOrdersParams) (int64, error)
 	CountMerchantMembers(ctx context.Context, merchantID int64) (int64, error)
 	// 统计商户在某时间后特定状态的订单数
@@ -197,6 +198,7 @@ type Querier interface {
 	CountMerchantSettlements(ctx context.Context, arg CountMerchantSettlementsParams) (int64, error)
 	CountMerchantSettlementsByStatus(ctx context.Context, arg CountMerchantSettlementsByStatusParams) (int64, error)
 	CountMerchantStaff(ctx context.Context, merchantID int64) (int64, error)
+	CountMerchantVouchers(ctx context.Context, merchantID int64) (int64, error)
 	// 统计区域内商户数量
 	CountMerchantsByRegion(ctx context.Context, regionID int64) (int64, error)
 	// 统计区域内指定状态的商户数量

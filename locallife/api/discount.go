@@ -217,6 +217,18 @@ func (server *Server) listMerchantDiscountRules(ctx *gin.Context) {
 		return
 	}
 
+	total, err := logic.CountMerchantDiscountRules(ctx, server.store, logic.CountMerchantDiscountRulesInput{
+		MerchantID:       merchant.ID,
+		TargetMerchantID: uriReq.MerchantID,
+	})
+	if err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
 	rsp := make([]discountRuleResponse, len(rules))
 	for i, rule := range rules {
 		rsp[i] = convertDiscountRuleResponse(rule)
@@ -224,7 +236,7 @@ func (server *Server) listMerchantDiscountRules(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, listMerchantDiscountRulesResponse{
 		Rules:    rsp,
-		Total:    int64(len(rsp)),
+		Total:    total,
 		PageID:   queryReq.PageID,
 		PageSize: queryReq.PageSize,
 	})

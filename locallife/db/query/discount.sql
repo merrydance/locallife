@@ -27,6 +27,10 @@ WHERE merchant_id = $1 AND deleted_at IS NULL
 ORDER BY min_order_amount ASC
 LIMIT $2 OFFSET $3;
 
+-- name: CountMerchantDiscountRules :one
+SELECT COUNT(*) FROM discount_rules
+WHERE merchant_id = $1 AND deleted_at IS NULL;
+
 -- name: ListActiveDiscountRules :many
 SELECT id, merchant_id, name, description, min_order_amount, discount_amount, can_stack_with_voucher, can_stack_with_membership, valid_from, valid_until, is_active, created_at, updated_at, deleted_at, stacking_group FROM discount_rules
 WHERE merchant_id = $1 

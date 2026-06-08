@@ -45737,16 +45737,21 @@
             "type": "object",
             "properties": {
                 "discount_amount": {
-                    "type": "integer"
+                    "type": "integer",
+                    "maximum": 10000000
                 },
                 "is_active": {
                     "type": "boolean"
                 },
                 "min_order_amount": {
-                    "type": "integer"
+                    "type": "integer",
+                    "maximum": 100000000,
+                    "minimum": 0
                 },
                 "name": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 50,
+                    "minLength": 1
                 },
                 "valid_from": {
                     "type": "string"

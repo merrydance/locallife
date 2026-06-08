@@ -36,6 +36,10 @@ WHERE merchant_id = $1 AND deleted_at IS NULL
 ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3;
 
+-- name: CountMerchantVouchers :one
+SELECT COUNT(*) FROM vouchers
+WHERE merchant_id = $1 AND deleted_at IS NULL;
+
 -- name: ListActiveVouchers :many
 SELECT id, merchant_id, code, name, description, amount, min_order_amount, total_quantity, claimed_quantity, used_quantity, valid_from, valid_until, is_active, created_at, updated_at, allowed_order_types, deleted_at FROM vouchers
 WHERE merchant_id = $1 

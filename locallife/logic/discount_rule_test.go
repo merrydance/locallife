@@ -437,6 +437,25 @@ func TestListMerchantDiscountRulesForbidden(t *testing.T) {
 	require.Equal(t, "insufficient permissions for this merchant", reqErr.Err.Error())
 }
 
+func TestCountMerchantDiscountRulesForbidden(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		CountMerchantDiscountRules(gomock.Any(), gomock.Any()).
+		Times(0)
+
+	_, err := CountMerchantDiscountRules(context.Background(), store, CountMerchantDiscountRulesInput{
+		MerchantID:       1,
+		TargetMerchantID: 2,
+	})
+
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 403, reqErr.Status)
+	require.Equal(t, "insufficient permissions for this merchant", reqErr.Err.Error())
+}
+
 func TestApplicableDiscountRulesForbidden(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

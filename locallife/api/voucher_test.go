@@ -718,6 +718,45 @@ func TestListMerchantVouchersAPI(t *testing.T) {
 		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
 	}{
 		{
+			name:       "OK_ReturnsFullMatchedTotal",
+			merchantID: merchant.ID,
+			query:      "?page_id=2&page_size=5",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				firstVoucher := randomVoucher(merchant.ID)
+				firstVoucher.ID = 101
+				secondVoucher := randomVoucher(merchant.ID)
+				secondVoucher.ID = 100
+
+				store.EXPECT().
+					ListMerchantVouchers(gomock.Any(), db.ListMerchantVouchersParams{
+						MerchantID: merchant.ID,
+						Limit:      5,
+						Offset:     5,
+					}).
+					Times(1).
+					Return([]db.Voucher{firstVoucher, secondVoucher}, nil)
+				store.EXPECT().
+					CountMerchantVouchers(gomock.Any(), merchant.ID).
+					Times(1).
+					Return(int64(7), nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var response listMerchantVouchersResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Len(t, response.Vouchers, 2)
+				require.Equal(t, int64(7), response.Total)
+				require.Equal(t, int32(2), response.PageID)
+				require.Equal(t, int32(5), response.PageSize)
+			},
+		},
+		{
 			name:       "NoAuthorization",
 			merchantID: merchant.ID,
 			query:      "?page_id=1&page_size=10",

@@ -2028,6 +2028,21 @@ func (mr *MockStoreMockRecorder) CountMerchantCustomers(ctx, merchantID any) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountMerchantCustomers", reflect.TypeOf((*MockStore)(nil).CountMerchantCustomers), ctx, merchantID)
 }
 
+// CountMerchantDiscountRules mocks base method.
+func (m *MockStore) CountMerchantDiscountRules(ctx context.Context, merchantID int64) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountMerchantDiscountRules", ctx, merchantID)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountMerchantDiscountRules indicates an expected call of CountMerchantDiscountRules.
+func (mr *MockStoreMockRecorder) CountMerchantDiscountRules(ctx, merchantID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountMerchantDiscountRules", reflect.TypeOf((*MockStore)(nil).CountMerchantDiscountRules), ctx, merchantID)
+}
+
 // CountMerchantFinanceOrders mocks base method.
 func (m *MockStore) CountMerchantFinanceOrders(ctx context.Context, arg db.CountMerchantFinanceOrdersParams) (int64, error) {
 	m.ctrl.T.Helper()
@@ -2191,6 +2206,21 @@ func (m *MockStore) CountMerchantStaff(ctx context.Context, merchantID int64) (i
 func (mr *MockStoreMockRecorder) CountMerchantStaff(ctx, merchantID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountMerchantStaff", reflect.TypeOf((*MockStore)(nil).CountMerchantStaff), ctx, merchantID)
+}
+
+// CountMerchantVouchers mocks base method.
+func (m *MockStore) CountMerchantVouchers(ctx context.Context, merchantID int64) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountMerchantVouchers", ctx, merchantID)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountMerchantVouchers indicates an expected call of CountMerchantVouchers.
+func (mr *MockStoreMockRecorder) CountMerchantVouchers(ctx, merchantID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountMerchantVouchers", reflect.TypeOf((*MockStore)(nil).CountMerchantVouchers), ctx, merchantID)
 }
 
 // CountMerchantsByRegion mocks base method.

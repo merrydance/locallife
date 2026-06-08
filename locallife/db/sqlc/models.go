@@ -1347,9 +1347,9 @@ type MerchantMembership struct {
 type MerchantMembershipSetting struct {
 	ID         int64 `json:"id"`
 	MerchantID int64 `json:"merchant_id"`
-	// 余额可用场景: dine_in(堂食), takeout(外卖), reservation(预定)
+	// 余额可用场景: dine_in(堂食), takeaway(外带自取)
 	BalanceUsableScenes []string `json:"balance_usable_scenes"`
-	// 赠送金额可用场景，可比余额更严格
+	// 赠送金额可用场景: dine_in(堂食), takeaway(外带自取)，可比余额更严格
 	BonusUsableScenes []string `json:"bonus_usable_scenes"`
 	// 是否允许与优惠券叠加
 	AllowWithVoucher bool `json:"allow_with_voucher"`

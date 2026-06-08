@@ -199,6 +199,12 @@ func (server *Server) listMerchantVouchers(ctx *gin.Context) {
 		return
 	}
 
+	total, err := server.store.CountMerchantVouchers(ctx, merchant.ID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
 	rsp := make([]voucherResponse, len(vouchers))
 	for i, v := range vouchers {
 		rsp[i] = convertVoucherResponse(v)
@@ -206,7 +212,7 @@ func (server *Server) listMerchantVouchers(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, listMerchantVouchersResponse{
 		Vouchers: rsp,
-		Total:    int64(len(rsp)),
+		Total:    total,
 		PageID:   queryReq.PageID,
 		PageSize: queryReq.PageSize,
 	})

@@ -212,6 +212,82 @@ func TestCreateDiscountRuleAPI(t *testing.T) {
 	}
 }
 
+func TestListMerchantDiscountRulesAPI(t *testing.T) {
+	merchantOwner, _ := randomUser(t)
+	merchant := randomMerchant(merchantOwner.ID)
+
+	testCases := []struct {
+		name          string
+		merchantID    int64
+		query         string
+		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
+		buildStubs    func(store *mockdb.MockStore)
+		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+	}{
+		{
+			name:       "OK_ReturnsFullMatchedTotal",
+			merchantID: merchant.ID,
+			query:      "?page_id=2&page_size=5",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+
+				firstRule := randomDiscountRule(merchant.ID)
+				firstRule.ID = 201
+				secondRule := randomDiscountRule(merchant.ID)
+				secondRule.ID = 202
+
+				store.EXPECT().
+					ListMerchantDiscountRules(gomock.Any(), db.ListMerchantDiscountRulesParams{
+						MerchantID: merchant.ID,
+						Limit:      5,
+						Offset:     5,
+					}).
+					Times(1).
+					Return([]db.DiscountRule{firstRule, secondRule}, nil)
+				store.EXPECT().
+					CountMerchantDiscountRules(gomock.Any(), merchant.ID).
+					Times(1).
+					Return(int64(6), nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var response listMerchantDiscountRulesResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Len(t, response.Rules, 2)
+				require.Equal(t, int64(6), response.Total)
+				require.Equal(t, int32(2), response.PageID)
+				require.Equal(t, int32(5), response.PageSize)
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			tc.buildStubs(store)
+
+			server := newTestServer(t, store)
+			recorder := httptest.NewRecorder()
+
+			url := fmt.Sprintf("/v1/merchants/%d/discounts%s", tc.merchantID, tc.query)
+			request, err := http.NewRequest(http.MethodGet, url, nil)
+			require.NoError(t, err)
+
+			tc.setupAuth(t, request, server.tokenMaker)
+			server.router.ServeHTTP(recorder, request)
+			tc.checkResponse(t, recorder)
+		})
+	}
+}
+
 func TestGetApplicableDiscountRulesAPI(t *testing.T) {
 	merchantOwner, _ := randomUser(t)
 	merchant := randomMerchant(merchantOwner.ID)

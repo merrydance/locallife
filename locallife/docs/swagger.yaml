@@ -9479,12 +9479,17 @@ definitions:
   api.updateDeliveryPromotionRequest:
     properties:
       discount_amount:
+        maximum: 10000000
         type: integer
       is_active:
         type: boolean
       min_order_amount:
+        maximum: 100000000
+        minimum: 0
         type: integer
       name:
+        maxLength: 50
+        minLength: 1
         type: string
       valid_from:
         type: string
