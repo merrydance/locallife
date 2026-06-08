@@ -76,18 +76,21 @@
         <text class="category-icon-preview category-icon-preview--large">{{selectedIcon}}</text>
         <text class="dialog-icon-copy">首页图标预览</text>
       </view>
-      <view class="icon-picker">
-        <view
-          wx:for="{{iconOptions}}"
-          wx:for-item="icon"
-          wx:key="*this"
-          class="icon-picker-item {{selectedIcon === icon ? 'icon-picker-item--active' : ''}}"
-          data-icon="{{icon}}"
-          bind:tap="onSelectIcon"
-        >
-          <text>{{icon}}</text>
+      <!-- weapp-gate allow-native-control: TDesign 没有等价的弹窗内滚动容器，图标候选较多时需要限制选择区高度 -->
+      <scroll-view scroll-y class="icon-picker-scroll">
+        <view class="icon-picker">
+          <view
+            wx:for="{{iconOptions}}"
+            wx:for-item="icon"
+            wx:key="*this"
+            class="icon-picker-item {{selectedIcon === icon ? 'icon-picker-item--active' : ''}}"
+            data-icon="{{icon}}"
+            bind:tap="onSelectIcon"
+          >
+            <text>{{icon}}</text>
+          </view>
         </view>
-      </view>
+      </scroll-view>
       <t-input
         label="品类名称"
         value="{{createInputValue}}"

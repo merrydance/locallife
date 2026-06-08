@@ -23,27 +23,142 @@ type CategoryEvent = WechatMiniprogram.TouchEvent & {
 }
 
 const CATEGORY_ICON_OPTIONS = [
-  '🥘',
-  '🍜',
-  '🍲',
-  '🥞',
-  '🥣',
-  '🍚',
+  '🍽️',
+  '🍴',
+  '🥢',
   '🥡',
   '🍱',
+  '🍲',
+  '🥘',
+  '🫕',
+  '🥣',
+  '🍚',
+  '🍜',
+  '🍝',
+  '🍛',
+  '🍙',
+  '🍘',
+  '🍠',
+  '🍢',
   '🍣',
+  '🍤',
+  '🍥',
+  '🥟',
+  '🥠',
+  '🥮',
+  '🍡',
   '🍕',
   '🍔',
+  '🍟',
+  '🌭',
+  '🥪',
+  '🌮',
+  '🌯',
+  '🫔',
+  '🥙',
+  '🧆',
+  '🍖',
   '🍗',
-  '🥗',
+  '🥩',
+  '🥓',
   '🦐',
+  '🦞',
+  '🦀',
+  '🦪',
+  '🦑',
   '🐟',
-  '🧋',
-  '☕',
+  '🥐',
+  '🥯',
+  '🍞',
+  '🥖',
+  '🫓',
+  '🥨',
+  '🥞',
+  '🧇',
+  '🧀',
+  '🥚',
+  '🍳',
+  '🥗',
+  '🥬',
+  '🥦',
+  '🥒',
+  '🌽',
+  '🥕',
+  '🥔',
+  '🍅',
+  '🥑',
+  '🍆',
+  '🌶️',
+  '🫑',
+  '🧄',
+  '🧅',
+  '🫘',
+  '🥜',
+  '🌰',
+  '🫚',
+  '🫛',
+  '🍄',
+  '🍇',
+  '🍈',
+  '🍉',
+  '🍊',
+  '🍋',
+  '🍌',
+  '🍍',
+  '🥭',
+  '🍎',
+  '🍏',
+  '🍐',
+  '🍑',
+  '🍒',
+  '🍓',
+  '🫐',
+  '🥝',
+  '🥥',
+  '🫒',
+  '🍦',
+  '🍧',
+  '🍨',
+  '🍩',
+  '🍪',
+  '🍿',
+  '🎂',
   '🍰',
-  '🔥',
-  '🍴'
+  '🧁',
+  '🥧',
+  '🍫',
+  '🍬',
+  '🍭',
+  '🍮',
+  '🍯',
+  '🧈',
+  '🧂',
+  '🥫',
+  '🍼',
+  '🥛',
+  '☕',
+  '🫖',
+  '🍵',
+  '🧃',
+  '🥤',
+  '🧋',
+  '🍶',
+  '🍾',
+  '🍺',
+  '🍻',
+  '🍷',
+  '🍸',
+  '🍹',
+  '🥂',
+  '🥃',
+  '🫗',
+  '🧉',
+  '🧊',
+  '🥄',
+  '🔪',
+  '🔥'
 ]
+const DEFAULT_CATEGORY_ICON = '🍴'
 
 function normalizeCategories(tags: TagInfo[]): CategoryView[] {
   return Array.isArray(tags)
@@ -88,7 +203,8 @@ Page({
     createDialogVisible: false,
     editingCategoryId: 0,
     createInputValue: '',
-    selectedIcon: CATEGORY_ICON_OPTIONS[0],
+    selectedIcon: DEFAULT_CATEGORY_ICON,
+    selectedIconManuallyChanged: false,
     iconOptions: CATEGORY_ICON_OPTIONS,
     categories: [] as CategoryView[]
   },
@@ -176,7 +292,8 @@ Page({
       createDialogVisible: true,
       editingCategoryId: 0,
       createInputValue: '',
-      selectedIcon: CATEGORY_ICON_OPTIONS[0]
+      selectedIcon: DEFAULT_CATEGORY_ICON,
+      selectedIconManuallyChanged: false
     })
   },
 
@@ -189,19 +306,27 @@ Page({
       createDialogVisible: false,
       editingCategoryId: 0,
       createInputValue: '',
-      selectedIcon: CATEGORY_ICON_OPTIONS[0]
+      selectedIcon: DEFAULT_CATEGORY_ICON,
+      selectedIconManuallyChanged: false
     })
   },
 
   onCreateInputChange(e: WechatMiniprogram.CustomEvent<FormInputDetail>) {
     const value = (e.detail?.value || '').replace(/^\s+/, '')
-    this.setData({ createInputValue: value })
+    const data: { createInputValue: string, selectedIcon?: string } = { createInputValue: value }
+    if (!this.data.selectedIconManuallyChanged) {
+      data.selectedIcon = buildCategoryIconEmoji(value)
+    }
+    this.setData(data)
   },
 
   onSelectIcon(e: IconTapEvent) {
     const icon = e.currentTarget.dataset.icon || ''
     if (!icon) return
-    this.setData({ selectedIcon: icon })
+    this.setData({
+      selectedIcon: icon,
+      selectedIconManuallyChanged: true
+    })
   },
 
   onEditCategory(e: CategoryEvent) {
@@ -219,7 +344,8 @@ Page({
       createDialogVisible: true,
       editingCategoryId: category.id,
       createInputValue: category.name,
-      selectedIcon: category.iconText || CATEGORY_ICON_OPTIONS[0]
+      selectedIcon: category.iconText || DEFAULT_CATEGORY_ICON,
+      selectedIconManuallyChanged: true
     })
   },
 
@@ -251,7 +377,8 @@ Page({
         createDialogVisible: false,
         editingCategoryId: 0,
         createInputValue: '',
-        selectedIcon: CATEGORY_ICON_OPTIONS[0]
+        selectedIcon: DEFAULT_CATEGORY_ICON,
+        selectedIconManuallyChanged: false
       })
       await this.loadData(false)
     } catch (err) {

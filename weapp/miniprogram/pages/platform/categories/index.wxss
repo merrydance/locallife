@@ -145,10 +145,16 @@
   color: var(--td-text-color-secondary);
 }
 
+.icon-picker-scroll {
+  height: 360rpx;
+  max-height: 360rpx;
+}
+
 .icon-picker {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: var(--spacer-xs);
+  padding-right: 4rpx;
 }
 
 .icon-picker-item {
