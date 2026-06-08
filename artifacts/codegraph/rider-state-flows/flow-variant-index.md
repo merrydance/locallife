@@ -2,6 +2,7 @@
 
 Status: created 2026-06-08
 Purpose: branch checklist for the full rider-side codegraph. Detailed evidence is in the individual slice files.
+Boundary note: this index is scoped to rider-visible state, rider actions, and rider recovery paths. Platform/operator/merchant closure backlog is parked under `artifacts/codegraph/platform-operations-closed-loop/`.
 
 ## Application And Identity
 
@@ -29,7 +30,7 @@ Purpose: branch checklist for the full rider-side codegraph. Detailed evidence i
 - New-order visibility: `delivery_pool_new` WebSocket messages are pushed to nearby online riders and replay-filtered against live `delivery_pool`; duplicate messages only affect the local badge.
 - Recommend: requires rider context through user id; score list is enriched with merchant, delivery, item count, and real distance when available.
 - Pending dispatch timeout: 3-minute operator alert dedupes through `delivery_timeout_alerts`; 20-minute merchant alert marks `deliveries.is_delayed`; 60-minute auto-cancel calls `CancelOrderTx`, removes `delivery_pool`, cancels delivery, and enqueues refund for successful external payment.
-- Cancelled-pool convergence: successful order cancellation now removes the matching `delivery_pool` row; remaining gap is lack of observed `delivery_pool_gone` push for already-open clients on scheduler auto-cancel.
+- Cancelled-pool convergence: successful order cancellation now removes the matching `delivery_pool` row; grab/cancel removal uses `delivery_pool_gone` for online active riders inside the recommendation-visible radius as best-effort in-session invalidation.
 - Grab: rejects not rider, offline, inactive/suspended, missing Baofu settlement readiness, expired/missing pool, distance too far, order state not allowed, insufficient deposit, and rider profit-sharing bill not pending.
 - Grab transaction: locks order/rider/pool, assigns delivery, updates rider profit-sharing bill, removes pool, freezes deposit, writes freeze log, syncs order status and order status log.
 - Pickup: assigned -> picking; food-safety progression guard applies.
@@ -78,7 +79,7 @@ Purpose: branch checklist for the full rider-side codegraph. Detailed evidence i
 
 - Resolved: old rider delivery detail API wrapper is backed by `GET /v1/delivery/:delivery_id`.
 - Resolved: worker fallback new-order push emits `delivery_pool_new`.
-- Resolved: stale pending-delivery auto-cancel removes the `delivery_pool` row through `CancelOrderTx`; realtime gone push remains an operations gap.
+- Resolved: stale pending-delivery auto-cancel removes the `delivery_pool` row through `CancelOrderTx` and publishes `delivery_pool_gone` for already-open rider clients.
 - Resolved: old rider appeal-compatible wrapper calls `/v1/rider/recovery-disputes` instead of missing `/v1/rider/appeals` routes.
 - Legacy rider damage risk worker is intentionally a no-op.
 - Legacy refund result worker refuses rider deposit refund application and points to payment facts.

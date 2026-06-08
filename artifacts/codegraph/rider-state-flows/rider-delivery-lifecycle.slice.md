@@ -1,7 +1,7 @@
 # Rider Delivery Lifecycle Slice
 
 Status: rider-state flow slice created 2026-06-08
-Risk class: G3 - order assignment, delivery state machine, rider deposit freeze/unfreeze, Baofu rider profit-sharing bill, food-safety/fulfillment guards, rider/customer/merchant/operator notifications
+Risk class: G3 - order assignment, delivery state machine, rider deposit freeze/unfreeze, Baofu rider profit-sharing bill, food-safety/fulfillment guards, rider-facing delivery visibility and notifications
 Scope: Mini Program rider dashboard/order hall/task/navigation pages -> delivery APIs -> delivery grab/status logic -> delivery timeout schedulers -> delivery transactions -> orders/deliveries/rider deposit/profit-sharing SQL truth
 
 ## Variant Coverage
@@ -13,7 +13,7 @@ This slice covers:
 - Rider navigation page route planning through authenticated `/v1/location/direction/bicycling` and provider map route lookup.
 - Backend delivery routes under `/v1/delivery/**`.
 - Delivery grab validation and transaction, including delivery pool locking, deposit freeze, Baofu rider profit-sharing bill assignment, order status sync, and broadcast removal.
-- New delivery visibility side paths: order payment creates/keeps a `delivery_pool` row, API/worker broadcast `delivery_pool_new` to nearby online riders, dashboard increments the new-order counter, and manual refresh rehydrates from recommend.
+- New delivery visibility side paths: order payment creates/keeps a `delivery_pool` row, API/worker broadcast `delivery_pool_new` as nearby-candidate new-order reminders, `delivery_pool_gone` broadcasts removal to online active riders inside the recommendation-visible radius, dashboard increments the new-order counter, and manual refresh rehydrates from recommend.
 - Pending-dispatch backend schedulers: 3-minute operator alert, 20-minute delayed merchant alert, 60-minute auto-cancel/refund path, and post-cancel pool cleanup.
 - Rider delivery transitions `assigned -> picking -> picked -> delivering -> delivered`, including merchant-ready and location-radius validation.
 - Rider history/active list and track/latest-location readers.
@@ -24,6 +24,7 @@ This slice does not fully cover:
 - Merchant fulfillment internals before rider pickup confirmation, except the fulfillment-ready guard.
 - Claim/recovery after a delivered order; that is covered by `rider-claims-and-recovery`.
 - Baofu profit-sharing provider callbacks that settle rider income after delivery; they are covered by `rider-income-and-baofu-withdrawal`.
+- Platform/operator/merchant action closure after dispatch timeout; cross-role backlog is parked in `artifacts/codegraph/platform-operations-closed-loop/`.
 
 ## Product Invariant
 
@@ -60,11 +61,11 @@ Rider delivery state must be one canonical delivery/order chain:
 7. Recommend route resolves the current rider by user id through logic, scores delivery pool rows, enriches merchant/order/delivery/item data, and returns real distance/duration when available.
    Evidence: `locallife/api/delivery.go:94`, `locallife/api/delivery.go:103`, `locallife/api/delivery.go:116`, `locallife/api/delivery.go:122`, `locallife/api/delivery.go:144`, `locallife/api/delivery.go:148`, `locallife/api/delivery.go:151`, `locallife/api/delivery.go:156`.
 
-8. A 3-minute operator dispatch scheduler scans pending deliveries not yet represented in `delivery_timeout_alerts`, writes the dedupe row, and enqueues an operator alert task; enqueue failure rolls back the dedupe row.
+8. A 3-minute dispatch scheduler scans pending deliveries not yet represented in `delivery_timeout_alerts`, writes the dedupe row, and enqueues an operator alert task; this is recorded here only because it shares the rider-visible pending-delivery timeout chain.
    Evidence: `locallife/scheduler/data_cleanup.go:89`, `locallife/scheduler/operator_dispatch_alert.go:19`, `locallife/scheduler/operator_dispatch_alert.go:29`, `locallife/scheduler/operator_dispatch_alert.go:47`, `locallife/scheduler/operator_dispatch_alert.go:59`, `locallife/scheduler/operator_dispatch_alert.go:66`, `locallife/db/query/delivery_timeout_alert.sql:1`, `locallife/db/query/delivery_timeout_alert.sql:15`.
 
-9. A 10-minute cleanup scheduler handles pending deliveries older than 20 minutes by marking `is_delayed` and notifying the merchant, and older than 60 minutes by cancelling the order/delivery and enqueueing a refund task for successful external payments. `CancelOrderTx` now removes the matching `delivery_pool` row in the same transaction as a successful order cancellation, so recommend reads converge on SQL truth after cancellation; no immediate `delivery_pool_gone` broadcast was observed for the scheduler auto-cancel path.
-   Evidence: `locallife/scheduler/data_cleanup.go:83`, `locallife/scheduler/data_cleanup.go:1291`, `locallife/scheduler/data_cleanup.go:1297`, `locallife/scheduler/data_cleanup.go:1320`, `locallife/scheduler/data_cleanup.go:1332`, `locallife/scheduler/data_cleanup.go:1356`, `locallife/scheduler/data_cleanup.go:1367`, `locallife/scheduler/data_cleanup.go:1390`, `locallife/scheduler/data_cleanup.go:1408`, `locallife/db/sqlc/tx_order_status.go:197`, `locallife/db/query/delivery_pool.sql:37`, `locallife/logic/delivery_recommendation.go:50`, `locallife/api/delivery.go:116`, `locallife/db/sqlc/tx_order_status_test.go:600`.
+9. A 10-minute cleanup scheduler handles pending deliveries older than 20 minutes by marking `is_delayed`, and older than 60 minutes by cancelling the order/delivery and enqueueing a refund task for successful external payments. For rider-side closure, `CancelOrderTx` removes the matching `delivery_pool` row in the same transaction as a successful order cancellation, and the scheduler now publishes `delivery_pool_gone` to online active riders inside the recommendation-visible radius after cancellation so already-open clients can remove the card without waiting for refresh.
+   Evidence: `locallife/scheduler/data_cleanup.go:83`, `locallife/scheduler/data_cleanup.go:1293`, `locallife/scheduler/data_cleanup.go:1299`, `locallife/scheduler/data_cleanup.go:1322`, `locallife/scheduler/data_cleanup.go:1334`, `locallife/scheduler/data_cleanup.go:1342`, `locallife/scheduler/data_cleanup.go:1358`, `locallife/scheduler/data_cleanup.go:1369`, `locallife/scheduler/data_cleanup.go:1392`, `locallife/scheduler/data_cleanup.go:1410`, `locallife/scheduler/data_cleanup.go:1478`, `locallife/scheduler/data_cleanup.go:1525`, `locallife/db/sqlc/tx_order_status.go:197`, `locallife/db/query/delivery_pool.sql:37`, `locallife/logic/delivery_recommendation.go:50`, `locallife/api/delivery.go:116`, `locallife/db/sqlc/tx_order_status_test.go:600`, `locallife/scheduler/stale_delivery_cleanup_test.go:24`.
 
 10. Grab route parses `order_id`, delegates to `logic.GrabDeliveryOrder`, then sends merchant notification, broadcasts order removal, reloads delivery, and returns backend delivery truth.
    Evidence: `locallife/api/delivery.go:436`, `locallife/api/delivery.go:445`, `locallife/api/delivery.go:483`, `locallife/api/delivery.go:499`, `locallife/api/delivery.go:513`.
@@ -113,7 +114,7 @@ Rider delivery state must be one canonical delivery/order chain:
 - `rider_deposits`: freeze/unfreeze logs tied to delivery/order deposit movement.
 - `profit_sharing_orders`: rider bill row updated during grab to bind rider Baofu sharing member.
 - `rider_locations`: latest/fresh location source for delivery confirmation and track/latest-location readers.
-- `delivery_timeout_alerts`: operator pending-dispatch alert dedupe ledger for the 3-minute scheduler.
+- `delivery_timeout_alerts`: pending-dispatch alert dedupe ledger for the 3-minute scheduler; operator action closure is outside this rider slice.
 - `payment_orders` and refund tasks: stale pending delivery cancellation can enqueue external payment refund recovery after `CancelOrderTx`.
 
 ## Trust, Authorization, And Tenant Checks
@@ -134,7 +135,7 @@ Rider delivery state must be one canonical delivery/order chain:
 - Confirm pickup/delivery are not idempotent from a stale state; repeated calls after transition return state errors.
 - Order status log writes skip duplicate final target in some branches, while delivery status updates remain the main guard.
 - Frontend has local action loading flags for grab and delivery buttons.
-- Operator pending-dispatch alerts dedupe through `delivery_timeout_alerts`; merchant 20-minute delay alerts dedupe through `deliveries.is_delayed`.
+- Pending-dispatch alerts dedupe through `delivery_timeout_alerts`; 20-minute delayed-delivery marking dedupes through `deliveries.is_delayed`.
 - Auto-cancel timeout uses `CancelOrderTx` plus `UpdateDeliveryToCancelled`; `CancelOrderTx` removes the pool row so recommend no longer exposes a cancelled pending order after transaction commit.
 
 ## Recovery And Async Convergence Paths
@@ -144,8 +145,8 @@ Rider delivery state must be one canonical delivery/order chain:
 - Delivery estimate recalculation after grab is best-effort and does not roll back assignment.
 - Map route planning can fail independently; navigation page falls back to straight-line/default route display while track/latest-location remain available.
 - Geofence auto transitions call the same delivery logic and can be recovered by manual buttons.
-- Pending-dispatch operator alerts and merchant delay notifications are best-effort; the 60-minute auto-cancel path enqueues refund tasks for successful external payments.
-- Auto-cancel removes the SQL pool row, but currently lacks an observed `delivery_pool_gone` broadcast, so already-open clients with cached recommendations may need refresh/reconnect to hide a just-cancelled card immediately.
+- Pending-dispatch timeout side effects are best-effort; the rider-facing source of truth remains `delivery_pool` plus delivery/order status.
+- Auto-cancel removes the SQL pool row and publishes a best-effort `delivery_pool_gone` event to online active riders inside the recommendation-visible radius; history/active/recommend refresh remains the durable recovery path if Pub/Sub or the client connection is unavailable.
 - History/active list refresh is the frontend recovery path after network ambiguity.
 
 ## Frontend Draft And Backend Rehydration
@@ -172,24 +173,24 @@ Missing high-value tests:
 - Broader Mini Program/WebSocket contract coverage that backend new-order event type remains `delivery_pool_new` across primary and fallback paths.
 - End-to-end grab -> active delivery -> location upload -> confirm delivery -> deposit unfreeze.
 - Notification/broadcast failure does not affect delivery transaction response.
-- Scheduler contract test for pending delivery timeout: 3-minute operator alert dedupe, 20-minute `is_delayed` merchant alert, 60-minute cancel/refund, and delivery-pool removal/broadcast semantics.
+- Broader scheduler contract test for pending delivery timeout: 3-minute alert dedupe, 20-minute `is_delayed` marking, 60-minute cancel/refund, and rider delivery-pool removal/broadcast semantics.
 
 ## Gaps And Refactor Notes
 
 - Consider naming cleanup around the older delivery-task-management wrapper now that its detail method is backed by `GET /v1/delivery/:delivery_id`.
-- Add `delivery_pool_gone` or an equivalent client invalidation event when `cleanupStaleDeliveries` cancels a pending delivery, if operations require immediate in-session card removal instead of refresh-based convergence.
+- Keep scheduler auto-cancel `delivery_pool_gone` best-effort and transaction-external; do not let realtime publish failure roll back cancellation/refund recovery.
 
 ## Dead And Orphan Paths
 
 - Resolved: `weapp/miniprogram/pages/rider/_api/delivery-task-management.ts:172` now has a backend-compatible `GET /v1/delivery/:delivery_id` route with order-owner/assigned-rider authorization.
 - Resolved: worker fallback new-order push now emits `delivery_pool_new`, matching current Mini Program listeners.
 - Resolved: `CancelOrderTx` now removes the matching `delivery_pool` row, so scheduler cancellation no longer leaves a cancelled order readable by recommend after transaction commit.
-- Residual operations gap: scheduler auto-cancel does not emit an observed `delivery_pool_gone` realtime event for already-open rider clients.
+- Resolved: scheduler auto-cancel emits best-effort `delivery_pool_gone` realtime invalidation for already-open rider clients after successful cancellation.
 
 ## Branch Exhaustion
 
 - Entry branches checked: dashboard/order hall hall tab, realtime new/gone order events, active delivery tab, task detail, navigation, delivery history, grab action, status transition buttons, old/new delivery API wrappers.
 - Request branches checked: recommend, grab, active, history, start-pickup, confirm-pickup, start-delivery, confirm-delivery, order detail by order id, order detail by delivery id, track, latest rider location, and authenticated map route planning.
 - Backend state branches checked: not rider, offline, not active, suspended, missing Baofu account, missing/expired pool, too far, missing delivery/order, disallowed order status, cancelled order cleanup, insufficient deposit, rider bill missing/non-pending, no nearby riders for push, stale replay pool row gone, invalid map coordinates/provider unavailable, food-safety pause, merchant not ready, wrong assigned rider, wrong status, missing/stale location, too far from dropoff, successful completion.
-- Async branches checked: order-pooled broadcast, payment-worker new-order notify, operator pending-dispatch alert scheduler, merchant delay alert scheduler, 60-minute stale-delivery cancel/refund scheduler, estimate recalculation, notifications, broadcast order removal, geofence auto-advance via separate slice, frontend refresh/reconciliation.
-- Dead/orphan branches checked: previously missing generic delivery detail route, previously unconsumed fallback event type, and previously stale `delivery_pool` row risk are now resolved; residual realtime invalidation gap after scheduler auto-cancel is recorded separately.
+- Async branches checked: order-pooled broadcast, payment-worker new-order notify, pending-dispatch alert scheduler, delayed-delivery marking scheduler, 60-minute stale-delivery cancel/refund scheduler, estimate recalculation, notifications, broadcast order removal, geofence auto-advance via separate slice, frontend refresh/reconciliation.
+- Dead/orphan branches checked: previously missing generic delivery detail route, previously unconsumed fallback event type, previously stale `delivery_pool` row risk, and scheduler auto-cancel realtime invalidation are now resolved.

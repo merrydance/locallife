@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/merrydance/locallife/algorithm"
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/websocket"
 	"github.com/merrydance/locallife/worker"
@@ -29,6 +30,7 @@ const (
 	timedOutPrintAnomalyBatchLimit       = int32(200)
 	timedOutPrintAnomalyThreshold        = 15 * time.Minute
 	timedOutPrintAnomalyAlertInterval    = time.Hour
+	staleDeliveryPoolGoneLimitCount      = int32(1<<31 - 1)
 )
 
 var riderDepositReminderOffsets = []int{30, 7, 1, 0}
@@ -1337,6 +1339,8 @@ func (s *DataCleanupScheduler) cleanupStaleDeliveries() {
 				continue
 			}
 
+			s.publishStaleDeliveryPoolGone(ctx, cancelResult.Order.ID, delivery)
+
 			// 3. P1-025 fix: 显式触发退款任务（针对微信支付等外部支付）
 			// CancelOrderTx 内部已处理余额支付的回滚，这里只处理外部支付
 			// 需要查找该订单关联的成功支付记录
@@ -1469,6 +1473,113 @@ func (s *DataCleanupScheduler) cleanupStaleDeliveries() {
 	if alertCount > 0 {
 		log.Info().Int("alert_count", alertCount).Msg("processed delivery delay alerts")
 	}
+}
+
+func (s *DataCleanupScheduler) publishStaleDeliveryPoolGone(ctx context.Context, orderID int64, delivery db.Delivery) {
+	if s.publisher == nil {
+		return
+	}
+	if !delivery.PickupLatitude.Valid || !delivery.PickupLongitude.Valid {
+		log.Warn().Int64("order_id", orderID).Int64("delivery_id", delivery.ID).Msg("skip stale delivery pool gone broadcast without pickup coordinates")
+		return
+	}
+
+	pickupLat, err := delivery.PickupLatitude.Float64Value()
+	if err != nil {
+		log.Warn().Err(err).Int64("order_id", orderID).Int64("delivery_id", delivery.ID).Msg("skip stale delivery pool gone broadcast with invalid pickup latitude")
+		return
+	}
+	pickupLng, err := delivery.PickupLongitude.Float64Value()
+	if err != nil {
+		log.Warn().Err(err).Int64("order_id", orderID).Int64("delivery_id", delivery.ID).Msg("skip stale delivery pool gone broadcast with invalid pickup longitude")
+		return
+	}
+
+	riders, err := s.listNearbyRidersForStaleDeliveryPoolGone(ctx, pickupLat.Float64, pickupLng.Float64)
+	if err != nil {
+		log.Warn().Err(err).Int64("order_id", orderID).Int64("delivery_id", delivery.ID).Msg("failed to list riders for stale delivery pool gone broadcast")
+		return
+	}
+	if len(riders) == 0 {
+		return
+	}
+
+	msgData, err := json.Marshal(map[string]any{
+		"order_id":    orderID,
+		"delivery_id": delivery.ID,
+		"event":       "gone",
+		"source":      "scheduler_auto_cancel",
+		"timestamp":   time.Now(),
+	})
+	if err != nil {
+		log.Warn().Err(err).Int64("order_id", orderID).Int64("delivery_id", delivery.ID).Msg("failed to marshal stale delivery pool gone payload")
+		return
+	}
+
+	msg := websocket.Message{
+		Type:      websocket.MessageTypeDeliveryPoolGone,
+		Data:      json.RawMessage(msgData),
+		Timestamp: time.Now(),
+	}
+	seen := make(map[int64]struct{}, len(riders))
+	for _, rider := range riders {
+		if _, ok := seen[rider.ID]; ok {
+			continue
+		}
+		seen[rider.ID] = struct{}{}
+
+		pushMsg := websocket.NotificationPushMessage{
+			EntityType: websocket.EntityRider,
+			EntityID:   rider.ID,
+			Message:    msg,
+		}
+		payload, err := json.Marshal(pushMsg)
+		if err != nil {
+			log.Warn().Err(err).Int64("rider_id", rider.ID).Int64("order_id", orderID).Msg("failed to marshal stale delivery pool gone push message")
+			continue
+		}
+		channel := fmt.Sprintf("notification:rider:%d", rider.ID)
+		if err := s.publisher.Publish(ctx, channel, payload); err != nil {
+			log.Warn().Err(err).Int64("rider_id", rider.ID).Int64("order_id", orderID).Msg("failed to publish stale delivery pool gone message")
+		}
+	}
+}
+
+func (s *DataCleanupScheduler) listNearbyRidersForStaleDeliveryPoolGone(ctx context.Context, pickupLat float64, pickupLng float64) ([]db.ListNearbyRidersRow, error) {
+	nearbyRiders, err := s.store.ListNearbyRiders(ctx, db.ListNearbyRidersParams{
+		CenterLat:   pickupLat,
+		CenterLng:   pickupLng,
+		MaxDistance: s.staleDeliveryPoolGoneMaxDistance(ctx),
+		LimitCount:  staleDeliveryPoolGoneLimitCount,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	riders := make([]db.ListNearbyRidersRow, 0, len(nearbyRiders))
+	seen := make(map[int64]struct{}, len(nearbyRiders))
+	for _, rider := range nearbyRiders {
+		if _, ok := seen[rider.ID]; ok {
+			continue
+		}
+		seen[rider.ID] = struct{}{}
+		riders = append(riders, rider)
+	}
+
+	return riders, nil
+}
+
+func (s *DataCleanupScheduler) staleDeliveryPoolGoneMaxDistance(ctx context.Context) float64 {
+	defaultMaxDistance := float64(algorithm.DefaultConfig().MaxDistance)
+	config, err := s.store.GetActiveRecommendConfig(ctx)
+	if err != nil {
+		log.Warn().Err(err).Float64("default_max_distance", defaultMaxDistance).Msg("fallback to default stale delivery pool gone radius")
+		return defaultMaxDistance
+	}
+	if config.MaxDistance <= 0 {
+		return defaultMaxDistance
+	}
+	return float64(config.MaxDistance)
 }
 
 // cleanupStaleDiningSessions 清理过期的用餐会话

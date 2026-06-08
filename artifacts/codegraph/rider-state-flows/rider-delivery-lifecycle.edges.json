@@ -47,7 +47,7 @@
     {"id":"side.poolNew","kind":"side_effect","label":"WebSocket delivery_pool_new","file":"locallife/websocket/message_types.go","line":13},
     {"id":"side.poolGone","kind":"side_effect","label":"WebSocket delivery_pool_gone","file":"locallife/websocket/message_types.go","line":14},
     {"id":"side.workerFallbackPoolNew","kind":"side_effect","label":"worker fallback delivery_pool_new","file":"locallife/worker/task_process_payment.go","line":54},
-    {"id":"side.schedulerPoolGoneGap","kind":"operations_gap","label":"scheduler auto-cancel lacks observed delivery_pool_gone realtime invalidation","file":"locallife/scheduler/data_cleanup.go","line":1332}
+    {"id":"side.schedulerPoolGone","kind":"side_effect","label":"scheduler auto-cancel delivery_pool_gone","file":"locallife/scheduler/data_cleanup.go","line":1525}
   ],
   "edges": [
     {"from":"weapp.orderHall","to":"weapp.deliveryApi","kind":"frontend_api_call"},
@@ -87,12 +87,12 @@
     {"from":"scheduler.staleDeliveryCleanup","to":"side.notifications","kind":"merchant_delay_notification"},
     {"from":"scheduler.staleDeliveryCleanup","to":"side.refundTask","kind":"enqueue"},
     {"from":"scheduler.staleDeliveryCleanup","to":"table.deliveryPool","kind":"delete_via_cancel_tx"},
-    {"from":"scheduler.staleDeliveryCleanup","to":"side.schedulerPoolGoneGap","kind":"missing_realtime_invalidation"},
+    {"from":"scheduler.staleDeliveryCleanup","to":"side.schedulerPoolGone","kind":"websocket_push"},
     {"from":"logic.broadcast","to":"table.riders","kind":"read"},
     {"from":"logic.broadcast","to":"side.poolNew","kind":"websocket_push"},
     {"from":"side.poolNew","to":"weapp.websocketRuntime","kind":"ws_receive"},
     {"from":"side.workerFallbackPoolNew","to":"weapp.websocketRuntime","kind":"ws_receive"},
-    {"from":"side.schedulerPoolGoneGap","to":"weapp.websocketRuntime","kind":"cache_invalidation_gap"},
+    {"from":"side.schedulerPoolGone","to":"weapp.websocketRuntime","kind":"ws_receive"},
     {"from":"weapp.websocketRuntime","to":"weapp.orderHall","kind":"local_recommendation_refresh"},
     {"from":"api.grab","to":"logic.grab","kind":"call"},
     {"from":"logic.grab","to":"table.riders","kind":"read"},

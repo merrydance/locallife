@@ -3,6 +3,7 @@
 Status: created 2026-06-08
 Risk class: G3 - identity documents, OCR, rider eligibility, delivery state machine, deposit/refund, Baofu settlement/withdrawal, claim recovery, behavior sanctions, provider callbacks
 Scope: WeChat Mini Program rider/register pages -> rider/delivery backend routes -> logic/transactions -> SQL tables -> async callbacks/workers/recovery schedulers -> dead/orphan paths
+Boundary note: this directory judges rider-side closure only: what the rider can see, do, and recover. Cross-role platform/operator/merchant operations gaps discovered during the audit are parked in `artifacts/codegraph/platform-operations-closed-loop/`.
 
 ## Slice Map
 
@@ -72,13 +73,15 @@ Provider callbacks used by rider money/settlement flows are registered at `local
 - Resolved: older delivery-task-management detail wrapper is now backed by `GET /v1/delivery/:delivery_id` with order-owner/assigned-rider authorization.
 - Resolved: worker fallback rider new-order push emits `delivery_pool_new`, matching Mini Program listeners.
 - Resolved: stale pending-delivery cancellation removes the matching `delivery_pool` row through `CancelOrderTx`.
+- Resolved: scheduler auto-cancel now publishes `delivery_pool_gone` to online active riders inside the recommendation-visible radius after successful cancellation, so already-open rider clients can remove cancelled recommendation cards without waiting for refresh.
 - Resolved: rider appeal-compatible wrappers now call `/v1/rider/recovery-disputes` list/detail/create and adapt the list response for existing pages.
 - `locallife/worker/task_risk_management.go:64` through `locallife/worker/task_risk_management.go:72` keep the legacy `risk:check_rider_damage` task consumer but intentionally ignore it because claim behavior trace is now the main adjudication path.
 - `locallife/worker/task_process_payment.go:794` through `locallife/worker/task_process_payment.go:797` intentionally skips rider deposit refund result application in the legacy refund worker; rider deposit refund facts must be applied through payment fact application.
 
-## Operations Gaps
+## Rider-Side Closure Notes
 
-- Scheduler auto-cancel removes SQL pool truth but does not emit an observed `delivery_pool_gone` realtime invalidation, so already-open rider clients may need refresh/reconnect to remove a cancelled recommendation card immediately.
+- Rider delivery pool truth now converges through SQL after scheduler auto-cancel, and the scheduler publishes `delivery_pool_gone` as a best-effort realtime invalidation for already-open rider clients inside the recommendation-visible radius.
+- Platform/operator/merchant action-loop questions are not counted as rider-side closure gaps here; they are tracked separately in `artifacts/codegraph/platform-operations-closed-loop/`.
 
 ## Validation
 

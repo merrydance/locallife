@@ -192,7 +192,7 @@ Missing high-value tests:
 
 - Add a durable idempotency key to rider income withdrawal create to avoid double withdrawal on network retries.
 - Consider surfacing provider `unknown` create results explicitly in withdrawal detail copy.
-- Keep Baofu share amount mismatch alerts visible to operations because rider income can remain processing/failed until manual reconciliation.
+- Rider-facing income may remain `processing` or `failed` when Baofu share amount mismatch blocks unsafe success; the platform/manual reconciliation loop is tracked outside this rider slice.
 - Keep rider personal-account Baofu docs separate from merchant business-account report continuation to avoid future shared-code regressions.
 
 ## Dead And Orphan Paths

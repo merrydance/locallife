@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
+	"github.com/merrydance/locallife/algorithm"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/websocket"
 	"github.com/rs/zerolog/log"
@@ -18,6 +19,7 @@ const (
 	broadcastMaxDistanceMeters   = 5000.0
 	broadcastMinRiderCount       = 3
 	broadcastRiderLimitCount     = 1000
+	poolGoneVisibleRiderLimit    = int32(1<<31 - 1)
 )
 
 // DeliveryBroadcastLogic 处理代取相关的实时广播逻辑
@@ -34,9 +36,9 @@ func NewDeliveryBroadcastLogic(store db.Store, redisClient *redis.Client) *Deliv
 	}
 }
 
-// BroadcastOrderGone 通知取餐点附近的在线骑手，某个订单已从代取池中消失（被抢走或取消）
+// BroadcastOrderGone 通知推荐可见范围内的在线骑手，某个订单已从代取池中消失（被抢走或取消）
 func (l *DeliveryBroadcastLogic) BroadcastOrderGone(ctx context.Context, orderID int64, pickupLat float64, pickupLng float64) error {
-	riders, err := l.listNearbyBroadcastRiders(ctx, pickupLat, pickupLng)
+	riders, err := l.listVisibleRidersForPoolGone(ctx, pickupLat, pickupLng)
 	if err != nil {
 		return err
 	}
@@ -60,7 +62,7 @@ func (l *DeliveryBroadcastLogic) BroadcastOrderGone(ctx context.Context, orderID
 	return l.pushToRiders(ctx, riders, wsMsg)
 }
 
-// BroadcastNewOrderNotification 通知取餐点附近的骑手有新订单加入（差量更新）
+// BroadcastNewOrderNotification 通知取餐点附近的候选骑手有新订单加入（差量提醒）
 func (l *DeliveryBroadcastLogic) BroadcastNewOrderNotification(ctx context.Context, poolItem db.DeliveryPool, merchantName string) error {
 	if !poolItem.PickupLongitude.Valid || !poolItem.PickupLatitude.Valid {
 		log.Warn().Int64("order_id", poolItem.OrderID).Msg("skip new order broadcast without pickup coordinates")
@@ -161,6 +163,65 @@ func (l *DeliveryBroadcastLogic) listNearbyBroadcastRiders(ctx context.Context, 
 	}
 
 	return riders, nil
+}
+
+func (l *DeliveryBroadcastLogic) listVisibleRidersForPoolGone(ctx context.Context, centerLat float64, centerLng float64) ([]db.Rider, error) {
+	maxDistance := l.deliveryPoolGoneMaxDistance(ctx)
+	nearbyRiders, err := l.store.ListNearbyRiders(ctx, db.ListNearbyRidersParams{
+		CenterLat:   centerLat,
+		CenterLng:   centerLng,
+		MaxDistance: maxDistance,
+		LimitCount:  poolGoneVisibleRiderLimit,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	riders := make([]db.Rider, 0, len(nearbyRiders))
+	seen := make(map[int64]struct{}, len(nearbyRiders))
+	for _, rider := range nearbyRiders {
+		if _, ok := seen[rider.ID]; ok {
+			continue
+		}
+		seen[rider.ID] = struct{}{}
+		riders = append(riders, db.Rider{
+			ID:                rider.ID,
+			UserID:            rider.UserID,
+			RealName:          rider.RealName,
+			IDCardNo:          rider.IDCardNo,
+			Phone:             rider.Phone,
+			DepositAmount:     rider.DepositAmount,
+			FrozenDeposit:     rider.FrozenDeposit,
+			Status:            rider.Status,
+			IsOnline:          rider.IsOnline,
+			CreditScore:       rider.CreditScore,
+			CurrentLongitude:  rider.CurrentLongitude,
+			CurrentLatitude:   rider.CurrentLatitude,
+			LocationUpdatedAt: rider.LocationUpdatedAt,
+			TotalOrders:       rider.TotalOrders,
+			TotalEarnings:     rider.TotalEarnings,
+			OnlineDuration:    rider.OnlineDuration,
+			CreatedAt:         rider.CreatedAt,
+			UpdatedAt:         rider.UpdatedAt,
+			RegionID:          rider.RegionID,
+			ApplicationID:     rider.ApplicationID,
+		})
+	}
+
+	return riders, nil
+}
+
+func (l *DeliveryBroadcastLogic) deliveryPoolGoneMaxDistance(ctx context.Context) float64 {
+	defaultMaxDistance := float64(algorithm.DefaultConfig().MaxDistance)
+	config, err := l.store.GetActiveRecommendConfig(ctx)
+	if err != nil {
+		log.Warn().Err(err).Float64("default_max_distance", defaultMaxDistance).Msg("fallback to default delivery pool gone radius")
+		return defaultMaxDistance
+	}
+	if config.MaxDistance <= 0 {
+		return defaultMaxDistance
+	}
+	return float64(config.MaxDistance)
 }
 
 // pushToRiders 内部辅助函数：批量推送消息到骑手频道

@@ -40,6 +40,36 @@ func TestListNearbyBroadcastRiders_StopsWhenEnoughRiders(t *testing.T) {
 	require.Equal(t, []int64{1, 2, 3}, []int64{riders[0].ID, riders[1].ID, riders[2].ID})
 }
 
+func TestListVisibleRidersForPoolGone_UsesRecommendationVisibleRadiusAndDoesNotStopAtThree(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	broadcast := NewDeliveryBroadcastLogic(store, nil)
+
+	store.EXPECT().
+		GetActiveRecommendConfig(gomock.Any()).
+		Return(db.RecommendConfig{MaxDistance: 4500}, nil)
+	store.EXPECT().
+		ListNearbyRiders(gomock.Any(), gomock.Any()).
+		Times(1).
+		DoAndReturn(func(_ context.Context, params db.ListNearbyRidersParams) ([]db.ListNearbyRidersRow, error) {
+			require.Equal(t, 30.1, params.CenterLat)
+			require.Equal(t, 120.2, params.CenterLng)
+			require.Equal(t, 4500.0, params.MaxDistance)
+			require.Equal(t, poolGoneVisibleRiderLimit, params.LimitCount)
+			return []db.ListNearbyRidersRow{{ID: 1}, {ID: 2}, {ID: 3}, {ID: 4}}, nil
+		})
+
+	riders, err := broadcast.listVisibleRidersForPoolGone(context.Background(), 30.1, 120.2)
+	require.NoError(t, err)
+	riderIDs := make([]int64, 0, len(riders))
+	for _, rider := range riders {
+		riderIDs = append(riderIDs, rider.ID)
+	}
+	require.Equal(t, []int64{1, 2, 3, 4}, riderIDs)
+}
+
 func TestListNearbyBroadcastRiders_ExpandsAndDeduplicates(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

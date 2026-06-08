@@ -19,7 +19,7 @@ This slice does not fully cover:
 
 - Baofu income withdrawal; rider income cash-out is covered by `rider-income-and-baofu-withdrawal`.
 - General payment APIs and WeChat callback signature internals outside the rider deposit business owner branch.
-- Admin/manual reconciliation tooling beyond the anomaly SQL and alert paths discovered here.
+- Platform/manual reconciliation tooling beyond the rider-visible anomaly status and alert handoff discovered here.
 
 ## Product Invariant
 
@@ -125,7 +125,7 @@ Rider deposit balance must converge through one durable ledger:
 - Payment callback and payment recovery both record facts; payment fact application scheduler retries.
 - Frontend stores pending withdrawal refund ids and can wait/poll terminal status.
 - Refund callback and refund recovery both record terminal refund facts.
-- Abnormal refund fact creates an outbox alert for manual operations.
+- Abnormal refund fact preserves a payment-domain alert handoff; the rider-facing recovery path remains deposit/withdrawal status rehydration.
 - Deposit credit expiry reminder/expiry schedulers handle refundable window lifecycle.
 
 ## Frontend Draft And Backend Rehydration

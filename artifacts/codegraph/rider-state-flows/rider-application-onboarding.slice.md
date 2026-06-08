@@ -161,7 +161,7 @@ Missing high-value tests:
 - Decide whether review-run cancellation is needed when a submitted application is explicitly reset to draft.
 - Add a stale OCR cleanup policy for rider application pending/processing payloads if not already covered by a shared OCR cleanup path.
 - Make the product copy explicit that submitted rider applications can be reset only by a deliberate user action.
-- Add an operator-visible audit/report path for rider credential lifecycle suspensions and restore outcomes if this is not already covered by generic credential governance alerts.
+- Rider-facing credential reminder/suspension/restore branches are covered here; platform-visible audit/report ownership is tracked in `artifacts/codegraph/platform-operations-closed-loop/`.
 
 ## Branch Exhaustion
 
