@@ -120,7 +120,7 @@ func (server *Server) generateAppBindCode(ctx *gin.Context) {
 
 	var merchantID int64
 	for _, role := range roles {
-		if role.Role == "merchant" || role.Role == "merchant_owner" || role.Role == "merchant_manager" {
+		if isAppBindMerchantRole(role) {
 			merchantID = role.RelatedEntityID.Int64
 			break
 		}
@@ -296,22 +296,22 @@ func (server *Server) verifyAppBindCode(ctx *gin.Context) {
 		return
 	}
 
-	// 二次校验：确认用户仍有 merchant 角色
+	// 二次校验：确认用户仍有同一商户的 merchant 角色
 	roles, err := server.store.ListUserRoles(ctx, userID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("获取用户角色失败: %w", err)))
 		return
 	}
 
-	hasMerchantRole := false
+	hasMatchingMerchantRole := false
 	for _, role := range roles {
-		if role.Role == "merchant" || role.Role == "merchant_owner" || role.Role == "merchant_manager" {
-			hasMerchantRole = true
+		if isAppBindMerchantRole(role) && role.RelatedEntityID.Int64 == merchantID {
+			hasMatchingMerchantRole = true
 			break
 		}
 	}
-	if !hasMerchantRole {
-		ctx.JSON(http.StatusForbidden, errorResponse(fmt.Errorf("用户不再具有商户权限")))
+	if !hasMatchingMerchantRole {
+		ctx.JSON(http.StatusForbidden, errorResponse(fmt.Errorf("用户不再具有该商户权限")))
 		return
 	}
 
@@ -401,6 +401,22 @@ func (server *Server) verifyAppBindCode(ctx *gin.Context) {
 		RefreshTokenExpiresAt: refreshPayload.ExpiredAt,
 		User:                  newUserResponse(user, userRolesList, workbenches),
 	})
+}
+
+func isAppBindMerchantRole(role db.UserRole) bool {
+	if role.Status != "" && role.Status != "active" {
+		return false
+	}
+	if !role.RelatedEntityID.Valid || role.RelatedEntityID.Int64 == 0 {
+		return false
+	}
+
+	switch role.Role {
+	case "merchant", "merchant_owner", "merchant_manager":
+		return true
+	default:
+		return false
+	}
 }
 
 type verifyAppBindCodeRequest struct {
