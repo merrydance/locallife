@@ -79,6 +79,23 @@ func (q *Queries) AddTableTag(ctx context.Context, arg AddTableTagParams) (Table
 	return i, err
 }
 
+const clearOtherPrimaryTableImages = `-- name: ClearOtherPrimaryTableImages :exec
+UPDATE table_images
+SET is_primary = FALSE
+WHERE table_id = $1
+  AND id <> $2
+`
+
+type ClearOtherPrimaryTableImagesParams struct {
+	TableID int64 `json:"table_id"`
+	ID      int64 `json:"id"`
+}
+
+func (q *Queries) ClearOtherPrimaryTableImages(ctx context.Context, arg ClearOtherPrimaryTableImagesParams) error {
+	_, err := q.db.Exec(ctx, clearOtherPrimaryTableImages, arg.TableID, arg.ID)
+	return err
+}
+
 const countAvailableTablesByMerchant = `-- name: CountAvailableTablesByMerchant :one
 SELECT COUNT(*) FROM tables
 WHERE merchant_id = $1 
@@ -264,13 +281,23 @@ func (q *Queries) DeleteTable(ctx context.Context, id int64) error {
 	return err
 }
 
-const deleteTableImage = `-- name: DeleteTableImage :exec
-DELETE FROM table_images WHERE id = $1
+const deleteTableImage = `-- name: DeleteTableImage :execrows
+DELETE FROM table_images
+WHERE table_id = $1
+  AND id = $2
 `
 
-func (q *Queries) DeleteTableImage(ctx context.Context, id int64) error {
-	_, err := q.db.Exec(ctx, deleteTableImage, id)
-	return err
+type DeleteTableImageParams struct {
+	TableID int64 `json:"table_id"`
+	ID      int64 `json:"id"`
+}
+
+func (q *Queries) DeleteTableImage(ctx context.Context, arg DeleteTableImageParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteTableImage, arg.TableID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const exploreNearbyRooms = `-- name: ExploreNearbyRooms :many
@@ -1446,11 +1473,20 @@ func (q *Queries) SetPrimaryTableImage(ctx context.Context, tableID int64) error
 }
 
 const setTableImagePrimary = `-- name: SetTableImagePrimary :one
-UPDATE table_images SET is_primary = TRUE WHERE id = $1 RETURNING id, table_id, sort_order, is_primary, created_at, media_asset_id
+UPDATE table_images
+SET is_primary = TRUE
+WHERE table_id = $1
+  AND id = $2
+RETURNING id, table_id, sort_order, is_primary, created_at, media_asset_id
 `
 
-func (q *Queries) SetTableImagePrimary(ctx context.Context, id int64) (TableImage, error) {
-	row := q.db.QueryRow(ctx, setTableImagePrimary, id)
+type SetTableImagePrimaryParams struct {
+	TableID int64 `json:"table_id"`
+	ID      int64 `json:"id"`
+}
+
+func (q *Queries) SetTableImagePrimary(ctx context.Context, arg SetTableImagePrimaryParams) (TableImage, error) {
+	row := q.db.QueryRow(ctx, setTableImagePrimary, arg.TableID, arg.ID)
 	var i TableImage
 	err := row.Scan(
 		&i.ID,

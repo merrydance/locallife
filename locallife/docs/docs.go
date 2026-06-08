@@ -30569,7 +30569,7 @@ const docTemplate = `{
                         }
                     },
                     "404": {
-                        "description": "桌台不存在",
+                        "description": "桌台或图片不存在",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }

@@ -122,6 +122,7 @@ type Querier interface {
 	ClearOperatorApplicationIDCardBack(ctx context.Context, id int64) (OperatorApplication, error)
 	// 清空身份证正面媒体与对应 OCR 字段
 	ClearOperatorApplicationIDCardFront(ctx context.Context, id int64) (OperatorApplication, error)
+	ClearOtherPrimaryTableImages(ctx context.Context, arg ClearOtherPrimaryTableImagesParams) error
 	// 清空健康证媒体与 OCR 结果
 	ClearRiderApplicationHealthCert(ctx context.Context, id int64) (RiderApplication, error)
 	// 清空身份证背面媒体与对应 OCR 字段，保留正面实名信息
@@ -591,7 +592,7 @@ type Querier interface {
 	DeleteReviewImages(ctx context.Context, reviewID int64) error
 	DeleteSearchHistory(ctx context.Context, arg DeleteSearchHistoryParams) error
 	DeleteTable(ctx context.Context, id int64) error
-	DeleteTableImage(ctx context.Context, id int64) error
+	DeleteTableImage(ctx context.Context, arg DeleteTableImageParams) (int64, error)
 	DeleteTag(ctx context.Context, id int64) error
 	DeleteUserAddress(ctx context.Context, arg DeleteUserAddressParams) error
 	DeleteUserRole(ctx context.Context, id int64) error
@@ -1750,7 +1751,7 @@ type Querier interface {
 	// 先清除所有主图标记，再设置新的主图
 	SetPrimaryTableImage(ctx context.Context, tableID int64) error
 	SetProfitSharingAuditActor(ctx context.Context, arg SetProfitSharingAuditActorParams) error
-	SetTableImagePrimary(ctx context.Context, id int64) (TableImage, error)
+	SetTableImagePrimary(ctx context.Context, arg SetTableImagePrimaryParams) (TableImage, error)
 	// 设置用户需要提交证据
 	SetUserRequiresEvidence(ctx context.Context, arg SetUserRequiresEvidenceParams) error
 	SoftDeleteMediaAsset(ctx context.Context, id int64) (MediaAsset, error)

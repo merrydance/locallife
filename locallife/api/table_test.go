@@ -14,6 +14,7 @@ import (
 
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
 
@@ -53,6 +54,14 @@ func randomRoom(merchantID int64) db.Table {
 		Status:       "available",
 		CreatedAt:    time.Now(),
 	}
+}
+
+func randomTableImageMediaAsset(id, ownerID int64, objectKey string) db.MediaAsset {
+	asset := randomMediaAsset(id, ownerID, string(media.VisibilityPublic), objectKey)
+	asset.MediaCategory = string(media.CategoryTableImage)
+	asset.UploadStatus = "confirmed"
+	asset.ModerationStatus = "approved"
+	return asset
 }
 
 func tableToListTablesByMerchantRow(table db.Table, primaryImageAssetID int64) db.ListTablesByMerchantRow {
@@ -1968,13 +1977,18 @@ func TestAddTableImageAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				asset := randomMediaAsset(1, user.ID, "public", "merchant/table/1/table_detail.jpg")
+				asset := randomTableImageMediaAsset(1, user.ID, "merchant/table/1/table_detail.jpg")
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetTable(gomock.Any(), table.ID).
 					Times(1).
 					Return(table, nil)
+
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), asset.ID).
+					Times(1).
+					Return(asset, nil)
 
 				// 因为 is_primary=true，需要先清除其他主图
 				store.EXPECT().
@@ -1992,11 +2006,6 @@ func TestAddTableImageAPI(t *testing.T) {
 						SortOrder:    1,
 						IsPrimary:    true,
 					}, nil)
-
-				store.EXPECT().
-					GetMediaAssetByID(gomock.Any(), asset.ID).
-					Times(1).
-					Return(asset, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusCreated, recorder.Code)
@@ -2017,13 +2026,18 @@ func TestAddTableImageAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				asset := randomMediaAsset(2, user.ID, "public", "merchant/table/2/table_detail.jpg")
+				asset := randomTableImageMediaAsset(2, user.ID, "merchant/table/2/table_detail.jpg")
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetTable(gomock.Any(), table.ID).
 					Times(1).
 					Return(table, nil)
+
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), asset.ID).
+					Times(1).
+					Return(asset, nil)
 
 				// 不是主图，不调用 SetPrimaryTableImage
 
@@ -2037,15 +2051,307 @@ func TestAddTableImageAPI(t *testing.T) {
 						SortOrder:    2,
 						IsPrimary:    false,
 					}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusCreated, recorder.Code)
+				require.Contains(t, recorder.Body.String(), "merchant/table/2/table_detail.jpg")
+			},
+		},
+		{
+			name:    "OK_UploadedByMerchantStaff",
+			tableID: table.ID,
+			body: gin.H{
+				"media_asset_id": 3,
+				"sort_order":     3,
+				"is_primary":     false,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				uploaderID := user.ID + 1000
+				asset := randomTableImageMediaAsset(3, uploaderID, "merchant/table/3/staff_table_detail.jpg")
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetTable(gomock.Any(), table.ID).
+					Times(1).
+					Return(table, nil)
 
 				store.EXPECT().
 					GetMediaAssetByID(gomock.Any(), asset.ID).
 					Times(1).
 					Return(asset, nil)
+
+				store.EXPECT().
+					GetUserMerchantRole(gomock.Any(), db.GetUserMerchantRoleParams{
+						MerchantID: merchant.ID,
+						UserID:     uploaderID,
+					}).
+					Times(1).
+					Return("manager", nil)
+
+				store.EXPECT().
+					AddTableImage(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.TableImage{
+						ID:           3,
+						TableID:      table.ID,
+						MediaAssetID: pgtype.Int8{Int64: asset.ID, Valid: true},
+						SortOrder:    3,
+						IsPrimary:    false,
+					}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusCreated, recorder.Code)
-				require.Contains(t, recorder.Body.String(), "merchant/table/2/table_detail.jpg")
+				require.Contains(t, recorder.Body.String(), "merchant/table/3/staff_table_detail.jpg")
+			},
+		},
+		{
+			name:    "RejectWrongMerchantMediaAsset",
+			tableID: table.ID,
+			body: gin.H{
+				"media_asset_id": 4,
+				"is_primary":     false,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				uploaderID := user.ID + 2000
+				asset := randomTableImageMediaAsset(4, uploaderID, "merchant/table/4/other_merchant.jpg")
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetTable(gomock.Any(), table.ID).
+					Times(1).
+					Return(table, nil)
+
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), asset.ID).
+					Times(1).
+					Return(asset, nil)
+
+				store.EXPECT().
+					GetUserMerchantRole(gomock.Any(), db.GetUserMerchantRoleParams{
+						MerchantID: merchant.ID,
+						UserID:     uploaderID,
+					}).
+					Times(1).
+					Return("", db.ErrRecordNotFound)
+
+				store.EXPECT().
+					AddTableImage(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusForbidden, recorder.Code)
+			},
+		},
+		{
+			name:    "RejectPendingStaffMediaAsset",
+			tableID: table.ID,
+			body: gin.H{
+				"media_asset_id": 5,
+				"is_primary":     false,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				uploaderID := user.ID + 3000
+				asset := randomTableImageMediaAsset(5, uploaderID, "merchant/table/5/pending_staff.jpg")
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetTable(gomock.Any(), table.ID).
+					Times(1).
+					Return(table, nil)
+
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), asset.ID).
+					Times(1).
+					Return(asset, nil)
+
+				store.EXPECT().
+					GetUserMerchantRole(gomock.Any(), db.GetUserMerchantRoleParams{
+						MerchantID: merchant.ID,
+						UserID:     uploaderID,
+					}).
+					Times(1).
+					Return("pending", nil)
+
+				store.EXPECT().
+					AddTableImage(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusForbidden, recorder.Code)
+			},
+		},
+		{
+			name:    "RejectWrongMediaCategoryBeforePrimaryReset",
+			tableID: table.ID,
+			body: gin.H{
+				"media_asset_id": 6,
+				"is_primary":     true,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				asset := randomMediaAsset(6, user.ID, "public", "merchant/dish/6/not_table.jpg")
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetTable(gomock.Any(), table.ID).
+					Times(1).
+					Return(table, nil)
+
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), asset.ID).
+					Times(1).
+					Return(asset, nil)
+
+				store.EXPECT().
+					SetPrimaryTableImage(gomock.Any(), gomock.Any()).
+					Times(0)
+				store.EXPECT().
+					AddTableImage(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name:    "RejectUnconfirmedMediaAsset",
+			tableID: table.ID,
+			body: gin.H{
+				"media_asset_id": 7,
+				"is_primary":     false,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				asset := randomTableImageMediaAsset(7, user.ID, "merchant/table/7/uploaded_only.jpg")
+				asset.UploadStatus = "uploaded"
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetTable(gomock.Any(), table.ID).
+					Times(1).
+					Return(table, nil)
+
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), asset.ID).
+					Times(1).
+					Return(asset, nil)
+
+				store.EXPECT().
+					AddTableImage(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name:    "RejectUnapprovedMediaAsset",
+			tableID: table.ID,
+			body: gin.H{
+				"media_asset_id": 8,
+				"is_primary":     false,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				asset := randomTableImageMediaAsset(8, user.ID, "merchant/table/8/pending_moderation.jpg")
+				asset.ModerationStatus = "pending"
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetTable(gomock.Any(), table.ID).
+					Times(1).
+					Return(table, nil)
+
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), asset.ID).
+					Times(1).
+					Return(asset, nil)
+
+				store.EXPECT().
+					AddTableImage(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name:    "RejectPrivateMediaAsset",
+			tableID: table.ID,
+			body: gin.H{
+				"media_asset_id": 9,
+				"is_primary":     false,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				asset := randomTableImageMediaAsset(9, user.ID, "id_card/front/9/private.jpg")
+				asset.Visibility = string(media.VisibilityPrivate)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetTable(gomock.Any(), table.ID).
+					Times(1).
+					Return(table, nil)
+
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), asset.ID).
+					Times(1).
+					Return(asset, nil)
+
+				store.EXPECT().
+					AddTableImage(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name:    "RejectMissingMediaAsset",
+			tableID: table.ID,
+			body: gin.H{
+				"media_asset_id": 10,
+				"is_primary":     false,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetTable(gomock.Any(), table.ID).
+					Times(1).
+					Return(table, nil)
+
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), int64(10)).
+					Times(1).
+					Return(db.MediaAsset{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
+					AddTableImage(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
 		},
 		{
@@ -2280,9 +2586,12 @@ func TestDeleteTableImageAPI(t *testing.T) {
 					Return(table, nil)
 
 				store.EXPECT().
-					DeleteTableImage(gomock.Any(), int64(1)).
+					DeleteTableImage(gomock.Any(), db.DeleteTableImageParams{
+						TableID: table.ID,
+						ID:      int64(1),
+					}).
 					Times(1).
-					Return(nil)
+					Return(int64(1), nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -2316,6 +2625,33 @@ func TestDeleteTableImageAPI(t *testing.T) {
 					GetTable(gomock.Any(), int64(99999)).
 					Times(1).
 					Return(db.Table{}, db.ErrRecordNotFound)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusNotFound, recorder.Code)
+			},
+		},
+		{
+			name:    "ImageNotFound",
+			tableID: table.ID,
+			imageID: 99999,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetTable(gomock.Any(), table.ID).
+					Times(1).
+					Return(table, nil)
+
+				store.EXPECT().
+					DeleteTableImage(gomock.Any(), db.DeleteTableImageParams{
+						TableID: table.ID,
+						ID:      int64(99999),
+					}).
+					Times(1).
+					Return(int64(0), nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -2376,15 +2712,11 @@ func TestSetTableImagePrimaryAPI(t *testing.T) {
 					Times(1).
 					Return(table, nil)
 
-				// 先清除所有主图
 				store.EXPECT().
-					SetPrimaryTableImage(gomock.Any(), table.ID).
-					Times(1).
-					Return(nil)
-
-				// 设置新主图
-				store.EXPECT().
-					SetTableImagePrimary(gomock.Any(), int64(1)).
+					SetTableImagePrimaryTx(gomock.Any(), db.SetTableImagePrimaryTxParams{
+						TableID: table.ID,
+						ImageID: int64(1),
+					}).
 					Times(1).
 					Return(db.TableImage{
 						ID:           1,
@@ -2433,12 +2765,10 @@ func TestSetTableImagePrimaryAPI(t *testing.T) {
 					Return(table, nil)
 
 				store.EXPECT().
-					SetPrimaryTableImage(gomock.Any(), table.ID).
-					Times(1).
-					Return(nil)
-
-				store.EXPECT().
-					SetTableImagePrimary(gomock.Any(), int64(99999)).
+					SetTableImagePrimaryTx(gomock.Any(), db.SetTableImagePrimaryTxParams{
+						TableID: table.ID,
+						ImageID: int64(99999),
+					}).
 					Times(1).
 					Return(db.TableImage{}, db.ErrRecordNotFound)
 			},

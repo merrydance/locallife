@@ -93,8 +93,8 @@ Merchant reservation and table state must remain coherent:
 20. Fixed 2026-06-08: table create/update with `tag_ids` validates positive, non-duplicate, existing `table` tags before writes and persists table/tag changes through sqlc transactions.
     Evidence: `locallife/api/table.go:183`, `locallife/api/table.go:256`, `locallife/api/table.go:293`, `locallife/api/table.go:714`, `locallife/api/table.go:762`, `locallife/db/sqlc/tx_table.go:43`, `locallife/db/sqlc/tx_table.go:73`.
 
-21. Table image binding does not visibly validate that the media asset belongs to the merchant or has `table` media category before inserting `table_images`.
-    Evidence: `weapp/miniprogram/api/table-device-management.ts:390`, `locallife/api/table.go:1004`, `locallife/api/table.go:1050`, `locallife/api/table.go:1060`.
+21. Fixed 2026-06-08: table image binding validates the media asset before mutating `table_images`, and set-primary/delete image actions are bound to the path table. The asset must be a confirmed, approved, public `media.CategoryTableImage` upload whose uploader is the merchant owner or an active non-pending merchant staff member; invalid assets are rejected before primary-image reset or insert. Setting a missing or foreign image as primary returns 404 without clearing the current primary; deleting an image is constrained by `(table_id, image_id)`.
+    Evidence: `weapp/miniprogram/api/table-device-management.ts:428`, `locallife/api/table.go:218`, `locallife/api/table.go:251`, `locallife/api/table.go:1152`, `locallife/api/table.go:1311`, `locallife/api/table.go:1386`, `locallife/db/query/table.sql:149`, `locallife/db/query/table.sql:161`, `locallife/db/sqlc/tx_table.go:152`, `locallife/api/table_test.go:2111`, `locallife/api/table_test.go:2193`, `locallife/api/table_test.go:2576`, `locallife/api/table_test.go:2686`, `locallife/db/sqlc/table_test.go:767`.
 
 22. Table QR code generation is owner/manager-only and updates `tables.qr_code_url`; changing table number clears the QR URL.
     Evidence: `locallife/api/server.go:904`, `locallife/api/table.go:675`, `locallife/api/scan.go:582`, `locallife/db/query/table.sql:72`.
@@ -111,7 +111,7 @@ Merchant reservation and table state must remain coherent:
 26. Flutter table create/edit sheet writes table metadata first, then binds a selected uploaded image if present, and finally reloads the table list.
     Evidence: `merchant_app/lib/features/table/ui/widgets/table_config_sheet.dart:66`, `merchant_app/lib/features/table/ui/widgets/table_config_sheet.dart:83`, `merchant_app/lib/features/table/ui/widgets/table_config_sheet.dart:97`, `merchant_app/lib/features/table/ui/widgets/table_config_sheet.dart:111`, `merchant_app/lib/features/table/ui/widgets/table_config_sheet.dart:121`.
 
-27. Flutter table image upload uses `businessType='table'` and `mediaCategory='table_cover'`, which differs from the Mini Program trace's `businessType='merchant'` and `mediaCategory='table'` wording; backend image binding still needs to enforce the accepted media categories.
+27. Flutter table image upload uses `businessType='table'` and `mediaCategory='table_cover'`, which differs from the Mini Program trace's `businessType='merchant'` and `mediaCategory='table'` wording. Backend media policy and table-image binding now enforce the accepted category as `table`, so Flutter upload payloads still need contract alignment.
     Evidence: `merchant_app/lib/features/table/ui/widgets/table_config_sheet.dart:523`, `merchant_app/lib/features/table/ui/widgets/table_config_sheet.dart:565`, `merchant_app/lib/core/service/media_upload_service.dart:21`, `merchant_app/lib/core/service/media_upload_service.dart:72`.
 
 28. Flutter websocket client handles `table_status_change` by patching the in-memory table row.
@@ -126,8 +126,8 @@ Merchant reservation and table state must remain coherent:
 - Fixed 2026-06-08: merchant list date filtering still paginates in memory after fetching date rows, but `total` now uses the filtered row count when `date+status` or `date+exception` is present. Backend coverage exists in `TestListMerchantReservationsDateScopedFilters`.
 - `status=exception` is accepted only with a date in `listMerchantReservations`; without date it returns 400, matching the workbench page but fragile for generic wrappers.
 - Fixed 2026-06-08: table create/update tag persistence now prevalidates submitted tag ids and uses `CreateTableTx`/`UpdateTableTx`, so a tag insert failure rolls back the table create/update and tag replacement together.
-- Table image media ownership/category validation is not visible in the handler, despite the frontend upload helper using `businessType='merchant'` and `mediaCategory='table'`.
-- Flutter merchant App has a second table-management client using `businessType='table'` and `mediaCategory='table_cover'`, so media category semantics already drift between clients.
+- Fixed 2026-06-08: table image media binding now rejects cross-merchant/non-staff uploads, pending-staff uploads, non-`table` media categories, unconfirmed uploads, non-public assets, and unapproved media before mutating table-image state. Set-primary and delete image writes are now constrained by the path table id, and missing/foreign primary targets do not clear the existing primary image.
+- Flutter merchant App still has a second table-management client using `businessType='table'` and `mediaCategory='table_cover'`, while backend media policy accepts table images as `media_category='table'`.
 - Merchant-created reservations use the operator user id as `user_id`; user reservation list intentionally filters out non-online sources, but downstream user/risk/payment assumptions must remember this is not the real customer account.
 - No-show writes a `behavior_decisions` user risk record against reservation user id. For merchant-created phone/walk-in reservations that user id is the operator, which can wrongly attribute no-show behavior to staff.
 - Payment timeout worker updates pending reservations to `cancelled` with `payment timeout`; it does not use `CancelReservationTx`, but pending reservations should not have current table occupancy.
@@ -164,7 +164,7 @@ Merchant reservation and table state must remain coherent:
 - Payment fact application and `ProcessPaymentSuccessTx` are idempotent around existing reservation payment rows and terminal fact application.
 - Completion/cancel/no-show status updates are conditional at the logic layer but not request-idempotent; retry after success can return conflict rather than the already-terminal truth.
 - Manual table release can be repeated and tends to converge to `available`, but its broad fallback can complete a reservation if `current_reservation_id` is still set.
-- Table create/update tag replacement is fixed as an atomic per-request workflow, but remains unversioned/last-write-wins. Table image binding remains a partial-progress workflow without versioning.
+- Table create/update tag replacement is fixed as an atomic per-request workflow, but remains unversioned/last-write-wins. Table image add remains a partial-progress workflow without versioning, while set-primary is now an atomic transaction and delete is table-bound.
 - Flutter table status actions are single-flight per table id; create/update/delete are not durable-idempotent and rely on local submit/action guards.
 
 ## Recovery And Async Convergence Paths
@@ -205,7 +205,7 @@ Missing high-value tests:
 - Mini Program contract tests for reservation action permissions and frontend consumption of date+status total semantics.
 - Backend test for merchant-created reservation no-show behavior attribution to operator user id.
 - Backend test deciding whether disabling/changing a table with future reservations should be blocked or should notify/cancel/reassign those reservations.
-- Table image media ownership/category validation test.
+- Fixed 2026-06-08: table image media ownership/category validation tests cover owner upload, active staff upload, cross-merchant rejection, pending-staff rejection, missing media rejection, wrong category rejection before primary reset, unconfirmed upload rejection, private media rejection, unapproved media rejection, set-primary missing/foreign-image no-clear behavior, and table-bound delete behavior.
 - End-to-end reservation open/close path from merchant-created reservation -> dining session open -> table occupied -> close/release -> reservation completed.
 - Frontend recovery test for new table created but pending image binding partially failed.
 - Flutter table-management coverage for create/edit/status/image flows and websocket table-status patching.
@@ -215,8 +215,8 @@ Missing high-value tests:
 - Decide whether merchant-created phone/walk-in reservations should use staff `user_id` as the customer identity. Current no-show behavior decisions can punish the operator account rather than a real customer.
 - Fixed 2026-06-08: merchant reservation list `total` counts filtered date rows when both `date` and `status` are present; `date+exception` follows the same filtered-row semantics.
 - Fixed 2026-06-08: table tag replacement validates tag ids before writes and is transactional through `CreateTableTx`/`UpdateTableTx`; API tests cover pre-write rejection and DB tests cover rollback on tag insert failure.
-- Add media ownership/category validation to table image binding.
-- Normalize table media upload category semantics across Mini Program and Flutter App before tightening backend category validation.
+- Fixed 2026-06-08: table image binding enforces media ownership/category/status before primary-image reset and insert; set-primary and delete image actions are constrained by `(table_id, image_id)`.
+- Normalize table media upload category semantics across Mini Program and Flutter App; backend accepts table images as `media_category='table'`.
 - Decide the product contract for disabling/editing/deleting tables with future reservations; currently delete blocks future reservations, but update/disable does not visibly enforce the same invariant.
 - Clarify in UI/API docs that confirm does not occupy a table; only dining-session open does.
 - Consider making terminal reservation actions idempotent from the API caller perspective by returning current terminal truth on replay.
@@ -232,4 +232,4 @@ Missing high-value tests:
 - Reader/consumer branches checked: reservation list/workbench/edit, table list/detail/QR, customer scan-table/menu/cart/order, dining-session billing, kitchen/order fulfillment, inventory, payment/refund recovery, Flutter table management, and public/table readers.
 - Authorization/tenant branches checked: reservation staff roles by action, owner/manager-only edit/no-show, generic detail/cancel/check-in owner-or-merchant checks, table owner/manager/cashier reads, owner/manager writes, table ownership checks, dining-session owner-or-staff access, role-agnostic pending-staff caveat, and payment/refund fact owner validation.
 - Zombie/unreachable branches checked: merchant-created reservation uses staff user as customer identity; table media categories differ between Mini Program and Flutter; table disable/update lacks delete-like future-reservation enforcement; manual release can complete reservation through status endpoint; Flutter table flows exist and are in scope.
-- Test-proof gaps checked: backend tests cover reservation CRUD/actions, date+status total semantics, table CRUD/status/images/tags/QR, inventory sync, dining-session transfer, and payment/refund workers. Missing proof remains for Mini Program action permissions and frontend date+status total consumption, merchant-created no-show attribution, table disable/update future-reservation contract, media ownership/category validation, full reservation-to-dining-session e2e, partial table-image recovery, and Flutter table flow/websocket tests.
+- Test-proof gaps checked: backend tests cover reservation CRUD/actions, date+status total semantics, table CRUD/status/images/tags/QR, table image media validation plus table-bound set/delete image actions, inventory sync, dining-session transfer, and payment/refund workers. Missing proof remains for Mini Program action permissions and frontend date+status total consumption, merchant-created no-show attribution, table disable/update future-reservation contract, full reservation-to-dining-session e2e, partial table-image recovery, and Flutter table flow/websocket tests.

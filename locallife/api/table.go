@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -203,6 +204,72 @@ func (server *Server) validateTableTagIDs(ctx *gin.Context, tagIDs []int64) (int
 		}
 	}
 	return 0, nil
+}
+
+var (
+	errTableImageMediaNotFound      = errors.New("table image media asset not found")
+	errTableImageMediaWrongCategory = errors.New("media asset is not a table image")
+	errTableImageMediaNotConfirmed  = errors.New("media asset upload is not confirmed")
+	errTableImageMediaNotApproved   = errors.New("media asset is not approved")
+	errTableImageMediaNotPublic     = errors.New("media asset is not public")
+	errTableImageMediaForbidden     = errors.New("table image media asset does not belong to your merchant")
+)
+
+func (server *Server) validateTableImageMediaAsset(ctx *gin.Context, merchant db.Merchant, mediaAssetID int64) (db.MediaAsset, int, error) {
+	asset, err := server.store.GetMediaAssetByID(ctx, mediaAssetID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return db.MediaAsset{}, http.StatusBadRequest, errTableImageMediaNotFound
+		}
+		return db.MediaAsset{}, http.StatusInternalServerError, err
+	}
+
+	if strings.ToLower(strings.TrimSpace(asset.MediaCategory)) != string(media.CategoryTableImage) {
+		return db.MediaAsset{}, http.StatusBadRequest, errTableImageMediaWrongCategory
+	}
+	if strings.ToLower(strings.TrimSpace(asset.UploadStatus)) != "confirmed" {
+		return db.MediaAsset{}, http.StatusBadRequest, errTableImageMediaNotConfirmed
+	}
+	if strings.ToLower(strings.TrimSpace(asset.Visibility)) != string(media.VisibilityPublic) {
+		return db.MediaAsset{}, http.StatusBadRequest, errTableImageMediaNotPublic
+	}
+	if strings.ToLower(strings.TrimSpace(asset.ModerationStatus)) != "approved" {
+		return db.MediaAsset{}, http.StatusBadRequest, errTableImageMediaNotApproved
+	}
+
+	owned, err := server.tableImageMediaAssetBelongsToMerchant(ctx, merchant, asset.UploadedBy)
+	if err != nil {
+		return db.MediaAsset{}, http.StatusInternalServerError, err
+	}
+	if !owned {
+		return db.MediaAsset{}, http.StatusForbidden, errTableImageMediaForbidden
+	}
+
+	return asset, 0, nil
+}
+
+func (server *Server) tableImageMediaAssetBelongsToMerchant(ctx *gin.Context, merchant db.Merchant, uploaderID int64) (bool, error) {
+	if uploaderID == merchant.OwnerUserID {
+		return true, nil
+	}
+
+	role, err := server.store.GetUserMerchantRole(ctx, db.GetUserMerchantRoleParams{
+		MerchantID: merchant.ID,
+		UserID:     uploaderID,
+	})
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	switch strings.ToLower(strings.TrimSpace(role)) {
+	case db.MerchantStaffRoleOwner, "manager", "chef", "cashier":
+		return true, nil
+	default:
+		return false, nil
+	}
 }
 
 // createTable godoc
@@ -1082,6 +1149,16 @@ func (server *Server) addTableImage(ctx *gin.Context) {
 		return
 	}
 
+	asset, status, err := server.validateTableImageMediaAsset(ctx, merchant, req.MediaAssetID)
+	if err != nil {
+		if status == http.StatusInternalServerError {
+			ctx.JSON(status, internalError(ctx, err))
+			return
+		}
+		ctx.JSON(status, errorResponse(err))
+		return
+	}
+
 	// 如果设置为主图，先清除其他主图标记
 	if req.IsPrimary {
 		err = server.store.SetPrimaryTableImage(ctx, uriReq.ID)
@@ -1107,7 +1184,7 @@ func (server *Server) addTableImage(ctx *gin.Context) {
 		ID:           image.ID,
 		TableID:      image.TableID,
 		MediaAssetID: int64PtrFromPgInt8(image.MediaAssetID),
-		ImageURL:     server.publicImageURL(ctx, int64PtrFromPgInt8(image.MediaAssetID), media.VariantDetail),
+		ImageURL:     server.mediaResolver.PublicURL(asset.ObjectKey, media.VariantDetail),
 		SortOrder:    image.SortOrder,
 		IsPrimary:    image.IsPrimary,
 	})
@@ -1231,15 +1308,10 @@ func (server *Server) setTablePrimaryImage(ctx *gin.Context) {
 		return
 	}
 
-	// 先清除所有主图标记
-	err = server.store.SetPrimaryTableImage(ctx, uriReq.ID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 设置新主图
-	image, err := server.store.SetTableImagePrimary(ctx, uriReq.ImageID)
+	image, err := server.store.SetTableImagePrimaryTx(ctx, db.SetTableImagePrimaryTxParams{
+		TableID: uriReq.ID,
+		ImageID: uriReq.ImageID,
+	})
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("image not found")))
@@ -1270,7 +1342,7 @@ func (server *Server) setTablePrimaryImage(ctx *gin.Context) {
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 401 {object} ErrorResponse "未认证"
 // @Failure 403 {object} ErrorResponse "非桌台所有者"
-// @Failure 404 {object} ErrorResponse "桌台不存在"
+// @Failure 404 {object} ErrorResponse "桌台或图片不存在"
 // @Failure 500 {object} ErrorResponse "服务器错误"
 // @Router /v1/tables/{id}/images/{image_id} [delete]
 // @Security BearerAuth
@@ -1311,10 +1383,16 @@ func (server *Server) deleteTableImage(ctx *gin.Context) {
 		return
 	}
 
-	// 删除图片
-	err = server.store.DeleteTableImage(ctx, uriReq.ImageID)
+	deletedRows, err := server.store.DeleteTableImage(ctx, db.DeleteTableImageParams{
+		TableID: uriReq.ID,
+		ID:      uriReq.ImageID,
+	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	if deletedRows == 0 {
+		ctx.JSON(http.StatusNotFound, errorResponse(errors.New("image not found")))
 		return
 	}
 

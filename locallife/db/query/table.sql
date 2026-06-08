@@ -146,8 +146,10 @@ SET sort_order = COALESCE(sqlc.narg('sort_order'), sort_order),
 WHERE id = sqlc.arg('id')
 RETURNING *;
 
--- name: DeleteTableImage :exec
-DELETE FROM table_images WHERE id = $1;
+-- name: DeleteTableImage :execrows
+DELETE FROM table_images
+WHERE table_id = sqlc.arg('table_id')
+  AND id = sqlc.arg('id');
 
 -- name: DeleteAllTableImages :exec
 DELETE FROM table_images WHERE table_id = $1;
@@ -156,8 +158,18 @@ DELETE FROM table_images WHERE table_id = $1;
 -- 先清除所有主图标记，再设置新的主图
 UPDATE table_images SET is_primary = FALSE WHERE table_id = $1;
 
+-- name: ClearOtherPrimaryTableImages :exec
+UPDATE table_images
+SET is_primary = FALSE
+WHERE table_id = sqlc.arg('table_id')
+  AND id <> sqlc.arg('id');
+
 -- name: SetTableImagePrimary :one
-UPDATE table_images SET is_primary = TRUE WHERE id = $1 RETURNING *;
+UPDATE table_images
+SET is_primary = TRUE
+WHERE table_id = sqlc.arg('table_id')
+  AND id = sqlc.arg('id')
+RETURNING *;
 
 -- ============ Customer-side Room Queries (C端包间查询) ============
 

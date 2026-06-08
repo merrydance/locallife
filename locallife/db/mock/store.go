@@ -1250,6 +1250,20 @@ func (mr *MockStoreMockRecorder) ClearOperatorApplicationIDCardFront(ctx, id any
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearOperatorApplicationIDCardFront", reflect.TypeOf((*MockStore)(nil).ClearOperatorApplicationIDCardFront), ctx, id)
 }
 
+// ClearOtherPrimaryTableImages mocks base method.
+func (m *MockStore) ClearOtherPrimaryTableImages(ctx context.Context, arg db.ClearOtherPrimaryTableImagesParams) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClearOtherPrimaryTableImages", ctx, arg)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ClearOtherPrimaryTableImages indicates an expected call of ClearOtherPrimaryTableImages.
+func (mr *MockStoreMockRecorder) ClearOtherPrimaryTableImages(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearOtherPrimaryTableImages", reflect.TypeOf((*MockStore)(nil).ClearOtherPrimaryTableImages), ctx, arg)
+}
+
 // ClearRiderApplicationHealthCert mocks base method.
 func (m *MockStore) ClearRiderApplicationHealthCert(ctx context.Context, id int64) (db.RiderApplication, error) {
 	m.ctrl.T.Helper()
@@ -6184,17 +6198,18 @@ func (mr *MockStoreMockRecorder) DeleteTable(ctx, id any) *gomock.Call {
 }
 
 // DeleteTableImage mocks base method.
-func (m *MockStore) DeleteTableImage(ctx context.Context, id int64) error {
+func (m *MockStore) DeleteTableImage(ctx context.Context, arg db.DeleteTableImageParams) (int64, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteTableImage", ctx, id)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "DeleteTableImage", ctx, arg)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // DeleteTableImage indicates an expected call of DeleteTableImage.
-func (mr *MockStoreMockRecorder) DeleteTableImage(ctx, id any) *gomock.Call {
+func (mr *MockStoreMockRecorder) DeleteTableImage(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteTableImage", reflect.TypeOf((*MockStore)(nil).DeleteTableImage), ctx, id)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteTableImage", reflect.TypeOf((*MockStore)(nil).DeleteTableImage), ctx, arg)
 }
 
 // DeleteTableTx mocks base method.
@@ -19892,18 +19907,33 @@ func (mr *MockStoreMockRecorder) SetProfitSharingAuditActor(ctx, arg any) *gomoc
 }
 
 // SetTableImagePrimary mocks base method.
-func (m *MockStore) SetTableImagePrimary(ctx context.Context, id int64) (db.TableImage, error) {
+func (m *MockStore) SetTableImagePrimary(ctx context.Context, arg db.SetTableImagePrimaryParams) (db.TableImage, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetTableImagePrimary", ctx, id)
+	ret := m.ctrl.Call(m, "SetTableImagePrimary", ctx, arg)
 	ret0, _ := ret[0].(db.TableImage)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // SetTableImagePrimary indicates an expected call of SetTableImagePrimary.
-func (mr *MockStoreMockRecorder) SetTableImagePrimary(ctx, id any) *gomock.Call {
+func (mr *MockStoreMockRecorder) SetTableImagePrimary(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetTableImagePrimary", reflect.TypeOf((*MockStore)(nil).SetTableImagePrimary), ctx, id)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetTableImagePrimary", reflect.TypeOf((*MockStore)(nil).SetTableImagePrimary), ctx, arg)
+}
+
+// SetTableImagePrimaryTx mocks base method.
+func (m *MockStore) SetTableImagePrimaryTx(ctx context.Context, arg db.SetTableImagePrimaryTxParams) (db.TableImage, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetTableImagePrimaryTx", ctx, arg)
+	ret0, _ := ret[0].(db.TableImage)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SetTableImagePrimaryTx indicates an expected call of SetTableImagePrimaryTx.
+func (mr *MockStoreMockRecorder) SetTableImagePrimaryTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetTableImagePrimaryTx", reflect.TypeOf((*MockStore)(nil).SetTableImagePrimaryTx), ctx, arg)
 }
 
 // SetUserRequiresEvidence mocks base method.

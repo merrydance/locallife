@@ -40,6 +40,12 @@ type DeleteTableParams struct {
 	TableID int64
 }
 
+// SetTableImagePrimaryTxParams sets a table image as primary within its table.
+type SetTableImagePrimaryTxParams struct {
+	TableID int64
+	ImageID int64
+}
+
 // CreateTableTx creates a table and tag associations in a single transaction.
 func (store *SQLStore) CreateTableTx(ctx context.Context, arg CreateTableTxParams) (CreateTableTxResult, error) {
 	var result CreateTableTxResult
@@ -137,6 +143,33 @@ func (store *SQLStore) DeleteTableTx(ctx context.Context, arg DeleteTableParams)
 		}
 
 		result.TableID = arg.TableID
+		return nil
+	})
+
+	return result, err
+}
+
+// SetTableImagePrimaryTx verifies the image belongs to the table, then switches the table primary image atomically.
+func (store *SQLStore) SetTableImagePrimaryTx(ctx context.Context, arg SetTableImagePrimaryTxParams) (TableImage, error) {
+	var result TableImage
+
+	err := store.execTx(ctx, func(q *Queries) error {
+		image, err := q.SetTableImagePrimary(ctx, SetTableImagePrimaryParams{
+			TableID: arg.TableID,
+			ID:      arg.ImageID,
+		})
+		if err != nil {
+			return err
+		}
+
+		if err := q.ClearOtherPrimaryTableImages(ctx, ClearOtherPrimaryTableImagesParams{
+			TableID: arg.TableID,
+			ID:      arg.ImageID,
+		}); err != nil {
+			return err
+		}
+
+		result = image
 		return nil
 	})
 
