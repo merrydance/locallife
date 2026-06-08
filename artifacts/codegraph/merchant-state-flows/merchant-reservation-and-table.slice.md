@@ -123,7 +123,7 @@ Merchant reservation and table state must remain coherent:
 - `tables.status/current_reservation_id` has multiple writers: manual table status API, dining-session open/close/transfer, and reservation terminal transactions.
 - Confirmed reservation and table occupancy are deliberately decoupled; any UI that interprets `confirmed` as occupied will drift from backend truth.
 - Manual table release is broad: if an active dining session exists, it closes the session; if the table has `current_reservation_id`, it completes that reservation before updating the table status.
-- Merchant list date filtering paginates in memory after fetching all date rows, while total count for date filter is a raw count by date before status filtering. For status tabs under a date, `total` can be larger than the filtered result.
+- Fixed 2026-06-08: merchant list date filtering still paginates in memory after fetching date rows, but `total` now uses the filtered row count when `date+status` or `date+exception` is present. Backend coverage exists in `TestListMerchantReservationsDateScopedFilters`.
 - `status=exception` is accepted only with a date in `listMerchantReservations`; without date it returns 400, matching the workbench page but fragile for generic wrappers.
 - Table create/update tag persistence is partial and non-transactional, similar to the merchant category drift found earlier.
 - Table image media ownership/category validation is not visible in the handler, despite the frontend upload helper using `businessType='merchant'` and `mediaCategory='table'`.
@@ -202,7 +202,7 @@ Observed tests:
 
 Missing high-value tests:
 
-- Mini Program contract tests for reservation action permissions and date+status total semantics.
+- Mini Program contract tests for reservation action permissions and frontend consumption of date+status total semantics.
 - Backend test for merchant-created reservation no-show behavior attribution to operator user id.
 - Backend test deciding whether disabling/changing a table with future reservations should be blocked or should notify/cancel/reassign those reservations.
 - Table image media ownership/category validation test.
@@ -213,7 +213,7 @@ Missing high-value tests:
 ## Gaps And Refactor Notes
 
 - Decide whether merchant-created phone/walk-in reservations should use staff `user_id` as the customer identity. Current no-show behavior decisions can punish the operator account rather than a real customer.
-- Fix merchant reservation list `total` when both `date` and `status` are present; it should count the filtered rows or expose explicit `has_more`.
+- Fixed 2026-06-08: merchant reservation list `total` counts filtered date rows when both `date` and `status` are present; `date+exception` follows the same filtered-row semantics.
 - Make table tag replacement transactional or validate all tag ids before deleting existing associations.
 - Add media ownership/category validation to table image binding.
 - Normalize table media upload category semantics across Mini Program and Flutter App before tightening backend category validation.
@@ -228,8 +228,8 @@ Missing high-value tests:
 - Request branches checked: merchant reservation list/create/update/confirm/complete/cancel/no-show/detail/statistics/workbench, table CRUD/status/delete/tag/image/QR, dining-session open/close/transfer/manual release, reservation payment/refund facts, table image upload/bind, and Flutter table repository endpoints.
 - Backend state branches checked: reservation pending/confirmed/paid/completed/cancelled/no-show, merchant-created reservations, table availability/occupied/disabled, `current_reservation_id`, dining sessions, table transfer logs, inventory reserve/release, payment/refund terminal states, no-show behavior decisions, tag associations, and table image media bindings.
 - Async branches checked: reservation payment timeout, no-show alert, food-safety reservation alert, payment fact application, reservation outbox, refund recovery scheduler, Baofu profit-sharing after completed reservation, websocket table-status updates, and Flutter in-memory patching.
-- Failure/retry branches checked: frontend local action guards, no request idempotency key, conflict checks with row locks, terminal action replay returning conflicts, partial table image binding after table creation, tag replacement partial writes, manual table release broad fallback, disabled/edit table with future reservations, and date+status total drift.
+- Failure/retry branches checked: frontend local action guards, no request idempotency key, conflict checks with row locks, terminal action replay returning conflicts, partial table image binding after table creation, tag replacement partial writes, manual table release broad fallback, disabled/edit table with future reservations, and date+status total semantics.
 - Reader/consumer branches checked: reservation list/workbench/edit, table list/detail/QR, customer scan-table/menu/cart/order, dining-session billing, kitchen/order fulfillment, inventory, payment/refund recovery, Flutter table management, and public/table readers.
 - Authorization/tenant branches checked: reservation staff roles by action, owner/manager-only edit/no-show, generic detail/cancel/check-in owner-or-merchant checks, table owner/manager/cashier reads, owner/manager writes, table ownership checks, dining-session owner-or-staff access, role-agnostic pending-staff caveat, and payment/refund fact owner validation.
 - Zombie/unreachable branches checked: merchant-created reservation uses staff user as customer identity; table media categories differ between Mini Program and Flutter; table disable/update lacks delete-like future-reservation enforcement; manual release can complete reservation through status endpoint; Flutter table flows exist and are in scope.
-- Test-proof gaps checked: backend tests cover reservation CRUD/actions, table CRUD/status/images/tags/QR, inventory sync, dining-session transfer, and payment/refund workers. Missing proof remains for Mini Program action permission/date+status totals, merchant-created no-show attribution, table disable/update future-reservation contract, media ownership/category validation, full reservation-to-dining-session e2e, partial table-image recovery, and Flutter table flow/websocket tests.
+- Test-proof gaps checked: backend tests cover reservation CRUD/actions, date+status total semantics, table CRUD/status/images/tags/QR, inventory sync, dining-session transfer, and payment/refund workers. Missing proof remains for Mini Program action permissions and frontend date+status total consumption, merchant-created no-show attribution, table disable/update future-reservation contract, media ownership/category validation, full reservation-to-dining-session e2e, partial table-image recovery, and Flutter table flow/websocket tests.
