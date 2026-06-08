@@ -115,6 +115,7 @@ func TestCreateTableAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
 	table := randomTable(merchant.ID)
+	tagID := util.RandomInt(1000, 2000)
 
 	testCases := []struct {
 		name          string
@@ -147,6 +148,49 @@ func TestCreateTableAPI(t *testing.T) {
 					CreateTable(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(table, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusCreated, recorder.Code)
+				requireBodyMatchTable(t, recorder.Body, table)
+			},
+		},
+		{
+			name: "OKWithTags",
+			body: gin.H{
+				"table_no":   table.TableNo,
+				"table_type": table.TableType,
+				"capacity":   table.Capacity,
+				"tag_ids":    []int64{tagID},
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetTableByMerchantAndNo(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.Table{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
+					GetTag(gomock.Any(), gomock.Eq(tagID)).
+					Times(1).
+					Return(db.Tag{ID: tagID, Type: "table"}, nil)
+
+				store.EXPECT().
+					CreateTableTx(gomock.Any(), gomock.AssignableToTypeOf(db.CreateTableTxParams{})).
+					DoAndReturn(func(_ context.Context, arg db.CreateTableTxParams) (db.CreateTableTxResult, error) {
+						require.Equal(t, table.TableNo, arg.Table.TableNo)
+						require.Equal(t, table.TableType, arg.Table.TableType)
+						require.Equal(t, table.Capacity, arg.Table.Capacity)
+						require.Equal(t, []int64{tagID}, arg.TagIDs)
+						return db.CreateTableTxResult{
+							Table: table,
+							Tags:  []db.TableTag{{TableID: table.ID, TagID: tagID}},
+						}, nil
+					}).
+					Times(1)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusCreated, recorder.Code)
@@ -296,6 +340,92 @@ func TestCreateTableAPI(t *testing.T) {
 			tc.checkResponse(t, recorder)
 		})
 	}
+}
+
+func TestCreateTableAPIRejectsInvalidTagIDsBeforeCreate(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	table := randomTable(merchant.ID)
+	missingTagID := util.RandomInt(1000, 2000)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetTableByMerchantAndNo(gomock.Any(), db.GetTableByMerchantAndNoParams{
+			MerchantID: merchant.ID,
+			TableNo:    table.TableNo,
+		}).
+		Times(1).
+		Return(db.Table{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetTag(gomock.Any(), gomock.Eq(missingTagID)).
+		Times(1).
+		Return(db.Tag{}, db.ErrRecordNotFound)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	body := gin.H{
+		"table_no":   table.TableNo,
+		"table_type": table.TableType,
+		"capacity":   table.Capacity,
+		"tag_ids":    []int64{missingTagID},
+	}
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/tables", bytes.NewReader(data))
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+}
+
+func TestCreateTableAPIRejectsDuplicateTagIDsBeforeCreate(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	table := randomTable(merchant.ID)
+	tagID := util.RandomInt(1000, 2000)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetTableByMerchantAndNo(gomock.Any(), db.GetTableByMerchantAndNoParams{
+			MerchantID: merchant.ID,
+			TableNo:    table.TableNo,
+		}).
+		Times(1).
+		Return(db.Table{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetTag(gomock.Any(), gomock.Eq(tagID)).
+		Times(1).
+		Return(db.Tag{ID: tagID, Type: "table"}, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	body := gin.H{
+		"table_no":   table.TableNo,
+		"table_type": table.TableType,
+		"capacity":   table.Capacity,
+		"tag_ids":    []int64{tagID, tagID},
+	}
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/tables", bytes.NewReader(data))
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
 }
 
 // ==================== 获取桌台详情测试 ====================
@@ -561,6 +691,7 @@ func TestUpdateTableAPI(t *testing.T) {
 
 	newTableNo := "T99"
 	newCapacity := int16(8)
+	tagID := util.RandomInt(1000, 2000)
 
 	testCases := []struct {
 		name          string
@@ -599,6 +730,85 @@ func TestUpdateTableAPI(t *testing.T) {
 						require.True(t, arg.QrCodeUrl.Valid)
 						require.Empty(t, arg.QrCodeUrl.String)
 						return updatedTable, nil
+					}).
+					Times(1)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+			},
+		},
+		{
+			name:    "OKWithTags",
+			tableID: table.ID,
+			body: gin.H{
+				"capacity": newCapacity,
+				"tag_ids":  []int64{tagID},
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetTable(gomock.Any(), gomock.Eq(table.ID)).
+					Times(1).
+					Return(table, nil)
+
+				store.EXPECT().
+					GetTag(gomock.Any(), gomock.Eq(tagID)).
+					Times(1).
+					Return(db.Tag{ID: tagID, Type: "table"}, nil)
+
+				updatedTable := table
+				updatedTable.Capacity = newCapacity
+
+				store.EXPECT().
+					UpdateTableTx(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateTableTxParams{})).
+					DoAndReturn(func(_ context.Context, arg db.UpdateTableTxParams) (db.UpdateTableTxResult, error) {
+						require.Equal(t, table.ID, arg.Table.ID)
+						require.True(t, arg.Table.Capacity.Valid)
+						require.Equal(t, newCapacity, arg.Table.Capacity.Int16)
+						require.NotNil(t, arg.TagIDs)
+						require.Equal(t, []int64{tagID}, *arg.TagIDs)
+						return db.UpdateTableTxResult{
+							Table: updatedTable,
+							Tags:  []db.TableTag{{TableID: table.ID, TagID: tagID}},
+						}, nil
+					}).
+					Times(1)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+			},
+		},
+		{
+			name:    "OKClearsTags",
+			tableID: table.ID,
+			body: gin.H{
+				"tag_ids": []int64{},
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetTable(gomock.Any(), gomock.Eq(table.ID)).
+					Times(1).
+					Return(table, nil)
+
+				store.EXPECT().
+					UpdateTableTx(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateTableTxParams{})).
+					DoAndReturn(func(_ context.Context, arg db.UpdateTableTxParams) (db.UpdateTableTxResult, error) {
+						require.Equal(t, table.ID, arg.Table.ID)
+						require.NotNil(t, arg.TagIDs)
+						require.Empty(t, *arg.TagIDs)
+						return db.UpdateTableTxResult{
+							Table: table,
+							Tags:  []db.TableTag{},
+						}, nil
 					}).
 					Times(1)
 			},
@@ -711,6 +921,79 @@ func TestUpdateTableAPI(t *testing.T) {
 			tc.checkResponse(t, recorder)
 		})
 	}
+}
+
+func TestUpdateTableAPIRejectsNonTableTagBeforeMutating(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	table := randomTable(merchant.ID)
+	nonTableTagID := util.RandomInt(1000, 2000)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetTable(gomock.Any(), gomock.Eq(table.ID)).
+		Times(1).
+		Return(table, nil)
+	store.EXPECT().
+		GetTag(gomock.Any(), gomock.Eq(nonTableTagID)).
+		Times(1).
+		Return(db.Tag{ID: nonTableTagID, Type: "dish"}, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	body := gin.H{
+		"capacity": table.Capacity + 1,
+		"tag_ids":  []int64{nonTableTagID},
+	}
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	url := fmt.Sprintf("/v1/tables/%d", table.ID)
+	request, err := http.NewRequest(http.MethodPatch, url, bytes.NewReader(data))
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+}
+
+func TestUpdateTableAPIRejectsInvalidTagIDBeforeMutating(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	table := randomTable(merchant.ID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetTable(gomock.Any(), gomock.Eq(table.ID)).
+		Times(1).
+		Return(table, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	body := gin.H{
+		"capacity": table.Capacity + 1,
+		"tag_ids":  []int64{0},
+	}
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	url := fmt.Sprintf("/v1/tables/%d", table.ID)
+	request, err := http.NewRequest(http.MethodPatch, url, bytes.NewReader(data))
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
 }
 
 // ==================== 删除桌台测试 ====================

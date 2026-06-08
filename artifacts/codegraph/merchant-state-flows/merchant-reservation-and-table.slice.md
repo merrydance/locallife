@@ -90,8 +90,8 @@ Merchant reservation and table state must remain coherent:
 19. Manual table release calls `PATCH /v1/tables/:id/status` with `available`; backend first tries to close an active dining session and then falls back to forced table status update.
     Evidence: `weapp/miniprogram/pages/merchant/tables/index.ts:236`, `weapp/miniprogram/api/table-device-management.ts:355`, `locallife/api/table.go:765`, `locallife/api/table.go:805`, `locallife/api/table.go:826`.
 
-20. Table create/update tag replacement is multi-step and not transactional; invalid or duplicate tag ids are ignored.
-    Evidence: `locallife/api/table.go:248`, `locallife/api/table.go:728`, `locallife/api/table.go:734`, `locallife/api/table.go:740`.
+20. Fixed 2026-06-08: table create/update with `tag_ids` validates positive, non-duplicate, existing `table` tags before writes and persists table/tag changes through sqlc transactions.
+    Evidence: `locallife/api/table.go:183`, `locallife/api/table.go:256`, `locallife/api/table.go:293`, `locallife/api/table.go:714`, `locallife/api/table.go:762`, `locallife/db/sqlc/tx_table.go:43`, `locallife/db/sqlc/tx_table.go:73`.
 
 21. Table image binding does not visibly validate that the media asset belongs to the merchant or has `table` media category before inserting `table_images`.
     Evidence: `weapp/miniprogram/api/table-device-management.ts:390`, `locallife/api/table.go:1004`, `locallife/api/table.go:1050`, `locallife/api/table.go:1060`.
@@ -125,7 +125,7 @@ Merchant reservation and table state must remain coherent:
 - Manual table release is broad: if an active dining session exists, it closes the session; if the table has `current_reservation_id`, it completes that reservation before updating the table status.
 - Fixed 2026-06-08: merchant list date filtering still paginates in memory after fetching date rows, but `total` now uses the filtered row count when `date+status` or `date+exception` is present. Backend coverage exists in `TestListMerchantReservationsDateScopedFilters`.
 - `status=exception` is accepted only with a date in `listMerchantReservations`; without date it returns 400, matching the workbench page but fragile for generic wrappers.
-- Table create/update tag persistence is partial and non-transactional, similar to the merchant category drift found earlier.
+- Fixed 2026-06-08: table create/update tag persistence now prevalidates submitted tag ids and uses `CreateTableTx`/`UpdateTableTx`, so a tag insert failure rolls back the table create/update and tag replacement together.
 - Table image media ownership/category validation is not visible in the handler, despite the frontend upload helper using `businessType='merchant'` and `mediaCategory='table'`.
 - Flutter merchant App has a second table-management client using `businessType='table'` and `mediaCategory='table_cover'`, so media category semantics already drift between clients.
 - Merchant-created reservations use the operator user id as `user_id`; user reservation list intentionally filters out non-online sources, but downstream user/risk/payment assumptions must remember this is not the real customer account.
@@ -164,7 +164,7 @@ Merchant reservation and table state must remain coherent:
 - Payment fact application and `ProcessPaymentSuccessTx` are idempotent around existing reservation payment rows and terminal fact application.
 - Completion/cancel/no-show status updates are conditional at the logic layer but not request-idempotent; retry after success can return conflict rather than the already-terminal truth.
 - Manual table release can be repeated and tends to converge to `available`, but its broad fallback can complete a reservation if `current_reservation_id` is still set.
-- Table create/update tag replacement and image binding are last-write-wins or partial-progress workflows without versioning.
+- Table create/update tag replacement is fixed as an atomic per-request workflow, but remains unversioned/last-write-wins. Table image binding remains a partial-progress workflow without versioning.
 - Flutter table status actions are single-flight per table id; create/update/delete are not durable-idempotent and rely on local submit/action guards.
 
 ## Recovery And Async Convergence Paths
@@ -197,8 +197,8 @@ Observed tests:
 - `locallife/db/sqlc/tx_reservation_test.go` covers reservation create, confirm not occupying near reservation, complete/cancel/no-show/table consistency, and active adjustment guards.
 - `locallife/db/sqlc/tx_reservation_inventory_test.go` covers reserve/release inventory sync.
 - `locallife/db/sqlc/tx_dining_session_test.go` and `tx_dining_session_transfer_test.go` cover open/transfer table occupancy and concurrent target behavior.
-- `locallife/api/table_test.go` covers table CRUD, status update, delete, tag/image APIs, and QR behavior.
-- Reservation payment/refund and food-safety/no-show alert workers have focused backend tests.
+- `locallife/api/table_test.go` covers table CRUD, status update, delete, tag/image APIs, QR behavior, table tag prevalidation, and tagged create/update transaction entrypoints.
+- Reservation payment/refund and food-safety/no-show alert workers have focused backend tests. `locallife/db/sqlc/table_test.go` covers tagged table create/update rollback on tag insert failure.
 
 Missing high-value tests:
 
@@ -214,7 +214,7 @@ Missing high-value tests:
 
 - Decide whether merchant-created phone/walk-in reservations should use staff `user_id` as the customer identity. Current no-show behavior decisions can punish the operator account rather than a real customer.
 - Fixed 2026-06-08: merchant reservation list `total` counts filtered date rows when both `date` and `status` are present; `date+exception` follows the same filtered-row semantics.
-- Make table tag replacement transactional or validate all tag ids before deleting existing associations.
+- Fixed 2026-06-08: table tag replacement validates tag ids before writes and is transactional through `CreateTableTx`/`UpdateTableTx`; API tests cover pre-write rejection and DB tests cover rollback on tag insert failure.
 - Add media ownership/category validation to table image binding.
 - Normalize table media upload category semantics across Mini Program and Flutter App before tightening backend category validation.
 - Decide the product contract for disabling/editing/deleting tables with future reservations; currently delete blocks future reservations, but update/disable does not visibly enforce the same invariant.
@@ -228,7 +228,7 @@ Missing high-value tests:
 - Request branches checked: merchant reservation list/create/update/confirm/complete/cancel/no-show/detail/statistics/workbench, table CRUD/status/delete/tag/image/QR, dining-session open/close/transfer/manual release, reservation payment/refund facts, table image upload/bind, and Flutter table repository endpoints.
 - Backend state branches checked: reservation pending/confirmed/paid/completed/cancelled/no-show, merchant-created reservations, table availability/occupied/disabled, `current_reservation_id`, dining sessions, table transfer logs, inventory reserve/release, payment/refund terminal states, no-show behavior decisions, tag associations, and table image media bindings.
 - Async branches checked: reservation payment timeout, no-show alert, food-safety reservation alert, payment fact application, reservation outbox, refund recovery scheduler, Baofu profit-sharing after completed reservation, websocket table-status updates, and Flutter in-memory patching.
-- Failure/retry branches checked: frontend local action guards, no request idempotency key, conflict checks with row locks, terminal action replay returning conflicts, partial table image binding after table creation, tag replacement partial writes, manual table release broad fallback, disabled/edit table with future reservations, and date+status total semantics.
+- Failure/retry branches checked: frontend local action guards, no request idempotency key, conflict checks with row locks, terminal action replay returning conflicts, partial table image binding after table creation, table tag validation and rollback, manual table release broad fallback, disabled/edit table with future reservations, and date+status total semantics.
 - Reader/consumer branches checked: reservation list/workbench/edit, table list/detail/QR, customer scan-table/menu/cart/order, dining-session billing, kitchen/order fulfillment, inventory, payment/refund recovery, Flutter table management, and public/table readers.
 - Authorization/tenant branches checked: reservation staff roles by action, owner/manager-only edit/no-show, generic detail/cancel/check-in owner-or-merchant checks, table owner/manager/cashier reads, owner/manager writes, table ownership checks, dining-session owner-or-staff access, role-agnostic pending-staff caveat, and payment/refund fact owner validation.
 - Zombie/unreachable branches checked: merchant-created reservation uses staff user as customer identity; table media categories differ between Mini Program and Flutter; table disable/update lacks delete-like future-reservation enforcement; manual release can complete reservation through status endpoint; Flutter table flows exist and are in scope.

@@ -5178,6 +5178,21 @@ func (mr *MockStoreMockRecorder) CreateTableReservationByMerchant(ctx, arg any) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTableReservationByMerchant", reflect.TypeOf((*MockStore)(nil).CreateTableReservationByMerchant), ctx, arg)
 }
 
+// CreateTableTx mocks base method.
+func (m *MockStore) CreateTableTx(ctx context.Context, arg db.CreateTableTxParams) (db.CreateTableTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateTableTx", ctx, arg)
+	ret0, _ := ret[0].(db.CreateTableTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateTableTx indicates an expected call of CreateTableTx.
+func (mr *MockStoreMockRecorder) CreateTableTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTableTx", reflect.TypeOf((*MockStore)(nil).CreateTableTx), ctx, arg)
+}
+
 // CreateTag mocks base method.
 func (m *MockStore) CreateTag(ctx context.Context, arg db.CreateTagParams) (db.Tag, error) {
 	m.ctrl.T.Helper()
@@ -22891,6 +22906,21 @@ func (m *MockStore) UpdateTableStatus(ctx context.Context, arg db.UpdateTableSta
 func (mr *MockStoreMockRecorder) UpdateTableStatus(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTableStatus", reflect.TypeOf((*MockStore)(nil).UpdateTableStatus), ctx, arg)
+}
+
+// UpdateTableTx mocks base method.
+func (m *MockStore) UpdateTableTx(ctx context.Context, arg db.UpdateTableTxParams) (db.UpdateTableTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateTableTx", ctx, arg)
+	ret0, _ := ret[0].(db.UpdateTableTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateTableTx indicates an expected call of UpdateTableTx.
+func (mr *MockStoreMockRecorder) UpdateTableTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTableTx", reflect.TypeOf((*MockStore)(nil).UpdateTableTx), ctx, arg)
 }
 
 // UpdateTag mocks base method.

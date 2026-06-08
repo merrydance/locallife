@@ -92,6 +92,8 @@ type Store interface {
 	CompleteOrderTx(ctx context.Context, arg CompleteOrderTxParams) (CompleteOrderTxResult, error)
 	CancelOrderTx(ctx context.Context, arg CancelOrderTxParams) (CancelOrderTxResult, error)
 	// M5: Table transactions
+	CreateTableTx(ctx context.Context, arg CreateTableTxParams) (CreateTableTxResult, error)
+	UpdateTableTx(ctx context.Context, arg UpdateTableTxParams) (UpdateTableTxResult, error)
 	DeleteTableTx(ctx context.Context, arg DeleteTableParams) (DeleteTableResult, error)
 	// Dining session transactions
 	OpenDiningSessionTx(ctx context.Context, arg OpenDiningSessionTxParams) (OpenDiningSessionTxResult, error)

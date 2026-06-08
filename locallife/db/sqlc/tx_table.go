@@ -3,7 +3,32 @@ package db
 import (
 	"context"
 	"errors"
+	"fmt"
 )
+
+// CreateTableTxParams creates a table and its tag associations atomically.
+type CreateTableTxParams struct {
+	Table  CreateTableParams
+	TagIDs []int64
+}
+
+// CreateTableTxResult contains the created table and tag associations.
+type CreateTableTxResult struct {
+	Table Table
+	Tags  []TableTag
+}
+
+// UpdateTableTxParams updates a table and optionally replaces its tag associations atomically.
+type UpdateTableTxParams struct {
+	Table  UpdateTableParams
+	TagIDs *[]int64
+}
+
+// UpdateTableTxResult contains the updated table and tag associations when tags were replaced.
+type UpdateTableTxResult struct {
+	Table Table
+	Tags  []TableTag
+}
 
 // DeleteTableResult 删除桌台的结果
 type DeleteTableResult struct {
@@ -13,6 +38,72 @@ type DeleteTableResult struct {
 // DeleteTableParams 删除桌台的参数
 type DeleteTableParams struct {
 	TableID int64
+}
+
+// CreateTableTx creates a table and tag associations in a single transaction.
+func (store *SQLStore) CreateTableTx(ctx context.Context, arg CreateTableTxParams) (CreateTableTxResult, error) {
+	var result CreateTableTxResult
+
+	err := store.execTx(ctx, func(q *Queries) error {
+		var err error
+
+		result.Table, err = q.CreateTable(ctx, arg.Table)
+		if err != nil {
+			return fmt.Errorf("create table: %w", err)
+		}
+
+		result.Tags = make([]TableTag, 0, len(arg.TagIDs))
+		for _, tagID := range arg.TagIDs {
+			tableTag, err := q.AddTableTag(ctx, AddTableTagParams{
+				TableID: result.Table.ID,
+				TagID:   tagID,
+			})
+			if err != nil {
+				return fmt.Errorf("add table tag %d: %w", tagID, err)
+			}
+			result.Tags = append(result.Tags, tableTag)
+		}
+
+		return nil
+	})
+
+	return result, err
+}
+
+// UpdateTableTx updates a table and replaces tag associations in a single transaction.
+func (store *SQLStore) UpdateTableTx(ctx context.Context, arg UpdateTableTxParams) (UpdateTableTxResult, error) {
+	var result UpdateTableTxResult
+
+	err := store.execTx(ctx, func(q *Queries) error {
+		var err error
+
+		result.Table, err = q.UpdateTable(ctx, arg.Table)
+		if err != nil {
+			return fmt.Errorf("update table: %w", err)
+		}
+
+		if arg.TagIDs != nil {
+			if err := q.RemoveAllTableTags(ctx, arg.Table.ID); err != nil {
+				return fmt.Errorf("remove table tags: %w", err)
+			}
+
+			result.Tags = make([]TableTag, 0, len(*arg.TagIDs))
+			for _, tagID := range *arg.TagIDs {
+				tableTag, err := q.AddTableTag(ctx, AddTableTagParams{
+					TableID: arg.Table.ID,
+					TagID:   tagID,
+				})
+				if err != nil {
+					return fmt.Errorf("add table tag %d: %w", tagID, err)
+				}
+				result.Tags = append(result.Tags, tableTag)
+			}
+		}
+
+		return nil
+	})
+
+	return result, err
 }
 
 // DeleteTableTx 事务删除桌台

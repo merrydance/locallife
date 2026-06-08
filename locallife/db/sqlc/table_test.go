@@ -446,6 +446,96 @@ func TestRemoveAllTableTags(t *testing.T) {
 	require.Empty(t, tags)
 }
 
+func TestCreateTableTxRollsBackWhenTagInsertFails(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	tableNo := "TX-" + util.RandomString(8)
+	missingTagID := util.RandomInt(1_000_000, 2_000_000)
+
+	_, err := testStore.CreateTableTx(context.Background(), CreateTableTxParams{
+		Table: CreateTableParams{
+			MerchantID:   merchant.ID,
+			TableNo:      tableNo,
+			TableType:    "table",
+			Capacity:     4,
+			Description:  pgtype.Text{String: "事务回滚测试", Valid: true},
+			MinimumSpend: pgtype.Int8{Int64: 0, Valid: false},
+			Status:       "available",
+		},
+		TagIDs: []int64{missingTagID},
+	})
+	require.Error(t, err)
+
+	_, err = testStore.GetTableByMerchantAndNo(context.Background(), GetTableByMerchantAndNoParams{
+		MerchantID: merchant.ID,
+		TableNo:    tableNo,
+	})
+	require.Error(t, err)
+}
+
+func TestUpdateTableTxRollsBackWhenTagInsertFails(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	table := createRandomRoom(t, merchant.ID)
+	originalTag := createRandomTag(t, "table")
+	validReplacementTag := createRandomTag(t, "table")
+	missingTagID := util.RandomInt(1_000_000, 2_000_000)
+
+	_, err := testStore.AddTableTag(context.Background(), AddTableTagParams{
+		TableID: table.ID,
+		TagID:   originalTag.ID,
+	})
+	require.NoError(t, err)
+
+	newCapacity := table.Capacity + 2
+	newTagIDs := []int64{validReplacementTag.ID, missingTagID}
+	_, err = testStore.UpdateTableTx(context.Background(), UpdateTableTxParams{
+		Table: UpdateTableParams{
+			ID:       table.ID,
+			Capacity: pgtype.Int2{Int16: newCapacity, Valid: true},
+		},
+		TagIDs: &newTagIDs,
+	})
+	require.Error(t, err)
+
+	after, err := testStore.GetTable(context.Background(), table.ID)
+	require.NoError(t, err)
+	require.Equal(t, table.Capacity, after.Capacity)
+
+	tags, err := testStore.ListTableTags(context.Background(), table.ID)
+	require.NoError(t, err)
+	require.Len(t, tags, 1)
+	require.Equal(t, originalTag.ID, tags[0].TagID)
+}
+
+func TestUpdateTableTxClearsTagsWithEmptySlice(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	table := createRandomRoom(t, merchant.ID)
+	tag := createRandomTag(t, "table")
+
+	_, err := testStore.AddTableTag(context.Background(), AddTableTagParams{
+		TableID: table.ID,
+		TagID:   tag.ID,
+	})
+	require.NoError(t, err)
+
+	emptyTagIDs := []int64{}
+	result, err := testStore.UpdateTableTx(context.Background(), UpdateTableTxParams{
+		Table: UpdateTableParams{
+			ID: table.ID,
+		},
+		TagIDs: &emptyTagIDs,
+	})
+	require.NoError(t, err)
+	require.Equal(t, table.ID, result.Table.ID)
+	require.Empty(t, result.Tags)
+
+	tags, err := testStore.ListTableTags(context.Background(), table.ID)
+	require.NoError(t, err)
+	require.Empty(t, tags)
+}
+
 func TestListTablesByTag(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)

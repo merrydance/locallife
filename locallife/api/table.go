@@ -180,6 +180,31 @@ func (server *Server) newTableResponseFromListTypeRow(t db.ListTablesByMerchantA
 	return resp
 }
 
+func (server *Server) validateTableTagIDs(ctx *gin.Context, tagIDs []int64) (int, error) {
+	seen := make(map[int64]struct{}, len(tagIDs))
+	for _, tagID := range tagIDs {
+		if tagID <= 0 {
+			return http.StatusBadRequest, errors.New("invalid tag id")
+		}
+		if _, ok := seen[tagID]; ok {
+			return http.StatusBadRequest, errors.New("duplicate tag id")
+		}
+		seen[tagID] = struct{}{}
+
+		tag, err := server.store.GetTag(ctx, tagID)
+		if err != nil {
+			if errors.Is(err, db.ErrRecordNotFound) {
+				return http.StatusBadRequest, errors.New("tag not found")
+			}
+			return http.StatusInternalServerError, err
+		}
+		if tag.Type != "table" {
+			return http.StatusBadRequest, errors.New("tag is not a table tag")
+		}
+	}
+	return 0, nil
+}
+
 // createTable godoc
 // @Summary 创建桌台/包间
 // @Description 商户创建新的桌台或包间
@@ -228,6 +253,18 @@ func (server *Server) createTable(ctx *gin.Context) {
 		return
 	}
 
+	if len(req.TagIds) > 0 {
+		status, err := server.validateTableTagIDs(ctx, req.TagIds)
+		if err != nil {
+			if status == http.StatusInternalServerError {
+				ctx.JSON(status, internalError(ctx, err))
+				return
+			}
+			ctx.JSON(status, errorResponse(err))
+			return
+		}
+	}
+
 	// 构建参数
 	arg := db.CreateTableParams{
 		MerchantID: merchant.ID,
@@ -252,23 +289,22 @@ func (server *Server) createTable(ctx *gin.Context) {
 		arg.AccessCodeHash = pgtype.Text{String: hashedCode, Valid: true}
 	}
 
-	table, err := server.store.CreateTable(ctx, arg)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 处理标签关联
+	var table db.Table
 	if len(req.TagIds) > 0 {
-		for _, tagID := range req.TagIds {
-			_, err = server.store.AddTableTag(ctx, db.AddTableTagParams{
-				TableID: table.ID,
-				TagID:   tagID,
-			})
-			if err != nil {
-				// 忽略重复或无效的标签ID，继续处理其他标签
-				continue
-			}
+		result, err := server.store.CreateTableTx(ctx, db.CreateTableTxParams{
+			Table:  arg,
+			TagIDs: req.TagIds,
+		})
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		table = result.Table
+	} else {
+		table, err = server.store.CreateTable(ctx, arg)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
 		}
 	}
 
@@ -675,6 +711,18 @@ func (server *Server) updateTable(ctx *gin.Context) {
 		return
 	}
 
+	if req.TagIds != nil {
+		status, err := server.validateTableTagIDs(ctx, req.TagIds)
+		if err != nil {
+			if status == http.StatusInternalServerError {
+				ctx.JSON(status, internalError(ctx, err))
+				return
+			}
+			ctx.JSON(status, errorResponse(err))
+			return
+		}
+	}
+
 	// 构建更新参数
 	arg := db.UpdateTableParams{
 		ID: uriReq.ID,
@@ -710,31 +758,22 @@ func (server *Server) updateTable(ctx *gin.Context) {
 		arg.Status = pgtype.Text{String: *req.Status, Valid: true}
 	}
 
-	updatedTable, err := server.store.UpdateTable(ctx, arg)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 处理标签关联
+	var updatedTable db.Table
 	if req.TagIds != nil {
-		// 删除现有标签关联
-		err = server.store.RemoveAllTableTags(ctx, uriReq.ID)
+		result, err := server.store.UpdateTableTx(ctx, db.UpdateTableTxParams{
+			Table:  arg,
+			TagIDs: &req.TagIds,
+		})
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
-
-		// 添加新的标签关联
-		for _, tagID := range req.TagIds {
-			_, err = server.store.AddTableTag(ctx, db.AddTableTagParams{
-				TableID: uriReq.ID,
-				TagID:   tagID,
-			})
-			if err != nil {
-				// 忽略重复或无效的标签ID
-				continue
-			}
+		updatedTable = result.Table
+	} else {
+		updatedTable, err = server.store.UpdateTable(ctx, arg)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
 		}
 	}
 
