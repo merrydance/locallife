@@ -597,6 +597,70 @@ func TestCancelOrderTx_PaidOrder(t *testing.T) {
 	require.Equal(t, "商户未接单，用户取消", result.Order.CancelReason.String)
 }
 
+func TestCancelOrderTx_RemovesDeliveryPoolEntry(t *testing.T) {
+	user := createRandomUser(t)
+	merchantOwner := createRandomUser(t)
+	merchant := createMerchantWithLocation(t, merchantOwner.ID)
+	address := createRandomUserAddress(t, user)
+
+	createResult, err := testStore.CreateOrderTx(context.Background(), CreateOrderTxParams{
+		CreateOrderParams: CreateOrderParams{
+			OrderNo:          util.RandomString(20),
+			UserID:           user.ID,
+			MerchantID:       merchant.ID,
+			OrderType:        OrderTypeTakeout,
+			AddressID:        pgtype.Int8{Int64: address.ID, Valid: true},
+			DeliveryFee:      1500,
+			DeliveryDistance: pgtype.Int4{Int32: 3600, Valid: true},
+			Subtotal:         5000,
+			TotalAmount:      6500,
+			Status:           OrderStatusPending,
+		},
+		Items: []CreateOrderItemParams{{
+			DishID:    pgtype.Int8{Int64: 1, Valid: true},
+			Name:      "外卖取消清池测试菜品",
+			UnitPrice: 5000,
+			Quantity:  1,
+			Subtotal:  5000,
+		}},
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.ProcessOrderPaymentTx(context.Background(), ProcessOrderPaymentTxParams{
+		OrderID: createResult.Order.ID,
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.AcceptTakeoutOrderTx(context.Background(), AcceptTakeoutOrderTxParams{
+		OrderID:      createResult.Order.ID,
+		OldStatus:    OrderStatusPaid,
+		OperatorID:   merchantOwner.ID,
+		OperatorType: "merchant",
+	})
+	require.NoError(t, err)
+
+	poolItem, err := testStore.GetDeliveryPoolByOrderID(context.Background(), createResult.Order.ID)
+	require.NoError(t, err)
+	require.Equal(t, createResult.Order.ID, poolItem.OrderID)
+
+	result, err := testStore.CancelOrderTx(context.Background(), CancelOrderTxParams{
+		OrderID:      createResult.Order.ID,
+		OldStatus:    OrderStatusPreparing,
+		CancelReason: "调度超时自动取消",
+		OperatorID:   createResult.Order.UserID,
+		OperatorType: "system",
+	})
+	require.NoError(t, err)
+	require.Equal(t, OrderStatusCancelled, result.Order.Status)
+
+	_, err = testStore.GetDeliveryPoolByOrderID(context.Background(), createResult.Order.ID)
+	require.ErrorIs(t, err, ErrRecordNotFound)
+
+	delivery, err := testStore.GetDeliveryByOrderID(context.Background(), createResult.Order.ID)
+	require.NoError(t, err)
+	require.Equal(t, DeliveryStatusCancelled, delivery.Status)
+}
+
 func TestCancelOrderTx_RollbackMembershipBalancePreservesSplit(t *testing.T) {
 	user := createRandomUser(t)
 	merchantOwner := createRandomUser(t)

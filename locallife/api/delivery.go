@@ -763,6 +763,10 @@ type getDeliveryRequest struct {
 	OrderID int64 `uri:"order_id" binding:"required,min=1"`
 }
 
+type getDeliveryByIDRequest struct {
+	DeliveryID int64 `uri:"delivery_id" binding:"required,min=1"`
+}
+
 // getDeliveryByOrder godoc
 // @Summary 根据订单查询代取信息
 // @Description 获取指定订单的代取信息，仅订单所有者可查看
@@ -801,6 +805,46 @@ func (server *Server) getDeliveryByOrder(ctx *gin.Context) {
 	}
 
 	server.writeDeliveryResponse(ctx, delivery)
+}
+
+// getDeliveryByID godoc
+// @Summary 根据代取单ID查询代取信息
+// @Description 获取指定代取单信息，仅订单所有者或分配骑手可查看
+// @Tags 代取管理-骑手
+// @Accept json
+// @Produce json
+// @Param delivery_id path int true "代取单ID" minimum(1)
+// @Success 200 {object} deliveryResponse "代取单详情"
+// @Failure 400 {object} ErrorResponse "参数校验失败"
+// @Failure 401 {object} ErrorResponse "未授权"
+// @Failure 403 {object} ErrorResponse "无权查看此代取单"
+// @Failure 404 {object} ErrorResponse "代取单不存在"
+// @Failure 500 {object} ErrorResponse "服务器内部错误"
+// @Router /v1/delivery/:delivery_id [get]
+// @Security BearerAuth
+func (server *Server) getDeliveryByID(ctx *gin.Context) {
+	var req getDeliveryByIDRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	result, err := logic.ValidateDeliveryViewer(ctx, server.store, logic.DeliveryViewerInput{
+		UserID:           authPayload.UserID,
+		DeliveryID:       req.DeliveryID,
+		ForbiddenMessage: "无权查看此代取单",
+	})
+	if err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	server.writeDeliveryResponse(ctx, result.Delivery)
 }
 
 // ==================== 骑手轨迹 ====================

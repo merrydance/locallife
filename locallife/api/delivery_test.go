@@ -1139,6 +1139,175 @@ func TestGetDeliveryByOrderAPI(t *testing.T) {
 	}
 }
 
+func TestGetDeliveryByIDAPI(t *testing.T) {
+	user, _ := randomUser(t)
+	riderUser, _ := randomUser(t)
+	rider := randomRider(riderUser.ID)
+	orderID := util.RandomInt(1, 1000)
+	deliveryID := util.RandomInt(1, 1000)
+
+	order := db.Order{
+		ID:         orderID,
+		UserID:     user.ID,
+		MerchantID: util.RandomInt(1, 1000),
+		OrderNo:    util.RandomString(10),
+	}
+
+	delivery := randomDelivery(orderID, rider.ID)
+	delivery.ID = deliveryID
+
+	testCases := []struct {
+		name          string
+		deliveryID    int64
+		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
+		buildStubs    func(store *mockdb.MockStore)
+		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+	}{
+		{
+			name:       "OK_OrderOwner",
+			deliveryID: deliveryID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetDelivery(gomock.Any(), gomock.Eq(deliveryID)).
+					Times(1).
+					Return(delivery, nil)
+
+				store.EXPECT().
+					GetOrder(gomock.Any(), gomock.Eq(orderID)).
+					Times(2).
+					Return(order, nil)
+
+				store.EXPECT().
+					GetMerchant(gomock.Any(), gomock.Eq(order.MerchantID)).
+					Times(1).
+					Return(db.Merchant{ID: order.MerchantID, Name: util.RandomString(10)}, nil)
+
+				store.EXPECT().
+					CountOrderItems(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return(int64(0), nil)
+
+				store.EXPECT().
+					ListOrderItemsByOrder(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return([]db.OrderItem{}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+			},
+		},
+		{
+			name:       "OK_AssignedRider",
+			deliveryID: deliveryID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, riderUser.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetDelivery(gomock.Any(), gomock.Eq(deliveryID)).
+					Times(1).
+					Return(delivery, nil)
+
+				store.EXPECT().
+					GetOrder(gomock.Any(), gomock.Eq(orderID)).
+					Times(2).
+					Return(order, nil)
+
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Eq(riderUser.ID)).
+					Times(1).
+					Return(rider, nil)
+
+				store.EXPECT().
+					GetMerchant(gomock.Any(), gomock.Eq(order.MerchantID)).
+					Times(1).
+					Return(db.Merchant{ID: order.MerchantID, Name: util.RandomString(10)}, nil)
+
+				store.EXPECT().
+					CountOrderItems(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return(int64(0), nil)
+
+				store.EXPECT().
+					ListOrderItemsByOrder(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return([]db.OrderItem{}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+			},
+		},
+		{
+			name:       "Forbidden",
+			deliveryID: deliveryID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				otherUserOrder := order
+				otherUserOrder.UserID = user.ID + 1
+				store.EXPECT().
+					GetDelivery(gomock.Any(), gomock.Eq(deliveryID)).
+					Times(1).
+					Return(delivery, nil)
+				store.EXPECT().
+					GetOrder(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return(otherUserOrder, nil)
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(db.Rider{}, db.ErrRecordNotFound)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusForbidden, recorder.Code)
+			},
+		},
+		{
+			name:       "DeliveryNotFound",
+			deliveryID: deliveryID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetDelivery(gomock.Any(), gomock.Eq(deliveryID)).
+					Times(1).
+					Return(db.Delivery{}, db.ErrRecordNotFound)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusNotFound, recorder.Code)
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			tc.buildStubs(store)
+
+			server := newTestServer(t, store)
+			recorder := httptest.NewRecorder()
+
+			url := fmt.Sprintf("/v1/delivery/%d", tc.deliveryID)
+			request, err := http.NewRequest(http.MethodGet, url, nil)
+			require.NoError(t, err)
+
+			tc.setupAuth(t, request, server.tokenMaker)
+			server.router.ServeHTTP(recorder, request)
+			tc.checkResponse(t, recorder)
+		})
+	}
+}
+
 func TestGetDeliveryTrackAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	orderID := util.RandomInt(1, 1000)

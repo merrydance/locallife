@@ -51,7 +51,7 @@ const (
 	profitSharingResultNotificationExpireWindow = 7 * 24 * time.Hour
 	riderNotificationEntityType                 = "rider"
 	riderNotificationChannelPrefix              = "notification:rider:"
-	riderDeliveryPoolUpdateMessageType          = "delivery_pool_update"
+	riderDeliveryPoolUpdateMessageType          = websocket.MessageTypeDeliveryPoolNew
 	riderNewDeliveryOrderPayloadType            = "new_delivery_order"
 	riderHighValueDeliveryFeeThreshold          = int64(1000)
 	riderDeliverySearchStartDistanceM           = 100.0

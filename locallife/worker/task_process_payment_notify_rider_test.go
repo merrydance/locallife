@@ -118,7 +118,7 @@ func TestNotifyRidersNewDelivery_PublishesStructuredPayload(t *testing.T) {
 		require.NoError(t, json.Unmarshal(publisher.records[index].payload, &pushMsg))
 		require.Equal(t, riderNotificationEntityType, pushMsg.EntityType)
 		require.Equal(t, riderID, pushMsg.EntityID)
-		require.Equal(t, riderDeliveryPoolUpdateMessageType, pushMsg.Message.Type)
+		require.Equal(t, websocket.MessageTypeDeliveryPoolNew, pushMsg.Message.Type)
 
 		var payload riderDeliveryOrderNotificationPayload
 		require.NoError(t, json.Unmarshal(pushMsg.Message.Data, &payload))

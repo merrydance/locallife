@@ -13043,6 +13043,50 @@ paths:
       summary: Create delivery fee config (Operator)
       tags:
       - delivery-fee
+  /v1/delivery/:delivery_id:
+    get:
+      consumes:
+      - application/json
+      description: 获取指定代取单信息，仅订单所有者或分配骑手可查看
+      parameters:
+      - description: 代取单ID
+        in: path
+        minimum: 1
+        name: delivery_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 代取单详情
+          schema:
+            $ref: '#/definitions/api.deliveryResponse'
+        "400":
+          description: 参数校验失败
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权查看此代取单
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 代取单不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 根据代取单ID查询代取信息
+      tags:
+      - 代取管理-骑手
   /v1/delivery/:delivery_id/confirm-delivery:
     post:
       consumes:

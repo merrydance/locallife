@@ -1195,6 +1195,7 @@ func (server *Server) setupRouter() {
 
 		// 代取详情
 		deliveryGroup.GET("/order/:order_id", server.getDeliveryByOrder)
+		deliveryGroup.GET("/:delivery_id", server.getDeliveryByID)
 		deliveryGroup.GET("/:delivery_id/track", server.getDeliveryTrack)
 		deliveryGroup.GET("/:delivery_id/rider-location", server.getRiderLatestLocation)
 	}

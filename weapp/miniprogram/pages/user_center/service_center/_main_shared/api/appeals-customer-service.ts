@@ -394,11 +394,30 @@ export class AppealManagementService {
         page_size: number
         has_more: boolean
     }> {
-        return request({
-            url: '/v1/rider/appeals',
+        const { page, limit, ...rest } = params
+        const query = {
+            ...rest,
+            page_id: params.page_id || page || 1,
+            page_size: params.page_size || limit || 20
+        }
+        const response = await request<{
+            disputes: AppealResponse[]
+            total: number
+            page_id: number
+            page_size: number
+            has_more: boolean
+        }>({
+            url: '/v1/rider/recovery-disputes',
             method: 'GET',
-            data: params
+            data: query
         })
+        return {
+            appeals: response.disputes || [],
+            total: response.total,
+            page_id: response.page_id,
+            page_size: response.page_size,
+            has_more: response.has_more
+        }
     }
 
     /**
@@ -407,7 +426,7 @@ export class AppealManagementService {
      */
     async getRiderAppealDetail(appealId: number): Promise<AppealResponse> {
         return request({
-            url: `/v1/rider/appeals/${appealId}`,
+            url: `/v1/rider/recovery-disputes/${appealId}`,
             method: 'GET'
         })
     }
@@ -418,7 +437,7 @@ export class AppealManagementService {
      */
     async createRiderAppeal(appealData: CreateAppealRequest): Promise<AppealResponse> {
         return request({
-            url: '/v1/rider/appeals',
+            url: '/v1/rider/recovery-disputes',
             method: 'POST',
             data: appealData
         })

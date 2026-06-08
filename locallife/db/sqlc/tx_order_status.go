@@ -197,6 +197,10 @@ func (store *SQLStore) CancelOrderTx(ctx context.Context, arg CancelOrderTxParam
 			return fmt.Errorf("create order status log: %w", err)
 		}
 
+		if err = q.RemoveFromDeliveryPool(ctx, arg.OrderID); err != nil {
+			return fmt.Errorf("remove from delivery pool on order cancel: %w", err)
+		}
+
 		if hasDelivery && delivery.Status != "cancelled" && delivery.Status != "completed" {
 			lockedDelivery, lockErr := q.GetDeliveryForUpdate(ctx, delivery.ID)
 			if lockErr != nil {
