@@ -36,6 +36,25 @@ void main() {
   });
 
   group('WsClient message delivery', () {
+    test('routes backend table status changes to the table callback', () async {
+      final channel = _FakeWebSocketChannel();
+      final delivered = <Map<String, dynamic>>[];
+      final client = WsClient(connector: (_) async => channel)
+        ..onTableStatusChange = delivered.add;
+
+      await client.connect('access-token');
+      channel.addMessage(
+        '{"type":"table_status_change","data":{"id":11,"table_no":"A01","status":"occupied"}}',
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(delivered, [
+        {'id': 11, 'table_no': 'A01', 'status': 'occupied'},
+      ]);
+
+      client.dispose();
+    });
+
     test(
       'does not permanently deduplicate before alert owner succeeds',
       () async {
