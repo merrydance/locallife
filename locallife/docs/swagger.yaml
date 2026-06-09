@@ -1991,7 +1991,7 @@ definitions:
         type: integer
       min_order_amount:
         maximum: 100000000
-        minimum: 0
+        minimum: 1
         type: integer
       name:
         maxLength: 50
@@ -9485,7 +9485,7 @@ definitions:
         type: boolean
       min_order_amount:
         maximum: 100000000
-        minimum: 0
+        minimum: 1
         type: integer
       name:
         maxLength: 50

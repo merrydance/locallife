@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/util"
 	"github.com/stretchr/testify/require"
@@ -256,6 +257,102 @@ func createRandomDeliveryPromotion(t *testing.T) MerchantDeliveryPromotion {
 
 func TestCreateDeliveryPromotion(t *testing.T) {
 	createRandomDeliveryPromotion(t)
+}
+
+func TestDeliveryPromotionRejectsInvalidDirectWrites(t *testing.T) {
+	merchant := getTestMerchant(t)
+	now := time.Now()
+	validArg := CreateDeliveryPromotionParams{
+		MerchantID:     merchant.ID,
+		Name:           "valid-" + util.RandomString(6),
+		MinOrderAmount: 1000,
+		DiscountAmount: 1000,
+		ValidFrom:      now,
+		ValidUntil:     now.Add(time.Hour),
+		IsActive:       true,
+	}
+
+	validPromo, err := testStore.CreateDeliveryPromotion(context.Background(), validArg)
+	require.NoError(t, err)
+
+	testCases := []struct {
+		name            string
+		mutate          func(*CreateDeliveryPromotionParams)
+		mutateUpdate    func(*UpdateDeliveryPromotionParams)
+		wantConstraints []string
+	}{
+		{
+			name: "NonPositiveMinOrderAmount",
+			mutate: func(arg *CreateDeliveryPromotionParams) {
+				arg.MinOrderAmount = 0
+			},
+			mutateUpdate: func(arg *UpdateDeliveryPromotionParams) {
+				arg.MinOrderAmount = pgtype.Int8{Int64: 0, Valid: true}
+			},
+			wantConstraints: []string{
+				"merchant_delivery_promotions_positive_amounts_check",
+				"merchant_delivery_promotions_discount_threshold_check",
+			},
+		},
+		{
+			name: "NonPositiveDiscountAmount",
+			mutate: func(arg *CreateDeliveryPromotionParams) {
+				arg.DiscountAmount = 0
+			},
+			mutateUpdate: func(arg *UpdateDeliveryPromotionParams) {
+				arg.DiscountAmount = pgtype.Int8{Int64: 0, Valid: true}
+			},
+			wantConstraints: []string{"merchant_delivery_promotions_positive_amounts_check"},
+		},
+		{
+			name: "DiscountExceedsMinOrder",
+			mutate: func(arg *CreateDeliveryPromotionParams) {
+				arg.MinOrderAmount = 1000
+				arg.DiscountAmount = 1001
+			},
+			mutateUpdate: func(arg *UpdateDeliveryPromotionParams) {
+				arg.DiscountAmount = pgtype.Int8{Int64: 1001, Valid: true}
+			},
+			wantConstraints: []string{"merchant_delivery_promotions_discount_threshold_check"},
+		},
+		{
+			name: "InvalidDateRange",
+			mutate: func(arg *CreateDeliveryPromotionParams) {
+				arg.ValidUntil = arg.ValidFrom
+			},
+			mutateUpdate: func(arg *UpdateDeliveryPromotionParams) {
+				arg.ValidUntil = pgtype.Timestamptz{Time: validPromo.ValidFrom, Valid: true}
+			},
+			wantConstraints: []string{"merchant_delivery_promotions_valid_period_check"},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+		t.Run(tc.name, func(t *testing.T) {
+			arg := validArg
+			arg.Name = tc.name + "-" + util.RandomString(6)
+			tc.mutate(&arg)
+
+			_, err := testStore.CreateDeliveryPromotion(context.Background(), arg)
+			requireDeliveryPromotionConstraintError(t, err, tc.wantConstraints...)
+
+			updateArg := UpdateDeliveryPromotionParams{ID: validPromo.ID}
+			tc.mutateUpdate(&updateArg)
+			_, err = testStore.UpdateDeliveryPromotion(context.Background(), updateArg)
+			requireDeliveryPromotionConstraintError(t, err, tc.wantConstraints...)
+		})
+	}
+}
+
+func requireDeliveryPromotionConstraintError(t *testing.T, err error, constraints ...string) {
+	t.Helper()
+	require.Error(t, err)
+
+	var pgErr *pgconn.PgError
+	require.ErrorAs(t, err, &pgErr)
+	require.Equal(t, "23514", pgErr.Code)
+	require.Contains(t, constraints, pgErr.ConstraintName)
 }
 
 func TestGetDeliveryPromotion(t *testing.T) {

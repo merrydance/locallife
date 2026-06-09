@@ -810,7 +810,7 @@ func (server *Server) deletePeakHourConfig(ctx *gin.Context) {
 
 type createDeliveryPromotionRequest struct {
 	Name           string `json:"name" binding:"required,min=1,max=50"`
-	MinOrderAmount int64  `json:"min_order_amount" binding:"required,gte=0,lte=100000000"`
+	MinOrderAmount int64  `json:"min_order_amount" binding:"required,min=1,lte=100000000"`
 	DiscountAmount int64  `json:"discount_amount" binding:"required,gt=0,lte=10000000"`
 	ValidFrom      string `json:"valid_from" binding:"required"`
 	ValidUntil     string `json:"valid_until" binding:"required"`
@@ -818,7 +818,7 @@ type createDeliveryPromotionRequest struct {
 
 type updateDeliveryPromotionRequest struct {
 	Name           *string `json:"name" binding:"omitempty,min=1,max=50"`
-	MinOrderAmount *int64  `json:"min_order_amount" binding:"omitempty,gte=0,lte=100000000"`
+	MinOrderAmount *int64  `json:"min_order_amount" binding:"omitempty,min=1,lte=100000000"`
 	DiscountAmount *int64  `json:"discount_amount" binding:"omitempty,gt=0,lte=10000000"`
 	ValidFrom      *string `json:"valid_from"`
 	ValidUntil     *string `json:"valid_until"`
@@ -1257,10 +1257,13 @@ func (server *Server) updateDeliveryPromotion(ctx *gin.Context) {
 }
 
 func validateDeliveryPromotionValues(validFrom, validUntil time.Time, minOrderAmount, discountAmount int64) error {
-	if validUntil.Before(validFrom) {
+	if !validUntil.After(validFrom) {
 		return ErrValidUntilBeforeValidFrom
 	}
-	if discountAmount > minOrderAmount && minOrderAmount > 0 {
+	if minOrderAmount <= 0 || discountAmount <= 0 {
+		return ErrDiscountExceedsMinOrder
+	}
+	if discountAmount > minOrderAmount {
 		return ErrDiscountExceedsMinOrder
 	}
 	return nil

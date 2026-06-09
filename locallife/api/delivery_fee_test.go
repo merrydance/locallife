@@ -1212,6 +1212,46 @@ func TestCreateDeliveryPromotionAPI(t *testing.T) {
 			},
 		},
 		{
+			name:       "InvalidEqualDates",
+			merchantID: merchant.ID,
+			body: gin.H{
+				"name":             "满20减2",
+				"min_order_amount": promo.MinOrderAmount,
+				"discount_amount":  promo.DiscountAmount,
+				"valid_from":       promo.ValidFrom.Format(time.RFC3339),
+				"valid_until":      promo.ValidFrom.Format(time.RFC3339),
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name:       "InvalidMinOrderAmount",
+			merchantID: merchant.ID,
+			body: gin.H{
+				"name":             "满20减2",
+				"min_order_amount": 0,
+				"discount_amount":  promo.DiscountAmount,
+				"valid_from":       promo.ValidFrom.Format(time.RFC3339),
+				"valid_until":      promo.ValidUntil.Format(time.RFC3339),
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
 			name:       "MissingName",
 			merchantID: merchant.ID,
 			body: gin.H{
@@ -1495,6 +1535,12 @@ func TestUpdateDeliveryPromotionAPIRejectsInvalidEffectiveValues(t *testing.T) {
 			},
 		},
 		{
+			name: "InvalidMergedEqualDateRange",
+			body: gin.H{
+				"valid_until": promo.ValidFrom.Format(time.RFC3339),
+			},
+		},
+		{
 			name: "InvalidMergedDiscountAmount",
 			body: gin.H{
 				"discount_amount": promo.MinOrderAmount + 1,
@@ -1541,6 +1587,39 @@ func TestUpdateDeliveryPromotionAPIRejectsInvalidEffectiveValues(t *testing.T) {
 			require.Equal(t, http.StatusBadRequest, recorder.Code)
 		})
 	}
+}
+
+func TestUpdateDeliveryPromotionAPIRejectsNonPositiveMinOrderAmountBeforeStoreUpdate(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchantForPromo(user.ID)
+	promo := randomDeliveryPromotion(merchant.ID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetDeliveryPromotion(gomock.Any(), gomock.Any()).
+		Times(0)
+	store.EXPECT().
+		UpdateDeliveryPromotion(gomock.Any(), gomock.Any()).
+		Times(0)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	data, err := json.Marshal(gin.H{"min_order_amount": 0})
+	require.NoError(t, err)
+
+	url := fmt.Sprintf("/v1/delivery-fee/merchants/%d/promotions/%d", merchant.ID, promo.ID)
+	request, err := http.NewRequest(http.MethodPatch, url, bytes.NewReader(data))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
 }
 
 func TestUpdateDeliveryPromotionAPIAcceptsValidEffectiveValues(t *testing.T) {

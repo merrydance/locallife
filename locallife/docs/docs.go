@@ -34788,7 +34788,7 @@ const docTemplate = `{
                 "min_order_amount": {
                     "type": "integer",
                     "maximum": 100000000,
-                    "minimum": 0
+                    "minimum": 1
                 },
                 "name": {
                     "type": "string",
@@ -45832,7 +45832,7 @@ const docTemplate = `{
                 "min_order_amount": {
                     "type": "integer",
                     "maximum": 100000000,
-                    "minimum": 0
+                    "minimum": 1
                 },
                 "name": {
                     "type": "string",
