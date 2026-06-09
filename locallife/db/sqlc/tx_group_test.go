@@ -208,6 +208,40 @@ func TestCreateGroupJoinRequestTxRejectsDuplicatePendingRequest(t *testing.T) {
 	require.Equal(t, int64(1), pendingCount)
 }
 
+func TestListGroupJoinRequestsByMerchantReturnsApplicantHistory(t *testing.T) {
+	owner := createRandomUser(t)
+	otherOwner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	otherMerchant := createRandomMerchantWithOwner(t, otherOwner.ID)
+	group := createGroupForJoinTxTest(t, owner.ID)
+	otherGroup := createGroupForJoinTxTest(t, otherOwner.ID)
+
+	firstReq := createGroupJoinRequestForTxTest(t, group.ID, merchant.ID, owner.ID)
+	firstRejected, err := testStore.RejectGroupJoinRequestTx(context.Background(), RejectGroupJoinRequestTxParams{
+		RequestID:      firstReq.ID,
+		GroupID:        group.ID,
+		ReviewerUserID: otherOwner.ID,
+		Reason:         pgtype.Text{String: "资料不完整", Valid: true},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "rejected", firstRejected.Request.Status)
+
+	secondReq := createGroupJoinRequestForTxTest(t, group.ID, merchant.ID, owner.ID)
+	otherReq := createGroupJoinRequestForTxTest(t, otherGroup.ID, otherMerchant.ID, otherOwner.ID)
+
+	rows, err := testStore.ListGroupJoinRequestsByMerchant(context.Background(), merchant.ID)
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	require.Equal(t, secondReq.ID, rows[0].ID)
+	require.Equal(t, firstReq.ID, rows[1].ID)
+	require.Equal(t, group.Name, rows[0].GroupName)
+
+	for _, row := range rows {
+		require.Equal(t, merchant.ID, row.MerchantID)
+		require.NotEqual(t, otherReq.ID, row.ID)
+	}
+}
+
 func TestRejectGroupJoinRequestTxWritesAuditAndRejectsOnlyPending(t *testing.T) {
 	reviewer := createRandomUser(t)
 	owner := createRandomUser(t)

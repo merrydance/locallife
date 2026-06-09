@@ -99,6 +99,7 @@ type brandResponse struct {
 type groupJoinRequestResponse struct {
 	ID              int64      `json:"id"`
 	GroupID         int64      `json:"group_id"`
+	GroupName       *string    `json:"group_name,omitempty"`
 	MerchantID      int64      `json:"merchant_id"`
 	ApplicantUserID int64      `json:"applicant_user_id"`
 	Status          string     `json:"status"`
@@ -235,6 +236,22 @@ func newGroupJoinRequestResponse(req db.MerchantGroupJoinRequest) groupJoinReque
 	resp.Reason = pgTextToPtr(req.Reason)
 	resp.ReviewedBy = pgInt8ToPtr(req.ReviewedBy)
 	resp.ReviewedAt = pgTimeToPtr(req.ReviewedAt)
+	return resp
+}
+
+func newGroupJoinRequestWithGroupResponse(row db.ListGroupJoinRequestsByMerchantRow) groupJoinRequestResponse {
+	resp := groupJoinRequestResponse{
+		ID:              row.ID,
+		GroupID:         row.GroupID,
+		GroupName:       &row.GroupName,
+		MerchantID:      row.MerchantID,
+		ApplicantUserID: row.ApplicantUserID,
+		Status:          row.Status,
+		CreatedAt:       row.CreatedAt,
+	}
+	resp.Reason = pgTextToPtr(row.Reason)
+	resp.ReviewedBy = pgInt8ToPtr(row.ReviewedBy)
+	resp.ReviewedAt = pgTimeToPtr(row.ReviewedAt)
 	return resp
 }
 
@@ -1261,7 +1278,7 @@ func (server *Server) createGroupJoinRequest(ctx *gin.Context) {
 	})
 	if err != nil {
 		if isDuplicateKeyError(err) {
-			ctx.JSON(http.StatusConflict, errorResponse(errors.New("join request already exists")))
+			ctx.JSON(http.StatusConflict, errorResponse(ErrGroupJoinRequestAlreadyPending))
 			return
 		}
 		if errors.Is(err, db.ErrMerchantAlreadyJoinedGroup) {
@@ -1273,6 +1290,37 @@ func (server *Server) createGroupJoinRequest(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusCreated, newGroupJoinRequestResponse(result.Request))
+}
+
+// listMyGroupJoinRequests godoc
+// @Summary 获取当前商户加入集团申请
+// @Description 获取当前商户发起过的集团加入申请列表（需店主）
+// @Tags 集团管理
+// @Produce json
+// @Success 200 {array} groupJoinRequestResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /v1/merchants/me/group-join-requests [get]
+// @Security BearerAuth
+func (server *Server) listMyGroupJoinRequests(ctx *gin.Context) {
+	merchant, ok := GetMerchantFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant not found")))
+		return
+	}
+
+	requests, err := server.store.ListGroupJoinRequestsByMerchant(ctx, merchant.ID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	resp := make([]groupJoinRequestResponse, 0, len(requests))
+	for _, r := range requests {
+		resp = append(resp, newGroupJoinRequestWithGroupResponse(r))
+	}
+	ctx.JSON(http.StatusOK, resp)
 }
 
 // listGroupJoinRequests godoc

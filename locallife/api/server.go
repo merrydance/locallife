@@ -700,6 +700,12 @@ func (server *Server) setupRouter() {
 	authGroup.GET("/merchants/me/tags", server.getMerchantTags) // 获取商户经营类目
 	authGroup.GET("/merchants/me/membership-settings", server.getMerchantMembershipSettings)
 
+	merchantGroupJoinReadGroup := authGroup.Group("/merchants/me")
+	merchantGroupJoinReadGroup.Use(server.MerchantStaffMiddleware("owner"))
+	{
+		merchantGroupJoinReadGroup.GET("/group-join-requests", server.listMyGroupJoinRequests)
+	}
+
 	merchantProfileWriteGroup := authGroup.Group("/merchants/me")
 	merchantProfileWriteGroup.Use(server.MerchantStaffMiddlewareWithError(
 		ErrMerchantStaffPermissionDenied,

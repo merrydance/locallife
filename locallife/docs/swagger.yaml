@@ -3622,6 +3622,8 @@ definitions:
         type: string
       group_id:
         type: integer
+      group_name:
+        type: string
       id:
         type: integer
       merchant_id:
@@ -21278,6 +21280,35 @@ paths:
       summary: 设置商户营业时间
       tags:
       - 商户
+  /v1/merchants/me/group-join-requests:
+    get:
+      description: 获取当前商户发起过的集团加入申请列表（需店主）
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.groupJoinRequestResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取当前商户加入集团申请
+      tags:
+      - 集团管理
   /v1/merchants/me/membership-settings:
     get:
       description: 获取当前商户的会员使用设置（余额使用场景、赠送金使用场景、叠加优惠等）

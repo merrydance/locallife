@@ -258,6 +258,7 @@ var (
 	ErrGroupApplicationReviewConflict     = apierr(40975, "该集团申请状态已变化，请刷新后查看最新审核结果")
 	ErrGroupJoinRequestReviewConflict     = apierr(40976, "该加入申请状态已变化，请刷新后查看最新审核结果")
 	ErrMerchantAlreadyJoinedGroup         = apierr(40977, "该门店已加入其他集团，请刷新后查看最新归属")
+	ErrGroupJoinRequestAlreadyPending     = apierr(40980, "已提交该集团申请，请等待审核")
 )
 
 // ==================== 区域/运营商扩张 (Region / Operator Expansion) ====================

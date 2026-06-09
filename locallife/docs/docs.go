@@ -14321,6 +14321,52 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/merchants/me/group-join-requests": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取当前商户发起过的集团加入申请列表（需店主）",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "集团管理"
+                ],
+                "summary": "获取当前商户加入集团申请",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.groupJoinRequestResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/merchants/me/membership-settings": {
             "get": {
                 "security": [
@@ -37144,6 +37190,9 @@ const docTemplate = `{
                 },
                 "group_id": {
                     "type": "integer"
+                },
+                "group_name": {
+                    "type": "string"
                 },
                 "id": {
                     "type": "integer"

@@ -220,6 +220,23 @@ SELECT id, group_id, merchant_id, applicant_user_id, status, reason, reviewed_by
 WHERE group_id = $1
 ORDER BY created_at DESC;
 
+-- name: ListGroupJoinRequestsByMerchant :many
+SELECT
+  r.id,
+  r.group_id,
+  g.name AS group_name,
+  r.merchant_id,
+  r.applicant_user_id,
+  r.status,
+  r.reason,
+  r.reviewed_by,
+  r.reviewed_at,
+  r.created_at
+FROM merchant_group_join_requests r
+JOIN merchant_groups g ON g.id = r.group_id
+WHERE r.merchant_id = $1
+ORDER BY r.created_at DESC, r.id DESC;
+
 -- name: ApprovePendingGroupJoinRequest :one
 UPDATE merchant_group_join_requests
 SET status = 'approved',

@@ -901,6 +901,44 @@ func TestCreateGroupJoinRequestAPI(t *testing.T) {
 	require.Equal(t, http.StatusCreated, recorder.Code)
 }
 
+func TestCreateGroupJoinRequestAPIConflictWhenDuplicatePendingRequest(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	merchant.Status = "approved"
+	groupID := util.RandomInt(1, 1000)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetMerchantGroupAffiliation(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(db.GetMerchantGroupAffiliationRow{GroupID: pgtype.Int8{Valid: false}, BrandID: pgtype.Int8{Valid: false}}, nil)
+	store.EXPECT().
+		GetMerchantGroup(gomock.Any(), groupID).
+		Times(1).
+		Return(db.MerchantGroup{ID: groupID, Name: "测试集团", Status: "active", OwnerUserID: user.ID}, nil)
+	store.EXPECT().
+		CreateGroupJoinRequestTx(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.CreateGroupJoinRequestTxResult{}, db.ErrUniqueViolation)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	url := "/v1/groups/" + strconv.FormatInt(groupID, 10) + "/join-requests"
+	request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader([]byte(`{}`)))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusConflict, recorder.Code)
+	requireAPIErrorCode(t, recorder, ErrGroupJoinRequestAlreadyPending)
+}
+
 func TestCreateGroupJoinRequestAPIConflictWhenTxFindsJoinedMerchant(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
@@ -967,6 +1005,50 @@ func TestCreateGroupJoinRequestAPIConflictWhenPrecheckFindsJoinedMerchant(t *tes
 
 	require.Equal(t, http.StatusConflict, recorder.Code)
 	requireAPIErrorCode(t, recorder, ErrMerchantAlreadyJoinedGroup)
+}
+
+func TestListMyGroupJoinRequestsAPI(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	merchant.Status = "approved"
+	groupID := util.RandomInt(1, 1000)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+	joinReq := randomGroupJoinRequest(groupID, merchant.ID, user.ID)
+	store.EXPECT().
+		ListGroupJoinRequestsByMerchant(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.ListGroupJoinRequestsByMerchantRow{
+			{
+				ID:              joinReq.ID,
+				GroupID:         joinReq.GroupID,
+				GroupName:       "测试集团",
+				MerchantID:      joinReq.MerchantID,
+				ApplicantUserID: joinReq.ApplicantUserID,
+				Status:          joinReq.Status,
+				Reason:          joinReq.Reason,
+				ReviewedBy:      joinReq.ReviewedBy,
+				ReviewedAt:      joinReq.ReviewedAt,
+				CreatedAt:       joinReq.CreatedAt,
+			},
+		}, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodGet, "/v1/merchants/me/group-join-requests", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Contains(t, recorder.Body.String(), `"group_name":"测试集团"`)
+	require.NotContains(t, recorder.Body.String(), "group_join_request_review_conflict")
 }
 
 func TestApproveGroupJoinRequestAPI(t *testing.T) {

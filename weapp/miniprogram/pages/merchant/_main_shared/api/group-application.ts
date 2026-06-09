@@ -71,6 +71,7 @@ export interface GroupJoinRequestRequest {
 export interface GroupJoinRequestResponse {
   id: number
   group_id: number
+  group_name?: string
   merchant_id: number
   applicant_user_id: number
   status: 'pending' | 'approved' | 'rejected' | 'cancelled'
@@ -79,6 +80,8 @@ export interface GroupJoinRequestResponse {
   reviewed_at?: string
   created_at: string
 }
+
+export const GROUP_JOIN_REQUEST_ALREADY_PENDING_CODE = 40980
 
 function hasGroupText(value?: string) {
   return typeof value === 'string' && value.trim().length > 0
@@ -234,5 +237,12 @@ export function applyToJoinGroup(groupID: number, data: GroupJoinRequestRequest)
     url: `/v1/groups/${groupID}/join-requests`,
     method: 'POST',
     data
+  })
+}
+
+export function listMyGroupJoinRequests() {
+  return request<GroupJoinRequestResponse[]>({
+    url: '/v1/merchants/me/group-join-requests',
+    method: 'GET'
   })
 }

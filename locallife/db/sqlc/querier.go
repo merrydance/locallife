@@ -1338,6 +1338,7 @@ type Querier interface {
 	ListGlobalDishCategories(ctx context.Context) ([]ListGlobalDishCategoriesRow, error)
 	ListGroupAuditLogsByGroup(ctx context.Context, groupID pgtype.Int8) ([]MerchantGroupAuditLog, error)
 	ListGroupJoinRequestsByGroup(ctx context.Context, groupID int64) ([]MerchantGroupJoinRequest, error)
+	ListGroupJoinRequestsByMerchant(ctx context.Context, merchantID int64) ([]ListGroupJoinRequestsByMerchantRow, error)
 	// Group merchants
 	ListGroupMerchants(ctx context.Context, groupID pgtype.Int8) ([]ListGroupMerchantsRow, error)
 	ListIngredients(ctx context.Context, arg ListIngredientsParams) ([]Ingredient, error)

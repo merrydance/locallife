@@ -21,6 +21,23 @@
     </view>
 
     <view class="content">
+      <view wx:if="{{pendingJoinRequest}}" class="request-status-panel">
+        <view class="request-status-panel__main">
+          <view class="request-status-panel__title">{{pendingJoinRequest.groupName}}</view>
+          <view class="request-status-panel__meta">提交时间 {{pendingJoinRequest.createdAtText}}</view>
+        </view>
+        <t-tag size="small" theme="{{pendingJoinRequest.statusTheme}}" variant="light">{{pendingJoinRequest.statusLabel}}</t-tag>
+      </view>
+
+      <view wx:if="{{joinRequestsErrorMessage}}" class="inline-warning">
+        <view class="inline-warning__text">{{joinRequestsErrorMessage}}</view>
+        <t-button theme="primary" variant="text" size="small" bind:tap="onRetryJoinRequests">重新同步</t-button>
+      </view>
+
+      <view wx:if="{{joinRequestsLoading}}" class="status-loading">
+        <t-loading theme="circular" size="32rpx" text="同步申请状态..." />
+      </view>
+
       <block wx:if="{{loading}}">
         <view class="skeleton-container animate-fade-in">
           <list-skeleton row="3" />
@@ -32,7 +49,8 @@
           <view class="group-card" wx:for="{{groups}}" wx:key="id">
             <view class="group-info">
               <view class="group-name">{{item.name}}</view>
-              <view class="group-addr">地址: {{item.address || '暂无地址'}}</view>
+              <view class="group-addr">地址: {{item.address}}</view>
+              <t-tag wx:if="{{item.pending}}" size="small" theme="{{item.statusTheme}}" variant="light">{{item.statusLabel}}</t-tag>
             </view>
             <t-button
               theme="primary"
@@ -41,7 +59,9 @@
               data-id="{{item.id}}"
               data-name="{{item.name}}"
               shape="round"
-            >申请加入</t-button>
+              loading="{{item.applying}}"
+              disabled="{{item.actionDisabled || applying}}"
+            >{{item.actionText}}</t-button>
           </view>
         </view>
         <view class="empty-state" wx:elif="{{searchErrorMessage}}">

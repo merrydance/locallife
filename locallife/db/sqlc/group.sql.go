@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -798,6 +799,68 @@ func (q *Queries) ListGroupJoinRequestsByGroup(ctx context.Context, groupID int6
 		if err := rows.Scan(
 			&i.ID,
 			&i.GroupID,
+			&i.MerchantID,
+			&i.ApplicantUserID,
+			&i.Status,
+			&i.Reason,
+			&i.ReviewedBy,
+			&i.ReviewedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGroupJoinRequestsByMerchant = `-- name: ListGroupJoinRequestsByMerchant :many
+SELECT
+  r.id,
+  r.group_id,
+  g.name AS group_name,
+  r.merchant_id,
+  r.applicant_user_id,
+  r.status,
+  r.reason,
+  r.reviewed_by,
+  r.reviewed_at,
+  r.created_at
+FROM merchant_group_join_requests r
+JOIN merchant_groups g ON g.id = r.group_id
+WHERE r.merchant_id = $1
+ORDER BY r.created_at DESC, r.id DESC
+`
+
+type ListGroupJoinRequestsByMerchantRow struct {
+	ID              int64              `json:"id"`
+	GroupID         int64              `json:"group_id"`
+	GroupName       string             `json:"group_name"`
+	MerchantID      int64              `json:"merchant_id"`
+	ApplicantUserID int64              `json:"applicant_user_id"`
+	Status          string             `json:"status"`
+	Reason          pgtype.Text        `json:"reason"`
+	ReviewedBy      pgtype.Int8        `json:"reviewed_by"`
+	ReviewedAt      pgtype.Timestamptz `json:"reviewed_at"`
+	CreatedAt       time.Time          `json:"created_at"`
+}
+
+func (q *Queries) ListGroupJoinRequestsByMerchant(ctx context.Context, merchantID int64) ([]ListGroupJoinRequestsByMerchantRow, error) {
+	rows, err := q.db.Query(ctx, listGroupJoinRequestsByMerchant, merchantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListGroupJoinRequestsByMerchantRow{}
+	for rows.Next() {
+		var i ListGroupJoinRequestsByMerchantRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.GroupID,
+			&i.GroupName,
 			&i.MerchantID,
 			&i.ApplicantUserID,
 			&i.Status,

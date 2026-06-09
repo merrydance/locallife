@@ -48,7 +48,7 @@ Page({
   },
 
   onJoinGroup() {
-    wx.navigateTo({ url: './join-group/index' })
+    wx.navigateTo({ url: '/pages/merchant/group/join/index' })
   },
 
   async loadLocalOperatorContact(regionIdParam?: number) {

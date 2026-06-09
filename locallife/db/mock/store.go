@@ -14661,6 +14661,21 @@ func (mr *MockStoreMockRecorder) ListGroupJoinRequestsByGroup(ctx, groupID any) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListGroupJoinRequestsByGroup", reflect.TypeOf((*MockStore)(nil).ListGroupJoinRequestsByGroup), ctx, groupID)
 }
 
+// ListGroupJoinRequestsByMerchant mocks base method.
+func (m *MockStore) ListGroupJoinRequestsByMerchant(ctx context.Context, merchantID int64) ([]db.ListGroupJoinRequestsByMerchantRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListGroupJoinRequestsByMerchant", ctx, merchantID)
+	ret0, _ := ret[0].([]db.ListGroupJoinRequestsByMerchantRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListGroupJoinRequestsByMerchant indicates an expected call of ListGroupJoinRequestsByMerchant.
+func (mr *MockStoreMockRecorder) ListGroupJoinRequestsByMerchant(ctx, merchantID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListGroupJoinRequestsByMerchant", reflect.TypeOf((*MockStore)(nil).ListGroupJoinRequestsByMerchant), ctx, merchantID)
+}
+
 // ListGroupMerchants mocks base method.
 func (m *MockStore) ListGroupMerchants(ctx context.Context, groupID pgtype.Int8) ([]db.ListGroupMerchantsRow, error) {
 	m.ctrl.T.Helper()
