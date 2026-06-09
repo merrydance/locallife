@@ -94,7 +94,7 @@ This slice does not fully cover:
 - Invite codes are reusable for up to 24 hours and there is no revoke/rotate action in the traced Mini Program page. This may be intentional for team onboarding, but it is a bearer credential with a wider blast radius than a one-person invite.
 - Bind creates `role='pending', status='active'`. `MerchantStaffMiddleware` later blocks roles not explicitly allowed, but `CheckUserHasMerchantAccess` checks only active status. Pending staff can therefore be treated as authorized by role-agnostic downstream checks such as dining-session access.
 - Migration `000070_add_staff_pending_status` introduced a `pending` status, but runtime bind uses a pending role plus active status. `UpdateMerchantStaffStatus`, hard delete queries, and count helpers are reverse-reference drift candidates.
-- Group OCR is protected by stale asset/job guards before and after provider execution. However, group documents share one `application_data` JSON blob, and writebacks replace that blob after a read/merge cycle. Parallel document OCR completion can lose a sibling write without a JSON merge SQL update, version check, or row lock.
+- Fixed 2026-06-09: group OCR writeback is concurrency-safe at the shared `application_data` JSON boundary. `UpdateGroupApplicationLicense` now JSONB-merges patches, and group OCR API/worker callers pass only current document keys instead of stale full blobs; DB/API/worker tests prove sibling document state is preserved and callers remain patch-only.
 - Fixed 2026-06-09: group application basic update now validates a submitted `license_image_asset_id` before draft mutation. The asset must belong to the applicant, be `confirmed`, and use one of the group business-license categories accepted by OCR (`business_license` or `group_license`); missing, cross-user, wrong-category, unconfirmed, and infrastructure-error branches are covered.
 - Group submit only requires `group_name` and `contact_phone`; backend does not require license, identity documents, successful OCR, address, or region. If those are required for approval, enforcement currently lives only in UI expectations or manual review.
 - Group application GET can create a draft and there is no unique active-draft constraint per applicant. Concurrent get-or-create requests can create multiple drafts; all later handlers operate on whichever row is latest.
@@ -161,8 +161,9 @@ Observed tests:
 - `locallife/api/rbac_middleware_test.go` covers merchant staff middleware role selection.
 - `locallife/api/group_test.go` covers group draft create/update/submit/review, document delete, join create, approve conflict, and cancel API paths.
 - `locallife/db/sqlc/tx_group_test.go` proves group application terminal review conflict and prevents group-join approval from overwriting an existing merchant affiliation.
-- `locallife/api/ocr_test.go` covers group OCR create ownership and enqueue paths.
-- `locallife/worker/task_group_application_ocr_test.go` covers group OCR execution and stale asset/status/malformed-data guards.
+- `locallife/api/ocr_test.go` covers group OCR create ownership/enqueue paths and patch-only pending/failure writebacks.
+- `locallife/db/sqlc/group_test.go` proves `UpdateGroupApplicationLicense` merges sibling `application_data` patches instead of replacing the full JSON blob.
+- `locallife/worker/task_group_application_ocr_test.go` covers group OCR execution, stale asset/status/malformed-data guards, and patch-only success/failure writebacks.
 
 Missing high-value tests:
 
@@ -170,7 +171,6 @@ Missing high-value tests:
 - Atomic rollback or reconciliation when `merchant_staff` succeeds but `user_roles` propagation fails.
 - Pending-role access test for every role-agnostic `CheckUserHasMerchantAccess` consumer.
 - Invite-code revoke/rotation and disabled-merchant bind behavior.
-- Group OCR concurrent sibling-document writeback test.
 - Group submit completeness contract for documents/OCR/address/region.
 - Concurrent group draft get-or-create test.
 - Join-request create/reject/cancel audit-log failure behavior.
@@ -183,7 +183,7 @@ Missing high-value tests:
 - Define a reactivation path for disabled staff and decide whether invite bind should reactivate or require owner confirmation.
 - Align pending semantics: use status, role, or a stricter role-aware access query consistently.
 - Decide whether staff invite codes should be reusable, revocable, rotated on demand, or one-time.
-- Make group OCR writeback concurrency-safe at the durable JSON boundary.
+- Fixed 2026-06-09: group OCR writeback is concurrency-safe at the durable JSON boundary.
 - Fixed 2026-06-09: apply media ownership/category/upload-status checks to direct group `license_image_asset_id` draft updates.
 - Move group submission completeness rules into the backend contract.
 - Add an active-draft uniqueness strategy for group onboarding.
@@ -201,4 +201,4 @@ Missing high-value tests:
 - Reader/consumer branches checked: merchant staff page, pending staff access checks, merchant dashboard/config access, group application page, group join page, group membership authorization, merchant affiliation readers, OCR result readers, and audit log consumers.
 - Authorization/tenant branches checked: owner/manager staff list/invite, owner-only role/remove, bind by server-side invite-code lookup, group applicant user ownership, OCR owner/media/category checks, group role authorization, merchant owner-only join create/cancel, review request/group ownership, optional brand-in-group validation, and transaction-protected one-group affiliation on approval.
 - Zombie/unreachable branches checked: reusable invite code has no revoke/rotation UI; disabled staff reactivation path is undefined; pending staff semantics can drift through role-agnostic access helpers; group review has two admin route aliases; group join backend cancel/list paths are not represented as durable Mini Program status recovery.
-- Test-proof gaps checked: existing tests cover invite pending semantics, typed duplicate-key classification, RBAC role selection, group draft/review/join basics, direct group license media validation, group OCR ownership/worker, and terminal transaction conflicts. Missing proof remains for disabled rejoin contract, atomic staff/coarse-role propagation, every pending-role consumer, invite revocation/disabled-merchant bind, concurrent group OCR JSON writes, submit completeness, active draft uniqueness, join audit failure, and cancel/approve race.
+- Test-proof gaps checked: existing tests cover invite pending semantics, typed duplicate-key classification, RBAC role selection, group draft/review/join basics, direct group license media validation, group OCR ownership/worker, group OCR JSON patch merging, and terminal transaction conflicts. Missing proof remains for disabled rejoin contract, atomic staff/coarse-role propagation, every pending-role consumer, invite revocation/disabled-merchant bind, submit completeness, active draft uniqueness, join audit failure, and cancel/approve race.

@@ -42,12 +42,8 @@ type groupIDCardOCRData struct {
 	OCRAt          string `json:"ocr_at,omitempty"`
 }
 
-func mergeGroupApplicationData(data []byte) map[string]any {
-	result := map[string]any{}
-	if len(data) > 0 {
-		_ = json.Unmarshal(data, &result)
-	}
-	return result
+func marshalGroupApplicationDataPatch(values map[string]any) ([]byte, error) {
+	return json.Marshal(values)
 }
 
 func (distributor *RedisTaskDistributor) DistributeTaskGroupApplicationBusinessLicenseOCR(ctx context.Context, applicationID int64, mediaAssetID int64, ocrJobID int64, opts ...asynq.Option) error {
@@ -98,13 +94,13 @@ func (processor *RedisTaskProcessor) ProcessTaskGroupApplicationBusinessLicenseO
 			return nil
 		}
 		alertEmittedAt := processor.publishOCRFailureAlert(ctx, job, err)
-		app, getErr := processor.store.GetGroupApplication(ctx, payload.ApplicationID)
-		if getErr == nil {
-			data := mergeGroupApplicationData(app.ApplicationData)
-			data["business_license_ocr"] = map[string]any{"status": string(ocr.JobStatusFailed), "queued_at": job.CreatedAt.Format(time.RFC3339), "started_at": formatPgTimestamp(job.StartedAt), "ocr_job_id": payload.OCRJobID, "error": err.Error(), "error_code": ocr.ErrorCode(err), "alert_emitted_at": formatOCRAlertEmittedAt(alertEmittedAt)}
-			merged, _ := json.Marshal(data)
-			_, _ = processor.store.UpdateGroupApplicationLicense(ctx, db.UpdateGroupApplicationLicenseParams{ID: payload.ApplicationID, ApplicationData: merged})
+		patch, marshalErr := marshalGroupApplicationDataPatch(map[string]any{
+			"business_license_ocr": map[string]any{"status": string(ocr.JobStatusFailed), "queued_at": job.CreatedAt.Format(time.RFC3339), "started_at": formatPgTimestamp(job.StartedAt), "ocr_job_id": payload.OCRJobID, "error": err.Error(), "error_code": ocr.ErrorCode(err), "alert_emitted_at": formatOCRAlertEmittedAt(alertEmittedAt)},
+		})
+		if marshalErr != nil {
+			return fmt.Errorf("marshal group business license OCR failure patch: %w", marshalErr)
 		}
+		_, _ = processor.store.UpdateGroupApplicationLicense(ctx, db.UpdateGroupApplicationLicenseParams{ID: payload.ApplicationID, ApplicationData: patch})
 		processor.writeOCRJobAudit(ctx, job, "ocr_job_failed", ocrFailureAuditMetadata(err))
 		return asynqOCRTaskError(job, err)
 	}
@@ -114,7 +110,7 @@ func (processor *RedisTaskProcessor) ProcessTaskGroupApplicationBusinessLicenseO
 	if decodeErr != nil {
 		return fmt.Errorf("decode normalized group business license result: %w", decodeErr)
 	}
-	app, stale, err := processor.guardGroupOCRCurrentBinding(ctx, binding, ocr.DocumentTypeBusinessLicense, ocr.DocumentSideUnknown)
+	_, stale, err = processor.guardGroupOCRCurrentBinding(ctx, binding, ocr.DocumentTypeBusinessLicense, ocr.DocumentSideUnknown)
 	if err != nil {
 		return err
 	}
@@ -122,7 +118,6 @@ func (processor *RedisTaskProcessor) ProcessTaskGroupApplicationBusinessLicenseO
 		return nil
 	}
 
-	data := mergeGroupApplicationData(app.ApplicationData)
 	ocrData := map[string]any{"status": "done", "queued_at": job.CreatedAt.Format(time.RFC3339), "started_at": formatPgTimestamp(job.StartedAt), "ocr_job_id": job.ID, "ocr_at": normalized.RecognizedAt.Format(time.RFC3339)}
 	arg := db.UpdateGroupApplicationLicenseParams{ID: payload.ApplicationID}
 	if normalized.BusinessLicense != nil {
@@ -141,8 +136,10 @@ func (processor *RedisTaskProcessor) ProcessTaskGroupApplicationBusinessLicenseO
 			arg.LicenseNumber = pgtype.Text{String: licenseNumber, Valid: true}
 		}
 	}
-	data["business_license_ocr"] = ocrData
-	merged, _ := json.Marshal(data)
+	merged, err := marshalGroupApplicationDataPatch(map[string]any{"business_license_ocr": ocrData})
+	if err != nil {
+		return fmt.Errorf("marshal group business license OCR patch: %w", err)
+	}
 	arg.ApplicationData = merged
 	_, err = processor.store.UpdateGroupApplicationLicense(ctx, arg)
 	if err != nil {
@@ -188,26 +185,26 @@ func (processor *RedisTaskProcessor) ProcessTaskGroupApplicationIDCardOCR(ctx co
 			return nil
 		}
 		alertEmittedAt := processor.publishOCRFailureAlert(ctx, job, err)
-		app, getErr := processor.store.GetGroupApplication(ctx, payload.ApplicationID)
-		if getErr == nil {
-			data := mergeGroupApplicationData(app.ApplicationData)
-			failed := groupIDCardOCRData{
-				Status:         string(ocr.JobStatusFailed),
-				QueuedAt:       job.CreatedAt.Format(time.RFC3339),
-				StartedAt:      formatPgTimestamp(job.StartedAt),
-				OCRJobID:       int64Ptr(payload.OCRJobID),
-				Error:          err.Error(),
-				ErrorCode:      ocr.ErrorCode(err),
-				AlertEmittedAt: formatOCRAlertEmittedAt(alertEmittedAt),
-			}
-			if payload.Side == "Back" {
-				data["id_card_back_ocr"] = failed
-			} else {
-				data["id_card_front_ocr"] = failed
-			}
-			merged, _ := json.Marshal(data)
-			_, _ = processor.store.UpdateGroupApplicationLicense(ctx, db.UpdateGroupApplicationLicenseParams{ID: payload.ApplicationID, ApplicationData: merged})
+		failed := groupIDCardOCRData{
+			Status:         string(ocr.JobStatusFailed),
+			QueuedAt:       job.CreatedAt.Format(time.RFC3339),
+			StartedAt:      formatPgTimestamp(job.StartedAt),
+			OCRJobID:       int64Ptr(payload.OCRJobID),
+			Error:          err.Error(),
+			ErrorCode:      ocr.ErrorCode(err),
+			AlertEmittedAt: formatOCRAlertEmittedAt(alertEmittedAt),
 		}
+		patch := map[string]any{}
+		if payload.Side == "Back" {
+			patch["id_card_back_ocr"] = failed
+		} else {
+			patch["id_card_front_ocr"] = failed
+		}
+		merged, marshalErr := marshalGroupApplicationDataPatch(patch)
+		if marshalErr != nil {
+			return fmt.Errorf("marshal group id card OCR failure patch: %w", marshalErr)
+		}
+		_, _ = processor.store.UpdateGroupApplicationLicense(ctx, db.UpdateGroupApplicationLicenseParams{ID: payload.ApplicationID, ApplicationData: merged})
 		processor.writeOCRJobAudit(ctx, job, "ocr_job_failed", ocrFailureAuditMetadata(err))
 		return asynqOCRTaskError(job, err)
 	}
@@ -217,7 +214,7 @@ func (processor *RedisTaskProcessor) ProcessTaskGroupApplicationIDCardOCR(ctx co
 	if decodeErr != nil {
 		return fmt.Errorf("decode normalized group id card result: %w", decodeErr)
 	}
-	app, stale, err := processor.guardGroupOCRCurrentBinding(ctx, binding, ocr.DocumentTypeIDCard, side)
+	_, stale, err = processor.guardGroupOCRCurrentBinding(ctx, binding, ocr.DocumentTypeIDCard, side)
 	if err != nil {
 		return err
 	}
@@ -225,7 +222,7 @@ func (processor *RedisTaskProcessor) ProcessTaskGroupApplicationIDCardOCR(ctx co
 		return nil
 	}
 
-	data := mergeGroupApplicationData(app.ApplicationData)
+	patch := map[string]any{}
 	ocrData := groupIDCardOCRData{
 		Status:    "done",
 		QueuedAt:  job.CreatedAt.Format(time.RFC3339),
@@ -243,19 +240,22 @@ func (processor *RedisTaskProcessor) ProcessTaskGroupApplicationIDCardOCR(ctx co
 			ocrData.Nation = normalized.IDCard.Ethnicity
 			ocrData.Address = normalized.IDCard.Address
 			if normalized.IDCard.Name != "" {
-				data["legal_person_name"] = normalized.IDCard.Name
+				patch["legal_person_name"] = normalized.IDCard.Name
 			}
 			if normalized.IDCard.IDNumber != "" {
-				data["legal_person_id_number"] = normalized.IDCard.IDNumber
+				patch["legal_person_id_number"] = normalized.IDCard.IDNumber
 			}
 		}
 	}
 	if payload.Side == "Back" {
-		data["id_card_back_ocr"] = ocrData
+		patch["id_card_back_ocr"] = ocrData
 	} else {
-		data["id_card_front_ocr"] = ocrData
+		patch["id_card_front_ocr"] = ocrData
 	}
-	merged, _ := json.Marshal(data)
+	merged, err := marshalGroupApplicationDataPatch(patch)
+	if err != nil {
+		return fmt.Errorf("marshal group id card OCR patch: %w", err)
+	}
 	_, err = processor.store.UpdateGroupApplicationLicense(ctx, db.UpdateGroupApplicationLicenseParams{ID: payload.ApplicationID, ApplicationData: merged})
 	if err != nil {
 		return fmt.Errorf("update group application id card: %w", err)

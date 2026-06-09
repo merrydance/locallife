@@ -1117,7 +1117,10 @@ const updateGroupApplicationLicense = `-- name: UpdateGroupApplicationLicense :o
 UPDATE merchant_group_applications
 SET license_media_asset_id = COALESCE($2, license_media_asset_id),
     license_number = COALESCE($3, license_number),
-    application_data = COALESCE($4, application_data),
+    application_data = CASE
+      WHEN $4::jsonb IS NULL THEN application_data
+      ELSE COALESCE(application_data, '{}'::jsonb) || $4::jsonb
+    END,
     updated_at = now()
 WHERE id = $1
 RETURNING id, applicant_user_id, group_name, contact_phone, license_number, address, region_id, status, reject_reason, reviewed_by, reviewed_at, application_data, created_at, updated_at, license_media_asset_id

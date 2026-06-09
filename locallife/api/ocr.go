@@ -458,6 +458,10 @@ func mergeGroupApplicationData(data []byte) (map[string]json.RawMessage, error) 
 	return result, nil
 }
 
+func marshalGroupApplicationDataPatch(values map[string]any) ([]byte, error) {
+	return json.Marshal(values)
+}
+
 func (server *Server) markGroupApplicationOCRPending(ctx *gin.Context, job db.OcrJob) error {
 	app, err := server.store.GetGroupApplication(ctx, job.OwnerID)
 	if err != nil {
@@ -466,56 +470,45 @@ func (server *Server) markGroupApplicationOCRPending(ctx *gin.Context, job db.Oc
 	if app.Status != "draft" {
 		return ErrApplicationNotDraft
 	}
-
-	queuedAt := job.CreatedAt.Format(time.RFC3339)
-	ocrJobID := job.ID
-	applicationData, err := mergeGroupApplicationData(app.ApplicationData)
-	if err != nil {
+	if _, err := mergeGroupApplicationData(app.ApplicationData); err != nil {
 		return fmt.Errorf("decode group application data for OCR pending: %w", err)
 	}
+	queuedAt := job.CreatedAt.Format(time.RFC3339)
+	ocrJobID := job.ID
 
 	switch ocr.DocumentType(job.DocumentType) {
 	case ocr.DocumentTypeBusinessLicense:
-		payload, marshalErr := json.Marshal(BusinessLicenseOCRData{
-			Status:   "pending",
-			QueuedAt: queuedAt,
-			OCRJobID: &ocrJobID,
+		patch, marshalErr := marshalGroupApplicationDataPatch(map[string]any{
+			"business_license_ocr": BusinessLicenseOCRData{
+				Status:   "pending",
+				QueuedAt: queuedAt,
+				OCRJobID: &ocrJobID,
+			},
 		})
-		if marshalErr != nil {
-			return marshalErr
-		}
-		applicationData["business_license_ocr"] = payload
-		merged, marshalErr := json.Marshal(applicationData)
 		if marshalErr != nil {
 			return marshalErr
 		}
 		_, err = server.store.UpdateGroupApplicationLicense(ctx, db.UpdateGroupApplicationLicenseParams{
 			ID:                  app.ID,
 			LicenseMediaAssetID: pgtype.Int8{Int64: job.MediaAssetID, Valid: true},
-			ApplicationData:     merged,
+			ApplicationData:     patch,
 		})
 		return err
 	case ocr.DocumentTypeIDCard:
-		payload, marshalErr := json.Marshal(MerchantIDCardOCRData{
+		patch := map[string]any{}
+		payload := MerchantIDCardOCRData{
 			Status:   "pending",
 			QueuedAt: queuedAt,
 			OCRJobID: &ocrJobID,
-		})
-		if marshalErr != nil {
-			return marshalErr
-		}
-		assetPayload, marshalErr := json.Marshal(job.MediaAssetID)
-		if marshalErr != nil {
-			return marshalErr
 		}
 		if strings.EqualFold(job.Side, string(ocr.DocumentSideBack)) {
-			applicationData["id_card_back_asset_id"] = assetPayload
-			applicationData["id_card_back_ocr"] = payload
+			patch["id_card_back_asset_id"] = job.MediaAssetID
+			patch["id_card_back_ocr"] = payload
 		} else {
-			applicationData["id_card_front_asset_id"] = assetPayload
-			applicationData["id_card_front_ocr"] = payload
+			patch["id_card_front_asset_id"] = job.MediaAssetID
+			patch["id_card_front_ocr"] = payload
 		}
-		merged, marshalErr := json.Marshal(applicationData)
+		merged, marshalErr := marshalGroupApplicationDataPatch(patch)
 		if marshalErr != nil {
 			return marshalErr
 		}
@@ -781,41 +774,31 @@ func (server *Server) markOCRFailed(ctx *gin.Context, job db.OcrJob, errorCode, 
 				Msg("skip stale group OCR failure writeback")
 			return nil
 		}
-		applicationData, err := mergeGroupApplicationData(app.ApplicationData)
-		if err != nil {
-			return fmt.Errorf("decode group application data for OCR failure: %w", err)
-		}
+		patch := map[string]any{}
 		switch ocr.DocumentType(job.DocumentType) {
 		case ocr.DocumentTypeBusinessLicense:
-			payload, err := json.Marshal(BusinessLicenseOCRData{
+			patch["business_license_ocr"] = BusinessLicenseOCRData{
 				Status:    string(ocr.JobStatusFailed),
 				QueuedAt:  queuedAt,
 				OCRJobID:  &ocrJobID,
 				Error:     errorMessage,
 				ErrorCode: errorCode,
-			})
-			if err != nil {
-				return err
 			}
-			applicationData["business_license_ocr"] = payload
 		case ocr.DocumentTypeIDCard:
-			payload, err := json.Marshal(MerchantIDCardOCRData{
+			payload := MerchantIDCardOCRData{
 				Status:    string(ocr.JobStatusFailed),
 				QueuedAt:  queuedAt,
 				OCRJobID:  &ocrJobID,
 				Error:     errorMessage,
 				ErrorCode: errorCode,
-			})
-			if err != nil {
-				return err
 			}
 			if strings.EqualFold(job.Side, string(ocr.DocumentSideBack)) {
-				applicationData["id_card_back_ocr"] = payload
+				patch["id_card_back_ocr"] = payload
 			} else {
-				applicationData["id_card_front_ocr"] = payload
+				patch["id_card_front_ocr"] = payload
 			}
 		}
-		merged, err := json.Marshal(applicationData)
+		merged, err := marshalGroupApplicationDataPatch(patch)
 		if err != nil {
 			return err
 		}

@@ -490,7 +490,8 @@ func TestCreateOCRJob_MarksGroupBusinessLicensePending(t *testing.T) {
 
 			var merged map[string]json.RawMessage
 			require.NoError(t, json.Unmarshal(arg.ApplicationData, &merged))
-			require.Contains(t, merged, "existing")
+			require.Len(t, merged, 1)
+			require.NotContains(t, merged, "existing")
 			require.Contains(t, merged, "business_license_ocr")
 
 			var payload BusinessLicenseOCRData
@@ -545,7 +546,8 @@ func TestCreateOCRJob_MarksGroupIDCardPending(t *testing.T) {
 
 			var merged map[string]json.RawMessage
 			require.NoError(t, json.Unmarshal(arg.ApplicationData, &merged))
-			require.Contains(t, merged, "existing")
+			require.Len(t, merged, 2)
+			require.NotContains(t, merged, "existing")
 			require.Contains(t, merged, "id_card_front_asset_id")
 			require.Contains(t, merged, "id_card_front_ocr")
 
@@ -617,6 +619,60 @@ func TestCreateOCRJob_GroupPendingRejectsInvalidExistingApplicationData(t *testi
 	var resp APIResponse
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
 	require.Equal(t, "internal server error", resp.Message)
+}
+
+func TestMarkOCRFailed_GroupIDCardWritesPatchOnly(t *testing.T) {
+	user, _ := randomUser(t)
+	app := randomGroupApplication(user.ID)
+	app.ApplicationData = []byte(`{
+		"existing":{"ok":true},
+		"business_license_ocr":{"status":"done","ocr_job_id":330},
+		"id_card_front_asset_id":804,
+		"id_card_front_ocr":{"status":"pending","ocr_job_id":334}
+	}`)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+
+	gomock.InOrder(
+		store.EXPECT().GetGroupApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().UpdateGroupApplicationLicense(gomock.Any(), gomock.Any()).DoAndReturn(func(_ any, arg db.UpdateGroupApplicationLicenseParams) (db.MerchantGroupApplication, error) {
+			require.Equal(t, app.ID, arg.ID)
+
+			var patch map[string]json.RawMessage
+			require.NoError(t, json.Unmarshal(arg.ApplicationData, &patch))
+			require.Len(t, patch, 1)
+			require.NotContains(t, patch, "existing")
+			require.NotContains(t, patch, "business_license_ocr")
+			require.NotContains(t, patch, "id_card_front_asset_id")
+			require.Contains(t, patch, "id_card_front_ocr")
+
+			var payload MerchantIDCardOCRData
+			require.NoError(t, json.Unmarshal(patch["id_card_front_ocr"], &payload))
+			require.Equal(t, string(ocr.JobStatusFailed), payload.Status)
+			require.NotNil(t, payload.OCRJobID)
+			require.Equal(t, int64(334), *payload.OCRJobID)
+			require.Equal(t, "timeout", payload.Error)
+			require.Equal(t, "ocr_provider_timeout", payload.ErrorCode)
+			return app, nil
+		}),
+	)
+
+	server := newTestServer(t, store)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	job := db.OcrJob{
+		ID:           334,
+		DocumentType: string(ocr.DocumentTypeIDCard),
+		MediaAssetID: 804,
+		OwnerType:    string(ocr.OwnerTypeGroupApplication),
+		OwnerID:      app.ID,
+		Side:         string(ocr.DocumentSideFront),
+		CreatedAt:    time.Now(),
+	}
+
+	err := server.markOCRFailed(ctx, job, "ocr_provider_timeout", "timeout")
+	require.NoError(t, err)
 }
 
 func TestCreateOCRJob_AllowsOwnerOnlyPrivateIDCardDespiteModerationStatus(t *testing.T) {

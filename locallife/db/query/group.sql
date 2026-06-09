@@ -37,7 +37,10 @@ RETURNING *;
 UPDATE merchant_group_applications
 SET license_media_asset_id = COALESCE($2, license_media_asset_id),
     license_number = COALESCE($3, license_number),
-    application_data = COALESCE($4, application_data),
+    application_data = CASE
+      WHEN sqlc.arg('application_data')::jsonb IS NULL THEN application_data
+      ELSE COALESCE(application_data, '{}'::jsonb) || sqlc.arg('application_data')::jsonb
+    END,
     updated_at = now()
 WHERE id = $1
 RETURNING *;
