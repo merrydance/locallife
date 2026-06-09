@@ -112,7 +112,7 @@ If `auto_close_at` is accepted as a contract, a runtime scheduler must eventuall
 
 ## Recovery And Async Convergence Paths
 
-- Dashboard handles partial refresh failure by retaining previous trusted status.
+- Dashboard handles partial refresh failure by retaining previous trusted status and rendering the stale/partial-sync message in a TDesign warning notice with retry.
 - Flutter App collapses status sync requests through `_syncFuture`, ignores stale generations, and resets local working status on logout.
 - Manual mutation publishes websocket source `manual`; dashboard reloads on matching merchant id.
 - Fixed 2026-06-07: expired `auto_close_at` rows are closed by `MerchantOpenStatusScheduler`, then websocket events are published with source `auto_close`.
@@ -124,7 +124,7 @@ If `auto_close_at` is accepted as a contract, a runtime scheduler must eventuall
 - On success, dashboard uses PATCH response for local `isOpen`.
 - In the Flutter App, order receiving is gated by confirmed backend `is_open`; opening fetches orders and closing clears local orders.
 - Websocket refresh provides a backend rehydration path after local update.
-- On failure, dashboard shows toast and leaves existing state intact.
+- On PATCH failure, dashboard shows an action-level toast and leaves existing `isOpen` intact because local truth is only updated from the backend PATCH response.
 
 ## Test Coverage Signals
 
@@ -137,16 +137,17 @@ Observed tests:
 - SQLC tests cover `AutoCloseMerchants` closing expired rows, clearing `auto_close_at`, and preserving future auto-close rows.
 - Authorization test denies unauthorized PATCH.
 - `check:merchant-open-status-cross-client-contract` covers the cross-client Mini Program/App convergence contract: backend `GET/PATCH /v1/merchants/me/status`, shared `is_open` payload/response, Mini Program dashboard wrapper/switch/readback, Flutter `WorkingStatusNotifier.syncFromBackend/setStatus`, Flutter order-list status actions, and Flutter login sync all point at the same backend truth.
+- `check:merchant-open-status-dashboard-failure-state` covers the Mini Program dashboard failure-state contract: refresh/partial-sync failures set a visible in-page warning with retry, PATCH failures use Chinese action toast, `openStatusSubmitting` is visible and cleared in `finally`, and `isOpen` is only changed from the backend PATCH response.
 - Flutter `working_status_provider_test.dart` and `working_status_sync_manager_test.dart` cover route/payload/readback behavior for App status sync, status writes, stale in-flight responses, and login-time status sync.
 
 Missing high-value tests:
 
 - Test for manual open while `auto_open_by_business_hours` is enabled and scheduler later disagrees.
-- Frontend/unit coverage for dashboard switch reverting or preserving state on failed PATCH.
 
 ## Gaps And Refactor Notes
 
 - Fixed 2026-06-07: `AutoCloseMerchants` is no longer zombie; it is wired into `MerchantOpenStatusScheduler`.
+- Fixed 2026-06-09: dashboard stale/partial-refresh failure state is visible in-page, and the status switch failure contract is proof-covered without changing manual/automatic status semantics.
 - Dashboard precheck for payment readiness only runs when `canManageMerchantApplyment` is true; backend still enforces readiness for all opens. This is safe but can lead to a backend-only toast for some roles.
 - Manual and automatic writers should have explicit product semantics: does manual override automatic mode, or does automatic mode always win within the next minute?
 - The Flutter App's "上线营业后才能接收新订单和断线补单" copy is correct only if backend readiness gates, automatic-business-hours overrides, and App polling/websocket state all remain aligned.
@@ -157,8 +158,8 @@ Missing high-value tests:
 - Request branches checked: `GET/PATCH /v1/merchants/me/status`, frontend Mini Program wrappers, Flutter `WorkingStatusNotifier.syncFromBackend/setStatus`, backend readiness checks, websocket publish, and scheduler-called `AutoCloseMerchants` SQL.
 - Backend state branches checked: manual `is_open` write, optional `auto_close_at`, closing path, opening path with food-safety suspension and Baofoo payment readiness, automatic scheduler overwrite, `auto_open_by_business_hours` reader field, and status response readiness fields.
 - Async branches checked: manual websocket source `manual`, timed auto-close scheduler source `auto_close`, dashboard reload on matching event, Flutter sync generation suppression, App order fetch on open, App order clear on close, and automatic scheduler source `business_hours`.
-- Failure/retry branches checked: duplicate dashboard switch guard, Flutter `_updateFuture` guard, last-write-wins PATCH, failed opening readiness precheck/backend error, partial status refresh retaining trusted data, stale Flutter sync generation, logout reset, and automatic scheduler race after manual write.
+- Failure/retry branches checked: duplicate dashboard switch guard, visible dashboard refresh/partial-sync failure notice with retry, PATCH failure preserving existing `isOpen`, Flutter `_updateFuture` guard, last-write-wins PATCH, failed opening readiness precheck/backend error, partial status refresh retaining trusted data, stale Flutter sync generation, logout reset, and automatic scheduler race after manual write.
 - Reader/consumer branches checked: dashboard, kitchen, Flutter order receiving/polling/websocket, public/order availability readers, business-hours scheduler, and settlement readiness prechecks.
 - Authorization/tenant branches checked: Mini Program console access, backend owner/manager profile-write middleware, server-side merchant resolution, readiness enforced on backend opening for all roles, and close allowed without payment readiness.
 - Zombie/unreachable branches checked: `AutoCloseMerchants` was repaired on 2026-06-07 and is now called by the scheduler; dashboard readiness precheck remains role-gated while backend enforces universally.
-- Test-proof gaps checked: existing tests cover readiness gates, status GET readiness fields, websocket publish, auth denial, timed `auto_close_at` scheduler publish, `AutoCloseMerchants` SQL semantics, and cross-client Mini Program/App status-route convergence. Missing proof remains for manual-open versus auto scheduler semantics and dashboard failure-state UI.
+- Test-proof gaps checked: existing tests cover readiness gates, status GET readiness fields, websocket publish, auth denial, timed `auto_close_at` scheduler publish, `AutoCloseMerchants` SQL semantics, cross-client Mini Program/App status-route convergence, and dashboard failure-state UI. Missing proof remains for manual-open versus auto scheduler semantics, pending product precedence.

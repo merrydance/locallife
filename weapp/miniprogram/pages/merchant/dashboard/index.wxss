@@ -17,6 +17,12 @@
   overflow: hidden;
 }
 
+.notice-banner-operation {
+  color: var(--td-brand-color);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+}
+
 .hero-card {
   padding: var(--spacer-md);
   border-radius: var(--radius-card);
