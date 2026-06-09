@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -75,6 +77,22 @@ func TestBindMerchantDoesNotGrantMerchantStaffRoleWhenPending(t *testing.T) {
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 	require.Equal(t, "pending", resp.Role)
 	require.Equal(t, merchant.ID, resp.MerchantID)
+}
+
+func TestIsDuplicateKeyErrorUsesTypedPostgresCode(t *testing.T) {
+	require.False(t, isDuplicateKeyError(nil))
+	require.False(t, isDuplicateKeyError(db.ErrRecordNotFound))
+	require.NotPanics(t, func() {
+		require.False(t, isDuplicateKeyError(errors.New("dup")))
+	})
+	require.True(t, isDuplicateKeyError(&pgconn.PgError{
+		Code:    db.UniqueViolation,
+		Message: "unexpected driver message",
+	}))
+	require.False(t, isDuplicateKeyError(&pgconn.PgError{
+		Code:    db.ForeignKeyViolation,
+		Message: "duplicate key value violates unique constraint",
+	}))
 }
 
 func TestEnsureMerchantStaffUserRoleActive(t *testing.T) {

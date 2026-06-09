@@ -460,9 +460,7 @@ func (server *Server) bindMerchant(ctx *gin.Context) {
 
 // isDuplicateKeyError 检查是否是重复 key 错误
 func isDuplicateKeyError(err error) bool {
-	return err != nil && !isNotFoundError(err) &&
-		(err.Error() == "duplicate key value violates unique constraint" ||
-			len(err.Error()) > 0 && err.Error()[0:9] == "duplicate")
+	return db.ErrorCode(err) == db.UniqueViolation
 }
 
 func (server *Server) ensureMerchantStaffUserRoleActive(ctx context.Context, userID, merchantID int64) error {
