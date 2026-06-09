@@ -165,6 +165,84 @@ func TestCalculateOrderPreview_WithVoucher(t *testing.T) {
 	require.True(t, foundVoucher)
 }
 
+func TestCalculateCartPreview_TakeawayIgnoresDeliveryLocation(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	userID := int64(1)
+	merchantID := int64(2)
+	addressID := int64(3)
+
+	store.EXPECT().
+		GetCartByUserAndMerchant(gomock.Any(), db.GetCartByUserAndMerchantParams{
+			UserID:     userID,
+			MerchantID: merchantID,
+			OrderType:  db.OrderTypeTakeaway,
+		}).
+		Times(1).
+		Return(db.Cart{ID: 30}, nil)
+	store.EXPECT().
+		ListCartItems(gomock.Any(), int64(30)).
+		Times(1).
+		Return([]db.ListCartItemsRow{{
+			DishID:    pgtype.Int8{Int64: 5, Valid: true},
+			DishName:  pgtype.Text{String: "Dish", Valid: true},
+			DishPrice: pgtype.Int8{Int64: 1000, Valid: true},
+			Quantity:  2,
+		}}, nil)
+	store.EXPECT().
+		ListActiveDiscountRules(gomock.Any(), merchantID).
+		Times(1).
+		Return([]db.DiscountRule{}, nil)
+	store.EXPECT().
+		ListUserAvailableVouchersForMerchant(gomock.Any(), db.ListUserAvailableVouchersForMerchantParams{
+			UserID:         userID,
+			MerchantID:     merchantID,
+			MinOrderAmount: 2000,
+		}).
+		Times(1).
+		Return([]db.ListUserAvailableVouchersForMerchantRow{}, nil)
+	store.EXPECT().
+		GetMembershipByMerchantAndUser(gomock.Any(), db.GetMembershipByMerchantAndUserParams{
+			MerchantID: merchantID,
+			UserID:     userID,
+		}).
+		Times(1).
+		Return(db.MerchantMembership{}, db.ErrRecordNotFound)
+
+	feeCalled := false
+	result, err := CalculateCartPreview(
+		context.Background(),
+		store,
+		nil,
+		db.Merchant{
+			ID:        merchantID,
+			RegionID:  9,
+			Latitude:  numericFromFloat(30.0),
+			Longitude: numericFromFloat(120.0),
+		},
+		func(context.Context, int64, int64, int32, int64) (DeliveryFeeComputation, error) {
+			feeCalled = true
+			return DeliveryFeeComputation{Fee: 999, Discount: 100}, nil
+		},
+		CartPreviewInput{
+			UserID:     userID,
+			MerchantID: merchantID,
+			OrderType:  db.OrderTypeTakeaway,
+			AddressID:  &addressID,
+		},
+	)
+
+	require.NoError(t, err)
+	require.False(t, feeCalled)
+	require.Equal(t, int64(2000), result.Subtotal)
+	require.Equal(t, int64(0), result.DeliveryFee)
+	require.Equal(t, int64(0), result.DeliveryFeeDiscount)
+	require.Equal(t, int32(0), result.DeliveryDistance)
+	require.Equal(t, int64(2000), result.Promotion.TotalAmount)
+}
+
 func TestCalculateOrderPreview_RejectsVoucherWhenMerchantDiscountCannotStack(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

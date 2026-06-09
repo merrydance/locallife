@@ -100,6 +100,73 @@ func TestNewOrderResponsePadsLegacyPickupCodeToFourDigits(t *testing.T) {
 	require.Equal(t, "0001", *resp.PickupCodeMasked)
 }
 
+func TestValidateOrderTypeFieldsRejectsTakeawayDeliveryFields(t *testing.T) {
+	dishID := int64(20)
+	addressID := int64(10)
+
+	testCases := []struct {
+		name    string
+		request createOrderRequest
+		wantErr string
+	}{
+		{
+			name: "AddressID",
+			request: createOrderRequest{
+				OrderType: OrderTypeTakeaway,
+				AddressID: &addressID,
+				Items: []orderItemRequest{{
+					DishID:   &dishID,
+					Quantity: 1,
+				}},
+			},
+			wantErr: "address_id is not allowed for takeaway orders",
+		},
+		{
+			name: "DeliveryFee",
+			request: createOrderRequest{
+				OrderType:   OrderTypeTakeaway,
+				DeliveryFee: 500,
+				Items: []orderItemRequest{{
+					DishID:   &dishID,
+					Quantity: 1,
+				}},
+			},
+			wantErr: "delivery_fee is not allowed for takeaway orders",
+		},
+		{
+			name: "DeliveryFeeDiscount",
+			request: createOrderRequest{
+				OrderType:           OrderTypeTakeaway,
+				DeliveryFeeDiscount: 100,
+				Items: []orderItemRequest{{
+					DishID:   &dishID,
+					Quantity: 1,
+				}},
+			},
+			wantErr: "delivery_fee_discount is not allowed for takeaway orders",
+		},
+		{
+			name: "DeliveryDistance",
+			request: createOrderRequest{
+				OrderType:        OrderTypeTakeaway,
+				DeliveryDistance: 1200,
+				Items: []orderItemRequest{{
+					DishID:   &dishID,
+					Quantity: 1,
+				}},
+			},
+			wantErr: "delivery_distance is not allowed for takeaway orders",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateOrderTypeFields(tc.request)
+			require.EqualError(t, err, tc.wantErr)
+		})
+	}
+}
+
 type replaceOrderErrorCommandService struct {
 	err error
 }

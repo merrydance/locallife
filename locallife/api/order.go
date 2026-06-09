@@ -635,7 +635,18 @@ func validateOrderTypeFields(req createOrderRequest) error {
 			return errors.New("reservation_id is required for reservation orders")
 		}
 	case OrderTypeTakeaway:
-		// 打包自取不需要额外字段
+		if req.AddressID != nil {
+			return errors.New("address_id is not allowed for takeaway orders")
+		}
+		if req.DeliveryFee != 0 {
+			return errors.New("delivery_fee is not allowed for takeaway orders")
+		}
+		if req.DeliveryFeeDiscount != 0 {
+			return errors.New("delivery_fee_discount is not allowed for takeaway orders")
+		}
+		if req.DeliveryDistance != 0 {
+			return errors.New("delivery_distance is not allowed for takeaway orders")
+		}
 	}
 
 	// 验证商品项

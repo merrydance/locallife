@@ -79,6 +79,9 @@ func (DefaultOrderPolicy) ValidateCreateInput(input CreateOrderCommandInput) err
 			return fmt.Errorf("reservation_id is required for reservation orders")
 		}
 	case "takeaway":
+		if input.AddressID != nil {
+			return fmt.Errorf("address_id is not allowed for takeaway orders")
+		}
 	default:
 		return fmt.Errorf("unsupported order_type")
 	}

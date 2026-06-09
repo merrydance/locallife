@@ -99,37 +99,38 @@ func CalculateCartPreview(
 	}
 	result.Subtotal = subtotal
 
-	// Resolve delivery route + fee.
-	if input.AddressID != nil {
-		address, err := store.GetUserAddress(ctx, *input.AddressID)
-		if err != nil || address.UserID != input.UserID {
-			return result, NewRequestError(http.StatusBadRequest, errors.New("地址无效"))
+	if input.OrderType == db.OrderTypeTakeout {
+		// Resolve delivery route + fee.
+		if input.AddressID != nil {
+			address, err := store.GetUserAddress(ctx, *input.AddressID)
+			if err != nil || address.UserID != input.UserID {
+				return result, NewRequestError(http.StatusBadRequest, errors.New("地址无效"))
+			}
+			if !address.Latitude.Valid || !address.Longitude.Valid || !merchant.Latitude.Valid || !merchant.Longitude.Valid {
+				return result, NewRequestError(http.StatusBadRequest, errors.New("无法获取距离，请重新选择地址"))
+			}
+			distance, durationSec, feeComp := resolveRouteAndFee(ctx, merchant, mapClient, feeFn, pgNumericToFloat64(address.Latitude), pgNumericToFloat64(address.Longitude), subtotal)
+			result.DeliveryDistance = distance
+			result.RouteDurationSec = durationSec
+			if !feeComp.Suspended {
+				result.DeliveryFee = feeComp.Fee
+				result.DeliveryFeeDiscount = feeComp.Discount
+			}
+		} else if input.Latitude != nil && input.Longitude != nil {
+			if !merchant.Latitude.Valid || !merchant.Longitude.Valid {
+				return result, NewRequestError(http.StatusBadRequest, errors.New("无法获取距离，请重新选择位置"))
+			}
+			distance, durationSec, feeComp := resolveRouteAndFee(ctx, merchant, mapClient, feeFn, *input.Latitude, *input.Longitude, subtotal)
+			result.DeliveryDistance = distance
+			result.RouteDurationSec = durationSec
+			if !feeComp.Suspended {
+				result.DeliveryFee = feeComp.Fee
+				result.DeliveryFeeDiscount = feeComp.Discount
+			}
 		}
-		if !address.Latitude.Valid || !address.Longitude.Valid || !merchant.Latitude.Valid || !merchant.Longitude.Valid {
-			return result, NewRequestError(http.StatusBadRequest, errors.New("无法获取距离，请重新选择地址"))
-		}
-		distance, durationSec, feeComp := resolveRouteAndFee(ctx, merchant, mapClient, feeFn, pgNumericToFloat64(address.Latitude), pgNumericToFloat64(address.Longitude), subtotal)
-		result.DeliveryDistance = distance
-		result.RouteDurationSec = durationSec
-		if !feeComp.Suspended {
-			result.DeliveryFee = feeComp.Fee
-			result.DeliveryFeeDiscount = feeComp.Discount
-		}
-	} else if input.Latitude != nil && input.Longitude != nil {
-		if !merchant.Latitude.Valid || !merchant.Longitude.Valid {
-			return result, NewRequestError(http.StatusBadRequest, errors.New("无法获取距离，请重新选择位置"))
-		}
-		distance, durationSec, feeComp := resolveRouteAndFee(ctx, merchant, mapClient, feeFn, *input.Latitude, *input.Longitude, subtotal)
-		result.DeliveryDistance = distance
-		result.RouteDurationSec = durationSec
-		if !feeComp.Suspended {
-			result.DeliveryFee = feeComp.Fee
-			result.DeliveryFeeDiscount = feeComp.Discount
-		}
-	}
 
-	// Compute ETA (zero-distance case is handled gracefully inside).
-	result.ETA = ComputeDeliveryETA(ctx, store, merchant.ID, result.DeliveryDistance, result.RouteDurationSec)
+		result.ETA = ComputeDeliveryETA(ctx, store, merchant.ID, result.DeliveryDistance, result.RouteDurationSec)
+	}
 
 	// Run the promotion engine for discounts, vouchers, and payment assessment.
 	engine := NewPromotionEngine(store)
