@@ -1,0 +1,5 @@
+ALTER TABLE merchant_group_join_requests
+ADD CONSTRAINT merchant_group_join_requests_group_id_merchant_id_status_key
+UNIQUE (group_id, merchant_id, status);
+
+DROP INDEX IF EXISTS merchant_group_join_requests_one_pending_per_pair_uidx;

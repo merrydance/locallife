@@ -172,6 +172,42 @@ func TestCreateGroupJoinRequestTxRejectsJoinedMerchantInsideTransaction(t *testi
 	require.Empty(t, rows)
 }
 
+func TestCreateGroupJoinRequestTxRejectsDuplicatePendingRequest(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	group := createGroupForJoinTxTest(t, owner.ID)
+
+	first, err := testStore.CreateGroupJoinRequestTx(context.Background(), CreateGroupJoinRequestTxParams{
+		GroupID:         group.ID,
+		MerchantID:      merchant.ID,
+		ApplicantUserID: owner.ID,
+		Reason:          pgtype.Text{String: "申请加入集团", Valid: true},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "pending", first.Request.Status)
+
+	second, err := testStore.CreateGroupJoinRequestTx(context.Background(), CreateGroupJoinRequestTxParams{
+		GroupID:         group.ID,
+		MerchantID:      merchant.ID,
+		ApplicantUserID: owner.ID,
+		Reason:          pgtype.Text{String: "重复申请加入集团", Valid: true},
+	})
+	require.Error(t, err)
+	require.Equal(t, UniqueViolation, ErrorCode(err))
+	require.Empty(t, second.Request.Status)
+
+	var pendingCount int64
+	err = testStore.(*SQLStore).connPool.QueryRow(context.Background(), `
+		SELECT COUNT(*)
+		FROM merchant_group_join_requests
+		WHERE group_id = $1
+		  AND merchant_id = $2
+		  AND status = 'pending'
+	`, group.ID, merchant.ID).Scan(&pendingCount)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), pendingCount)
+}
+
 func TestRejectGroupJoinRequestTxWritesAuditAndRejectsOnlyPending(t *testing.T) {
 	reviewer := createRandomUser(t)
 	owner := createRandomUser(t)
@@ -203,6 +239,45 @@ func TestRejectGroupJoinRequestTxWritesAuditAndRejectsOnlyPending(t *testing.T) 
 	require.Empty(t, second.Request.Status)
 }
 
+func TestRejectGroupJoinRequestTxAllowsRepeatedRejectedHistory(t *testing.T) {
+	reviewer := createRandomUser(t)
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	group := createGroupForJoinTxTest(t, reviewer.ID)
+
+	firstReq := createGroupJoinRequestForTxTest(t, group.ID, merchant.ID, owner.ID)
+	first, err := testStore.RejectGroupJoinRequestTx(context.Background(), RejectGroupJoinRequestTxParams{
+		RequestID:      firstReq.ID,
+		GroupID:        group.ID,
+		ReviewerUserID: reviewer.ID,
+		Reason:         pgtype.Text{String: "资料不完整", Valid: true},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "rejected", first.Request.Status)
+
+	secondReq := createGroupJoinRequestForTxTest(t, group.ID, merchant.ID, owner.ID)
+	second, err := testStore.RejectGroupJoinRequestTx(context.Background(), RejectGroupJoinRequestTxParams{
+		RequestID:      secondReq.ID,
+		GroupID:        group.ID,
+		ReviewerUserID: reviewer.ID,
+		Reason:         pgtype.Text{String: "仍需补充资料", Valid: true},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "rejected", second.Request.Status)
+	require.NotEqual(t, first.Request.ID, second.Request.ID)
+
+	var rejectedCount int64
+	err = testStore.(*SQLStore).connPool.QueryRow(context.Background(), `
+		SELECT COUNT(*)
+		FROM merchant_group_join_requests
+		WHERE group_id = $1
+		  AND merchant_id = $2
+		  AND status = 'rejected'
+	`, group.ID, merchant.ID).Scan(&rejectedCount)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), rejectedCount)
+}
+
 func TestCancelGroupJoinRequestTxDoesNotOverwriteApprovedRequest(t *testing.T) {
 	reviewer := createRandomUser(t)
 	owner := createRandomUser(t)
@@ -230,6 +305,42 @@ func TestCancelGroupJoinRequestTxDoesNotOverwriteApprovedRequest(t *testing.T) {
 	currentReq, err := testStore.GetGroupJoinRequest(context.Background(), joinReq.ID)
 	require.NoError(t, err)
 	require.Equal(t, "approved", currentReq.Status)
+}
+
+func TestCancelGroupJoinRequestTxAllowsRepeatedCancelledHistory(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	group := createGroupForJoinTxTest(t, owner.ID)
+
+	firstReq := createGroupJoinRequestForTxTest(t, group.ID, merchant.ID, owner.ID)
+	first, err := testStore.CancelGroupJoinRequestTx(context.Background(), CancelGroupJoinRequestTxParams{
+		RequestID:       firstReq.ID,
+		GroupID:         group.ID,
+		ApplicantUserID: owner.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "cancelled", first.Request.Status)
+
+	secondReq := createGroupJoinRequestForTxTest(t, group.ID, merchant.ID, owner.ID)
+	second, err := testStore.CancelGroupJoinRequestTx(context.Background(), CancelGroupJoinRequestTxParams{
+		RequestID:       secondReq.ID,
+		GroupID:         group.ID,
+		ApplicantUserID: owner.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "cancelled", second.Request.Status)
+	require.NotEqual(t, first.Request.ID, second.Request.ID)
+
+	var cancelledCount int64
+	err = testStore.(*SQLStore).connPool.QueryRow(context.Background(), `
+		SELECT COUNT(*)
+		FROM merchant_group_join_requests
+		WHERE group_id = $1
+		  AND merchant_id = $2
+		  AND status = 'cancelled'
+	`, group.ID, merchant.ID).Scan(&cancelledCount)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), cancelledCount)
 }
 
 func createGroupForJoinTxTest(t *testing.T, ownerUserID int64) MerchantGroup {
