@@ -391,6 +391,7 @@ func TestCalculateOrderPreview_RejectsForeignAddress(t *testing.T) {
 		GetCartByUserAndMerchant(gomock.Any(), db.GetCartByUserAndMerchantParams{
 			UserID:     userID,
 			MerchantID: merchantID,
+			OrderType:  db.OrderTypeTakeout,
 		}).
 		Times(1).
 		Return(db.Cart{ID: 30}, nil)
@@ -416,7 +417,7 @@ func TestCalculateOrderPreview_RejectsForeignAddress(t *testing.T) {
 		OrderCalculationInput{
 			UserID:     userID,
 			MerchantID: merchantID,
-			OrderType:  "takeout",
+			OrderType:  db.OrderTypeTakeout,
 			AddressID:  &addressID,
 		},
 		func(context.Context, int64, map[string]interface{}) ([]byte, int64, error) {

@@ -31,7 +31,7 @@ Merchant marketing rules must converge to one backend truth before they influenc
 - Voucher lifecycle semantics must be explicit: disabling or deleting a voucher template should either stop only future claims, or also stop future use of already issued user vouchers.
 - Pagination metadata on merchant rule pages should be real backend truth, not a current-page count that requires client probing.
 
-Fixed 2026-06-08: voucher quantity update now returns a stable 400 before SQL write when `total_quantity < claimed_quantity`; discount-rule and delivery-promotion updates now merge existing rule values with partial PATCH fields and apply create-level value validation before writing; discount `/applicable` plus `/best` route reachability is locked by a focused API route test; voucher and discount management list `total` now returns the full matched backend count. Voucher template disable/delete semantics remain implicit.
+Fixed 2026-06-08: voucher quantity update now returns a stable 400 before SQL write when `total_quantity < claimed_quantity`; discount-rule and delivery-promotion updates now merge existing rule values with partial PATCH fields and apply create-level value validation before writing; discount `/applicable` plus `/best` route reachability is locked by a focused API route test; voucher and discount management list `total` now returns the full matched backend count. Fixed 2026-06-09: order preview now passes `order_type` into the typed cart lookup, and takeout cart preview, order preview, and direct order creation now have focused parity proof for subtotal, merchant discount, voucher amount, delivery fee discount, and persisted total under the same marketing stack. Voucher template disable/delete semantics remain implicit.
 
 ## Primary Forward Chain
 
@@ -119,8 +119,8 @@ Fixed 2026-06-08: voucher quantity update now returns a stable 400 before SQL wr
 28. Promotion engine reads active discount rules, selects the best rule per stacking group, blocks voucher/membership stacking based on selected rules, and builds ladder/voucher trial hints.
     Evidence: `locallife/logic/promotion_engine.go:104`, `locallife/logic/promotion_engine.go:111`, `locallife/logic/promotion_engine.go:119`, `locallife/logic/promotion_engine.go:127`, `locallife/logic/promotion_engine.go:181`, `locallife/logic/promotion_engine.go:237`.
 
-29. Cart preview and order preview run `PromotionEngine.CalculateFinalPrice`; direct order creation separately resolves discount, validates voucher, validates membership payment, computes totals, and persists totals.
-    Evidence: `locallife/logic/cart_calculation.go:134`, `locallife/logic/order_calculation.go:239`, `locallife/logic/order_service.go:182`, `locallife/logic/order_service.go:195`, `locallife/logic/order_service.go:221`, `locallife/logic/order_service.go:237`, `locallife/logic/order_service.go:313`.
+29. Fixed 2026-06-09: cart preview and order preview both look up carts by `order_type` before running `PromotionEngine.CalculateFinalPrice`; direct order creation separately resolves discount, validates voucher, computes totals, and persists totals. `TestOrderServiceCreateOrder_MarketingTotalsMatchCartAndOrderPreview` proves the three paths agree on subtotal, merchant discount, voucher amount, delivery fee, delivery fee discount, and final total for a takeout cart with a merchant discount, user voucher, and delivery promotion.
+    Evidence: `locallife/logic/cart_calculation.go:67`, `locallife/logic/cart_calculation.go:134`, `locallife/logic/order_calculation.go:77`, `locallife/logic/order_calculation.go:240`, `locallife/logic/order_service.go:182`, `locallife/logic/order_service.go:195`, `locallife/logic/order_service.go:237`, `locallife/logic/order_service_create_test.go:116`.
 
 30. Public merchant promotions and public merchant detail read active delivery, discount, voucher, and recharge rule truth for customer-visible surfaces.
     Evidence: `locallife/api/merchant.go:965`, `locallife/api/merchant.go:991`, `locallife/api/merchant.go:1007`, `locallife/api/merchant.go:1024`, `locallife/api/merchant.go:1049`, `locallife/api/merchant.go:1307`, `locallife/api/merchant.go:1320`, `locallife/api/merchant.go:1333`.
@@ -190,11 +190,11 @@ Observed tests:
 - Discount-rule API/logic tests cover applicable and best rule lookups, static route reachability, full-count management pagination, update invalid effective values, and create/update shared value validation; order-pricing tests cover discount stacking with vouchers.
 - Delivery-fee API/sqlc tests cover delivery promotion create/list/active/delete, invalid merged update values, and valid partial update parameter mapping.
 - Merchant public detail tests cover active discount/voucher/delivery promotion response assembly.
-- Order calculation and promotion engine tests cover voucher trials, merchant discount stacking, and payment assessment interactions.
+- Order calculation and promotion engine tests cover voucher trials, merchant discount stacking, and payment assessment interactions. `TestOrderServiceCreateOrder_MarketingTotalsMatchCartAndOrderPreview` covers order preview's typed cart lookup plus cart preview, order preview, and direct order creation parity for a combined merchant discount, voucher, delivery fee, and delivery-fee discount stack.
 
 Missing high-value tests:
 
-- Product-decided semantics for issued vouchers after template disable/soft-delete are covered in preview and direct order creation.
+- Product-decided semantics for issued vouchers after template disable/soft-delete still need focused preview and direct order creation tests once product decides whether issued vouchers remain usable or stop at template disable/delete.
 
 ## Gaps And Refactor Notes
 
@@ -204,6 +204,7 @@ Missing high-value tests:
 - Voucher template disable/delete semantics need a durable product decision. Current behavior is closer to "disable/delete stops future claims but already issued user vouchers can remain usable until user-voucher expiry."
 - Fixed 2026-06-08: backend voucher and discount management lists return full matched `total`; frontend probe logic is now only a compatibility fallback.
 - Fixed 2026-06-08: discount static route reachability is verified by `TestDiscountStaticRoutesReachable`; `/applicable` and `/best` are not shadowed by `/:id`.
+- Fixed 2026-06-09: order preview now includes `order_type` in the cart lookup, matching cart preview; cart preview, order preview, and direct order creation pricing parity is proof-covered for a takeout marketing stack with merchant discount, user voucher, delivery fee, and delivery-fee discount.
 - Recharge-rule physical delete is technically protected by `ON DELETE SET NULL`, but deactivation would preserve stronger audit provenance for transactions.
 - Delivery promotions still have no DB check constraints for valid period or discount/threshold relation. The handler now rejects invalid create/update requests, but direct SQL or future writers remain able to persist invalid rows unless DB constraints are added.
 
@@ -217,4 +218,4 @@ Missing high-value tests:
 - Reader/consumer branches checked: merchant marketing pages, member recharge, customer voucher center, public merchant detail, cart/order preview, direct order creation, promotion engine, order cancellation, and settlement/order pricing fields.
 - Authorization/tenant branches checked: owner/manager merchant route groups, merchant match checks, recharge current merchant check, discount ownership checks, customer voucher ownership validation, and downstream order/cart using authenticated/derived merchant/user context.
 - Zombie/unreachable branches checked: voucher/discount frontend list probe remains a compatibility fallback after backend full-count repair; voucher edit scans list pages instead of detail truth; discount `/applicable` and `/best` route reachability is now proof-covered; recharge-rule delete may erase live rule provenance from UI while DB only preserves nullable transaction reference.
-- Test-proof gaps checked: existing tests cover voucher claim/use/rollback, voucher update product 400 for claimed quantity, voucher/discount full-count management pagination, recharge-rule CRUD/idempotent recharge, discount lookup/order pricing, discount static route reachability, discount update merged validation, delivery update merged validation, delivery SQL, public promotion assembly, and promotion engine. Missing proof remains for issued voucher after template disable/delete and delivery DB constraints.
+- Test-proof gaps checked: existing tests cover voucher claim/use/rollback, voucher update product 400 for claimed quantity, voucher/discount full-count management pagination, recharge-rule CRUD/idempotent recharge, discount lookup/order pricing, discount static route reachability, discount update merged validation, delivery update merged validation, delivery SQL, public promotion assembly, promotion engine, order-preview typed cart lookup, and cart/order preview/direct-create marketing-total parity. Missing proof remains for issued voucher after template disable/delete and delivery DB constraints.

@@ -77,6 +77,7 @@ func CalculateOrderPreview(
 	cart, err := store.GetCartByUserAndMerchant(ctx, db.GetCartByUserAndMerchantParams{
 		UserID:     input.UserID,
 		MerchantID: input.MerchantID,
+		OrderType:  input.OrderType,
 	})
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
