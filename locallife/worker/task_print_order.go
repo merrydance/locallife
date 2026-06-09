@@ -160,21 +160,73 @@ func (processor *RedisTaskProcessor) retryPrintLog(ctx context.Context, printLog
 		return fmt.Errorf("get print log: %w", err)
 	}
 
-	printer, err := processor.store.GetCloudPrinter(ctx, printLog.PrinterID)
+	printer, err := processor.store.GetCloudPrinterIncludingDeleted(ctx, printLog.PrinterID)
 	if err != nil {
 		if err == db.ErrRecordNotFound {
 			return nil
 		}
 		return fmt.Errorf("get cloud printer: %w", err)
 	}
+	if printer.DeletedAt.Valid {
+		processor.recordSkippedPrintRetry(ctx, printLog, printer, taskKey, "printer is deleted")
+		return nil
+	}
 	printerProvider, ok := processor.cloudPrinterProvider(printer.PrinterType)
 	if !printer.IsActive || !ok {
-		log.Warn().Int64("print_log_id", printLogID).Int64("printer_id", printer.ID).Msg("skip print retry because printer is inactive or unsupported")
+		reason := "printer is inactive"
+		if !ok {
+			reason = "printer provider is not configured"
+		}
+		processor.recordSkippedPrintRetry(ctx, printLog, printer, taskKey, reason)
 		return nil
 	}
 
 	processor.executePrintAttemptWithProvider(ctx, printLog.OrderID, printer, printerProvider, printLog.PrintContent, "retry", taskKey)
 	return nil
+}
+
+func (processor *RedisTaskProcessor) recordSkippedPrintRetry(ctx context.Context, printLog db.PrintLog, printer db.CloudPrinter, taskKey string, reason string) {
+	log.Warn().
+		Int64("print_log_id", printLog.ID).
+		Int64("printer_id", printer.ID).
+		Str("printer_type", printer.PrinterType).
+		Str("reason", reason).
+		Msg("record skipped print retry")
+
+	if taskKey != "" {
+		if existingLog, err := processor.store.GetPrintLogByTaskKeyAndPrinter(ctx, db.GetPrintLogByTaskKeyAndPrinterParams{
+			TaskKey:   pgtype.Text{String: taskKey, Valid: true},
+			PrinterID: printer.ID,
+		}); err == nil {
+			log.Info().Int64("order_id", printLog.OrderID).Int64("printer_id", printer.ID).Int64("print_log_id", existingLog.ID).Str("task_key", taskKey).Msg("skip duplicate print retry failure record")
+			return
+		} else if err != db.ErrRecordNotFound {
+			log.Error().Err(err).Int64("order_id", printLog.OrderID).Int64("printer_id", printer.ID).Str("task_key", taskKey).Msg("check print retry task key failed")
+			return
+		}
+	}
+
+	providerOriginID := newPrintProviderOriginID()
+	failedLog, err := processor.store.CreatePrintLog(ctx, db.CreatePrintLogParams{
+		OrderID:          printLog.OrderID,
+		PrinterID:        printer.ID,
+		PrintContent:     printLog.PrintContent,
+		Status:           printLogStatusFailed,
+		TaskKey:          pgtype.Text{String: taskKey, Valid: taskKey != ""},
+		ProviderOriginID: pgtype.Text{String: providerOriginID, Valid: providerOriginID != ""},
+	})
+	if err != nil {
+		log.Error().Err(err).Int64("order_id", printLog.OrderID).Int64("printer_id", printer.ID).Msg("create skipped print retry log failed")
+		return
+	}
+
+	if _, err := processor.store.UpdatePrintLogStatus(ctx, db.UpdatePrintLogStatusParams{
+		ID:           failedLog.ID,
+		Status:       printLogStatusFailed,
+		ErrorMessage: pgtype.Text{String: reason, Valid: true},
+	}); err != nil {
+		log.Error().Err(err).Int64("print_log_id", failedLog.ID).Msg("update skipped print retry log failed")
+	}
 }
 
 func (processor *RedisTaskProcessor) cloudPrinterProvider(providerType string) (cloudprint.Client, bool) {

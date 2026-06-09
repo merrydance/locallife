@@ -3583,7 +3583,7 @@ func TestGetMerchantOrderPrintJobStatusAPI(t *testing.T) {
 				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
 				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
 				store.EXPECT().GetPrintLog(gomock.Any(), printLog.ID).Times(1).Return(printLog, nil)
-				store.EXPECT().GetCloudPrinter(gomock.Any(), printer.ID).Times(1).Return(printer, nil)
+				store.EXPECT().GetCloudPrinterIncludingDeleted(gomock.Any(), printer.ID).Times(1).Return(printer, nil)
 			},
 			buildClient: func() *printerClientStub {
 				return &printerClientStub{queryPrinted: true}
@@ -3614,7 +3614,7 @@ func TestGetMerchantOrderPrintJobStatusAPI(t *testing.T) {
 				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
 				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
 				store.EXPECT().GetPrintLog(gomock.Any(), printLog.ID).Times(1).Return(printLog, nil)
-				store.EXPECT().GetCloudPrinter(gomock.Any(), printer.ID).Times(1).Return(shangpengPrinter, nil)
+				store.EXPECT().GetCloudPrinterIncludingDeleted(gomock.Any(), printer.ID).Times(1).Return(shangpengPrinter, nil)
 			},
 			buildClient: func() *printerClientStub {
 				return &printerClientStub{queryPrinted: true}
@@ -3649,7 +3649,7 @@ func TestGetMerchantOrderPrintJobStatusAPI(t *testing.T) {
 				noVendorLog := printLog
 				noVendorLog.VendorOrderID = pgtype.Text{}
 				store.EXPECT().GetPrintLog(gomock.Any(), printLog.ID).Times(1).Return(noVendorLog, nil)
-				store.EXPECT().GetCloudPrinter(gomock.Any(), printer.ID).Times(1).Return(printer, nil)
+				store.EXPECT().GetCloudPrinterIncludingDeleted(gomock.Any(), printer.ID).Times(1).Return(printer, nil)
 			},
 			buildClient: func() *printerClientStub { return &printerClientStub{} },
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder, client *printerClientStub) {
@@ -3659,6 +3659,61 @@ func TestGetMerchantOrderPrintJobStatusAPI(t *testing.T) {
 				require.Equal(t, printerTypeFeieyun, resp.PrinterType)
 				require.False(t, resp.CloudQueryAvailable)
 				require.Nil(t, resp.CloudPrinted)
+				require.Empty(t, client.queryOrderID)
+			},
+		},
+		{
+			name:       "SoftDeletedPrinterKeepsHistoricalStatusVisibleWithoutCloudQuery",
+			orderID:    order.ID,
+			printLogID: printLog.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				deletedPrinter := printer
+				deletedPrinter.IsActive = false
+				deletedPrinter.DeletedAt = pgtype.Timestamptz{Time: time.Now(), Valid: true}
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
+				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				store.EXPECT().GetPrintLog(gomock.Any(), printLog.ID).Times(1).Return(printLog, nil)
+				store.EXPECT().GetCloudPrinterIncludingDeleted(gomock.Any(), printer.ID).Times(1).Return(deletedPrinter, nil)
+			},
+			buildClient: func() *printerClientStub { return &printerClientStub{} },
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder, client *printerClientStub) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp merchantOrderPrintJobStatusResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, printLog.ID, resp.PrintLogID)
+				require.Equal(t, printer.ID, resp.PrinterID)
+				require.Equal(t, printer.PrinterName, resp.PrinterName)
+				require.Equal(t, printer.PrinterType, resp.PrinterType)
+				require.NotNil(t, resp.VendorOrderID)
+				require.Equal(t, "vendor-job-1", *resp.VendorOrderID)
+				require.False(t, resp.CloudQueryAvailable)
+				require.Nil(t, resp.CloudPrinted)
+				require.Empty(t, client.queryOrderID)
+			},
+		},
+		{
+			name:       "PrinterFromOtherMerchantHidden",
+			orderID:    order.ID,
+			printLogID: printLog.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				foreignPrinter := printer
+				foreignPrinter.MerchantID = merchant.ID + 100
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
+				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				store.EXPECT().GetPrintLog(gomock.Any(), printLog.ID).Times(1).Return(printLog, nil)
+				store.EXPECT().GetCloudPrinterIncludingDeleted(gomock.Any(), printer.ID).Times(1).Return(foreignPrinter, nil)
+			},
+			buildClient: func() *printerClientStub { return &printerClientStub{} },
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder, client *printerClientStub) {
+				require.Equal(t, http.StatusNotFound, recorder.Code)
 				require.Empty(t, client.queryOrderID)
 			},
 		},
@@ -3930,7 +3985,7 @@ func TestRetryMerchantOrderPrintJobAPI(t *testing.T) {
 				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
 				store.EXPECT().GetPrintLog(gomock.Any(), currentPrintLog.ID).Times(1).Return(currentPrintLog, nil)
 				store.EXPECT().GetLatestPrintLogByOrderAndPrinter(gomock.Any(), db.GetLatestPrintLogByOrderAndPrinterParams{OrderID: order.ID, PrinterID: printer.ID}).Times(1).Return(currentPrintLog, nil)
-				store.EXPECT().GetCloudPrinter(gomock.Any(), printer.ID).Times(1).Return(printer, nil)
+				store.EXPECT().GetCloudPrinterIncludingDeleted(gomock.Any(), printer.ID).Times(1).Return(printer, nil)
 				distributor.EXPECT().DistributeTaskPrintOrder(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(func(_ any, payload *worker.PrintOrderPayload, _ ...asynq.Option) error {
 					require.Equal(t, order.ID, payload.OrderID)
 					require.Equal(t, "retry", payload.Trigger)
@@ -3964,7 +4019,7 @@ func TestRetryMerchantOrderPrintJobAPI(t *testing.T) {
 				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
 				store.EXPECT().GetPrintLog(gomock.Any(), currentPrintLog.ID).Times(1).Return(currentPrintLog, nil)
 				store.EXPECT().GetLatestPrintLogByOrderAndPrinter(gomock.Any(), db.GetLatestPrintLogByOrderAndPrinterParams{OrderID: order.ID, PrinterID: printer.ID}).Times(1).Return(currentPrintLog, nil)
-				store.EXPECT().GetCloudPrinter(gomock.Any(), printer.ID).Times(1).Return(shangpengPrinter, nil)
+				store.EXPECT().GetCloudPrinterIncludingDeleted(gomock.Any(), printer.ID).Times(1).Return(shangpengPrinter, nil)
 				distributor.EXPECT().DistributeTaskPrintOrder(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(func(_ any, payload *worker.PrintOrderPayload, _ ...asynq.Option) error {
 					require.Equal(t, order.ID, payload.OrderID)
 					require.Equal(t, "retry", payload.Trigger)
@@ -3998,7 +4053,26 @@ func TestRetryMerchantOrderPrintJobAPI(t *testing.T) {
 				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
 				store.EXPECT().GetPrintLog(gomock.Any(), currentPrintLog.ID).Times(1).Return(currentPrintLog, nil)
 				store.EXPECT().GetLatestPrintLogByOrderAndPrinter(gomock.Any(), db.GetLatestPrintLogByOrderAndPrinterParams{OrderID: order.ID, PrinterID: printer.ID}).Times(1).Return(currentPrintLog, nil)
-				store.EXPECT().GetCloudPrinter(gomock.Any(), printer.ID).Times(1).Return(inactivePrinter, nil)
+				store.EXPECT().GetCloudPrinterIncludingDeleted(gomock.Any(), printer.ID).Times(1).Return(inactivePrinter, nil)
+				distributor.EXPECT().DistributeTaskPrintOrder(gomock.Any(), gomock.Any()).Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name:     "SoftDeletedPrinterRejectedAsInactive",
+			printLog: printLog,
+			buildStubs: func(store *mockdb.MockStore, distributor *mockworker.MockTaskDistributor, currentPrintLog db.PrintLog) {
+				deletedPrinter := printer
+				deletedPrinter.IsActive = false
+				deletedPrinter.DeletedAt = pgtype.Timestamptz{Time: time.Now(), Valid: true}
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
+				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				store.EXPECT().GetPrintLog(gomock.Any(), currentPrintLog.ID).Times(1).Return(currentPrintLog, nil)
+				store.EXPECT().GetLatestPrintLogByOrderAndPrinter(gomock.Any(), db.GetLatestPrintLogByOrderAndPrinterParams{OrderID: order.ID, PrinterID: printer.ID}).Times(1).Return(currentPrintLog, nil)
+				store.EXPECT().GetCloudPrinterIncludingDeleted(gomock.Any(), printer.ID).Times(1).Return(deletedPrinter, nil)
 				distributor.EXPECT().DistributeTaskPrintOrder(gomock.Any(), gomock.Any()).Times(0)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {

@@ -7587,6 +7587,21 @@ func (mr *MockStoreMockRecorder) GetCloudPrinterBySN(ctx, printerSn any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCloudPrinterBySN", reflect.TypeOf((*MockStore)(nil).GetCloudPrinterBySN), ctx, printerSn)
 }
 
+// GetCloudPrinterIncludingDeleted mocks base method.
+func (m *MockStore) GetCloudPrinterIncludingDeleted(ctx context.Context, id int64) (db.CloudPrinter, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCloudPrinterIncludingDeleted", ctx, id)
+	ret0, _ := ret[0].(db.CloudPrinter)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetCloudPrinterIncludingDeleted indicates an expected call of GetCloudPrinterIncludingDeleted.
+func (mr *MockStoreMockRecorder) GetCloudPrinterIncludingDeleted(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCloudPrinterIncludingDeleted", reflect.TypeOf((*MockStore)(nil).GetCloudPrinterIncludingDeleted), ctx, id)
+}
+
 // GetCloudPrinterProviderAuthorizationByMerchantAndMachineCode mocks base method.
 func (m *MockStore) GetCloudPrinterProviderAuthorizationByMerchantAndMachineCode(ctx context.Context, arg db.GetCloudPrinterProviderAuthorizationByMerchantAndMachineCodeParams) (db.CloudPrinterProviderAuthorization, error) {
 	m.ctrl.T.Helper()

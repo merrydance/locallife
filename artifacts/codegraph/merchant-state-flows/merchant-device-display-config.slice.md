@@ -82,7 +82,7 @@ Device and display settings must be truthful configuration, not decorative toggl
 16. Printer edit page checks access, loads detail when editing, validates create fields, then calls create or update. It navigates back instead of rehydrating in-place.
     Evidence: `weapp/miniprogram/pages/merchant/printers/edit/index.ts:110`, `weapp/miniprogram/pages/merchant/printers/edit/index.ts:133`, `weapp/miniprogram/pages/merchant/printers/edit/index.ts:152`, `weapp/miniprogram/pages/merchant/printers/edit/index.ts:173`, `weapp/miniprogram/pages/merchant/printers/edit/index.ts:223`, `weapp/miniprogram/pages/merchant/printers/edit/index.ts:231`, `weapp/miniprogram/pages/merchant/printers/edit/index.ts:235`, `weapp/miniprogram/pages/merchant/printers/edit/index.ts:256`, `weapp/miniprogram/pages/merchant/printers/edit/index.ts:268`, `weapp/miniprogram/pages/merchant/printers/edit/index.ts:275`.
 
-17. Backend printer create checks global printer SN uniqueness, calls provider add first for Feieyun, then writes `cloud_printers`. If local create fails after provider success, it records a pending remove reconciliation job.
+17. Backend printer create enforces active printer SN uniqueness, calls provider add first for Feieyun, then writes `cloud_printers`. Soft-deleted historical printer rows may keep the same SN; if local create fails after provider success, the backend records a pending remove reconciliation job.
     Evidence: `locallife/api/device.go:89`, `locallife/api/device.go:100`, `locallife/api/device.go:111`, `locallife/api/device.go:139`, `locallife/api/device.go:141`, `locallife/api/device.go:152`, `locallife/api/device.go:164`, `locallife/api/device.go:165`.
 
 18. Backend printer read/update/status/test/delete all resolve the merchant and verify the printer belongs to that merchant before operating.
@@ -91,11 +91,11 @@ Device and display settings must be truthful configuration, not decorative toggl
 19. Backend printer update is local-only; it can change name, key, role, order-type print flags, and active state. It does not rename/update provider-side printer metadata.
     Evidence: `locallife/api/device.go:467`, `locallife/api/device.go:472`, `locallife/api/device.go:475`, `locallife/api/device.go:478`, `locallife/api/device.go:481`, `locallife/api/device.go:490`, `locallife/api/device.go:495`, `locallife/db/query/cloud_printer.sql:34`, `locallife/db/query/cloud_printer.sql:37`, `locallife/db/query/cloud_printer.sql:43`.
 
-20. Backend printer delete calls provider remove first, then physically deletes local `cloud_printers`. If local delete fails after provider success, it records a pending register reconciliation job.
-    Evidence: `locallife/api/device.go:559`, `locallife/api/device.go:561`, `locallife/api/device.go:568`, `locallife/api/device.go:570`, `locallife/api/device.go:571`, `locallife/db/query/cloud_printer.sql:48`.
+20. Fixed 2026-06-09: backend printer delete still calls provider remove first, then soft-deletes/deactivates local `cloud_printers` instead of physically deleting the row. If the local soft delete fails after provider success, it still records a pending register reconciliation job.
+    Evidence: `locallife/api/device.go:559`, `locallife/api/device.go:561`, `locallife/api/device.go:568`, `locallife/api/device.go:570`, `locallife/api/device.go:571`, `locallife/db/query/cloud_printer.sql:48`, `locallife/db/migration/000255_soft_delete_cloud_printers.up.sql`.
 
-21. `print_logs.printer_id` references `cloud_printers(id)` without an `ON DELETE` clause, so historical print logs can block physical printer deletion.
-    Evidence: `locallife/db/migration/000010_add_orders.up.sql:156`, `locallife/db/migration/000010_add_orders.up.sql:160`, `locallife/db/query/print_log.sql:35`, `locallife/db/query/print_log.sql:50`.
+21. Fixed 2026-06-09: `print_logs.printer_id` still references `cloud_printers(id)` for historical observability, but delete no longer physically removes the printer row. Current printer reads/lists/updates exclude `deleted_at IS NOT NULL`, active printer SN uniqueness ignores soft-deleted rows, order print-job status can read soft-deleted historical printers without issuing a cloud query, retry on a soft-deleted printer is rejected/recorded as `printer is deleted`, and migration down preserves both duplicate-SN historical rows by tombstoning soft-deleted SNs before restoring the old global unique index.
+    Evidence: `locallife/db/migration/000010_add_orders.up.sql:156`, `locallife/db/migration/000010_add_orders.up.sql:160`, `locallife/db/migration/000255_soft_delete_cloud_printers.up.sql`, `locallife/db/migration/000255_soft_delete_cloud_printers.down.sql`, `locallife/db/query/cloud_printer.sql`, `locallife/api/order.go`, `locallife/worker/task_print_order.go`, `locallife/db/sqlc/cloud_printer_test.go`, `locallife/db/sqlc/cloud_printer_migration_test.go`, `locallife/api/order_test.go`, `locallife/worker/task_print_order_test.go`.
 
 22. Printer test and live status call provider APIs directly; test print does not create `print_logs`.
     Evidence: `locallife/api/device.go:650`, `locallife/api/device.go:661`, `locallife/api/device.go:662`, `locallife/api/device.go:672`, `locallife/api/device.go:355`, `locallife/api/device.go:360`, `locallife/api/device.go:365`, `locallife/api/device.go:371`.
@@ -136,16 +136,16 @@ Device and display settings must be truthful configuration, not decorative toggl
 - `DeviceManagementService.listPrinterReconciliationJobs` and `retryPrinterReconciliationJob` wrappers exist, but the current merchant printer pages do not call them.
 - `getActivePrinters` and `batchTestPrinters` helper exports exist but no current caller was found in the Mini Program search.
 - Printer update changes local `printer_key` and `printer_name`, but no provider update/rename path was found. Provider/local metadata can drift by design after update.
-- Printer deletion can be blocked by historical `print_logs` foreign keys. Because delete removes provider first, local failure produces a re-register reconciliation job instead of a clean deletion.
+- Fixed 2026-06-09: printer deletion is now a soft-delete/deactivate operation, so historical `print_logs` keep their printer reference and no longer block local deletion after provider removal. The active SN partial unique index allows a replacement active printer with the same SN, Yilianyun authorization rebind clears stale soft-deleted printer links before attaching the replacement, and historical print status/retry paths now report soft-deleted printers as local inactive/deleted rather than disappearing as 404.
 - Flutter local Bluetooth printer state is a third print surface that is not represented in `cloud_printers`, `print_logs`, or display config. It can print App receipts even when backend cloud-printer config is disabled, depending on App action flow.
 - There are two auto-accept controls with different truth owners: backend display config auto-accept runs in the payment-domain outbox and requires cloud-printer conditions; Flutter local auto-accept runs when the App observes a new order alert and calls the merchant accept endpoint directly.
 
 ## SQL And Durable State Boundaries
 
 - `order_display_configs`: owns print enablement, order-type print flags, dispatch mode, trigger mode, auto-accept, voice flags, KDS flag, and KDS URL. Unique by merchant.
-- `cloud_printers`: owns local printer name, serial number, secret key, provider type, role, per-order-type flags, and active flag. Printer serial number is globally unique.
+- `cloud_printers`: owns local printer name, serial number, secret key, provider type, role, per-order-type flags, active flag, and soft-delete timestamp. Active printer serial numbers are unique while soft-deleted historical rows may keep the same SN.
 - `cloud_printer_reconciliation_jobs`: owns pending/resolved provider/local drift jobs after provider-first create/delete local failures. Pending jobs are unique by `(merchant_id, printer_sn, desired_action)`.
-- `print_logs`: owns order-print execution observability and references `cloud_printers(id)`. It can block physical printer deletion.
+- `print_logs`: owns order-print execution observability and references `cloud_printers(id)`. It keeps historical printer identity after soft delete.
 - Feieyun provider: owns real registration, removal, live status, printer info, and test/order print command acceptance.
 - Flutter local Bluetooth device id in shared preferences owns App-local printer reconnect state only; backend cannot observe or reconcile it.
 - Flutter notification settings in shared preferences own App-local sound, voice, auto-accept, and auto-print behavior only; they are not synchronized with `order_display_configs`.
@@ -162,7 +162,7 @@ Device and display settings must be truthful configuration, not decorative toggl
 ## Idempotency And Duplicate-Submit Checks
 
 - Display-config page blocks duplicate save with `settingsSaving`. Backend PUT is partial create/update and last-write-wins; no version or idempotency key exists.
-- Printer edit page blocks duplicate submit with `submitting`. Backend create checks global SN uniqueness and provider add is called before local insert.
+- Printer edit page blocks duplicate submit with `submitting`. Backend create checks active SN uniqueness and provider add is called before local insert.
 - Printer list blocks duplicate delete/test via per-action ids and confirmation dialog `confirmDialogSubmitting`.
 - Provider/local create and delete are not atomic. Reconciliation jobs provide durable recovery signals only for local DB failure after provider success.
 - Reconciliation retry is idempotent only at the local job state level: resolved jobs return as-is; pending retries call the provider action again.
@@ -206,7 +206,7 @@ Missing high-value tests:
 
 - Mini Program wrapper/page test for display config save/reload and auto-accept/enable-print combined semantics.
 - Test proving voice fields have a consumer, or an explicit test documenting that they are disabled/unavailable.
-- Deletion-with-existing-print-logs DB/API test to decide whether physical delete should fail, deactivate, or cascade/restrict intentionally.
+- Fixed 2026-06-09: deletion-with-existing-print-logs DB test now proves soft delete/deactivate preserves historical print logs and permits active SN re-registration; Yilianyun rebind after soft delete, historical print-job status over soft-deleted printers, skipped retry failure logging, and duplicate-SN migration down are also covered.
 - End-to-end test that a paid order with `auto_accept_paid_orders=true` updates order state and enqueues one accepted print task only once across outbox retries.
 - Reconciliation UI coverage if merchants are expected to recover provider/local drift themselves.
 - Flutter local-printer tests for duplicate receipt printing, saved-device reconnect, disconnected-device failure copy, and relationship to backend cloud-printer/display config.
@@ -216,7 +216,7 @@ Missing high-value tests:
 
 - Decide whether voice settings are real product controls. If not, hide them or label them as unavailable; if yes, wire them to the actual merchant notification/audio consumer.
 - Add a merchant-visible reconciliation section or remove/defer the Mini Program reconciliation wrappers to avoid unreachable recovery controls.
-- Replace physical printer deletion with soft deactivate/deleted state, or explicitly handle print-log foreign keys before delete.
+- Fixed 2026-06-09: physical printer deletion has been replaced with a soft deactivate/deleted state, preserving print-log history while excluding deleted printers from current printer reads and active printer selection.
 - Decide whether provider printer metadata should be updated when local name/key changes. If key changes are only for future provider commands, document the boundary.
 - Normalize `auto_accept_paid_orders` and `enable_print` semantics: either clear auto-accept when print is disabled, or make the UI/response explain that auto-accept is stored but inactive.
 - Consider persisting a display-config row when GET returns defaults so future audits have one durable truth shape instead of a default-response path plus persisted path.
@@ -229,8 +229,8 @@ Missing high-value tests:
 - Request branches checked: display-config GET/PUT, device access check, printer CRUD/test/live-status, reconciliation list/retry, order accept endpoint used by Flutter local auto-accept, backend print-task enqueue, and Flutter local shared-preferences paths with no backend request.
 - Backend state branches checked: default versus persisted display config, `auto_accept_paid_orders`, `enable_print`, per-order-type print flags, voice/KDS fields, cloud printer registration and delete, provider-first/local-failure reconciliation jobs, print logs, manual/test print commands, accepted/ready print triggers, and App-local BLE state outside backend.
 - Async branches checked: payment-domain outbox auto-accept, Redis print worker, provider print callback/anomaly scheduler, reconciliation retry, provider live status direct query, Flutter local BLE print after manual/local auto-accept, and App notification/voice delivery. Flutter BLE has no backend recovery or observability path.
-- Failure/retry branches checked: duplicate save/delete/test guards, provider add/delete success followed by local DB failure, reconciliation retry repeatability, physical delete blocked by print logs, default display-config path without row persistence, outbox retry idempotency, print task key dedupe, manual/test repeated commands, BLE duplicate paper prints, and local auto-accept retries.
+- Failure/retry branches checked: duplicate save/delete/test guards, provider add/delete success followed by local DB failure, reconciliation retry repeatability, soft-delete with historical print logs, default display-config path without row persistence, outbox retry idempotency, print task key dedupe, manual/test repeated commands, BLE duplicate paper prints, and local auto-accept retries.
 - Reader/consumer branches checked: display settings UI, printer list, print anomalies, order outbox, order service print scheduler, print worker, Flutter order alerts, Flutter local printer page, and merchant staff device access gate.
 - Authorization/tenant branches checked: Mini Program device-management access guard, backend owner/manager device routes, active/approved/region device access check, printer merchant ownership checks, reconciliation merchant scope, and downstream print/auto-accept loading merchant ids from durable orders/printers.
 - Zombie/unreachable branches checked: voice settings lack a proven consumer; reconciliation wrappers have no merchant UI surface; Flutter notification settings are not synchronized with backend display config; Flutter BLE prints are not `print_logs`; Flutter local auto-accept is a second auto-accept path separate from backend config.
-- Test-proof gaps checked: backend tests cover display config, printer provider/reconciliation, outbox auto-accept, print tasks, and print scheduling. Missing proof remains for Mini Program display-config semantics, voice consumer decision, delete-with-print-logs contract, one accepted print across outbox retries, reconciliation UI, Flutter BLE duplicate/reconnect/failure behavior, and cross-client auto-accept convergence.
+- Test-proof gaps checked: backend tests cover display config, printer provider/reconciliation, soft-delete with historical print logs, Yilianyun rebind after soft delete, historical print-job status/retry behavior for soft-deleted printers, duplicate-SN migration down, outbox auto-accept, print tasks, and print scheduling. Missing proof remains for Mini Program display-config semantics, voice consumer decision, one accepted print across outbox retries, reconciliation UI, Flutter BLE duplicate/reconnect/failure behavior, and cross-client auto-accept convergence.

@@ -472,6 +472,7 @@ type CloudPrinter struct {
 	CreatedAt        time.Time          `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 	PrinterRole      string             `json:"printer_role"`
+	DeletedAt        pgtype.Timestamptz `json:"deleted_at"`
 }
 
 type CloudPrinterAuthorizationSession struct {

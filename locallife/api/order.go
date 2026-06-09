@@ -2025,7 +2025,7 @@ func (server *Server) getMerchantOrderPrintJobStatus(ctx *gin.Context) {
 		return
 	}
 
-	printer, err := server.store.GetCloudPrinter(ctx, printLog.PrinterID)
+	printer, err := server.store.GetCloudPrinterIncludingDeleted(ctx, printLog.PrinterID)
 	if err != nil {
 		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("printer not found")))
@@ -2034,12 +2034,10 @@ func (server *Server) getMerchantOrderPrintJobStatus(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	printerProvider, ok := server.cloudPrinterProvider(printer.PrinterType)
-	if !ok {
-		ctx.JSON(http.StatusNotImplemented, errorResponse(errors.New("current printer type or environment does not support cloud print status query")))
+	if printer.MerchantID != merchant.ID {
+		ctx.JSON(http.StatusNotFound, errorResponse(errors.New("printer not found")))
 		return
 	}
-
 	resp := merchantOrderPrintJobStatusResponse{
 		PrintLogID:          printLog.ID,
 		OrderID:             printLog.OrderID,
@@ -2047,13 +2045,20 @@ func (server *Server) getMerchantOrderPrintJobStatus(ctx *gin.Context) {
 		PrinterName:         printer.PrinterName,
 		PrinterType:         printer.PrinterType,
 		LocalStatus:         printLog.Status,
-		CloudQueryAvailable: printLog.VendorOrderID.Valid,
+		CloudQueryAvailable: printLog.VendorOrderID.Valid && !printer.DeletedAt.Valid,
 		CheckedAt:           time.Now(),
 	}
 	if printLog.VendorOrderID.Valid {
 		vendorOrderID := printLog.VendorOrderID.String
 		resp.VendorOrderID = &vendorOrderID
-		cloudPrinted, err := printerProvider.QueryOrderState(ctx, vendorOrderID)
+	}
+	if resp.CloudQueryAvailable {
+		printerProvider, ok := server.cloudPrinterProvider(printer.PrinterType)
+		if !ok {
+			ctx.JSON(http.StatusNotImplemented, errorResponse(errors.New("current printer type or environment does not support cloud print status query")))
+			return
+		}
+		cloudPrinted, err := printerProvider.QueryOrderState(ctx, printLog.VendorOrderID.String)
 		if err != nil {
 			ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, err, "cloud print status unavailable", "cloud print order state query failed"))
 			return
@@ -2223,7 +2228,7 @@ func (server *Server) retryMerchantOrderPrintJob(ctx *gin.Context) {
 		return
 	}
 
-	printer, err := server.store.GetCloudPrinter(ctx, printLog.PrinterID)
+	printer, err := server.store.GetCloudPrinterIncludingDeleted(ctx, printLog.PrinterID)
 	if err != nil {
 		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("printer not found")))
@@ -2234,6 +2239,10 @@ func (server *Server) retryMerchantOrderPrintJob(ctx *gin.Context) {
 	}
 	if printer.MerchantID != merchant.ID {
 		ctx.JSON(http.StatusNotFound, errorResponse(errors.New("printer not found")))
+		return
+	}
+	if printer.DeletedAt.Valid {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("printer is deleted")))
 		return
 	}
 	if !printer.IsActive {

@@ -699,6 +699,7 @@ type Querier interface {
 	GetClosestRegion(ctx context.Context, arg GetClosestRegionParams) (Region, error)
 	GetCloudPrinter(ctx context.Context, id int64) (CloudPrinter, error)
 	GetCloudPrinterBySN(ctx context.Context, printerSn string) (CloudPrinter, error)
+	GetCloudPrinterIncludingDeleted(ctx context.Context, id int64) (CloudPrinter, error)
 	GetCloudPrinterProviderAuthorizationByMerchantAndMachineCode(ctx context.Context, arg GetCloudPrinterProviderAuthorizationByMerchantAndMachineCodeParams) (CloudPrinterProviderAuthorization, error)
 	GetCloudPrinterReconciliationJob(ctx context.Context, id int64) (CloudPrinterReconciliationJob, error)
 	GetCombinedPaymentOrder(ctx context.Context, id int64) (CombinedPaymentOrder, error)

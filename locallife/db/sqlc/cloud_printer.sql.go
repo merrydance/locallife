@@ -24,7 +24,7 @@ INSERT INTO cloud_printers (
     print_reservation
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9
-) RETURNING id, merchant_id, printer_name, printer_sn, printer_key, printer_type, print_takeout, print_dine_in, print_reservation, is_active, created_at, updated_at, printer_role
+) RETURNING id, merchant_id, printer_name, printer_sn, printer_key, printer_type, print_takeout, print_dine_in, print_reservation, is_active, created_at, updated_at, printer_role, deleted_at
 `
 
 type CreateCloudPrinterParams struct {
@@ -66,13 +66,15 @@ func (q *Queries) CreateCloudPrinter(ctx context.Context, arg CreateCloudPrinter
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.PrinterRole,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
 const deleteCloudPrinter = `-- name: DeleteCloudPrinter :exec
-DELETE FROM cloud_printers
-WHERE id = $1
+UPDATE cloud_printers
+SET deleted_at = now(), is_active = false, updated_at = now()
+WHERE id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) DeleteCloudPrinter(ctx context.Context, id int64) error {
@@ -81,8 +83,8 @@ func (q *Queries) DeleteCloudPrinter(ctx context.Context, id int64) error {
 }
 
 const getCloudPrinter = `-- name: GetCloudPrinter :one
-SELECT id, merchant_id, printer_name, printer_sn, printer_key, printer_type, print_takeout, print_dine_in, print_reservation, is_active, created_at, updated_at, printer_role FROM cloud_printers
-WHERE id = $1 LIMIT 1
+SELECT id, merchant_id, printer_name, printer_sn, printer_key, printer_type, print_takeout, print_dine_in, print_reservation, is_active, created_at, updated_at, printer_role, deleted_at FROM cloud_printers
+WHERE id = $1 AND deleted_at IS NULL LIMIT 1
 `
 
 func (q *Queries) GetCloudPrinter(ctx context.Context, id int64) (CloudPrinter, error) {
@@ -102,13 +104,14 @@ func (q *Queries) GetCloudPrinter(ctx context.Context, id int64) (CloudPrinter, 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.PrinterRole,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
 const getCloudPrinterBySN = `-- name: GetCloudPrinterBySN :one
-SELECT id, merchant_id, printer_name, printer_sn, printer_key, printer_type, print_takeout, print_dine_in, print_reservation, is_active, created_at, updated_at, printer_role FROM cloud_printers
-WHERE printer_sn = $1 LIMIT 1
+SELECT id, merchant_id, printer_name, printer_sn, printer_key, printer_type, print_takeout, print_dine_in, print_reservation, is_active, created_at, updated_at, printer_role, deleted_at FROM cloud_printers
+WHERE printer_sn = $1 AND deleted_at IS NULL LIMIT 1
 `
 
 func (q *Queries) GetCloudPrinterBySN(ctx context.Context, printerSn string) (CloudPrinter, error) {
@@ -128,13 +131,41 @@ func (q *Queries) GetCloudPrinterBySN(ctx context.Context, printerSn string) (Cl
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.PrinterRole,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const getCloudPrinterIncludingDeleted = `-- name: GetCloudPrinterIncludingDeleted :one
+SELECT id, merchant_id, printer_name, printer_sn, printer_key, printer_type, print_takeout, print_dine_in, print_reservation, is_active, created_at, updated_at, printer_role, deleted_at FROM cloud_printers
+WHERE id = $1 LIMIT 1
+`
+
+func (q *Queries) GetCloudPrinterIncludingDeleted(ctx context.Context, id int64) (CloudPrinter, error) {
+	row := q.db.QueryRow(ctx, getCloudPrinterIncludingDeleted, id)
+	var i CloudPrinter
+	err := row.Scan(
+		&i.ID,
+		&i.MerchantID,
+		&i.PrinterName,
+		&i.PrinterSn,
+		&i.PrinterKey,
+		&i.PrinterType,
+		&i.PrintTakeout,
+		&i.PrintDineIn,
+		&i.PrintReservation,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PrinterRole,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
 const listActiveCloudPrintersByMerchant = `-- name: ListActiveCloudPrintersByMerchant :many
-SELECT id, merchant_id, printer_name, printer_sn, printer_key, printer_type, print_takeout, print_dine_in, print_reservation, is_active, created_at, updated_at, printer_role FROM cloud_printers
-WHERE merchant_id = $1 AND is_active = true
+SELECT id, merchant_id, printer_name, printer_sn, printer_key, printer_type, print_takeout, print_dine_in, print_reservation, is_active, created_at, updated_at, printer_role, deleted_at FROM cloud_printers
+WHERE merchant_id = $1 AND is_active = true AND deleted_at IS NULL
 ORDER BY created_at
 `
 
@@ -161,6 +192,7 @@ func (q *Queries) ListActiveCloudPrintersByMerchant(ctx context.Context, merchan
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.PrinterRole,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -173,8 +205,8 @@ func (q *Queries) ListActiveCloudPrintersByMerchant(ctx context.Context, merchan
 }
 
 const listCloudPrintersByMerchant = `-- name: ListCloudPrintersByMerchant :many
-SELECT id, merchant_id, printer_name, printer_sn, printer_key, printer_type, print_takeout, print_dine_in, print_reservation, is_active, created_at, updated_at, printer_role FROM cloud_printers
-WHERE merchant_id = $1
+SELECT id, merchant_id, printer_name, printer_sn, printer_key, printer_type, print_takeout, print_dine_in, print_reservation, is_active, created_at, updated_at, printer_role, deleted_at FROM cloud_printers
+WHERE merchant_id = $1 AND deleted_at IS NULL
 ORDER BY created_at
 `
 
@@ -201,6 +233,7 @@ func (q *Queries) ListCloudPrintersByMerchant(ctx context.Context, merchantID in
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.PrinterRole,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -223,8 +256,8 @@ SET
     print_reservation = COALESCE($7, print_reservation),
     is_active = COALESCE($8, is_active),
     updated_at = now()
-WHERE id = $1
-RETURNING id, merchant_id, printer_name, printer_sn, printer_key, printer_type, print_takeout, print_dine_in, print_reservation, is_active, created_at, updated_at, printer_role
+WHERE id = $1 AND deleted_at IS NULL
+RETURNING id, merchant_id, printer_name, printer_sn, printer_key, printer_type, print_takeout, print_dine_in, print_reservation, is_active, created_at, updated_at, printer_role, deleted_at
 `
 
 type UpdateCloudPrinterParams struct {
@@ -264,6 +297,7 @@ func (q *Queries) UpdateCloudPrinter(ctx context.Context, arg UpdateCloudPrinter
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.PrinterRole,
+		&i.DeletedAt,
 	)
 	return i, err
 }

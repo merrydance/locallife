@@ -906,7 +906,7 @@ func TestProcessTaskPrintOrder_RetryPrintLogReplaysOriginalContent(t *testing.T)
 	}
 
 	store.EXPECT().GetPrintLog(gomock.Any(), originalPrintLog.ID).Times(1).Return(originalPrintLog, nil)
-	store.EXPECT().GetCloudPrinter(gomock.Any(), printer.ID).Times(1).Return(printer, nil)
+	store.EXPECT().GetCloudPrinterIncludingDeleted(gomock.Any(), printer.ID).Times(1).Return(printer, nil)
 	store.EXPECT().GetPrintLogByTaskKeyAndPrinter(gomock.Any(), gomock.Any()).Times(1).Return(db.PrintLog{}, db.ErrRecordNotFound)
 	store.EXPECT().CreatePrintLog(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(func(_ context.Context, arg db.CreatePrintLogParams) (db.PrintLog, error) {
 		require.Equal(t, originalPrintLog.OrderID, arg.OrderID)
@@ -933,6 +933,69 @@ func TestProcessTaskPrintOrder_RetryPrintLogReplaysOriginalContent(t *testing.T)
 	require.Len(t, printerClient.inputs, 1)
 	require.Equal(t, printer.PrinterSn, printerClient.inputs[0].SN)
 	require.Equal(t, originalPrintLog.PrintContent, printerClient.inputs[0].Content)
+}
+
+func TestProcessTaskPrintOrder_RetrySoftDeletedPrinterRecordsFailedAttempt(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	processor := NewTestTaskProcessor(store, NewNoopTaskDistributor(), nil, nil)
+	printerClient := &printClientRecorder{}
+	processor.SetPrinterClientForTest(printerClient)
+
+	originalPrintLog := db.PrintLog{
+		ID:           311,
+		OrderID:      411,
+		PrinterID:    511,
+		PrintContent: "补打测试",
+		Status:       "failed",
+	}
+	printer := db.CloudPrinter{
+		ID:          originalPrintLog.PrinterID,
+		MerchantID:  611,
+		PrinterName: "前台",
+		PrinterSn:   "front-sn-deleted",
+		PrinterType: "feieyun",
+		PrinterRole: "front",
+		IsActive:    false,
+		DeletedAt:   pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	}
+
+	store.EXPECT().GetPrintLog(gomock.Any(), originalPrintLog.ID).Times(1).Return(originalPrintLog, nil)
+	store.EXPECT().GetCloudPrinterIncludingDeleted(gomock.Any(), printer.ID).Times(1).Return(printer, nil)
+	store.EXPECT().GetPrintLogByTaskKeyAndPrinter(gomock.Any(), gomock.Any()).Times(1).Return(db.PrintLog{}, db.ErrRecordNotFound)
+	store.EXPECT().CreatePrintLog(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(func(_ context.Context, arg db.CreatePrintLogParams) (db.PrintLog, error) {
+		require.Equal(t, originalPrintLog.OrderID, arg.OrderID)
+		require.Equal(t, printer.ID, arg.PrinterID)
+		require.Equal(t, originalPrintLog.PrintContent, arg.PrintContent)
+		require.Equal(t, "failed", arg.Status)
+		require.Equal(t, pgtype.Text{String: "retry:411:311", Valid: true}, arg.TaskKey)
+		require.True(t, arg.ProviderOriginID.Valid)
+		return db.PrintLog{
+			ID:               312,
+			OrderID:          arg.OrderID,
+			PrinterID:        arg.PrinterID,
+			PrintContent:     arg.PrintContent,
+			Status:           arg.Status,
+			TaskKey:          arg.TaskKey,
+			ProviderOriginID: arg.ProviderOriginID,
+		}, nil
+	})
+	store.EXPECT().UpdatePrintLogStatus(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(func(_ context.Context, arg db.UpdatePrintLogStatusParams) (db.PrintLog, error) {
+		require.Equal(t, int64(312), arg.ID)
+		require.Equal(t, "failed", arg.Status)
+		require.True(t, arg.ErrorMessage.Valid)
+		require.Equal(t, "printer is deleted", arg.ErrorMessage.String)
+		return db.PrintLog{}, nil
+	})
+
+	payload, err := json.Marshal(PrintOrderPayload{OrderID: originalPrintLog.OrderID, Trigger: "retry", RetryPrintLogID: originalPrintLog.ID, TaskKey: "retry:411:311"})
+	require.NoError(t, err)
+
+	err = processor.ProcessTaskPrintOrder(context.Background(), asynq.NewTask(TaskPrintOrder, payload))
+	require.NoError(t, err)
+	require.Empty(t, printerClient.inputs)
 }
 
 func TestProcessTaskPrintOrder_SkipsDuplicateTaskKeyReentry(t *testing.T) {
