@@ -110,6 +110,188 @@ func TestCreateReservationTx_DepositMode(t *testing.T) {
 	require.Equal(t, result.Reservation.ID, dbReservation.ID)
 }
 
+func TestCreateReservationTxRejectsDisabledTableAfterLock(t *testing.T) {
+	user := createRandomUser(t)
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	room := createRandomRoom(t, merchant.ID)
+
+	_, err := testStore.UpdateTableStatus(context.Background(), UpdateTableStatusParams{
+		ID:     room.ID,
+		Status: TableStatusDisabled,
+	})
+	require.NoError(t, err)
+
+	tomorrow := time.Now().Add(24 * time.Hour)
+	_, err = testStore.CreateReservationTx(context.Background(), CreateReservationTxParams{
+		CreateTableReservationParams: CreateTableReservationParams{
+			TableID:         room.ID,
+			UserID:          user.ID,
+			MerchantID:      merchant.ID,
+			ReservationDate: pgtype.Date{Time: tomorrow, Valid: true},
+			ReservationTime: pgtype.Time{Microseconds: 18 * 3600 * 1000000, Valid: true},
+			GuestCount:      4,
+			ContactName:     "张三",
+			ContactPhone:    "13800138000",
+			PaymentMode:     "deposit",
+			DepositAmount:   10000,
+			PrepaidAmount:   0,
+			RefundDeadline:  tomorrow.Add(-2 * time.Hour),
+			PaymentDeadline: time.Now().Add(30 * time.Minute),
+			Status:          "pending",
+		},
+	})
+	require.ErrorIs(t, err, ErrTableDisabledForReservation)
+
+	reservations, listErr := testStore.ListReservationsByTable(context.Background(), ListReservationsByTableParams{
+		TableID: room.ID,
+		Limit:   10,
+		Offset:  0,
+	})
+	require.NoError(t, listErr)
+	require.Empty(t, reservations)
+}
+
+func TestCreateMerchantReservationTxRejectsDisabledTableAfterLock(t *testing.T) {
+	operator := createRandomUser(t)
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	room := createRandomRoom(t, merchant.ID)
+
+	_, err := testStore.UpdateTableStatus(context.Background(), UpdateTableStatusParams{
+		ID:     room.ID,
+		Status: TableStatusDisabled,
+	})
+	require.NoError(t, err)
+
+	tomorrow := time.Now().Add(24 * time.Hour)
+	_, err = testStore.CreateMerchantReservationTx(context.Background(), CreateMerchantReservationTxParams{
+		CreateTableReservationByMerchantParams: CreateTableReservationByMerchantParams{
+			TableID:         room.ID,
+			UserID:          operator.ID,
+			MerchantID:      merchant.ID,
+			ReservationDate: pgtype.Date{Time: tomorrow, Valid: true},
+			ReservationTime: pgtype.Time{Microseconds: 19 * 3600 * 1000000, Valid: true},
+			GuestCount:      4,
+			ContactName:     "李四",
+			ContactPhone:    "13900139000",
+			PaymentMode:     "deposit",
+			DepositAmount:   0,
+			PrepaidAmount:   0,
+			RefundDeadline:  time.Now(),
+			PaymentDeadline: time.Now().Add(365 * 24 * time.Hour),
+			Source:          pgtype.Text{String: "merchant", Valid: true},
+		},
+	})
+	require.ErrorIs(t, err, ErrTableDisabledForReservation)
+
+	reservations, listErr := testStore.ListReservationsByTable(context.Background(), ListReservationsByTableParams{
+		TableID: room.ID,
+		Limit:   10,
+		Offset:  0,
+	})
+	require.NoError(t, listErr)
+	require.Empty(t, reservations)
+}
+
+func TestUpdateReservationTxRejectsDisabledTargetTableAfterLock(t *testing.T) {
+	user := createRandomUser(t)
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	originalRoom := createRandomRoom(t, merchant.ID)
+	targetRoom := createRandomRoom(t, merchant.ID)
+	reservation := createRandomReservation(t, user.ID, merchant.ID, originalRoom.ID, "confirmed")
+
+	_, err := testStore.UpdateTableStatus(context.Background(), UpdateTableStatusParams{
+		ID:     targetRoom.ID,
+		Status: TableStatusDisabled,
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.UpdateReservationTx(context.Background(), UpdateReservationTxParams{
+		MerchantID: merchant.ID,
+		Reservation: UpdateReservationParams{
+			ID:      reservation.ID,
+			TableID: pgtype.Int8{Int64: targetRoom.ID, Valid: true},
+		},
+	})
+	require.ErrorIs(t, err, ErrTableDisabledForReservation)
+
+	after, getErr := testStore.GetTableReservation(context.Background(), reservation.ID)
+	require.NoError(t, getErr)
+	require.Equal(t, originalRoom.ID, after.TableID)
+}
+
+func TestUpdateReservationTxRejectsGuestCountExceedsLockedCapacity(t *testing.T) {
+	user := createRandomUser(t)
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	room := createRandomRoom(t, merchant.ID)
+	room, err := testStore.UpdateTable(context.Background(), UpdateTableParams{
+		ID:       room.ID,
+		Capacity: pgtype.Int2{Int16: 4, Valid: true},
+	})
+	require.NoError(t, err)
+	reservation := createRandomReservation(t, user.ID, merchant.ID, room.ID, "confirmed")
+
+	_, err = testStore.UpdateReservationTx(context.Background(), UpdateReservationTxParams{
+		MerchantID: merchant.ID,
+		Reservation: UpdateReservationParams{
+			ID:         reservation.ID,
+			GuestCount: pgtype.Int2{Int16: room.Capacity + 1, Valid: true},
+		},
+	})
+	require.ErrorIs(t, err, ErrReservationGuestCountExceedsCapacity)
+
+	after, getErr := testStore.GetTableReservation(context.Background(), reservation.ID)
+	require.NoError(t, getErr)
+	require.Equal(t, reservation.GuestCount, after.GuestCount)
+}
+
+func TestUpdateReservationTxRejectsTimeConflictAfterLock(t *testing.T) {
+	user := createRandomUser(t)
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	room := createRandomRoom(t, merchant.ID)
+	room, err := testStore.UpdateTable(context.Background(), UpdateTableParams{
+		ID:           room.ID,
+		MinimumSpend: pgtype.Int8{Int64: 0, Valid: true},
+	})
+	require.NoError(t, err)
+	tomorrow := time.Now().Add(24 * time.Hour)
+
+	existing := createRandomReservation(t, user.ID, merchant.ID, room.ID, ReservationStatusConfirmed)
+	existing, err = testStore.UpdateReservation(context.Background(), UpdateReservationParams{
+		ID:              existing.ID,
+		ReservationDate: pgtype.Date{Time: tomorrow, Valid: true},
+		ReservationTime: pgtype.Time{Microseconds: 18 * 3600 * 1000000, Valid: true},
+	})
+	require.NoError(t, err)
+
+	moving := createRandomReservation(t, user.ID, merchant.ID, room.ID, ReservationStatusConfirmed)
+	moving, err = testStore.UpdateReservation(context.Background(), UpdateReservationParams{
+		ID:              moving.ID,
+		ReservationDate: pgtype.Date{Time: tomorrow.Add(24 * time.Hour), Valid: true},
+		ReservationTime: pgtype.Time{Microseconds: 12 * 3600 * 1000000, Valid: true},
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.UpdateReservationTx(context.Background(), UpdateReservationTxParams{
+		MerchantID: merchant.ID,
+		Reservation: UpdateReservationParams{
+			ID:              moving.ID,
+			ReservationDate: existing.ReservationDate,
+			ReservationTime: existing.ReservationTime,
+		},
+	})
+	require.ErrorIs(t, err, ErrReservationTimeConflict)
+
+	after, getErr := testStore.GetTableReservation(context.Background(), moving.ID)
+	require.NoError(t, getErr)
+	require.Equal(t, moving.ReservationDate, after.ReservationDate)
+	require.Equal(t, moving.ReservationTime, after.ReservationTime)
+}
+
 func TestCreateReservationTx_FullPaymentWithItems(t *testing.T) {
 	// 准备测试数据
 	user := createRandomUser(t)
@@ -137,13 +319,13 @@ func TestCreateReservationTx_FullPaymentWithItems(t *testing.T) {
 			ContactPhone:    "13900139000",
 			PaymentMode:     "full",
 			DepositAmount:   0,
-			PrepaidAmount:   50000, // 500元
+			PrepaidAmount:   100800, // 1008元，满足包间最低消费
 			RefundDeadline:  tomorrow.Add(-2 * time.Hour),
 			PaymentDeadline: time.Now().Add(30 * time.Minute),
 			Status:          "pending",
 		},
 		Items: []ReservationItemInput{
-			{DishID: &dishID1, Quantity: 2, UnitPrice: 8800},  // 88元 x 2
+			{DishID: &dishID1, Quantity: 2, UnitPrice: 44000}, // 440元 x 2
 			{DishID: &dishID2, Quantity: 1, UnitPrice: 12800}, // 128元 x 1
 		},
 	}
@@ -156,7 +338,7 @@ func TestCreateReservationTx_FullPaymentWithItems(t *testing.T) {
 	// 验证预定创建成功
 	require.NotZero(t, result.Reservation.ID)
 	require.Equal(t, "full", result.Reservation.PaymentMode)
-	require.Equal(t, int64(50000), result.Reservation.PrepaidAmount)
+	require.Equal(t, int64(100800), result.Reservation.PrepaidAmount)
 
 	// 验证菜品明细创建成功
 	require.Len(t, result.Items, 2)
@@ -166,8 +348,8 @@ func TestCreateReservationTx_FullPaymentWithItems(t *testing.T) {
 	require.True(t, result.Items[0].DishID.Valid)
 	require.Equal(t, dish1.ID, result.Items[0].DishID.Int64)
 	require.Equal(t, int16(2), result.Items[0].Quantity)
-	require.Equal(t, int64(8800), result.Items[0].UnitPrice)
-	require.Equal(t, int64(17600), result.Items[0].TotalPrice) // 8800 * 2
+	require.Equal(t, int64(44000), result.Items[0].UnitPrice)
+	require.Equal(t, int64(88000), result.Items[0].TotalPrice) // 44000 * 2
 
 	// 验证第二个菜品
 	require.Equal(t, dish2.ID, result.Items[1].DishID.Int64)
@@ -717,13 +899,13 @@ func TestReservationCompleteFlow(t *testing.T) {
 			ContactPhone:    "13800000000",
 			PaymentMode:     "full",
 			DepositAmount:   0,
-			PrepaidAmount:   30000,
+			PrepaidAmount:   120000,
 			RefundDeadline:  tomorrow.Add(-2 * time.Hour),
 			PaymentDeadline: time.Now().Add(30 * time.Minute),
 			Status:          "pending",
 		},
 		Items: []ReservationItemInput{
-			{DishID: &dishID, Quantity: 3, UnitPrice: 10000},
+			{DishID: &dishID, Quantity: 3, UnitPrice: 40000},
 		},
 	}
 

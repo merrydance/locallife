@@ -33,22 +33,6 @@ func MerchantUpdateReservation(ctx context.Context, store db.Store, input Mercha
 		return db.TableReservation{}, err
 	}
 
-	reservation, err := store.GetTableReservationForUpdate(ctx, input.ReservationID)
-	if err != nil {
-		if errors.Is(err, db.ErrRecordNotFound) {
-			return db.TableReservation{}, NewRequestError(http.StatusNotFound, errors.New("reservation not found"))
-		}
-		return db.TableReservation{}, err
-	}
-
-	if reservation.MerchantID != merchant.ID {
-		return db.TableReservation{}, NewRequestError(http.StatusForbidden, errors.New("reservation does not belong to your merchant"))
-	}
-
-	if reservation.Status == reservationStatusCompleted || reservation.Status == reservationStatusCancelled || reservation.Status == reservationStatusExpired {
-		return db.TableReservation{}, NewRequestError(http.StatusConflict, errors.New("cannot modify completed, cancelled or expired reservations"))
-	}
-
 	updateParams := db.UpdateReservationParams{ID: input.ReservationID}
 
 	if input.TableID != nil {
@@ -76,35 +60,33 @@ func MerchantUpdateReservation(ctx context.Context, store db.Store, input Mercha
 		updateParams.Notes = pgtype.Text{String: *input.Notes, Valid: true}
 	}
 
-	if input.TableID != nil || input.ReservationDate != nil || input.ReservationTime != nil {
-		checkTableID := reservation.TableID
-		if input.TableID != nil {
-			checkTableID = *input.TableID
-		}
-
-		targetDate := reservation.ReservationDate.Time
-		if input.ReservationDate != nil {
-			targetDate = *input.ReservationDate
-		}
-
-		finalTime := time.Date(0, 1, 1, int(reservation.ReservationTime.Microseconds/1000000/3600), int((reservation.ReservationTime.Microseconds/1000000%3600)/60), 0, 0, time.UTC)
-		if input.ReservationTime != nil {
-			finalTime = *input.ReservationTime
-		}
-
-		conflict, err := CheckReservationConflict(ctx, store, checkTableID, reservation.MerchantID, targetDate, finalTime, reservation.ID)
-		if err != nil {
-			return db.TableReservation{}, err
-		}
-		if conflict {
-			return db.TableReservation{}, NewRequestError(http.StatusConflict, errors.New("time slot is already reserved"))
-		}
-	}
-
-	updatedReservation, err := store.UpdateReservation(ctx, updateParams)
+	updatedReservation, err := store.UpdateReservationTx(ctx, db.UpdateReservationTxParams{
+		MerchantID:  merchant.ID,
+		Reservation: updateParams,
+	})
 	if err != nil {
+		if reqErr := mapReservationUpdateMutationError(err); reqErr != nil {
+			return db.TableReservation{}, reqErr
+		}
 		return db.TableReservation{}, err
 	}
 
 	return updatedReservation, nil
+}
+
+func mapReservationUpdateMutationError(err error) error {
+	switch {
+	case errors.Is(err, db.ErrRecordNotFound):
+		return NewRequestError(http.StatusNotFound, errors.New("reservation not found"))
+	case errors.Is(err, db.ErrTableNotFoundForReservation):
+		return NewRequestError(http.StatusNotFound, errors.New("table not found"))
+	case errors.Is(err, db.ErrReservationMerchantMismatch):
+		return NewRequestError(http.StatusForbidden, errors.New("reservation does not belong to your merchant"))
+	case errors.Is(err, db.ErrReservationTerminalState):
+		return NewRequestError(http.StatusConflict, errors.New("cannot modify completed, cancelled or expired reservations"))
+	case errors.Is(err, db.ErrReservationTimeConflict):
+		return NewRequestError(http.StatusConflict, errors.New("time slot is already reserved"))
+	default:
+		return mapReservationTableMutationError(err)
+	}
 }

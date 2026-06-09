@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -341,6 +342,37 @@ func TestDeleteTable(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestDeleteTableTxRejectsMissingTable(t *testing.T) {
+	_, err := testStore.DeleteTableTx(context.Background(), DeleteTableParams{
+		TableID: -util.RandomInt(1, 1000000),
+	})
+	require.ErrorIs(t, err, ErrRecordNotFound)
+}
+
+func TestDeleteTableTxRejectsActiveReservationAfterLock(t *testing.T) {
+	owner := createRandomUser(t)
+	user := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	table := createRandomRoom(t, merchant.ID)
+	reservation := createRandomReservation(t, user.ID, merchant.ID, table.ID, "confirmed")
+
+	_, err := testStore.UpdateTableStatus(context.Background(), UpdateTableStatusParams{
+		ID:                   table.ID,
+		Status:               TableStatusOccupied,
+		CurrentReservationID: pgtype.Int8{Int64: reservation.ID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.DeleteTableTx(context.Background(), DeleteTableParams{
+		TableID: table.ID,
+	})
+	require.ErrorIs(t, err, ErrTableHasActiveReservation)
+
+	after, err := testStore.GetTable(context.Background(), table.ID)
+	require.NoError(t, err)
+	require.Equal(t, table.ID, after.ID)
+}
+
 // ==================== Table Tags Tests ====================
 
 func TestAddTableTag(t *testing.T) {
@@ -534,6 +566,122 @@ func TestUpdateTableTxClearsTagsWithEmptySlice(t *testing.T) {
 	tags, err := testStore.ListTableTags(context.Background(), table.ID)
 	require.NoError(t, err)
 	require.Empty(t, tags)
+}
+
+func TestUpdateTableTxRejectsFutureReservationsWhenGuarded(t *testing.T) {
+	owner := createRandomUser(t)
+	user := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	table := createRandomTable(t, merchant.ID)
+	createRandomReservation(t, user.ID, merchant.ID, table.ID, "confirmed")
+
+	_, err := testStore.UpdateTableTx(context.Background(), UpdateTableTxParams{
+		Table: UpdateTableParams{
+			ID:       table.ID,
+			Capacity: pgtype.Int2{Int16: table.Capacity - 1, Valid: true},
+		},
+		RequireNoFutureReservations: true,
+	})
+	require.Error(t, err)
+	require.True(t, errors.Is(err, ErrTableHasFutureReservations))
+
+	after, err := testStore.GetTable(context.Background(), table.ID)
+	require.NoError(t, err)
+	require.Equal(t, table.Capacity, after.Capacity)
+}
+
+func TestUpdateTableTxAllowsNoopFulfillmentFieldsWithFutureReservationsWhenGuarded(t *testing.T) {
+	owner := createRandomUser(t)
+	user := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	table := createRandomRoom(t, merchant.ID)
+	createRandomReservation(t, user.ID, merchant.ID, table.ID, "confirmed")
+
+	newDescription := "same fulfillment fields with updated description"
+	result, err := testStore.UpdateTableTx(context.Background(), UpdateTableTxParams{
+		Table: UpdateTableParams{
+			ID:           table.ID,
+			TableNo:      pgtype.Text{String: table.TableNo, Valid: true},
+			TableType:    pgtype.Text{String: table.TableType, Valid: true},
+			Capacity:     pgtype.Int2{Int16: table.Capacity, Valid: true},
+			MinimumSpend: pgtype.Int8{Int64: table.MinimumSpend.Int64, Valid: table.MinimumSpend.Valid},
+			Description:  pgtype.Text{String: newDescription, Valid: true},
+			Status:       pgtype.Text{String: table.Status, Valid: true},
+		},
+		RequireNoFutureReservations: true,
+	})
+	require.NoError(t, err)
+	require.Equal(t, newDescription, result.Table.Description.String)
+	require.Equal(t, table.TableNo, result.Table.TableNo)
+	require.Equal(t, table.TableType, result.Table.TableType)
+	require.Equal(t, table.Capacity, result.Table.Capacity)
+}
+
+func TestUpdateTableTxClearsQRCodeWhenTableNoChanges(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	table := createRandomTable(t, merchant.ID)
+
+	table, err := testStore.UpdateTable(context.Background(), UpdateTableParams{
+		ID:        table.ID,
+		QrCodeUrl: pgtype.Text{String: "https://example.com/qr/original.png", Valid: true},
+	})
+	require.NoError(t, err)
+	require.True(t, table.QrCodeUrl.Valid)
+
+	result, err := testStore.UpdateTableTx(context.Background(), UpdateTableTxParams{
+		Table: UpdateTableParams{
+			ID:      table.ID,
+			TableNo: pgtype.Text{String: table.TableNo + "-new", Valid: true},
+		},
+		RequireNoFutureReservations: true,
+	})
+	require.NoError(t, err)
+	require.Equal(t, table.TableNo+"-new", result.Table.TableNo)
+	require.True(t, result.Table.QrCodeUrl.Valid)
+	require.Empty(t, result.Table.QrCodeUrl.String)
+}
+
+func TestUpdateTableStatusTxRejectsFutureReservationsWhenGuarded(t *testing.T) {
+	owner := createRandomUser(t)
+	user := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	table := createRandomTable(t, merchant.ID)
+	createRandomReservation(t, user.ID, merchant.ID, table.ID, "confirmed")
+
+	_, err := testStore.UpdateTableStatusTx(context.Background(), UpdateTableStatusTxParams{
+		ID:                          table.ID,
+		Status:                      TableStatusDisabled,
+		RequireNoFutureReservations: true,
+	})
+	require.Error(t, err)
+	require.True(t, errors.Is(err, ErrTableHasFutureReservations))
+
+	after, err := testStore.GetTable(context.Background(), table.ID)
+	require.NoError(t, err)
+	require.Equal(t, table.Status, after.Status)
+}
+
+func TestUpdateTableStatusTxAllowsAlreadyDisabledTableWithFutureReservationsWhenGuarded(t *testing.T) {
+	owner := createRandomUser(t)
+	user := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	table := createRandomTable(t, merchant.ID)
+
+	disabledTable, err := testStore.UpdateTableStatus(context.Background(), UpdateTableStatusParams{
+		ID:     table.ID,
+		Status: TableStatusDisabled,
+	})
+	require.NoError(t, err)
+	createRandomReservation(t, user.ID, merchant.ID, table.ID, "confirmed")
+
+	result, err := testStore.UpdateTableStatusTx(context.Background(), UpdateTableStatusTxParams{
+		ID:                          table.ID,
+		Status:                      TableStatusDisabled,
+		RequireNoFutureReservations: true,
+	})
+	require.NoError(t, err)
+	require.Equal(t, disabledTable.Status, result.Status)
 }
 
 func TestListTablesByTag(t *testing.T) {

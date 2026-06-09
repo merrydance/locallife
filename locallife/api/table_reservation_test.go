@@ -1903,9 +1903,9 @@ func TestMerchantCreateReservationAPISuccess(t *testing.T) {
 		Return([]db.MerchantBusinessHour{}, nil)
 
 	store.EXPECT().
-		CreateTableReservationByMerchant(gomock.Any(), gomock.Any()).
+		CreateMerchantReservationTx(gomock.Any(), gomock.Any()).
 		Times(1).
-		DoAndReturn(func(_ context.Context, arg db.CreateTableReservationByMerchantParams) (db.TableReservation, error) {
+		DoAndReturn(func(_ context.Context, arg db.CreateMerchantReservationTxParams) (db.TableReservation, error) {
 			require.Equal(t, table.ID, arg.TableID)
 			require.Equal(t, user.ID, arg.UserID)
 			require.Equal(t, merchant.ID, arg.MerchantID)
@@ -1921,6 +1921,7 @@ func TestMerchantCreateReservationAPISuccess(t *testing.T) {
 			require.Equal(t, pgtype.Text{String: ReservationSourceMerchant, Valid: true}, arg.Source)
 			require.False(t, arg.RefundDeadline.IsZero())
 			require.False(t, arg.PaymentDeadline.IsZero())
+			require.NotNil(t, arg.AfterLock)
 			return createdReservation, nil
 		})
 
@@ -1945,6 +1946,134 @@ func TestMerchantCreateReservationAPISuccess(t *testing.T) {
 	require.Equal(t, "2026-04-02", resp.ReservationDate)
 	require.Equal(t, "18:30", resp.ReservationTime)
 	require.Equal(t, ReservationSourceMerchant, resp.Source)
+}
+
+func TestMerchantCreateReservationAPIRejectsDisabledTableAfterLock(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	table := randomRoom(merchant.ID)
+	reservationDate := time.Date(2026, 4, 2, 0, 0, 0, 0, time.UTC)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	staffMerchant := merchant
+	staffMerchant.OwnerUserID = user.ID + 100
+
+	expectResolveSingleStaffMerchant(store, user.ID, staffMerchant)
+
+	store.EXPECT().
+		GetUserMerchantRole(gomock.Any(), gomock.Eq(db.GetUserMerchantRoleParams{
+			MerchantID: merchant.ID,
+			UserID:     user.ID,
+		})).
+		Times(1).
+		Return("cashier", nil)
+
+	store.EXPECT().
+		GetTable(gomock.Any(), gomock.Eq(table.ID)).
+		Times(1).
+		Return(table, nil)
+
+	store.EXPECT().
+		ListReservationsByTableAndDate(gomock.Any(), gomock.Eq(db.ListReservationsByTableAndDateParams{
+			TableID:         table.ID,
+			ReservationDate: pgtype.Date{Time: reservationDate, Valid: true},
+		})).
+		Times(1).
+		Return([]db.TableReservation{}, nil)
+
+	store.EXPECT().
+		ListMerchantBusinessHours(gomock.Any(), gomock.Eq(merchant.ID)).
+		Times(1).
+		Return([]db.MerchantBusinessHour{}, nil)
+
+	store.EXPECT().
+		CreateMerchantReservationTx(gomock.Any(), gomock.Any()).
+		Times(1).
+		DoAndReturn(func(_ context.Context, arg db.CreateMerchantReservationTxParams) (db.TableReservation, error) {
+			require.Equal(t, table.ID, arg.TableID)
+			require.Equal(t, merchant.ID, arg.MerchantID)
+			return db.TableReservation{}, db.ErrTableDisabledForReservation
+		})
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	reqBody := []byte(`{"table_id":` + fmt.Sprint(table.ID) + `,"date":"2026-04-02","time":"18:30","guest_count":4,"contact_name":"Alice","contact_phone":"13800138000"}`)
+	req, err := http.NewRequest(http.MethodPost, "/v1/reservations/merchant/create", bytes.NewReader(reqBody))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, req)
+	require.Equal(t, http.StatusConflict, recorder.Code)
+
+	var resp APIResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, "当前状态已变化，请刷新页面确认后重试", resp.Message)
+}
+
+func TestMerchantCreateReservationAPIRejectsDeletedTableAfterLock(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	table := randomRoom(merchant.ID)
+	reservationDate := time.Date(2026, 4, 2, 0, 0, 0, 0, time.UTC)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	staffMerchant := merchant
+	staffMerchant.OwnerUserID = user.ID + 100
+
+	expectResolveSingleStaffMerchant(store, user.ID, staffMerchant)
+
+	store.EXPECT().
+		GetUserMerchantRole(gomock.Any(), gomock.Eq(db.GetUserMerchantRoleParams{
+			MerchantID: merchant.ID,
+			UserID:     user.ID,
+		})).
+		Times(1).
+		Return("cashier", nil)
+
+	store.EXPECT().
+		GetTable(gomock.Any(), gomock.Eq(table.ID)).
+		Times(1).
+		Return(table, nil)
+
+	store.EXPECT().
+		ListReservationsByTableAndDate(gomock.Any(), gomock.Eq(db.ListReservationsByTableAndDateParams{
+			TableID:         table.ID,
+			ReservationDate: pgtype.Date{Time: reservationDate, Valid: true},
+		})).
+		Times(1).
+		Return([]db.TableReservation{}, nil)
+
+	store.EXPECT().
+		ListMerchantBusinessHours(gomock.Any(), gomock.Eq(merchant.ID)).
+		Times(1).
+		Return([]db.MerchantBusinessHour{}, nil)
+
+	store.EXPECT().
+		CreateMerchantReservationTx(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.TableReservation{}, fmt.Errorf("get table check lock: %w", db.ErrRecordNotFound))
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	reqBody := []byte(`{"table_id":` + fmt.Sprint(table.ID) + `,"date":"2026-04-02","time":"18:30","guest_count":4,"contact_name":"Alice","contact_phone":"13800138000"}`)
+	req, err := http.NewRequest(http.MethodPost, "/v1/reservations/merchant/create", bytes.NewReader(reqBody))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, req)
+	require.Equal(t, http.StatusNotFound, recorder.Code)
+
+	var resp APIResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, "未找到要操作的记录，请刷新页面后重试", resp.Message)
 }
 
 func TestMerchantUpdateReservationAPICashierForbidden(t *testing.T) {
@@ -1974,4 +2103,148 @@ func TestMerchantUpdateReservationAPICashierForbidden(t *testing.T) {
 
 	server.router.ServeHTTP(recorder, req)
 	require.Equal(t, http.StatusForbidden, recorder.Code)
+}
+
+func TestMerchantUpdateReservationAPISuccessUsesTransaction(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	table := randomRoom(merchant.ID)
+	reservationDate := time.Date(2026, 4, 3, 0, 0, 0, 0, time.UTC)
+	updatedReservation := randomReservation(table.ID, user.ID, merchant.ID)
+	updatedReservation.Status = db.ReservationStatusConfirmed
+	updatedReservation.ReservationDate = pgtype.Date{Time: reservationDate, Valid: true}
+	updatedReservation.ReservationTime = pgtype.Time{Microseconds: int64((19*3600 + 15*60) * 1000000), Valid: true}
+	updatedReservation.GuestCount = 6
+	updatedReservation.ContactName = "Alice"
+	updatedReservation.ContactPhone = "13800138000"
+	updatedReservation.Notes = pgtype.Text{String: "靠窗", Valid: true}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).
+		Return(merchant, nil)
+	store.EXPECT().
+		UpdateReservationTx(gomock.Any(), gomock.Any()).
+		Times(1).
+		DoAndReturn(func(_ context.Context, arg db.UpdateReservationTxParams) (db.TableReservation, error) {
+			require.Equal(t, merchant.ID, arg.MerchantID)
+			require.Equal(t, updatedReservation.ID, arg.Reservation.ID)
+			require.Equal(t, pgtype.Int8{Int64: table.ID, Valid: true}, arg.Reservation.TableID)
+			require.Equal(t, pgtype.Date{Time: reservationDate, Valid: true}, arg.Reservation.ReservationDate)
+			require.Equal(t, pgtype.Time{Microseconds: int64((19*3600 + 15*60) * 1000000), Valid: true}, arg.Reservation.ReservationTime)
+			require.Equal(t, pgtype.Int2{Int16: 6, Valid: true}, arg.Reservation.GuestCount)
+			require.Equal(t, pgtype.Text{String: "Alice", Valid: true}, arg.Reservation.ContactName)
+			require.Equal(t, pgtype.Text{String: "13800138000", Valid: true}, arg.Reservation.ContactPhone)
+			require.Equal(t, pgtype.Text{String: "靠窗", Valid: true}, arg.Reservation.Notes)
+			return updatedReservation, nil
+		})
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	reqBody := []byte(`{"table_id":` + fmt.Sprint(table.ID) + `,"date":"2026-04-03","time":"19:15","guest_count":6,"contact_name":"Alice","contact_phone":"13800138000","notes":"靠窗"}`)
+	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("/v1/reservations/%d/update", updatedReservation.ID), bytes.NewReader(reqBody))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, req)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp reservationResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, updatedReservation.ID, resp.ID)
+	require.Equal(t, table.ID, resp.TableID)
+	require.Equal(t, "2026-04-03", resp.ReservationDate)
+	require.Equal(t, "19:15", resp.ReservationTime)
+	require.Equal(t, int16(6), resp.GuestCount)
+}
+
+func TestMerchantUpdateReservationAPIRejectsDisabledTargetTableAfterLock(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	table := randomRoom(merchant.ID)
+	reservation := randomReservation(table.ID, user.ID, merchant.ID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).
+		Return(merchant, nil)
+	store.EXPECT().
+		UpdateReservationTx(gomock.Any(), gomock.Any()).
+		Times(1).
+		DoAndReturn(func(_ context.Context, arg db.UpdateReservationTxParams) (db.TableReservation, error) {
+			require.Equal(t, merchant.ID, arg.MerchantID)
+			require.Equal(t, reservation.ID, arg.Reservation.ID)
+			require.Equal(t, pgtype.Int8{Int64: table.ID, Valid: true}, arg.Reservation.TableID)
+			return db.TableReservation{}, db.ErrTableDisabledForReservation
+		})
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	reqBody := []byte(`{"table_id":` + fmt.Sprint(table.ID) + `}`)
+	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("/v1/reservations/%d/update", reservation.ID), bytes.NewReader(reqBody))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, req)
+	require.Equal(t, http.StatusConflict, recorder.Code)
+
+	var resp APIResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, "当前状态已变化，请刷新页面确认后重试", resp.Message)
+}
+
+func TestMerchantUpdateReservationAPIRejectsDeletedTargetTableAfterLock(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	table := randomRoom(merchant.ID)
+	reservation := randomReservation(table.ID, user.ID, merchant.ID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).
+		Return(merchant, nil)
+	store.EXPECT().
+		UpdateReservationTx(gomock.Any(), gomock.Any()).
+		Times(1).
+		DoAndReturn(func(_ context.Context, arg db.UpdateReservationTxParams) (db.TableReservation, error) {
+			require.Equal(t, merchant.ID, arg.MerchantID)
+			require.Equal(t, reservation.ID, arg.Reservation.ID)
+			require.Equal(t, pgtype.Int8{Int64: table.ID, Valid: true}, arg.Reservation.TableID)
+			return db.TableReservation{}, db.ErrTableNotFoundForReservation
+		})
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	reqBody := []byte(`{"table_id":` + fmt.Sprint(table.ID) + `}`)
+	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("/v1/reservations/%d/update", reservation.ID), bytes.NewReader(reqBody))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, req)
+	require.Equal(t, http.StatusNotFound, recorder.Code)
+
+	var resp APIResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, "未找到要操作的记录，请刷新页面后重试", resp.Message)
 }

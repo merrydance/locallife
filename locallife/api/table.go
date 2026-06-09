@@ -207,6 +207,9 @@ func (server *Server) validateTableTagIDs(ctx *gin.Context, tagIDs []int64) (int
 }
 
 var (
+	errTableUpdateFutureReservations  = errors.New("cannot update table fulfillment fields with future reservations")
+	errTableDisableFutureReservations = errors.New("cannot disable table with future reservations")
+
 	errTableImageMediaNotFound      = errors.New("table image media asset not found")
 	errTableImageMediaWrongCategory = errors.New("media asset is not a table image")
 	errTableImageMediaNotConfirmed  = errors.New("media asset upload is not confirmed")
@@ -270,6 +273,25 @@ func (server *Server) tableImageMediaAssetBelongsToMerchant(ctx *gin.Context, me
 	default:
 		return false, nil
 	}
+}
+
+func tableUpdateTouchesFulfillment(req updateTableRequest) bool {
+	if req.TableNo != nil {
+		return true
+	}
+	if req.TableType != nil {
+		return true
+	}
+	if req.Capacity != nil {
+		return true
+	}
+	if req.MinimumSpend != nil {
+		return true
+	}
+	if req.Status != nil && *req.Status == db.TableStatusDisabled {
+		return true
+	}
+	return false
 }
 
 // createTable godoc
@@ -733,6 +755,7 @@ type updateTableRequest struct {
 // @Failure 401 {object} ErrorResponse "未认证"
 // @Failure 403 {object} ErrorResponse "非桌台所有者"
 // @Failure 404 {object} ErrorResponse "桌台不存在"
+// @Failure 409 {object} ErrorResponse "存在未来预订"
 // @Failure 500 {object} ErrorResponse "服务器错误"
 // @Router /v1/tables/{id} [patch]
 // @Security BearerAuth
@@ -790,6 +813,8 @@ func (server *Server) updateTable(ctx *gin.Context) {
 		}
 	}
 
+	guardFutureReservations := tableUpdateTouchesFulfillment(req)
+
 	// 构建更新参数
 	arg := db.UpdateTableParams{
 		ID: uriReq.ID,
@@ -797,9 +822,6 @@ func (server *Server) updateTable(ctx *gin.Context) {
 
 	if req.TableNo != nil {
 		arg.TableNo = pgtype.Text{String: *req.TableNo, Valid: true}
-		if *req.TableNo != table.TableNo {
-			arg.QrCodeUrl = pgtype.Text{String: "", Valid: true}
-		}
 	}
 	if req.TableType != nil {
 		arg.TableType = pgtype.Text{String: *req.TableType, Valid: true}
@@ -826,12 +848,24 @@ func (server *Server) updateTable(ctx *gin.Context) {
 	}
 
 	var updatedTable db.Table
-	if req.TagIds != nil {
-		result, err := server.store.UpdateTableTx(ctx, db.UpdateTableTxParams{
-			Table:  arg,
-			TagIDs: &req.TagIds,
-		})
+	if req.TagIds != nil || guardFutureReservations {
+		txArg := db.UpdateTableTxParams{
+			Table:                       arg,
+			RequireNoFutureReservations: guardFutureReservations,
+		}
+		if req.TagIds != nil {
+			txArg.TagIDs = &req.TagIds
+		}
+		result, err := server.store.UpdateTableTx(ctx, txArg)
 		if err != nil {
+			if errors.Is(err, db.ErrRecordNotFound) {
+				ctx.JSON(http.StatusNotFound, errorResponse(errors.New("table not found")))
+				return
+			}
+			if errors.Is(err, db.ErrTableHasFutureReservations) {
+				ctx.JSON(http.StatusConflict, errorResponse(errTableUpdateFutureReservations))
+				return
+			}
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
@@ -839,6 +873,10 @@ func (server *Server) updateTable(ctx *gin.Context) {
 	} else {
 		updatedTable, err = server.store.UpdateTable(ctx, arg)
 		if err != nil {
+			if errors.Is(err, db.ErrRecordNotFound) {
+				ctx.JSON(http.StatusNotFound, errorResponse(errors.New("table not found")))
+				return
+			}
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
@@ -865,6 +903,7 @@ type updateTableStatusRequest struct {
 // @Failure 401 {object} ErrorResponse "未认证"
 // @Failure 403 {object} ErrorResponse "非桌台所有者"
 // @Failure 404 {object} ErrorResponse "桌台不存在"
+// @Failure 409 {object} ErrorResponse "存在未来预订"
 // @Failure 500 {object} ErrorResponse "服务器错误"
 // @Router /v1/tables/{id}/status [patch]
 // @Security BearerAuth
@@ -910,9 +949,11 @@ func (server *Server) updateTableStatus(ctx *gin.Context) {
 		return
 	}
 
+	guardFutureReservations := req.Status == db.TableStatusDisabled
+
 	// 特殊处理：如果请求将桌台设为空闲(available)，尝试查找并关闭关联的就餐会话
 	// 这是为了修复前端可能直接调用此接口而没有调用 CloseDiningSessionTx 导致的会话残留问题
-	if req.Status == "available" {
+	if req.Status == db.TableStatusAvailable {
 		session, err := server.store.GetActiveDiningSessionByTable(ctx, uriReq.ID)
 		if err == nil && session.MerchantID == merchant.ID {
 			// 找到活动会话，使用事务进行完整关闭（含释放桌台、结算）
@@ -953,7 +994,7 @@ func (server *Server) updateTableStatus(ctx *gin.Context) {
 
 	// 强制清理：如果是释放桌台，且桌台当前有预订，强制结束预订状态
 	// 这是为了防止 UpdateTableStatus 清除了桌台上的引用，但 Reservation 表里依然保留 checked_in 状态
-	if req.Status == "available" && table.CurrentReservationID.Valid {
+	if req.Status == db.TableStatusAvailable && table.CurrentReservationID.Valid {
 		// 仅放过缺失记录这类脏数据兜底；其他错误会导致桌台与预订状态漂移
 		if _, err := server.store.UpdateReservationToCompleted(ctx, table.CurrentReservationID.Int64); err != nil && !isNotFoundError(err) {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -961,12 +1002,30 @@ func (server *Server) updateTableStatus(ctx *gin.Context) {
 		}
 	}
 
-	updatedTable, err := server.store.UpdateTableStatus(ctx, db.UpdateTableStatusParams{
-		ID:                   uriReq.ID,
-		Status:               req.Status,
-		CurrentReservationID: reservationID,
-	})
+	var updatedTable db.Table
+	if guardFutureReservations {
+		updatedTable, err = server.store.UpdateTableStatusTx(ctx, db.UpdateTableStatusTxParams{
+			ID:                          uriReq.ID,
+			Status:                      req.Status,
+			CurrentReservationID:        reservationID,
+			RequireNoFutureReservations: true,
+		})
+	} else {
+		updatedTable, err = server.store.UpdateTableStatus(ctx, db.UpdateTableStatusParams{
+			ID:                   uriReq.ID,
+			Status:               req.Status,
+			CurrentReservationID: reservationID,
+		})
+	}
 	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("table not found")))
+			return
+		}
+		if errors.Is(err, db.ErrTableHasFutureReservations) {
+			ctx.JSON(http.StatusConflict, errorResponse(errTableDisableFutureReservations))
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -994,7 +1053,7 @@ type deleteTableRequest struct {
 
 // deleteTable godoc
 // @Summary 删除桌台
-// @Description 商户删除桌台/包间（不能有进行中的预定）
+// @Description 商户删除桌台/包间（不能有当前进行中或未来有效预订）
 // @Tags 桌台管理
 // @Produce json
 // @Param id path int true "桌台ID"
@@ -1003,7 +1062,7 @@ type deleteTableRequest struct {
 // @Failure 401 {object} ErrorResponse "未认证"
 // @Failure 403 {object} ErrorResponse "非桌台所有者"
 // @Failure 404 {object} ErrorResponse "桌台不存在"
-// @Failure 409 {object} ErrorResponse "有进行中的预定"
+// @Failure 409 {object} ErrorResponse "有当前进行中或未来有效预订"
 // @Failure 500 {object} ErrorResponse "服务器错误"
 // @Router /v1/tables/{id} [delete]
 // @Security BearerAuth
@@ -1052,8 +1111,16 @@ func (server *Server) deleteTable(ctx *gin.Context) {
 		TableID: req.ID,
 	})
 	if err != nil {
-		if err.Error() == "cannot delete table with future reservations" {
-			ctx.JSON(http.StatusConflict, errorResponse(err))
+		if errors.Is(err, db.ErrRecordNotFound) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("table not found")))
+			return
+		}
+		if errors.Is(err, db.ErrTableHasActiveReservation) {
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("cannot delete table with active reservation")))
+			return
+		}
+		if errors.Is(err, db.ErrTableHasFutureReservations) {
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("cannot delete table with future reservations")))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))

@@ -180,10 +180,10 @@ func CreateReservation(ctx context.Context, store db.Store, input CreateReservat
 		return result, err
 	}
 
-	if table.TableType != "room" {
+	if table.TableType != db.TableTypeRoom {
 		return result, NewRequestError(http.StatusBadRequest, errors.New("只有包间可以预订"))
 	}
-	if table.Status == "disabled" {
+	if table.Status == db.TableStatusDisabled {
 		return result, NewRequestError(http.StatusConflict, errors.New("table is disabled and cannot be reserved"))
 	}
 	if input.GuestCount > table.Capacity {
@@ -252,6 +252,7 @@ func CreateReservation(ctx context.Context, store db.Store, input CreateReservat
 
 	txArg := db.CreateReservationTxParams{
 		CreateTableReservationParams: arg,
+		DefaultDepositAmount:         input.DefaultDeposit,
 		AfterLock: func(ctx context.Context, q *db.Queries) error {
 			existingReservations, err := q.ListReservationsByTableAndDate(ctx, db.ListReservationsByTableAndDateParams{
 				TableID:         input.TableID,
@@ -298,6 +299,9 @@ func CreateReservation(ctx context.Context, store db.Store, input CreateReservat
 		if isReservationConflictError(err) {
 			return result, NewRequestError(http.StatusConflict, errors.New("该时间段刚刚被抢订，请选择其他时间"))
 		}
+		if reqErr := mapReservationTableMutationError(err); reqErr != nil {
+			return result, reqErr
+		}
 		return result, err
 	}
 
@@ -325,7 +329,7 @@ func MerchantCreateReservation(ctx context.Context, store db.Store, input Mercha
 	if table.MerchantID != input.MerchantID {
 		return db.TableReservation{}, NewRequestError(http.StatusForbidden, errors.New("table does not belong to your merchant"))
 	}
-	if table.Status == "disabled" {
+	if table.Status == db.TableStatusDisabled {
 		return db.TableReservation{}, NewRequestError(http.StatusConflict, errors.New("table is disabled and cannot be reserved"))
 	}
 	if input.GuestCount > table.Capacity {
@@ -351,24 +355,61 @@ func MerchantCreateReservation(ctx context.Context, store db.Store, input Mercha
 		source = "merchant"
 	}
 
-	reservation, err := store.CreateTableReservationByMerchant(ctx, db.CreateTableReservationByMerchantParams{
-		TableID:         input.TableID,
-		UserID:          input.OperatorUserID,
-		MerchantID:      input.MerchantID,
-		ReservationDate: pgDate,
-		ReservationTime: pgTime,
-		GuestCount:      input.GuestCount,
-		ContactName:     input.ContactName,
-		ContactPhone:    input.ContactPhone,
-		PaymentMode:     paymentModeDeposit,
-		DepositAmount:   0,
-		PrepaidAmount:   0,
-		RefundDeadline:  input.Now,
-		PaymentDeadline: input.Now.Add(365 * 24 * time.Hour),
-		Notes:           pgtype.Text{String: input.Notes, Valid: input.Notes != ""},
-		Source:          pgtype.Text{String: source, Valid: true},
-	})
+	txArg := db.CreateMerchantReservationTxParams{
+		CreateTableReservationByMerchantParams: db.CreateTableReservationByMerchantParams{
+			TableID:         input.TableID,
+			UserID:          input.OperatorUserID,
+			MerchantID:      input.MerchantID,
+			ReservationDate: pgDate,
+			ReservationTime: pgTime,
+			GuestCount:      input.GuestCount,
+			ContactName:     input.ContactName,
+			ContactPhone:    input.ContactPhone,
+			PaymentMode:     paymentModeDeposit,
+			DepositAmount:   0,
+			PrepaidAmount:   0,
+			RefundDeadline:  input.Now,
+			PaymentDeadline: input.Now.Add(365 * 24 * time.Hour),
+			Notes:           pgtype.Text{String: input.Notes, Valid: input.Notes != ""},
+			Source:          pgtype.Text{String: source, Valid: true},
+		},
+		AfterLock: func(ctx context.Context, q *db.Queries) error {
+			existingReservations, err := q.ListReservationsByTableAndDate(ctx, db.ListReservationsByTableAndDateParams{
+				TableID:         input.TableID,
+				ReservationDate: pgDate,
+			})
+			if err != nil {
+				return fmt.Errorf("failed to list existing reservations: %w", err)
+			}
+
+			config := buildTimeSlotConfigFromQueries(ctx, q, input.MerchantID, input.ReservationDate)
+			newDateTime := time.Date(input.ReservationDate.Year(), input.ReservationDate.Month(), input.ReservationDate.Day(), input.ReservationTime.Hour(), input.ReservationTime.Minute(), 0, 0, input.ReservationDate.Location())
+
+			for _, r := range existingReservations {
+				if r.Status == reservationStatusCancelled || r.Status == reservationStatusExpired || r.Status == reservationStatusNoShow {
+					continue
+				}
+				if !r.ReservationTime.Valid {
+					continue
+				}
+
+				existingTime := util.CombineDateAndTime(r.ReservationDate.Time, r.ReservationTime.Microseconds)
+				if util.AreReservationsConflictingWithConfig(newDateTime, existingTime, config) {
+					return fmt.Errorf("该时间段刚刚被抢订，请选择其他时间")
+				}
+			}
+			return nil
+		},
+	}
+
+	reservation, err := store.CreateMerchantReservationTx(ctx, txArg)
 	if err != nil {
+		if isReservationConflictError(err) {
+			return db.TableReservation{}, NewRequestError(http.StatusConflict, errors.New("该时间段刚刚被抢订，请选择其他时间"))
+		}
+		if reqErr := mapReservationTableMutationError(err); reqErr != nil {
+			return db.TableReservation{}, reqErr
+		}
 		return db.TableReservation{}, err
 	}
 
@@ -946,4 +987,23 @@ func isReservationConflictError(err error) bool {
 		return false
 	}
 	return strings.Contains(err.Error(), "刚刚被抢订")
+}
+
+func mapReservationTableMutationError(err error) error {
+	switch {
+	case errors.Is(err, db.ErrRecordNotFound):
+		return NewRequestError(http.StatusNotFound, errors.New("table not found"))
+	case errors.Is(err, db.ErrTableDisabledForReservation):
+		return NewRequestError(http.StatusConflict, errors.New("table is disabled and cannot be reserved"))
+	case errors.Is(err, db.ErrTableMerchantMismatchForReservation):
+		return NewRequestError(http.StatusForbidden, errors.New("table does not belong to your merchant"))
+	case errors.Is(err, db.ErrTableTypeNotReservable):
+		return NewRequestError(http.StatusBadRequest, errors.New("只有包间可以预订"))
+	case errors.Is(err, db.ErrReservationGuestCountExceedsCapacity):
+		return NewRequestError(http.StatusBadRequest, errors.New("guest count exceeds table capacity"))
+	case errors.Is(err, db.ErrReservationMinimumSpendNotMet):
+		return NewRequestError(http.StatusBadRequest, errors.New("预点菜品金额未达到包间最低消费，请刷新后重试"))
+	default:
+		return nil
+	}
 }

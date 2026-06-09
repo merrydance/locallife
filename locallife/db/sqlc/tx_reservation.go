@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/merrydance/locallife/util"
 )
 
 // ==================== 取消预定事务 ====================
@@ -605,14 +607,252 @@ type ReservationItemInput struct {
 // CreateReservationTxParams contains the input parameters for creating a reservation
 type CreateReservationTxParams struct {
 	CreateTableReservationParams
-	Items     []ReservationItemInput // 全款模式的预点菜品
-	AfterLock func(context.Context, *Queries) error
+	Items                []ReservationItemInput // 全款模式的预点菜品
+	AfterLock            func(context.Context, *Queries) error
+	DefaultDepositAmount int64
 }
 
 // CreateReservationTxResult contains the result of the create reservation transaction
 type CreateReservationTxResult struct {
 	Reservation TableReservation
 	Items       []ReservationItem
+}
+
+type CreateMerchantReservationTxParams struct {
+	CreateTableReservationByMerchantParams
+	AfterLock func(context.Context, *Queries) error
+}
+
+type UpdateReservationTxParams struct {
+	MerchantID  int64
+	Reservation UpdateReservationParams
+}
+
+const (
+	reservationPaymentModeDeposit = "deposit"
+	reservationPaymentModeFull    = "full"
+	reservationSourceOnline       = "online"
+)
+
+func isReservationTerminalForUpdate(status string) bool {
+	return status == ReservationStatusCompleted ||
+		status == ReservationStatusCancelled ||
+		status == ReservationStatusExpired
+}
+
+func ensureLockedTableReservableForReservation(table Table, merchantID int64, guestCount int16) error {
+	if table.MerchantID != merchantID {
+		return ErrTableMerchantMismatchForReservation
+	}
+	if table.TableType != TableTypeRoom {
+		return ErrTableTypeNotReservable
+	}
+	if table.Status == TableStatusDisabled {
+		return ErrTableDisabledForReservation
+	}
+	if guestCount > table.Capacity {
+		return ErrReservationGuestCountExceedsCapacity
+	}
+	return nil
+}
+
+func applyLockedTableReservationPricing(table Table, arg *CreateTableReservationParams, defaultDepositAmount int64) error {
+	switch arg.PaymentMode {
+	case reservationPaymentModeDeposit:
+		if table.MinimumSpend.Valid && table.MinimumSpend.Int64 > 0 {
+			arg.DepositAmount = table.MinimumSpend.Int64
+			return nil
+		}
+		if defaultDepositAmount > 0 {
+			arg.DepositAmount = defaultDepositAmount
+		}
+	case reservationPaymentModeFull:
+		if table.MinimumSpend.Valid && arg.PrepaidAmount < table.MinimumSpend.Int64 {
+			return ErrReservationMinimumSpendNotMet
+		}
+	}
+	return nil
+}
+
+func validateLockedTableMinimumSpendForReservation(table Table, reservation TableReservation) error {
+	if !table.MinimumSpend.Valid || table.MinimumSpend.Int64 <= 0 {
+		return nil
+	}
+	if reservation.Source.Valid && reservation.Source.String != "" && reservation.Source.String != reservationSourceOnline {
+		return nil
+	}
+
+	switch reservation.PaymentMode {
+	case reservationPaymentModeDeposit:
+		if reservation.DepositAmount < table.MinimumSpend.Int64 {
+			return ErrReservationMinimumSpendNotMet
+		}
+	case reservationPaymentModeFull:
+		if reservation.PrepaidAmount < table.MinimumSpend.Int64 {
+			return ErrReservationMinimumSpendNotMet
+		}
+	}
+	return nil
+}
+
+func updateReservationTargetChanged(current TableReservation, update UpdateReservationParams) bool {
+	if update.TableID.Valid && update.TableID.Int64 != current.TableID {
+		return true
+	}
+	if update.ReservationDate.Valid && !update.ReservationDate.Time.Equal(current.ReservationDate.Time) {
+		return true
+	}
+	if update.ReservationTime.Valid && (!current.ReservationTime.Valid || update.ReservationTime.Microseconds != current.ReservationTime.Microseconds) {
+		return true
+	}
+	return false
+}
+
+func reservationTimeSlotConfigFromQueries(ctx context.Context, q *Queries, merchantID int64, date time.Time) util.TimeSlotConfig {
+	config := util.DefaultConfig
+	businessHours, err := q.ListMerchantBusinessHours(ctx, merchantID)
+	if err != nil {
+		return config
+	}
+
+	dayOfWeek := int32(date.Weekday())
+	var todayHours []MerchantBusinessHour
+	for _, bh := range businessHours {
+		if bh.SpecialDate.Valid && bh.SpecialDate.Time.Format("2006-01-02") == date.Format("2006-01-02") {
+			todayHours = append(todayHours, bh)
+		}
+	}
+	if len(todayHours) == 0 {
+		for _, bh := range businessHours {
+			if !bh.SpecialDate.Valid && bh.DayOfWeek == dayOfWeek {
+				todayHours = append(todayHours, bh)
+			}
+		}
+	}
+
+	if len(todayHours) == 0 {
+		return config
+	}
+
+	h1 := todayHours[0]
+	config.LunchStart = int(h1.OpenTime.Microseconds/1000000/3600*100) + int(h1.OpenTime.Microseconds/1000000%3600/60)
+	config.LunchEnd = int(h1.CloseTime.Microseconds/1000000/3600*100) + int(h1.CloseTime.Microseconds/1000000%3600/60)
+	config.DinnerStart = 0
+	config.DinnerEnd = 0
+
+	if len(todayHours) > 1 {
+		h2 := todayHours[1]
+		config.DinnerStart = int(h2.OpenTime.Microseconds/1000000/3600*100) + int(h2.OpenTime.Microseconds/1000000%3600/60)
+		config.DinnerEnd = int(h2.CloseTime.Microseconds/1000000/3600*100) + int(h2.CloseTime.Microseconds/1000000%3600/60)
+	} else if config.LunchStart >= 1500 {
+		config.DinnerStart = config.LunchStart
+		config.DinnerEnd = config.LunchEnd
+		config.LunchStart = 0
+		config.LunchEnd = 0
+	}
+
+	return config
+}
+
+func ensureUpdatedReservationHasNoConflict(ctx context.Context, q *Queries, reservation TableReservation, tableID int64, date time.Time, reservationTime pgtype.Time) error {
+	if !reservationTime.Valid {
+		return nil
+	}
+
+	existingReservations, err := q.ListReservationsByTableAndDate(ctx, ListReservationsByTableAndDateParams{
+		TableID:         tableID,
+		ReservationDate: pgtype.Date{Time: date, Valid: true},
+	})
+	if err != nil {
+		return fmt.Errorf("list existing reservations: %w", err)
+	}
+
+	config := reservationTimeSlotConfigFromQueries(ctx, q, reservation.MerchantID, date)
+	newDateTime := util.CombineDateAndTime(date, reservationTime.Microseconds)
+	for _, r := range existingReservations {
+		if r.ID == reservation.ID {
+			continue
+		}
+		if r.Status == ReservationStatusCancelled || r.Status == ReservationStatusExpired || r.Status == ReservationStatusNoShow {
+			continue
+		}
+		if !r.ReservationTime.Valid {
+			continue
+		}
+		existingTime := util.CombineDateAndTime(r.ReservationDate.Time, r.ReservationTime.Microseconds)
+		if util.AreReservationsConflictingWithConfig(newDateTime, existingTime, config) {
+			return ErrReservationTimeConflict
+		}
+	}
+	return nil
+}
+
+func (store *SQLStore) UpdateReservationTx(ctx context.Context, arg UpdateReservationTxParams) (TableReservation, error) {
+	var result TableReservation
+
+	err := store.execTx(ctx, func(q *Queries) error {
+		reservation, err := q.GetTableReservationForUpdate(ctx, arg.Reservation.ID)
+		if err != nil {
+			return fmt.Errorf("lock reservation: %w", err)
+		}
+		if reservation.MerchantID != arg.MerchantID {
+			return ErrReservationMerchantMismatch
+		}
+		if isReservationTerminalForUpdate(reservation.Status) {
+			return ErrReservationTerminalState
+		}
+
+		targetTableID := reservation.TableID
+		if arg.Reservation.TableID.Valid {
+			targetTableID = arg.Reservation.TableID.Int64
+		}
+		targetDate := reservation.ReservationDate.Time
+		if arg.Reservation.ReservationDate.Valid {
+			targetDate = arg.Reservation.ReservationDate.Time
+		}
+		targetTime := reservation.ReservationTime
+		if arg.Reservation.ReservationTime.Valid {
+			targetTime = arg.Reservation.ReservationTime
+		}
+		targetGuestCount := reservation.GuestCount
+		if arg.Reservation.GuestCount.Valid {
+			targetGuestCount = arg.Reservation.GuestCount.Int16
+		}
+
+		if arg.Reservation.TableID.Valid ||
+			arg.Reservation.ReservationDate.Valid ||
+			arg.Reservation.ReservationTime.Valid ||
+			arg.Reservation.GuestCount.Valid {
+			table, err := q.GetTableForUpdate(ctx, targetTableID)
+			if err != nil {
+				if errors.Is(err, ErrRecordNotFound) {
+					return ErrTableNotFoundForReservation
+				}
+				return fmt.Errorf("lock table: %w", err)
+			}
+			if err := ensureLockedTableReservableForReservation(table, reservation.MerchantID, targetGuestCount); err != nil {
+				return err
+			}
+			if err := validateLockedTableMinimumSpendForReservation(table, reservation); err != nil {
+				return err
+			}
+		}
+
+		if updateReservationTargetChanged(reservation, arg.Reservation) {
+			if err := ensureUpdatedReservationHasNoConflict(ctx, q, reservation, targetTableID, targetDate, targetTime); err != nil {
+				return err
+			}
+		}
+
+		result, err = q.UpdateReservation(ctx, arg.Reservation)
+		if err != nil {
+			return fmt.Errorf("update reservation: %w", err)
+		}
+
+		return nil
+	})
+
+	return result, err
 }
 
 // CreateReservationTx creates a reservation with optional items in a single transaction:
@@ -625,9 +865,15 @@ func (store *SQLStore) CreateReservationTx(ctx context.Context, arg CreateReserv
 		var err error
 
 		// 0. 锁定桌台，防止并发预订（P0-002 修复）
-		_, err = q.GetTableForUpdate(ctx, arg.CreateTableReservationParams.TableID)
+		table, err := q.GetTableForUpdate(ctx, arg.CreateTableReservationParams.TableID)
 		if err != nil {
 			return fmt.Errorf("get table check lock: %w", err)
+		}
+		if err := ensureLockedTableReservableForReservation(table, arg.MerchantID, arg.GuestCount); err != nil {
+			return err
+		}
+		if err := applyLockedTableReservationPricing(table, &arg.CreateTableReservationParams, arg.DefaultDepositAmount); err != nil {
+			return err
 		}
 
 		// 0.1 执行自定义校验 (如再次检查冲突)
@@ -669,6 +915,35 @@ func (store *SQLStore) CreateReservationTx(ctx context.Context, arg CreateReserv
 					return fmt.Errorf("create reservation item %d: %w", i, err)
 				}
 			}
+		}
+
+		return nil
+	})
+
+	return result, err
+}
+
+func (store *SQLStore) CreateMerchantReservationTx(ctx context.Context, arg CreateMerchantReservationTxParams) (TableReservation, error) {
+	var result TableReservation
+
+	err := store.execTx(ctx, func(q *Queries) error {
+		table, err := q.GetTableForUpdate(ctx, arg.TableID)
+		if err != nil {
+			return fmt.Errorf("get table check lock: %w", err)
+		}
+		if err := ensureLockedTableReservableForReservation(table, arg.MerchantID, arg.GuestCount); err != nil {
+			return err
+		}
+
+		if arg.AfterLock != nil {
+			if err := arg.AfterLock(ctx, q); err != nil {
+				return err
+			}
+		}
+
+		result, err = q.CreateTableReservationByMerchant(ctx, arg.CreateTableReservationByMerchantParams)
+		if err != nil {
+			return fmt.Errorf("create merchant reservation: %w", err)
 		}
 
 		return nil

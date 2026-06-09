@@ -63,6 +63,8 @@ type Store interface {
 	ConfirmReservationTx(ctx context.Context, arg ConfirmReservationTxParams) (ConfirmReservationTxResult, error)
 	CompleteReservationTx(ctx context.Context, arg CompleteReservationTxParams) (CompleteReservationTxResult, error)
 	CreateReservationTx(ctx context.Context, arg CreateReservationTxParams) (CreateReservationTxResult, error)
+	CreateMerchantReservationTx(ctx context.Context, arg CreateMerchantReservationTxParams) (TableReservation, error)
+	UpdateReservationTx(ctx context.Context, arg UpdateReservationTxParams) (TableReservation, error)
 	ReplaceReservationItemsTx(ctx context.Context, arg ReplaceReservationItemsTxParams) (ReplaceReservationItemsTxResult, error)
 	ReplaceReservationItemsWithRefundOrdersTx(ctx context.Context, arg ReplaceReservationItemsWithRefundOrdersTxParams) (ReplaceReservationItemsWithRefundOrdersTxResult, error)
 	CreateReservationPositiveAdjustmentPaymentTx(ctx context.Context, arg CreateReservationPositiveAdjustmentPaymentTxParams) (CreateReservationPositiveAdjustmentPaymentTxResult, error)
@@ -94,6 +96,7 @@ type Store interface {
 	// M5: Table transactions
 	CreateTableTx(ctx context.Context, arg CreateTableTxParams) (CreateTableTxResult, error)
 	UpdateTableTx(ctx context.Context, arg UpdateTableTxParams) (UpdateTableTxResult, error)
+	UpdateTableStatusTx(ctx context.Context, arg UpdateTableStatusTxParams) (Table, error)
 	DeleteTableTx(ctx context.Context, arg DeleteTableParams) (DeleteTableResult, error)
 	SetTableImagePrimaryTx(ctx context.Context, arg SetTableImagePrimaryTxParams) (TableImage, error)
 	// Dining session transactions

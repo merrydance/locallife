@@ -30311,7 +30311,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "商户删除桌台/包间（不能有进行中的预定）",
+                "description": "商户删除桌台/包间（不能有当前进行中或未来有效预订）",
                 "produces": [
                     "application/json"
                 ],
@@ -30363,7 +30363,7 @@ const docTemplate = `{
                         }
                     },
                     "409": {
-                        "description": "有进行中的预定",
+                        "description": "有当前进行中或未来有效预订",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -30438,6 +30438,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "桌台不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "存在未来预订",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -30847,6 +30853,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "桌台不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "存在未来预订",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }

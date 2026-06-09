@@ -30505,7 +30505,7 @@ paths:
       - 桌台管理
   /v1/tables/{id}:
     delete:
-      description: 商户删除桌台/包间（不能有进行中的预定）
+      description: 商户删除桌台/包间（不能有当前进行中或未来有效预订）
       parameters:
       - description: 桌台ID
         in: path
@@ -30538,7 +30538,7 @@ paths:
           schema:
             $ref: '#/definitions/api.ErrorResponse'
         "409":
-          description: 有进行中的预定
+          description: 有当前进行中或未来有效预订
           schema:
             $ref: '#/definitions/api.ErrorResponse'
         "500":
@@ -30627,6 +30627,10 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
         "404":
           description: 桌台不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: 存在未来预订
           schema:
             $ref: '#/definitions/api.ErrorResponse'
         "500":
@@ -30891,6 +30895,10 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
         "404":
           description: 桌台不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: 存在未来预订
           schema:
             $ref: '#/definitions/api.ErrorResponse'
         "500":

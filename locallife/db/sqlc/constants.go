@@ -50,6 +50,23 @@ const (
 	MerchantAppDeviceStatusActive   = "active"
 	MerchantAppDeviceStatusInactive = "inactive"
 
+	TableTypeTable = "table"
+	TableTypeRoom  = "room"
+
+	TableStatusAvailable = "available"
+	TableStatusOccupied  = "occupied"
+	TableStatusDisabled  = "disabled"
+	TableStatusReserved  = "reserved"
+
+	ReservationStatusPending   = "pending"
+	ReservationStatusPaid      = "paid"
+	ReservationStatusConfirmed = "confirmed"
+	ReservationStatusCheckedIn = "checked_in"
+	ReservationStatusCompleted = "completed"
+	ReservationStatusCancelled = "cancelled"
+	ReservationStatusExpired   = "expired"
+	ReservationStatusNoShow    = "no_show"
+
 	AppVersionPlatformAndroid = "android"
 	AppVersionChannelMerchant = "merchant_app"
 

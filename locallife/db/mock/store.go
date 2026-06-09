@@ -4292,6 +4292,21 @@ func (mr *MockStoreMockRecorder) CreateMerchantProfile(ctx, merchantID any) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateMerchantProfile", reflect.TypeOf((*MockStore)(nil).CreateMerchantProfile), ctx, merchantID)
 }
 
+// CreateMerchantReservationTx mocks base method.
+func (m *MockStore) CreateMerchantReservationTx(ctx context.Context, arg db.CreateMerchantReservationTxParams) (db.TableReservation, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateMerchantReservationTx", ctx, arg)
+	ret0, _ := ret[0].(db.TableReservation)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateMerchantReservationTx indicates an expected call of CreateMerchantReservationTx.
+func (mr *MockStoreMockRecorder) CreateMerchantReservationTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateMerchantReservationTx", reflect.TypeOf((*MockStore)(nil).CreateMerchantReservationTx), ctx, arg)
+}
+
 // CreateMerchantSettlementAdjustment mocks base method.
 func (m *MockStore) CreateMerchantSettlementAdjustment(ctx context.Context, arg db.CreateMerchantSettlementAdjustmentParams) (db.MerchantSettlementAdjustment, error) {
 	m.ctrl.T.Helper()
@@ -22609,6 +22624,21 @@ func (mr *MockStoreMockRecorder) UpdateReservationToPaid(ctx, id any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateReservationToPaid", reflect.TypeOf((*MockStore)(nil).UpdateReservationToPaid), ctx, id)
 }
 
+// UpdateReservationTx mocks base method.
+func (m *MockStore) UpdateReservationTx(ctx context.Context, arg db.UpdateReservationTxParams) (db.TableReservation, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateReservationTx", ctx, arg)
+	ret0, _ := ret[0].(db.TableReservation)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateReservationTx indicates an expected call of UpdateReservationTx.
+func (mr *MockStoreMockRecorder) UpdateReservationTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateReservationTx", reflect.TypeOf((*MockStore)(nil).UpdateReservationTx), ctx, arg)
+}
+
 // UpdateReviewContent mocks base method.
 func (m *MockStore) UpdateReviewContent(ctx context.Context, arg db.UpdateReviewContentParams) (db.Review, error) {
 	m.ctrl.T.Helper()
@@ -22936,6 +22966,21 @@ func (m *MockStore) UpdateTableStatus(ctx context.Context, arg db.UpdateTableSta
 func (mr *MockStoreMockRecorder) UpdateTableStatus(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTableStatus", reflect.TypeOf((*MockStore)(nil).UpdateTableStatus), ctx, arg)
+}
+
+// UpdateTableStatusTx mocks base method.
+func (m *MockStore) UpdateTableStatusTx(ctx context.Context, arg db.UpdateTableStatusTxParams) (db.Table, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateTableStatusTx", ctx, arg)
+	ret0, _ := ret[0].(db.Table)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateTableStatusTx indicates an expected call of UpdateTableStatusTx.
+func (mr *MockStoreMockRecorder) UpdateTableStatusTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTableStatusTx", reflect.TypeOf((*MockStore)(nil).UpdateTableStatusTx), ctx, arg)
 }
 
 // UpdateTableTx mocks base method.

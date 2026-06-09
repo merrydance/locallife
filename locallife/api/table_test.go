@@ -734,11 +734,14 @@ func TestUpdateTableAPI(t *testing.T) {
 				updatedTable.QrCodeUrl = pgtype.Text{}
 
 				store.EXPECT().
-					UpdateTable(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateTableParams{})).
-					DoAndReturn(func(_ context.Context, arg db.UpdateTableParams) (db.Table, error) {
-						require.True(t, arg.QrCodeUrl.Valid)
-						require.Empty(t, arg.QrCodeUrl.String)
-						return updatedTable, nil
+					UpdateTableTx(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateTableTxParams{})).
+					DoAndReturn(func(_ context.Context, arg db.UpdateTableTxParams) (db.UpdateTableTxResult, error) {
+						require.True(t, arg.RequireNoFutureReservations)
+						require.Nil(t, arg.TagIDs)
+						require.True(t, arg.Table.TableNo.Valid)
+						require.Equal(t, newTableNo, arg.Table.TableNo.String)
+						require.False(t, arg.Table.QrCodeUrl.Valid)
+						return db.UpdateTableTxResult{Table: updatedTable}, nil
 					}).
 					Times(1)
 			},
@@ -775,6 +778,7 @@ func TestUpdateTableAPI(t *testing.T) {
 				store.EXPECT().
 					UpdateTableTx(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateTableTxParams{})).
 					DoAndReturn(func(_ context.Context, arg db.UpdateTableTxParams) (db.UpdateTableTxResult, error) {
+						require.True(t, arg.RequireNoFutureReservations)
 						require.Equal(t, table.ID, arg.Table.ID)
 						require.True(t, arg.Table.Capacity.Valid)
 						require.Equal(t, newCapacity, arg.Table.Capacity.Int16)
@@ -811,6 +815,7 @@ func TestUpdateTableAPI(t *testing.T) {
 				store.EXPECT().
 					UpdateTableTx(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateTableTxParams{})).
 					DoAndReturn(func(_ context.Context, arg db.UpdateTableTxParams) (db.UpdateTableTxResult, error) {
+						require.False(t, arg.RequireNoFutureReservations)
 						require.Equal(t, table.ID, arg.Table.ID)
 						require.NotNil(t, arg.TagIDs)
 						require.Empty(t, *arg.TagIDs)
@@ -818,6 +823,45 @@ func TestUpdateTableAPI(t *testing.T) {
 							Table: table,
 							Tags:  []db.TableTag{},
 						}, nil
+					}).
+					Times(1)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+			},
+		},
+		{
+			name:    "NoopFulfillmentFieldStillUsesTransaction",
+			tableID: table.ID,
+			body: gin.H{
+				"table_no":    table.TableNo,
+				"description": "updated description only",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetTable(gomock.Any(), gomock.Eq(table.ID)).
+					Times(1).
+					Return(table, nil)
+
+				updatedTable := table
+				updatedTable.Description = pgtype.Text{String: "updated description only", Valid: true}
+
+				store.EXPECT().
+					UpdateTableTx(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateTableTxParams{})).
+					DoAndReturn(func(_ context.Context, arg db.UpdateTableTxParams) (db.UpdateTableTxResult, error) {
+						require.True(t, arg.RequireNoFutureReservations)
+						require.Nil(t, arg.TagIDs)
+						require.True(t, arg.Table.TableNo.Valid)
+						require.Equal(t, table.TableNo, arg.Table.TableNo.String)
+						require.True(t, arg.Table.Description.Valid)
+						require.Equal(t, "updated description only", arg.Table.Description.String)
+						require.False(t, arg.Table.QrCodeUrl.Valid)
+						return db.UpdateTableTxResult{Table: updatedTable}, nil
 					}).
 					Times(1)
 			},
@@ -846,10 +890,12 @@ func TestUpdateTableAPI(t *testing.T) {
 				updatedTable.Capacity = newCapacity
 
 				store.EXPECT().
-					UpdateTable(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateTableParams{})).
-					DoAndReturn(func(_ context.Context, arg db.UpdateTableParams) (db.Table, error) {
-						require.False(t, arg.QrCodeUrl.Valid)
-						return updatedTable, nil
+					UpdateTableTx(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateTableTxParams{})).
+					DoAndReturn(func(_ context.Context, arg db.UpdateTableTxParams) (db.UpdateTableTxResult, error) {
+						require.True(t, arg.RequireNoFutureReservations)
+						require.Nil(t, arg.TagIDs)
+						require.False(t, arg.Table.QrCodeUrl.Valid)
+						return db.UpdateTableTxResult{Table: updatedTable}, nil
 					}).
 					Times(1)
 			},
@@ -1005,6 +1051,132 @@ func TestUpdateTableAPIRejectsInvalidTagIDBeforeMutating(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
 }
 
+func TestUpdateTableAPIRejectsFulfillmentChangeWithFutureReservations(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	table := randomTable(merchant.ID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetTable(gomock.Any(), gomock.Eq(table.ID)).
+		Times(1).
+		Return(table, nil)
+	store.EXPECT().
+		UpdateTableTx(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateTableTxParams{})).
+		DoAndReturn(func(_ context.Context, arg db.UpdateTableTxParams) (db.UpdateTableTxResult, error) {
+			require.True(t, arg.RequireNoFutureReservations)
+			require.True(t, arg.Table.Capacity.Valid)
+			return db.UpdateTableTxResult{}, db.ErrTableHasFutureReservations
+		}).
+		Times(1)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	body := gin.H{
+		"capacity": table.Capacity - 1,
+	}
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	url := fmt.Sprintf("/v1/tables/%d", table.ID)
+	request, err := http.NewRequest(http.MethodPatch, url, bytes.NewReader(data))
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusConflict, recorder.Code)
+	var resp APIResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, "cannot update table fulfillment fields with future reservations", resp.Message)
+}
+
+func TestUpdateTableAPIRejectsDeletedTableAfterPrecheck(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	table := randomTable(merchant.ID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetTable(gomock.Any(), gomock.Eq(table.ID)).
+		Times(1).
+		Return(table, nil)
+	store.EXPECT().
+		UpdateTableTx(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateTableTxParams{})).
+		DoAndReturn(func(_ context.Context, arg db.UpdateTableTxParams) (db.UpdateTableTxResult, error) {
+			require.True(t, arg.RequireNoFutureReservations)
+			require.True(t, arg.Table.Capacity.Valid)
+			return db.UpdateTableTxResult{}, fmt.Errorf("lock table: %w", db.ErrRecordNotFound)
+		}).
+		Times(1)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	body := gin.H{
+		"capacity": table.Capacity - 1,
+	}
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	url := fmt.Sprintf("/v1/tables/%d", table.ID)
+	request, err := http.NewRequest(http.MethodPatch, url, bytes.NewReader(data))
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusNotFound, recorder.Code)
+}
+
+func TestUpdateTableAPIDescriptionUpdateRejectsDeletedTableAfterPrecheck(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	table := randomTable(merchant.ID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetTable(gomock.Any(), gomock.Eq(table.ID)).
+		Times(1).
+		Return(table, nil)
+	store.EXPECT().
+		UpdateTable(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateTableParams{})).
+		DoAndReturn(func(_ context.Context, arg db.UpdateTableParams) (db.Table, error) {
+			require.Equal(t, table.ID, arg.ID)
+			require.True(t, arg.Description.Valid)
+			return db.Table{}, fmt.Errorf("update table: %w", db.ErrRecordNotFound)
+		}).
+		Times(1)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	body := gin.H{
+		"description": "updated description",
+	}
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	url := fmt.Sprintf("/v1/tables/%d", table.ID)
+	request, err := http.NewRequest(http.MethodPatch, url, bytes.NewReader(data))
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusNotFound, recorder.Code)
+}
+
 // ==================== 删除桌台测试 ====================
 
 func TestDeleteTableAPI(t *testing.T) {
@@ -1084,10 +1256,60 @@ func TestDeleteTableAPI(t *testing.T) {
 						TableID: table.ID,
 					})).
 					Times(1).
-					Return(db.DeleteTableResult{}, errors.New("cannot delete table with future reservations"))
+					Return(db.DeleteTableResult{}, db.ErrTableHasFutureReservations)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusConflict, recorder.Code)
+			},
+		},
+		{
+			name:    "TableBecomesActiveReservationDuringDelete",
+			tableID: table.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetTable(gomock.Any(), gomock.Eq(table.ID)).
+					Times(1).
+					Return(table, nil)
+
+				store.EXPECT().
+					DeleteTableTx(gomock.Any(), gomock.Eq(db.DeleteTableParams{
+						TableID: table.ID,
+					})).
+					Times(1).
+					Return(db.DeleteTableResult{}, db.ErrTableHasActiveReservation)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusConflict, recorder.Code)
+			},
+		},
+		{
+			name:    "TableDeletedDuringDeleteTx",
+			tableID: table.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetTable(gomock.Any(), gomock.Eq(table.ID)).
+					Times(1).
+					Return(table, nil)
+
+				store.EXPECT().
+					DeleteTableTx(gomock.Any(), gomock.Eq(db.DeleteTableParams{
+						TableID: table.ID,
+					})).
+					Times(1).
+					Return(db.DeleteTableResult{}, db.ErrRecordNotFound)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusNotFound, recorder.Code)
 			},
 		},
 		{
@@ -1219,6 +1441,40 @@ func TestUpdateTableStatusAPI(t *testing.T) {
 			},
 		},
 		{
+			name:    "AlreadyDisabledStillUsesTransactionForDisabledRequest",
+			tableID: table.ID,
+			body: gin.H{
+				"status": db.TableStatusDisabled,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				disabledTable := table
+				disabledTable.Status = db.TableStatusDisabled
+
+				store.EXPECT().
+					GetTable(gomock.Any(), gomock.Eq(table.ID)).
+					Times(1).
+					Return(disabledTable, nil)
+
+				store.EXPECT().
+					UpdateTableStatusTx(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateTableStatusTxParams{})).
+					DoAndReturn(func(_ context.Context, arg db.UpdateTableStatusTxParams) (db.Table, error) {
+						require.True(t, arg.RequireNoFutureReservations)
+						require.Equal(t, table.ID, arg.ID)
+						require.Equal(t, db.TableStatusDisabled, arg.Status)
+						return disabledTable, nil
+					}).
+					Times(1)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+			},
+		},
+		{
 			name:    "ReleaseTableFailsWhenReservationCleanupFails",
 			tableID: table.ID,
 			body: gin.H{
@@ -1343,6 +1599,93 @@ func TestUpdateTableStatusAPI(t *testing.T) {
 			tc.checkResponse(t, recorder)
 		})
 	}
+}
+
+func TestUpdateTableStatusAPIRejectsDisableWithFutureReservations(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	table := randomTable(merchant.ID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetTable(gomock.Any(), gomock.Eq(table.ID)).
+		Times(1).
+		Return(table, nil)
+	store.EXPECT().
+		UpdateTableStatusTx(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateTableStatusTxParams{})).
+		DoAndReturn(func(_ context.Context, arg db.UpdateTableStatusTxParams) (db.Table, error) {
+			require.True(t, arg.RequireNoFutureReservations)
+			require.Equal(t, table.ID, arg.ID)
+			require.Equal(t, db.TableStatusDisabled, arg.Status)
+			return db.Table{}, db.ErrTableHasFutureReservations
+		}).
+		Times(1)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	body := gin.H{
+		"status": db.TableStatusDisabled,
+	}
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	url := fmt.Sprintf("/v1/tables/%d/status", table.ID)
+	request, err := http.NewRequest(http.MethodPatch, url, bytes.NewReader(data))
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusConflict, recorder.Code)
+	var resp APIResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, "cannot disable table with future reservations", resp.Message)
+}
+
+func TestUpdateTableStatusAPIRejectsDeletedTableAfterPrecheck(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	table := randomTable(merchant.ID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetTable(gomock.Any(), gomock.Eq(table.ID)).
+		Times(1).
+		Return(table, nil)
+	store.EXPECT().
+		UpdateTableStatusTx(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateTableStatusTxParams{})).
+		DoAndReturn(func(_ context.Context, arg db.UpdateTableStatusTxParams) (db.Table, error) {
+			require.True(t, arg.RequireNoFutureReservations)
+			require.Equal(t, table.ID, arg.ID)
+			require.Equal(t, db.TableStatusDisabled, arg.Status)
+			return db.Table{}, fmt.Errorf("lock table: %w", db.ErrRecordNotFound)
+		}).
+		Times(1)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	body := gin.H{
+		"status": db.TableStatusDisabled,
+	}
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	url := fmt.Sprintf("/v1/tables/%d/status", table.ID)
+	request, err := http.NewRequest(http.MethodPatch, url, bytes.NewReader(data))
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusNotFound, recorder.Code)
 }
 
 // ==================== TestAddTableTagAPI ====================

@@ -21,6 +21,15 @@ var ErrGroupJoinRequestReviewConflict = errors.New("group join request review co
 var ErrMerchantAlreadyJoinedGroup = errors.New("merchant already joined group")
 var ErrMerchantDishCategoryHasActiveDishes = errors.New("merchant dish category has active dishes")
 var ErrMerchantDishCategoryNotLinked = errors.New("merchant dish category is not linked")
+var ErrTableDisabledForReservation = errors.New("table is disabled and cannot be reserved")
+var ErrTableMerchantMismatchForReservation = errors.New("table merchant mismatch for reservation")
+var ErrTableNotFoundForReservation = errors.New("table not found for reservation")
+var ErrTableTypeNotReservable = errors.New("table type is not reservable")
+var ErrReservationMerchantMismatch = errors.New("reservation merchant mismatch")
+var ErrReservationTerminalState = errors.New("reservation cannot be modified in terminal state")
+var ErrReservationTimeConflict = errors.New("reservation time conflict")
+var ErrReservationGuestCountExceedsCapacity = errors.New("reservation guest count exceeds table capacity")
+var ErrReservationMinimumSpendNotMet = errors.New("reservation minimum spend not met")
 
 // ErrPaymentMissingOrderID indicates a payment_order with business_type=order has no order_id.
 // Callers should skip retry and alert for manual intervention.
