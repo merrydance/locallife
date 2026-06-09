@@ -4,12 +4,15 @@ INSERT INTO merchant_group_applications (
   applicant_user_id, group_name, contact_phone
 ) VALUES (
   $1, '', ''
-) RETURNING *;
+)
+ON CONFLICT (applicant_user_id) WHERE status = 'draft'
+DO UPDATE SET updated_at = merchant_group_applications.updated_at
+RETURNING *;
 
 -- name: GetLatestGroupApplicationByApplicant :one
 SELECT id, applicant_user_id, group_name, contact_phone, license_number, address, region_id, status, reject_reason, reviewed_by, reviewed_at, application_data, created_at, updated_at, license_media_asset_id FROM merchant_group_applications
 WHERE applicant_user_id = $1
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT 1;
 
 -- name: GetGroupApplication :one
@@ -75,14 +78,42 @@ WHERE id = $1 AND status = 'draft'
 RETURNING *;
 
 -- name: ResetGroupApplicationToDraft :one
-UPDATE merchant_group_applications
-SET status = 'draft',
-    reject_reason = NULL,
-    reviewed_by = NULL,
-    reviewed_at = NULL,
-    updated_at = now()
-WHERE id = $1
-RETURNING *;
+WITH target_application AS (
+  SELECT app.applicant_user_id
+  FROM merchant_group_applications AS app
+  WHERE app.id = $1
+),
+existing_draft AS (
+  SELECT draft.id, draft.applicant_user_id, draft.group_name, draft.contact_phone, draft.license_number, draft.address, draft.region_id, draft.status, draft.reject_reason, draft.reviewed_by, draft.reviewed_at, draft.application_data, draft.created_at, draft.updated_at, draft.license_media_asset_id
+  FROM merchant_group_applications AS draft
+  WHERE draft.applicant_user_id = (SELECT target_application.applicant_user_id FROM target_application)
+    AND draft.status = 'draft'
+    AND draft.id <> $1
+  ORDER BY draft.created_at DESC, draft.id DESC
+  LIMIT 1
+),
+reset_application AS (
+  UPDATE merchant_group_applications AS reset
+  SET status = 'draft',
+      reject_reason = NULL,
+      reviewed_by = NULL,
+      reviewed_at = NULL,
+      updated_at = now()
+  WHERE reset.id = $1
+    AND NOT EXISTS (SELECT 1 FROM existing_draft)
+  RETURNING reset.id
+),
+selected_application AS (
+  SELECT reset_application.id
+  FROM reset_application
+  UNION ALL
+  SELECT existing_draft.id
+  FROM existing_draft
+  LIMIT 1
+)
+SELECT id, applicant_user_id, group_name, contact_phone, license_number, address, region_id, status, reject_reason, reviewed_by, reviewed_at, application_data, created_at, updated_at, license_media_asset_id
+FROM merchant_group_applications
+WHERE id = (SELECT selected_application.id FROM selected_application);
 
 -- name: SubmitGroupApplication :one
 UPDATE merchant_group_applications

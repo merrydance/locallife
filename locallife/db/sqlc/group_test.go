@@ -104,3 +104,61 @@ func TestUpdateGroupApplicationLicenseMergesApplicationDataPatch(t *testing.T) {
 	require.NoError(t, json.Unmarshal(merged["id_card_front_asset_id"], &idCardAssetID))
 	require.Equal(t, int64(233), idCardAssetID)
 }
+
+func TestCreateGroupApplicationDraftIsIdempotentForActiveDraft(t *testing.T) {
+	ctx := context.Background()
+	user := createRandomUser(t)
+
+	first, err := testStore.CreateGroupApplicationDraft(ctx, user.ID)
+	require.NoError(t, err)
+
+	second, err := testStore.CreateGroupApplicationDraft(ctx, user.ID)
+	require.NoError(t, err)
+
+	require.Equal(t, first.ID, second.ID)
+
+	var draftCount int64
+	err = testStore.(*SQLStore).connPool.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM merchant_group_applications
+		WHERE applicant_user_id = $1 AND status = 'draft'
+	`, user.ID).Scan(&draftCount)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), draftCount)
+}
+
+func TestResetGroupApplicationToDraftReturnsExistingDraftWhenOneExists(t *testing.T) {
+	ctx := context.Background()
+	user := createRandomUser(t)
+
+	rejected, err := testStore.CreateGroupApplicationDraft(ctx, user.ID)
+	require.NoError(t, err)
+
+	rejected, err = testStore.ReviewGroupApplication(ctx, ReviewGroupApplicationParams{
+		ID:           rejected.ID,
+		Status:       "rejected",
+		RejectReason: pgtype.Text{String: "superseded", Valid: true},
+		ReviewedAt:   pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	})
+	require.NoError(t, err)
+
+	draft, err := testStore.CreateGroupApplicationDraft(ctx, user.ID)
+	require.NoError(t, err)
+
+	reset, err := testStore.ResetGroupApplicationToDraft(ctx, rejected.ID)
+	require.NoError(t, err)
+	require.Equal(t, draft.ID, reset.ID)
+
+	currentRejected, err := testStore.GetGroupApplication(ctx, rejected.ID)
+	require.NoError(t, err)
+	require.Equal(t, "rejected", currentRejected.Status)
+
+	var draftCount int64
+	err = testStore.(*SQLStore).connPool.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM merchant_group_applications
+		WHERE applicant_user_id = $1 AND status = 'draft'
+	`, user.ID).Scan(&draftCount)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), draftCount)
+}

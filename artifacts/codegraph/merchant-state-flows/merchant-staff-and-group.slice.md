@@ -25,6 +25,7 @@ This slice does not fully cover:
 - A merchant invite code must not grant operational access until the owner assigns a real staff role.
 - Removing or reactivating a staff member must converge both `merchant_staff` membership truth and the coarse `user_roles.merchant_staff` capability without partial writes.
 - Group application documents and OCR results must remain bound to the applicant's current draft and current media assets.
+- Group onboarding can have at most one editable `draft` application per applicant.
 - A merchant can belong to at most one group. Group join approval must not overwrite an existing affiliation or regress a terminal request.
 - Every user-visible success or failure around join-request transitions must match the durable request and audit-log state.
 
@@ -97,7 +98,7 @@ This slice does not fully cover:
 - Fixed 2026-06-09: group OCR writeback is concurrency-safe at the shared `application_data` JSON boundary. `UpdateGroupApplicationLicense` now JSONB-merges patches, and group OCR API/worker callers pass only current document keys instead of stale full blobs; DB/API/worker tests prove sibling document state is preserved and callers remain patch-only.
 - Fixed 2026-06-09: group application basic update now validates a submitted `license_image_asset_id` before draft mutation. The asset must belong to the applicant, be `confirmed`, and use one of the group business-license categories accepted by OCR (`business_license` or `group_license`); missing, cross-user, wrong-category, unconfirmed, and infrastructure-error branches are covered.
 - Group submit only requires `group_name` and `contact_phone`; backend does not require license, identity documents, successful OCR, address, or region. If those are required for approval, enforcement currently lives only in UI expectations or manual review.
-- Group application GET can create a draft and there is no unique active-draft constraint per applicant. Concurrent get-or-create requests can create multiple drafts; all later handlers operate on whichever row is latest.
+- Fixed 2026-06-09: group application active-draft uniqueness is enforced at the database boundary. Migration `000256` cleans historical non-latest draft rows to `rejected`, adds a partial unique index on `(applicant_user_id) WHERE status='draft'`, `CreateGroupApplicationDraft` is idempotent through upsert, and `ResetGroupApplicationToDraft` returns an existing draft instead of creating a second one.
 - Fixed 2026-06-09: join-request create/reject/cancel now use transaction helpers for durable state and audit-log writes. Create also locks merchant affiliation before inserting so a concurrently joined merchant is rejected inside the transaction, and both precheck and transaction joined-merchant branches return the stable API error.
 - Fixed 2026-06-09: join-request cancel no longer calls a broad status update. `CancelPendingGroupJoinRequest` updates only `status='pending'`, and stale approved/rejected/cancelled requests return `ErrGroupJoinRequestReviewConflict` / HTTP 409 without overwriting terminal state.
 - `merchant_group_join_requests` has `UNIQUE(group_id, merchant_id, status)`. This blocks duplicate pending rows, but it also allows only one historical rejected or cancelled row for the same merchant/group. A later reject/cancel can fail on a terminal-history uniqueness collision.
@@ -133,7 +134,7 @@ This slice does not fully cover:
 - Generating an invite code is replay-friendly: an existing unexpired code is reused.
 - Binding the same active or disabled membership returns conflict. Disabled membership is not reactivated.
 - Role update and soft remove now use transaction helpers, so the membership row and coarse `user_roles` propagation commit or roll back together.
-- Group get-or-create is not protected by a unique active-draft constraint.
+- Group get-or-create is protected by a partial unique active-draft constraint and idempotent create/reset SQL.
 - Group application approval and all join-request create/approve/reject/cancel transitions use transaction helpers for their state/audit boundaries.
 - Join-request create relies on a database uniqueness constraint for pending dedupe, but that same constraint causes terminal-history collisions.
 - Reject and cancel conditionally change only pending rows; stale terminal states are conflicts.
@@ -163,7 +164,7 @@ Observed tests:
 - `locallife/api/group_test.go` covers group draft create/update/submit/review, document delete, join create via transaction, joined-merchant create precheck/transaction conflict mapping, approve conflict, reject via transaction, cancel via transaction, and cancel conflict API paths.
 - `locallife/db/sqlc/tx_group_test.go` proves group application terminal review conflict, create request transaction writes audit and rejects already-joined merchants, approval prevents affiliation overwrite, reject writes audit and rejects non-pending replay, and cancel does not overwrite approved requests.
 - `locallife/api/ocr_test.go` covers group OCR create ownership/enqueue paths and patch-only pending/failure writebacks.
-- `locallife/db/sqlc/group_test.go` proves `UpdateGroupApplicationLicense` merges sibling `application_data` patches instead of replacing the full JSON blob.
+- `locallife/db/sqlc/group_test.go` proves `UpdateGroupApplicationLicense` merges sibling `application_data` patches instead of replacing the full JSON blob, `CreateGroupApplicationDraft` is idempotent for an existing active draft, and resetting an older rejected application returns the existing draft without creating a second draft.
 - `locallife/worker/task_group_application_ocr_test.go` covers group OCR execution, stale asset/status/malformed-data guards, and patch-only success/failure writebacks.
 
 Missing high-value tests:
@@ -172,7 +173,6 @@ Missing high-value tests:
 - Broader end-to-end tests for every higher-level pending-role consumer beyond `CheckUserHasMerchantAccess`, `GetMerchantByOwner`/`resolveMerchantForUser`, and focused adjacent API suites.
 - Invite-code revoke/rotation and disabled-merchant bind behavior.
 - Group submit completeness contract for documents/OCR/address/region.
-- Concurrent group draft get-or-create test.
 - Second reject/cancel history test for the all-status unique constraint.
 - Mini Program duplicate-tap and re-entry recovery tests for group join.
 
@@ -185,7 +185,7 @@ Missing high-value tests:
 - Fixed 2026-06-09: group OCR writeback is concurrency-safe at the durable JSON boundary.
 - Fixed 2026-06-09: apply media ownership/category/upload-status checks to direct group `license_image_asset_id` draft updates.
 - Move group submission completeness rules into the backend contract.
-- Add an active-draft uniqueness strategy for group onboarding.
+- Fixed 2026-06-09: add active-draft uniqueness for group onboarding through migration `000256`, idempotent draft creation, deterministic latest-application ordering, and reset-to-existing-draft behavior.
 - Fixed 2026-06-09: join create/reject/cancel state and audit writes are atomic, and cancel uses pending-only SQL.
 - Replace the all-status join-request uniqueness rule with a pending-only uniqueness constraint if historical retries are expected.
 - Fixed 2026-06-09: duplicate-error string slicing was replaced with typed database error classification and focused regression coverage.
@@ -196,8 +196,8 @@ Missing high-value tests:
 - Request branches checked: staff list/invite/bind/update-role/remove, group application get-or-create/update/delete/submit/review aliases, group OCR create/poll, group document binding/delete, group member/role routes, merchant group join create/cancel/reject/approve/list, and group audit-log writes.
 - Backend state branches checked: reusable staff invite code, pending/active/disabled `merchant_staff`, coarse `user_roles`, staff role update/removal, group application draft/submitted/approved/rejected states, group OCR JSON writeback, group creation, group membership roles, join request pending/approved/rejected/cancelled states, merchant `group_id/brand_id` affiliation, and audit logs.
 - Async branches checked: group OCR asynq worker and polling; staff propagation is transaction-owned with no separate repair scheduler; group application review and join review are synchronous admin actions; group join Mini Program has no durable re-entry/status refresh despite backend list/cancel capability.
-- Failure/retry branches checked: invite-code reuse, disabled staff bind conflict, fixed transaction-owned staff/user-role propagation, group draft duplicate get-or-create, OCR stale asset guard, group submit without backend completeness enforcement, join duplicate pending constraint, all-status unique collision after terminal history, fixed cancel-after-approve conflict handling, fixed join create/reject/cancel transaction-owned audit writes, and typed duplicate-key classification.
+- Failure/retry branches checked: invite-code reuse, disabled staff bind conflict, fixed transaction-owned staff/user-role propagation, fixed group draft duplicate get-or-create, OCR stale asset guard, group submit without backend completeness enforcement, join duplicate pending constraint, all-status unique collision after terminal history, fixed cancel-after-approve conflict handling, fixed join create/reject/cancel transaction-owned audit writes, and typed duplicate-key classification.
 - Reader/consumer branches checked: merchant staff page, pending staff access checks, merchant dashboard/config access, group application page, group join page, group membership authorization, merchant affiliation readers, OCR result readers, and audit log consumers.
 - Authorization/tenant branches checked: owner/manager staff list/invite, owner-only role/remove, bind by server-side invite-code lookup, group applicant user ownership, OCR owner/media/category checks, group role authorization, merchant owner-only join create/cancel, review request/group ownership, optional brand-in-group validation, and transaction-protected one-group affiliation on approval.
 - Zombie/unreachable branches checked: reusable invite code has no revoke/rotation UI; disabled staff reactivation path is undefined; group review has two admin route aliases; group join backend cancel/list paths are not represented as durable Mini Program status recovery.
-- Test-proof gaps checked: existing tests cover invite pending semantics, pending role-aware access helpers, `GetMerchantByOwner`/logic fallback filtering, atomic staff/coarse-role propagation, typed duplicate-key classification, RBAC role selection, group draft/review/join basics, direct group license media validation, group OCR ownership/worker, group OCR JSON patch merging, join create/reject/cancel transaction paths, stable joined-merchant create conflict mapping, and terminal transaction conflicts. Missing proof remains for disabled rejoin contract, every broader higher-level pending-role consumer beyond focused suites, invite revocation/disabled-merchant bind, submit completeness, active draft uniqueness, all-status join history uniqueness, and Mini Program join recovery.
+- Test-proof gaps checked: existing tests cover invite pending semantics, pending role-aware access helpers, `GetMerchantByOwner`/logic fallback filtering, atomic staff/coarse-role propagation, typed duplicate-key classification, RBAC role selection, group draft/review/join basics, group active-draft uniqueness/reset idempotency, direct group license media validation, group OCR ownership/worker, group OCR JSON patch merging, join create/reject/cancel transaction paths, stable joined-merchant create conflict mapping, and terminal transaction conflicts. Missing proof remains for disabled rejoin contract, every broader higher-level pending-role consumer beyond focused suites, invite revocation/disabled-merchant bind, submit completeness, all-status join history uniqueness, and Mini Program join recovery.

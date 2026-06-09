@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS merchant_group_applications_one_draft_per_applicant_uidx;
