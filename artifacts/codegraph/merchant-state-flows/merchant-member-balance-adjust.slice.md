@@ -31,7 +31,7 @@ Manual balance changes must leave one auditable truth:
 - Customer checkout preview and final order creation must read the same current balance and principal/bonus split.
 - Merchant-visible transaction labels must understand every transaction type the backend writes.
 
-Fixed 2026-05-31 in `62839932`: manual adjustment now has a durable idempotency contract, Mini Program transaction labels cover adjustment transaction types, member list pagination uses backend full count, and order cancellation preserves principal/bonus split fields. Remaining high-impact product decision: whether managers may manually mutate stored-value balance.
+Fixed 2026-05-31 in `62839932`: manual adjustment now has a durable idempotency contract, Mini Program transaction labels cover adjustment transaction types, member list pagination uses backend full count, and order cancellation preserves principal/bonus split fields. Product decision 2026-06-10: managers may manually adjust customer stored-value balance.
 
 ## Primary Forward Chain
 
@@ -114,13 +114,13 @@ Fixed 2026-05-31 in `62839932`: manual adjustment now has a durable idempotency 
 - The route group uses `MerchantStaffMiddleware("owner", "manager")`.
 - Logic repeats a merchant-id equality check between authenticated merchant context and route merchant id.
 - Membership lookup uses `(merchant_id, user_id)`, so a manager cannot adjust a member from another merchant if middleware context and logic checks hold.
-- Managers can manually adjust customer stored-value balance. This may be intentional, but it is a high-impact permission contract that should be explicitly product-owned.
+- Product decision 2026-06-10: managers can manually adjust customer stored-value balance. This is a high-impact permission boundary and should stay explicitly tested.
 
 ## Idempotency And Duplicate-Submit Checks
 
 - The Mini Program has an in-memory `adjustSubmitting` guard.
 - Fixed 2026-05-31 in `62839932`: manual adjustment requires an idempotency key, persists the key with the ledger row, and returns conflict for a duplicate key with a different request.
-- A timeout or ambiguous response followed by retry should reuse the same adjustment key for the unchanged draft; the remaining product decision is whether managers should be allowed to initiate these adjustments at all.
+- A timeout or ambiguous response followed by retry should reuse the same adjustment key for the unchanged draft. Product decision 2026-06-10 confirms managers are allowed to initiate these adjustments.
 - Merchant recharge already has a stronger contract: clients must send `Idempotency-Key`, and duplicate keys return or conflict against the existing transaction.
 
 ## Recovery And Async Convergence Paths
@@ -152,7 +152,7 @@ Observed tests:
 
 Missing high-value tests:
 
-- Product-level manager permission decision and tests if the permission changes.
+- Manager permission regression tests proving managers may manually adjust stored-value balance and unauthorized roles remain blocked.
 - Optional explicit response contract for returning `transaction_id` from manual adjustment.
 - Ongoing contract test coverage when future backend transaction types are added.
 
@@ -172,6 +172,6 @@ Missing high-value tests:
 - Async branches checked: manual adjustment is synchronous only; no worker, scheduler, websocket, or outbox repair was found. Adjacent order/payment/refund flows can later mutate the same membership balance through their own transaction paths.
 - Failure/retry branches checked: frontend `adjustSubmitting` guard, manual adjustment durable idempotency key, negative insufficient-balance branch, detail reload failure after committed adjustment, recharge duplicate-key recovery, and order cancellation rollback split-field preservation.
 - Reader/consumer branches checked: merchant member list/detail, merchant transaction labels, customer membership views, checkout preview, direct order creation, promotion engine membership scene checks, and order cancellation/refund history.
-- Authorization/tenant branches checked: route owner/manager middleware, logic merchant-id equality recheck, membership lookup by `(merchant_id,user_id)`, and manager permission to mutate stored value. The manager-write permission is a product decision needing explicit sign-off.
+- Authorization/tenant branches checked: route owner/manager middleware, logic merchant-id equality recheck, membership lookup by `(merchant_id,user_id)`, and manager permission to mutate stored value. Product decision 2026-06-10 explicitly approves manager adjustment permission.
 - Zombie/unreachable branches checked: generated `IncrementMembershipBalance` and `DecrementMembershipBalance` were not found in runtime call sites and bypass richer ledger semantics if reused; Mini Program has no caller for merchant offline recharge in the current searched paths.
-- Test-proof gaps checked: existing tests now cover manual adjustment API/logic/DB behavior, split-balance invariant after cancellation, transaction-type display contract, pagination total semantics, and idempotency replay/conflict behavior. Remaining proof is product/permission-level manager write policy if that changes.
+- Test-proof gaps checked: existing tests now cover manual adjustment API/logic/DB behavior, split-balance invariant after cancellation, transaction-type display contract, pagination total semantics, and idempotency replay/conflict behavior. Remaining proof should include an explicit manager-write permission regression for the 2026-06-10 product decision if current coverage is not already direct.

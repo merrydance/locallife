@@ -23,8 +23,11 @@ This slice does not fully cover:
 ## Product Invariant
 
 - A merchant invite code must not grant operational access until the owner assigns a real staff role.
+- Product decision 2026-06-10: a disabled/removed staff member may re-apply through a valid invite code, but only into `pending`; the owner must confirm the role again before operational access is restored.
+- Product decision 2026-06-10: staff invite codes must support revoke/rotate, and old codes become invalid immediately after rotation/revocation.
 - Removing or reactivating a staff member must converge both `merchant_staff` membership truth and the coarse `user_roles.merchant_staff` capability without partial writes.
 - Group application documents and OCR results must remain bound to the applicant's current draft and current media assets.
+- Product decision 2026-06-10: group application submit must be backend-gated on the minimum required documents: business license, legal representative ID card, and trademark registration certificate.
 - Group onboarding can have at most one editable `draft` application per applicant.
 - A merchant can belong to at most one group. Group join approval must not overwrite an existing affiliation or regress a terminal request.
 - Every user-visible success or failure around join-request transitions must match the durable request and audit-log state.
@@ -91,13 +94,13 @@ This slice does not fully cover:
 ## Reverse-Reference Findings
 
 - Fixed 2026-06-09: `merchant_staff` is still the merchant-specific authorization truth and `user_roles(role='merchant_staff')` remains a coarse global capability, but direct add, invite bind, role assignment, and remove now mutate both through transaction helpers. Assigned roles create/reactivate the coarse role via `UpsertUserRoleActive`; pending staff does not grant it; removal disables it only when no assigned active staff remains.
-- A disabled `merchant_staff` row cannot rejoin through invite binding or direct add because both paths treat any existing row as a conflict. `UpdateMerchantStaffStatus` exists but no runtime reactivation caller was found.
-- Invite codes are reusable for up to 24 hours and there is no revoke/rotate action in the traced Mini Program page. This may be intentional for team onboarding, but it is a bearer credential with a wider blast radius than a one-person invite.
+- Product decision 2026-06-10: disabled/removed staff rejoin is allowed only by re-applying with a valid invite into pending status, followed by owner role confirmation. Current runtime still treats any existing staff row as a bind/direct-add conflict, so implementation must align invite binding, direct add, and owner confirmation with this contract.
+- Product decision 2026-06-10: invite codes must be revocable/rotatable, and any old code must become invalid immediately. Current runtime still reuses an unexpired `merchants.bind_code` for up to 24 hours and has no traced revoke/rotate UI/API.
 - Fixed 2026-06-09: bind still creates `role='pending', status='active'` for pending workbench display, but role-agnostic access is now role-aware. `CheckUserHasMerchantAccess`, `CountMerchantStaff`, `GetMerchantByOwner`, logic `resolveMerchantForUser`, and default accessible-merchant resolution exclude pending staff; `MerchantStaffMiddleware` resolves pending associations only for explicit denial/audit and defaults to granted staff merchants when granted and pending associations coexist.
 - Migration `000070_add_staff_pending_status` introduced a `pending` status, but runtime bind uses a pending role plus active status. `UpdateMerchantStaffStatus` and hard-delete queries remain reverse-reference drift candidates; count/access helpers are now role-aware.
 - Fixed 2026-06-09: group OCR writeback is concurrency-safe at the shared `application_data` JSON boundary. `UpdateGroupApplicationLicense` now JSONB-merges patches, and group OCR API/worker callers pass only current document keys instead of stale full blobs; DB/API/worker tests prove sibling document state is preserved and callers remain patch-only.
 - Fixed 2026-06-09: group application basic update now validates a submitted `license_image_asset_id` before draft mutation. The asset must belong to the applicant, be `confirmed`, and use one of the group business-license categories accepted by OCR (`business_license` or `group_license`); missing, cross-user, wrong-category, unconfirmed, and infrastructure-error branches are covered.
-- Group submit only requires `group_name` and `contact_phone`; backend does not require license, identity documents, successful OCR, address, or region. If those are required for approval, enforcement currently lives only in UI expectations or manual review.
+- Product decision 2026-06-10: group submit must enforce the backend minimum required document set: business license, legal representative ID card, and trademark registration certificate. Current runtime only requires `group_name` and `contact_phone`, so the submit contract still needs backend validation and tests for the required documents.
 - Fixed 2026-06-09: group application active-draft uniqueness is enforced at the database boundary. Migration `000256` cleans historical non-latest draft rows to `rejected`, adds a partial unique index on `(applicant_user_id) WHERE status='draft'`, `CreateGroupApplicationDraft` is idempotent through upsert, and `ResetGroupApplicationToDraft` returns an existing draft instead of creating a second one.
 - Fixed 2026-06-09: join-request create/reject/cancel now use transaction helpers for durable state and audit-log writes. Create also locks merchant affiliation before inserting so a concurrently joined merchant is rejected inside the transaction, and both precheck and transaction joined-merchant branches return the stable API error.
 - Fixed 2026-06-09: join-request cancel no longer calls a broad status update. `CancelPendingGroupJoinRequest` updates only `status='pending'`, and stale approved/rejected/cancelled requests return `ErrGroupJoinRequestReviewConflict` / HTTP 409 without overwriting terminal state.
@@ -108,7 +111,7 @@ This slice does not fully cover:
 
 ## SQL And Durable State Boundaries
 
-- `merchants.bind_code`, `merchants.bind_code_expires_at`: reusable staff invite bearer credential.
+- `merchants.bind_code`, `merchants.bind_code_expires_at`: current staff invite bearer credential. Product decision 2026-06-10 requires revoke/rotate semantics where old codes become invalid immediately.
 - `merchant_staff`: merchant-specific staff membership, role, and active/disabled truth.
 - `user_roles`: coarse `merchant_staff` platform capability used by broader authorization surfaces.
 - `merchant_group_applications`: group onboarding draft and review state; OCR document bindings/results share `application_data`.
@@ -131,8 +134,8 @@ This slice does not fully cover:
 
 ## Idempotency And Duplicate-Submit Checks
 
-- Generating an invite code is replay-friendly: an existing unexpired code is reused.
-- Binding the same active or disabled membership returns conflict. Disabled membership is not reactivated.
+- Current invite generation is replay-friendly because an existing unexpired code is reused; product decision 2026-06-10 requires explicit revoke/rotate semantics instead of relying only on expiry.
+- Binding the same active or disabled membership currently returns conflict. Product decision 2026-06-10 changes the disabled/removed rejoin path to create a pending re-application that still requires owner role confirmation.
 - Role update and soft remove now use transaction helpers, so the membership row and coarse `user_roles` propagation commit or roll back together.
 - Group get-or-create is protected by a partial unique active-draft constraint and idempotent create/reset SQL.
 - Group application approval and all join-request create/approve/reject/cancel transitions use transaction helpers for their state/audit boundaries.
@@ -173,20 +176,20 @@ Observed tests:
 
 Missing high-value tests:
 
-- Disabled staff rejoin/reactivation contract.
-- Invite-code revoke/rotation and disabled-merchant bind behavior.
-- Group submit completeness contract for documents/OCR/address/region.
+- Disabled staff rejoin/reactivation contract per the 2026-06-10 decision: valid invite -> pending re-application -> owner role confirmation.
+- Invite-code revoke/rotation and disabled-merchant bind behavior, including immediate invalidation of old codes.
+- Group submit completeness contract for the backend-required document set: business license, legal representative ID card, and trademark registration certificate.
 
 ## Gaps And Refactor Notes
 
-- Define a reactivation path for disabled staff and decide whether invite bind should reactivate or require owner confirmation.
+- Product decision 2026-06-10: disabled/removed staff may re-apply through a valid invite into pending, and owner role confirmation is required before access. Implement this across invite binding, direct add, owner confirmation, and tests.
 - Fixed 2026-06-09: staff membership/coarse-role updates now use transaction helpers for add, invite bind, role assignment, and removal.
 - Fixed 2026-06-09: pending staff semantics are role-aware in backend access helpers, `GetMerchantByOwner`, and logic merchant fallback while preserving `role='pending', status='active'` as the pending workbench model.
 - Fixed 2026-06-09: representative high-level pending-staff consumers now have real route proof. `GET /v1/kitchen/orders` and `POST /v1/inventory` return 403 for pending staff through the registered middleware, with gomock expectations ensuring downstream kitchen reads and inventory writes are not reached. A full route matrix can be expanded when new merchant-staff surfaces are added, but the prior high-value proof gap is closed for traced representative consumers.
-- Decide whether staff invite codes should be reusable, revocable, rotated on demand, or one-time.
+- Product decision 2026-06-10: staff invite codes must support revoke/rotate on demand; old codes are invalid immediately after rotation/revocation.
 - Fixed 2026-06-09: group OCR writeback is concurrency-safe at the durable JSON boundary.
 - Fixed 2026-06-09: apply media ownership/category/upload-status checks to direct group `license_image_asset_id` draft updates.
-- Move group submission completeness rules into the backend contract.
+- Product decision 2026-06-10: move group submission completeness into backend validation for business license, legal representative ID card, and trademark registration certificate.
 - Fixed 2026-06-09: add active-draft uniqueness for group onboarding through migration `000256`, idempotent draft creation, deterministic latest-application ordering, and reset-to-existing-draft behavior.
 - Fixed 2026-06-09: join create/reject/cancel state and audit writes are atomic, and cancel uses pending-only SQL.
 - Fixed 2026-06-09: replace the all-status join-request uniqueness rule with migration `000257` pending-only uniqueness; duplicate pending rows remain blocked and repeated terminal rejected/cancelled history is preserved.
@@ -202,5 +205,5 @@ Missing high-value tests:
 - Failure/retry branches checked: invite-code reuse, disabled staff bind conflict, fixed transaction-owned staff/user-role propagation, fixed group draft duplicate get-or-create, OCR stale asset guard, group submit without backend completeness enforcement, pending-only join duplicate constraint, repeated rejected/cancelled terminal history, fixed cancel-after-approve conflict handling, fixed join create/reject/cancel transaction-owned audit writes, typed duplicate-key classification, and Mini Program stable-code `40980` duplicate-pending recovery.
 - Reader/consumer branches checked: merchant staff page, pending staff access checks, representative kitchen/inventory high-level route denial, merchant dashboard/config access, group application page, group join page/history recovery, group membership authorization, merchant affiliation readers, OCR result readers, and audit log consumers.
 - Authorization/tenant branches checked: owner/manager staff list/invite, owner-only role/remove, bind by server-side invite-code lookup, group applicant user ownership, OCR owner/media/category checks, group role authorization, merchant owner-only join create/cancel, review request/group ownership, optional brand-in-group validation, and transaction-protected one-group affiliation on approval.
-- Zombie/unreachable branches checked: reusable invite code has no revoke/rotation UI; disabled staff reactivation path is undefined; group review has two admin route aliases; group join backend cancel path is still not represented as a Mini Program applicant cancellation control.
-- Test-proof gaps checked: existing tests cover invite pending semantics, pending role-aware access helpers, `GetMerchantByOwner`/logic fallback filtering, atomic staff/coarse-role propagation, typed duplicate-key classification, RBAC role selection, representative real kitchen/inventory route denial for pending staff, group draft/review/join basics, group active-draft uniqueness/reset idempotency, direct group license media validation, group OCR ownership/worker, group OCR JSON patch merging, join create/reject/cancel transaction paths, stable joined-merchant create conflict mapping, pending-only join uniqueness, repeated terminal join history, applicant-history readback, Mini Program join recovery, and terminal transaction conflicts. Missing proof remains for disabled rejoin contract, invite revocation/disabled-merchant bind, and submit completeness.
+- Zombie/unreachable branches checked: reusable invite code currently has no revoke/rotation UI despite the 2026-06-10 revoke/rotate decision; disabled staff reactivation currently conflicts instead of pending re-applying; group review has two admin route aliases; group join backend cancel path is still not represented as a Mini Program applicant cancellation control.
+- Test-proof gaps checked: existing tests cover invite pending semantics, pending role-aware access helpers, `GetMerchantByOwner`/logic fallback filtering, atomic staff/coarse-role propagation, typed duplicate-key classification, RBAC role selection, representative real kitchen/inventory route denial for pending staff, group draft/review/join basics, group active-draft uniqueness/reset idempotency, direct group license media validation, group OCR ownership/worker, group OCR JSON patch merging, join create/reject/cancel transaction paths, stable joined-merchant create conflict mapping, pending-only join uniqueness, repeated terminal join history, applicant-history readback, Mini Program join recovery, and terminal transaction conflicts. Missing proof remains for the 2026-06-10 disabled rejoin contract, invite revoke/rotate invalidation, and group submit minimum-document completeness.

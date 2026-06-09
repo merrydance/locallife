@@ -30,6 +30,8 @@ Device and display settings must be truthful configuration, not decorative toggl
 - `cloud_printers` is the durable local source for which merchant printers are active and which order types/roles they support.
 - Provider registration/removal/status is external truth; local DB and provider state must either change together or expose a recovery path.
 - Auto-accept may only happen when backend truth allows it and at least one eligible active printer exists.
+- Product decision 2026-06-10: Flutter BLE receipt printing must honor backend display config and must gain observability/deduplication boundaries instead of remaining an unlimited invisible local side effect.
+- Product decision 2026-06-10: Flutter App local auto-accept and backend `auto_accept_paid_orders` must merge into one backend truth; the App should only execute/display backend-authorized behavior.
 - Test print command acceptance is not proof of terminal print success; printed truth still lives in provider status/callback or `print_logs` for order tasks.
 
 ## Primary Forward Chain
@@ -132,13 +134,13 @@ Device and display settings must be truthful configuration, not decorative toggl
 - `auto_accept_paid_orders` is not a dead field. It is consumed by `task_payment_domain_outbox.go` after order payment success.
 - Auto-accept is intentionally coupled to print configuration: worker requires `AutoAcceptPaidOrders`, `EnablePrint`, order-type flag, `PrintTriggerMode=accepted`, and eligible active printer.
 - Normal accepted/ready/manual print flows consume the same `order_display_configs` and `cloud_printers` state through order service and print worker.
-- `enable_voice`, `voice_takeout`, and `voice_dine_in` currently look like persisted but unconsumed settings. No backend, Mini Program merchant page, or Flutter merchant app consumer was found in this trace.
+- `enable_voice`, `voice_takeout`, and `voice_dine_in` currently look like persisted but unconsumed settings. No backend, Mini Program merchant page, or Flutter merchant app consumer was found in this trace. Clarification recorded 2026-06-10: this audit item primarily refers to the Mini Program display-config voice toggles plus their persisted backend fields; whether those toggles should remain visible, be hidden, or be wired to a real consumer is still a product clarification item.
 - `DeviceManagementService.listPrinterReconciliationJobs` and `retryPrinterReconciliationJob` wrappers exist, but the current merchant printer pages do not call them.
 - `getActivePrinters` and `batchTestPrinters` helper exports exist but no current caller was found in the Mini Program search.
 - Printer update changes local `printer_key` and `printer_name`, but no provider update/rename path was found. Provider/local metadata can drift by design after update.
 - Fixed 2026-06-09: printer deletion is now a soft-delete/deactivate operation, so historical `print_logs` keep their printer reference and no longer block local deletion after provider removal. The active SN partial unique index allows a replacement active printer with the same SN, Yilianyun authorization rebind clears stale soft-deleted printer links before attaching the replacement, and historical print status/retry paths now report soft-deleted printers as local inactive/deleted rather than disappearing as 404.
-- Flutter local Bluetooth printer state is a third print surface that is not represented in `cloud_printers`, `print_logs`, or display config. It can print App receipts even when backend cloud-printer config is disabled, depending on App action flow.
-- There are two auto-accept controls with different truth owners: backend display config auto-accept runs in the payment-domain outbox and requires cloud-printer conditions; Flutter local auto-accept runs when the App observes a new order alert and calls the merchant accept endpoint directly.
+- Product decision 2026-06-10: Flutter local Bluetooth printing must obey backend display config and define observability/deduplication boundaries. Current App BLE printer state is not represented in `cloud_printers`, `print_logs`, or display config, and can print App receipts even when backend cloud-printer config is disabled, depending on App action flow.
+- Product decision 2026-06-10: Flutter App local auto-accept and backend display-config auto-accept must be merged into one backend truth; the App only executes or displays the backend-authorized state. Current runtime still has two auto-accept controls with different truth owners: backend outbox `auto_accept_paid_orders` and App-local `autoAcceptEnabled`.
 
 ## SQL And Durable State Boundaries
 
@@ -147,8 +149,8 @@ Device and display settings must be truthful configuration, not decorative toggl
 - `cloud_printer_reconciliation_jobs`: owns pending/resolved provider/local drift jobs after provider-first create/delete local failures. Pending jobs are unique by `(merchant_id, printer_sn, desired_action)`.
 - `print_logs`: owns order-print execution observability and references `cloud_printers(id)`. It keeps historical printer identity after soft delete.
 - Feieyun provider: owns real registration, removal, live status, printer info, and test/order print command acceptance.
-- Flutter local Bluetooth device id in shared preferences owns App-local printer reconnect state only; backend cannot observe or reconcile it.
-- Flutter notification settings in shared preferences own App-local sound, voice, auto-accept, and auto-print behavior only; they are not synchronized with `order_display_configs`.
+- Flutter local Bluetooth device id in shared preferences currently owns App-local printer reconnect state only; backend cannot observe or reconcile it. Product decision 2026-06-10 requires this path to honor backend display config and add observability/deduplication boundaries.
+- Flutter notification settings in shared preferences currently own App-local sound, voice, auto-accept, and auto-print behavior only; they are not synchronized with `order_display_configs`. Product decision 2026-06-10 requires App auto-accept to merge into backend truth, with the App only executing/displaying backend-authorized behavior.
 
 ## Trust, Authorization, And Tenant Checks
 
@@ -168,8 +170,8 @@ Device and display settings must be truthful configuration, not decorative toggl
 - Reconciliation retry is idempotent only at the local job state level: resolved jobs return as-is; pending retries call the provider action again.
 - Payment outbox auto-accept calls conditional merchant order logic, so repeated execution after status changes will no-op or skip through state checks.
 - Print tasks dedupe accepted/ready re-entry by stable task key and printer; manual/test print are intentionally command-like and can create repeated provider commands.
-- Flutter BLE print commands are local side effects with no backend idempotency, print log, or provider callback; duplicate App actions can print duplicate paper receipts.
-- Flutter local auto-accept relies on backend order status conditionality plus App deduplication, not a shared backend auto-accept idempotency key.
+- Flutter BLE print commands are currently local side effects with no backend idempotency, print log, or provider callback; duplicate App actions can print duplicate paper receipts. Product decision 2026-06-10 requires explicit observability and deduplication boundaries.
+- Flutter local auto-accept currently relies on backend order status conditionality plus App deduplication, not a shared backend auto-accept truth/idempotency contract. Product decision 2026-06-10 requires a single backend truth for auto-accept.
 
 ## Recovery And Async Convergence Paths
 
@@ -180,8 +182,8 @@ Device and display settings must be truthful configuration, not decorative toggl
 - Auto-accept runs asynchronously in payment-domain outbox processing after paid order facts.
 - Accepted/ready/manual print tasks run asynchronously in Redis print worker and update `print_logs`; order print callbacks/anomalies are covered by `merchant-order-operations`.
 - Live status is a direct provider query and is not persisted as printer truth.
-- Flutter BLE connect/print errors remain local App state and are not visible in backend device/printer recovery pages.
-- Flutter local auto-accept and BLE auto-print remain invisible to Mini Program display-config UI; backend order state can still change because the App calls the ordinary accept endpoint.
+- Flutter BLE connect/print errors remain local App state and are not visible in backend device/printer recovery pages. Product decision 2026-06-10 requires adding observability/deduplication boundaries for this local-print surface.
+- Flutter local auto-accept and BLE auto-print remain invisible to Mini Program display-config UI; backend order state can still change because the App calls the ordinary accept endpoint. Product decision 2026-06-10 requires the App auto-accept path to become a backend-truth execution/display path rather than a second local preference.
 
 ## Frontend Draft And Backend Rehydration
 
@@ -209,28 +211,28 @@ Missing high-value tests:
 - Fixed 2026-06-09: deletion-with-existing-print-logs DB test now proves soft delete/deactivate preserves historical print logs and permits active SN re-registration; Yilianyun rebind after soft delete, historical print-job status over soft-deleted printers, skipped retry failure logging, and duplicate-SN migration down are also covered.
 - End-to-end test that a paid order with `auto_accept_paid_orders=true` updates order state and enqueues one accepted print task only once across outbox retries.
 - Reconciliation UI coverage if merchants are expected to recover provider/local drift themselves.
-- Flutter local-printer tests for duplicate receipt printing, saved-device reconnect, disconnected-device failure copy, and relationship to backend cloud-printer/display config.
-- Cross-client auto-accept tests proving backend display-config auto-accept and Flutter local alert auto-accept converge safely on one order state without duplicate print side effects.
+- Flutter local-printer tests for duplicate receipt printing, saved-device reconnect, disconnected-device failure copy, backend display-config enforcement, and backend observability/deduplication boundaries.
+- Cross-client auto-accept tests proving backend display-config auto-accept and Flutter App alert handling converge safely through one backend truth without duplicate print side effects.
 
 ## Gaps And Refactor Notes
 
-- Decide whether voice settings are real product controls. If not, hide them or label them as unavailable; if yes, wire them to the actual merchant notification/audio consumer.
+- Pending clarification 2026-06-10: the voice-setting audit item primarily points to Mini Program display-config voice toggles and their persisted backend fields. Decide whether those fields are real product controls; if not, hide them or label them as unavailable; if yes, wire them to the actual merchant notification/audio consumer.
 - Add a merchant-visible reconciliation section or remove/defer the Mini Program reconciliation wrappers to avoid unreachable recovery controls.
 - Fixed 2026-06-09: physical printer deletion has been replaced with a soft deactivate/deleted state, preserving print-log history while excluding deleted printers from current printer reads and active printer selection.
 - Decide whether provider printer metadata should be updated when local name/key changes. If key changes are only for future provider commands, document the boundary.
 - Normalize `auto_accept_paid_orders` and `enable_print` semantics: either clear auto-accept when print is disabled, or make the UI/response explain that auto-accept is stored but inactive.
 - Consider persisting a display-config row when GET returns defaults so future audits have one durable truth shape instead of a default-response path plus persisted path.
-- Decide whether Flutter local Bluetooth printing is intentionally independent from cloud-printer display config, or whether App receipt printing should honor `order_display_configs` and/or write local print observability.
-- Decide whether Flutter local auto-accept should remain an App-only preference or be unified with backend `auto_accept_paid_orders`; if both remain, product copy should explain that they trigger at different moments and have different printer requirements.
+- Product decision 2026-06-10: Flutter local Bluetooth printing must honor backend display config and add backend-visible observability/deduplication boundaries. Implement this instead of keeping BLE receipts as an unconstrained invisible local convenience.
+- Product decision 2026-06-10: Flutter local auto-accept must be unified with backend `auto_accept_paid_orders` as the same backend truth. The App should execute/display backend-authorized behavior, not own a separate auto-accept preference.
 
 ## Branch Exhaustion
 
 - Entry branches checked: Mini Program display-config settings, printer list/edit/delete/test/status, print anomaly linkage, hidden reconciliation wrappers, backend auto-accept after payment, backend cloud-print tasks, Flutter local notification settings, Flutter local auto-accept, Flutter BLE printer connect/reconnect/print, and App order alert flow.
 - Request branches checked: display-config GET/PUT, device access check, printer CRUD/test/live-status, reconciliation list/retry, order accept endpoint used by Flutter local auto-accept, backend print-task enqueue, and Flutter local shared-preferences paths with no backend request.
 - Backend state branches checked: default versus persisted display config, `auto_accept_paid_orders`, `enable_print`, per-order-type print flags, voice/KDS fields, cloud printer registration and delete, provider-first/local-failure reconciliation jobs, print logs, manual/test print commands, accepted/ready print triggers, and App-local BLE state outside backend.
-- Async branches checked: payment-domain outbox auto-accept, Redis print worker, provider print callback/anomaly scheduler, reconciliation retry, provider live status direct query, Flutter local BLE print after manual/local auto-accept, and App notification/voice delivery. Flutter BLE has no backend recovery or observability path.
-- Failure/retry branches checked: duplicate save/delete/test guards, provider add/delete success followed by local DB failure, reconciliation retry repeatability, soft-delete with historical print logs, default display-config path without row persistence, outbox retry idempotency, print task key dedupe, manual/test repeated commands, BLE duplicate paper prints, and local auto-accept retries.
+- Async branches checked: payment-domain outbox auto-accept, Redis print worker, provider print callback/anomaly scheduler, reconciliation retry, provider live status direct query, Flutter local BLE print after manual/local auto-accept, and App notification/voice delivery. Flutter BLE currently has no backend recovery or observability path; product decision 2026-06-10 requires that boundary to be added and tied to backend display config.
+- Failure/retry branches checked: duplicate save/delete/test guards, provider add/delete success followed by local DB failure, reconciliation retry repeatability, soft-delete with historical print logs, default display-config path without row persistence, outbox retry idempotency, print task key dedupe, manual/test repeated commands, BLE duplicate paper prints, and local auto-accept retries. Product decision 2026-06-10 requires single backend auto-accept truth and BLE print deduplication/observability.
 - Reader/consumer branches checked: display settings UI, printer list, print anomalies, order outbox, order service print scheduler, print worker, Flutter order alerts, Flutter local printer page, and merchant staff device access gate.
 - Authorization/tenant branches checked: Mini Program device-management access guard, backend owner/manager device routes, active/approved/region device access check, printer merchant ownership checks, reconciliation merchant scope, and downstream print/auto-accept loading merchant ids from durable orders/printers.
-- Zombie/unreachable branches checked: voice settings lack a proven consumer; reconciliation wrappers have no merchant UI surface; Flutter notification settings are not synchronized with backend display config; Flutter BLE prints are not `print_logs`; Flutter local auto-accept is a second auto-accept path separate from backend config.
-- Test-proof gaps checked: backend tests cover display config, printer provider/reconciliation, soft-delete with historical print logs, Yilianyun rebind after soft delete, historical print-job status/retry behavior for soft-deleted printers, duplicate-SN migration down, outbox auto-accept, print tasks, and print scheduling. Missing proof remains for Mini Program display-config semantics, voice consumer decision, one accepted print across outbox retries, reconciliation UI, Flutter BLE duplicate/reconnect/failure behavior, and cross-client auto-accept convergence.
+- Zombie/unreachable branches checked: voice settings lack a proven consumer; reconciliation wrappers have no merchant UI surface; Flutter notification settings are not synchronized with backend display config; Flutter BLE prints are not `print_logs`; Flutter local auto-accept is a second auto-accept path separate from backend config despite the 2026-06-10 decision to unify it with backend truth.
+- Test-proof gaps checked: backend tests cover display config, printer provider/reconciliation, soft-delete with historical print logs, Yilianyun rebind after soft delete, historical print-job status/retry behavior for soft-deleted printers, duplicate-SN migration down, outbox auto-accept, print tasks, and print scheduling. Missing proof remains for Mini Program display-config semantics, voice consumer decision, one accepted print across outbox retries, reconciliation UI, Flutter BLE backend-config/dedupe/observability behavior, and cross-client backend-truth auto-accept convergence.

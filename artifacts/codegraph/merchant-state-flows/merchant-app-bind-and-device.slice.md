@@ -25,6 +25,7 @@ The merchant App binding workflow has two distinct truths:
 
 - Binding code truth is short-lived Redis state that should be one-time and should only mint tokens for a still-authorized merchant user.
 - Device truth is durable `merchant_app_devices` state created after App login and used later for native order push.
+- Product decision 2026-06-10: App bind code consumption should happen after all recheckable preconditions, so late infrastructure failure does not burn a valid code; strict one-time semantics must still be preserved at the final consume boundary.
 
 Successful bind-code verification alone does not prove the device can receive native push; device registration and heartbeat must converge separately.
 
@@ -91,11 +92,11 @@ Successful bind-code verification alone does not prove the device can receive na
 
 - App bind codes use Redis `app_bind:*` keys and do not use the legacy `merchants.bind_code` columns. Those columns are used by staff invite binding.
 - The public verify endpoint receives `device_id`, model, OS, and App version, but only logs them. It does not persist a device row; device persistence happens later through `/v1/merchant/device/register`.
-- Bind-code verification deletes the Redis code before the final role check, user lookup, token creation, and session insert finish. A late failure consumes the code.
+- Product decision 2026-06-10: bind-code verification should consume the Redis code after all recheckable preconditions, so late infrastructure failure does not burn the code while preserving one-time semantics. Current runtime deletes the Redis code before the final role check, user lookup, token creation, and session insert finish.
 - Fixed 2026-06-08: the role recheck proves the same `merchantID` embedded in the Redis code payload is still present in the user's current active merchant roles before tokens are minted.
 - Device registry constrains `platform` to `android`, while Flutter can produce `ios` or `web` payloads. The current product may be Android-only, but the client path is broader than the DB/logic contract.
 - Device unregister is backend-supported, but no Flutter caller was found in the traced App code.
-- Native push dispatcher does not deactivate devices after permanent provider failures. It reports summaries only to the caller.
+- Native push dispatcher does not deactivate devices after permanent provider failures. It reports summaries only to the caller. Clarification needed 2026-06-10: this refers to terminal provider send failures such as invalid/unregistered device tokens; decide whether those failures should deactivate devices, mark devices degraded, or remain report-only.
 
 ## SQL And Durable State Boundaries
 
@@ -115,7 +116,7 @@ Successful bind-code verification alone does not prove the device can receive na
 ## Idempotency And Duplicate-Submit Checks
 
 - Generate reuses a still-valid code per user and rate-limits generation.
-- Verify is one-time by Redis deletion, but late backend failures after deletion are not replayable.
+- Verify is one-time by Redis deletion, but late backend failures after deletion are not replayable. Product decision 2026-06-10 requires moving consumption after recheckable preconditions while preserving one-time semantics.
 - Flutter `AuthNotifier` collapses in-flight bind-code submits.
 - Device registration is idempotent by active `device_id` and deactivates other active rows with the same push token in the same transaction.
 - Heartbeat is repeatable and last-write-wins for mutable device metadata.
@@ -123,7 +124,7 @@ Successful bind-code verification alone does not prove the device can receive na
 ## Recovery And Async Convergence Paths
 
 - Mini Program can regenerate a bind code if generation fails or code expires.
-- Flutter can retry bind-code login, but a consumed code cannot be retried after a late backend failure.
+- Flutter can retry bind-code login, but a consumed code cannot be retried after a late backend failure. Product decision 2026-06-10 requires avoiding code burn for late infrastructure failures when preconditions can be rechecked.
 - Device registration failures surface as degraded state in the App settings/order list, but do not block token login.
 - Missing native push token skips registration; polling and websocket still provide other order-reception channels.
 - No backend worker was found that deactivates stale devices by `last_active_at`.
@@ -147,15 +148,15 @@ Observed tests:
 
 Missing high-value tests:
 
-- Late-failure-after-code-delete behavior should be explicit, or deletion should move after all non-replayable preconditions.
+- App bind verify deletion order tests for the 2026-06-10 decision: consume after recheckable preconditions, do not burn the code on late infrastructure failure, and still reject duplicate successful consumption.
 - Flutter/contract test for Android-only platform behavior and unsupported provider copy.
 - Device unregister call coverage from Flutter logout or account-switch paths if product expects push token cleanup.
-- Stale device deactivation or push-dispatch behavior for permanently failed/long-inactive devices.
+- Stale device deactivation or push-dispatch behavior for permanently failed/long-inactive devices. Clarification needed 2026-06-10: this is the native-push provider terminal-failure policy question, meaning invalid/unregistered push-token outcomes from the provider, not a bind-code issue.
 
 ## Gaps And Refactor Notes
 
 - Decide whether managers should be allowed to generate App bind codes; generation currently accepts `merchant_manager` as well as owner.
-- Make code-consumption order explicit: consume before token minting for strict one-time semantics, or consume after all recheckable preconditions so transient backend failures do not burn the code.
+- Product decision 2026-06-10: consume App bind codes after all recheckable preconditions so transient backend failures do not burn the code; preserve strict one-time semantics at the final consume/token boundary.
 - Fixed 2026-06-08: verify rechecks the embedded `merchantID` against the user's current active merchant roles before minting tokens.
 - Align Flutter platform payload with the Android-only backend contract, or expand backend migration/logic if iOS/web merchant App support is intended.
 - Add an App logout/unregister path or a stale-device cleanup policy so durable push targets do not accumulate.
@@ -166,8 +167,8 @@ Missing high-value tests:
 - Request branches checked: bind-code generate, public bind-code verify, token/session creation, merchant access profile read during verify, device register, heartbeat, unregister, push device query by merchant, and dispatcher provider sends. Legacy staff invite `merchants.bind_code` is tracked separately under staff flow.
 - Backend state branches checked: Redis code/user index reuse and TTL, public verify rate limit, Redis deletion, role recheck, session insert, token minting, device platform/provider validation, active device upsert by device id, duplicate push-token deactivation, heartbeat metadata update, push provider grouping, skipped unconfigured providers, retryable send failure, and permanent send failure.
 - Async branches checked: native push dispatch is called from order notification paths; device registration is independent of bind-code verification; missing push token leaves polling/websocket as recovery channels. No stale-device cleanup scheduler was found.
-- Failure/retry branches checked: generation Redis unavailable, verify Redis unavailable, expired/missing code, consumed-code retry, late verify failure after Redis delete, duplicate Flutter submit, registration unsupported provider/platform, missing push token, heartbeat failure, unconfigured push provider, and permanent provider failure.
+- Failure/retry branches checked: generation Redis unavailable, verify Redis unavailable, expired/missing code, consumed-code retry, late verify failure after Redis delete, duplicate Flutter submit, registration unsupported provider/platform, missing push token, heartbeat failure, unconfigured push provider, and permanent provider failure. Product decision 2026-06-10 changes desired bind-code deletion order to avoid code burn after recheckable preconditions; permanent push failure policy remains pending clarification.
 - Reader/consumer branches checked: Flutter auth state, settings device sync tile, order polling/alert delivery, backend push dispatcher, sessions table, and merchant App device list used by push.
 - Authorization/tenant branches checked: code generation accepts merchant owner/manager roles, public verify now rechecks the same Redis-embedded merchant id against current active merchant roles, device routes require owner/manager/cashier/chef staff context, and device writes derive merchant id from middleware rather than client payload.
 - Zombie/unreachable branches checked: `merchants.bind_code` is not App binding truth; verify logs but does not persist device metadata; unregister route has no discovered Flutter logout/account-switch caller; Flutter can send `ios/web` but backend DB contract is Android-only.
-- Test-proof gaps checked: existing tests cover Redis failures, full one-time generate/verify/session flow, embedded merchant-id recheck, App refresh sessions, device registration/heartbeat/unregister, and dispatcher provider branches. Missing proof remains for deletion-order semantics, Flutter Android-only contract, logout unregister, and stale/permanently failing device cleanup.
+- Test-proof gaps checked: existing tests cover Redis failures, full one-time generate/verify/session flow, embedded merchant-id recheck, App refresh sessions, device registration/heartbeat/unregister, and dispatcher provider branches. Missing proof remains for the 2026-06-10 consume-after-recheckable-preconditions bind-code order, Flutter Android-only contract, logout unregister, and stale/permanently failing device cleanup/policy.
