@@ -25,6 +25,37 @@ export interface FormInputDetail {
 
 export type TableImageRole = 'cover' | 'gallery'
 
+export const TABLE_IMAGE_BIND_RECOVERY_MESSAGE = '部分图片尚未关联成功，请再次保存重试'
+
+export interface TableImageBindRecoveryPatch {
+  imageBindRecoveryPending: boolean
+  imageBindRecoveryMessage: string
+}
+
+export interface CreatedTableEditPatch {
+  isEdit: boolean
+  tableId: number
+  qrCodeImageUrl: string
+  qrCodeTableNo: string
+}
+
+export interface UploadPendingTableImagesOptions {
+  tableId: number
+  coverFiles: TableUploadFile[]
+  galleryFiles: TableUploadFile[]
+  uploadTableImage: (tableId: number, payload: { media_asset_id: number, is_primary?: boolean }) => Promise<TableImageResponse>
+  setCoverFiles: (files: TableUploadFile[]) => void
+  setGalleryFiles: (files: TableUploadFile[]) => void
+  onBindError?: (role: TableImageRole, error: unknown) => void
+}
+
+export const TABLE_EDIT_STATUS_OPTIONS: Array<{ label: string, value: TableFormData['status'] }> = [
+  { label: '空闲', value: 'available' },
+  { label: '占用中', value: 'occupied' },
+  { label: '已预订', value: 'reserved' },
+  { label: '停用', value: 'disabled' }
+]
+
 export function buildSelectedTagState(tagIds: number[]): Record<string, boolean> {
   return tagIds.reduce<Record<string, boolean>>((result, id) => {
     result[String(id)] = true
@@ -102,6 +133,20 @@ export function pickPendingBoundFiles(files: TableUploadFile[]): TableUploadFile
   return ensureArray(files).filter((file) => typeof file.mediaId === 'number' && file.mediaId > 0 && !file.imageId)
 }
 
+function findPendingBindFileIndex(files: TableUploadFile[], target: TableUploadFile): number {
+  return files.findIndex((file) => {
+    if (typeof file.mediaId !== 'number' || file.mediaId !== target.mediaId || file.imageId) {
+      return false
+    }
+
+    if (target.localPath && file.localPath === target.localPath) {
+      return true
+    }
+
+    return !!target.url && file.url === target.url
+  })
+}
+
 export function buildPersistedUploadFile(savedImage: TableImageResponse | null | undefined, fallbackUrl: string, mediaId: number): TableUploadFile {
   return {
     url: (typeof savedImage?.image_url === 'string' && savedImage.image_url) ? savedImage.image_url : fallbackUrl,
@@ -110,6 +155,89 @@ export function buildPersistedUploadFile(savedImage: TableImageResponse | null |
     imageId: typeof savedImage?.id === 'number' ? savedImage.id : undefined,
     isPersisted: true
   }
+}
+
+export function buildTableImageBindRecoveryPatch(): TableImageBindRecoveryPatch {
+  return {
+    imageBindRecoveryPending: true,
+    imageBindRecoveryMessage: TABLE_IMAGE_BIND_RECOVERY_MESSAGE
+  }
+}
+
+export function buildTableImageBindRecoveredPatch(): TableImageBindRecoveryPatch {
+  return {
+    imageBindRecoveryPending: false,
+    imageBindRecoveryMessage: ''
+  }
+}
+
+export function buildCreatedTableEditPatch(table: TableResponse, fallbackTableNo: string): CreatedTableEditPatch {
+  const tableId = Number(table.id)
+  if (!Number.isFinite(tableId) || tableId <= 0) {
+    throw new Error('missing created table id')
+  }
+
+  return {
+    isEdit: true,
+    tableId,
+    qrCodeImageUrl: normalizeQRCodeUrl(table.qr_code_url),
+    qrCodeTableNo: table.table_no || fallbackTableNo
+  }
+}
+
+export async function uploadPendingTableImages(options: UploadPendingTableImagesOptions) {
+  let failedCount = 0
+  let coverFiles = options.coverFiles
+  let galleryFiles = options.galleryFiles
+
+  const bindFile = async (role: TableImageRole, file: TableUploadFile, isPrimary?: boolean) => {
+    const payload: { media_asset_id: number, is_primary?: boolean } = {
+      media_asset_id: Number(file.mediaId)
+    }
+    if (typeof isPrimary === 'boolean') {
+      payload.is_primary = isPrimary
+    }
+    const savedImage = await options.uploadTableImage(options.tableId, payload)
+    const currentFiles = role === 'cover' ? coverFiles : galleryFiles
+    const fileIndex = findPendingBindFileIndex(currentFiles, file)
+    if (fileIndex < 0) {
+      return
+    }
+
+    const nextFiles = replaceUploadFileAt(
+      currentFiles,
+      fileIndex,
+      buildPersistedUploadFile(savedImage, file.url, Number(file.mediaId))
+    )
+    if (role === 'cover') {
+      coverFiles = nextFiles
+      options.setCoverFiles(nextFiles)
+      return
+    }
+
+    galleryFiles = nextFiles
+    options.setGalleryFiles(nextFiles)
+  }
+
+  for (const file of pickPendingBoundFiles(coverFiles).slice(0, 1)) {
+    try {
+      await bindFile('cover', file, true)
+    } catch (err) {
+      failedCount += 1
+      options.onBindError?.('cover', err)
+    }
+  }
+
+  for (const file of pickPendingBoundFiles(galleryFiles)) {
+    try {
+      await bindFile('gallery', file)
+    } catch (err) {
+      failedCount += 1
+      options.onBindError?.('gallery', err)
+    }
+  }
+
+  return { failedCount }
 }
 
 export function mapTableDetailToFormData(table: TableResponse): TableFormData {

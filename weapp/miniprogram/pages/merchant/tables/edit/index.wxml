@@ -19,6 +19,10 @@
         <t-notice-bar theme="warning" visible="{{true}}" content="{{loadWarningMessage}}" />
       </view>
 
+      <view wx:if="{{imageBindRecoveryPending && imageBindRecoveryMessage}}" class="notice-banner">
+        <t-notice-bar theme="warning" visible="{{true}}" content="{{imageBindRecoveryMessage}}" />
+      </view>
+
       <view class="section-panel">
         <view class="section-top">
           <text class="section-title">桌台图片</text>

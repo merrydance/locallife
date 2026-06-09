@@ -21,7 +21,10 @@ import {
   type TableUploadFile
 } from '../../_utils/merchant-tables-shared'
 import {
+  buildCreatedTableEditPatch,
   buildPersistedUploadFile,
+  buildTableImageBindRecoveredPatch,
+  buildTableImageBindRecoveryPatch,
   buildSelectedTagState,
   buildTableQRCodeContext,
   buildTableSubmitPayload,
@@ -30,16 +33,17 @@ import {
   hasTableTagName,
   mapTableDetailToFormData,
   mergeSelectableTableTags,
-  pickPendingBoundFiles,
   removeUploadFileAt,
   removeWarningMessageSegment,
   replaceUploadFileAt,
   splitTableImageFiles,
+  TABLE_EDIT_STATUS_OPTIONS,
   TableEditPageOptions,
   TableImageRole,
+  TABLE_IMAGE_BIND_RECOVERY_MESSAGE,
+  uploadPendingTableImages,
   validateTableBeforeSubmit
 } from '../shared/table-edit-view'
-
 Page({
   data: {
     navBarHeight: 88,
@@ -65,15 +69,12 @@ Page({
     createTagDialogVisible: false,
     createTagInputValue: '',
     tagSubmitting: false,
+    imageBindRecoveryPending: false,
+    imageBindRecoveryMessage: '',
     coverUploadFiles: [] as TableUploadFile[],
     galleryUploadFiles: [] as TableUploadFile[],
     formData: createDefaultTableFormData(),
-    statusOptions: [
-      { label: '空闲', value: 'available' },
-      { label: '占用中', value: 'occupied' },
-      { label: '已预订', value: 'reserved' },
-      { label: '停用', value: 'disabled' }
-    ]
+    statusOptions: TABLE_EDIT_STATUS_OPTIONS
   },
 
   onLoad(options: TableEditPageOptions) {
@@ -567,30 +568,17 @@ Page({
   },
 
   async uploadPendingImages(tableId: number) {
-    let failedCount = 0
-
-    for (const file of pickPendingBoundFiles(this.getRoleUploadFiles('cover')).slice(0, 1)) {
-      try {
-        await tableManagementService.uploadTableImage(tableId, {
-          media_asset_id: Number(file.mediaId),
-          is_primary: true
-        })
-      } catch (err) {
-        failedCount += 1
-        logger.error('Bind pending table cover failed', err)
+    return uploadPendingTableImages({
+      tableId,
+      coverFiles: this.getRoleUploadFiles('cover'),
+      galleryFiles: this.getRoleUploadFiles('gallery'),
+      uploadTableImage: (targetTableId, payload) => tableManagementService.uploadTableImage(targetTableId, payload),
+      setCoverFiles: (files) => this.setRoleUploadFiles('cover', files),
+      setGalleryFiles: (files) => this.setRoleUploadFiles('gallery', files),
+      onBindError: (role, err) => {
+        logger.error(role === 'cover' ? 'Bind pending table cover failed' : 'Bind pending table gallery image failed', err)
       }
-    }
-
-    for (const file of pickPendingBoundFiles(this.getRoleUploadFiles('gallery'))) {
-      try {
-        await tableManagementService.uploadTableImage(tableId, { media_asset_id: Number(file.mediaId) })
-      } catch (err) {
-        failedCount += 1
-        logger.error('Bind pending table gallery image failed', err)
-      }
-    }
-
-    return { failedCount }
+    })
   },
 
   async notifyPreviousPage() {
@@ -624,16 +612,32 @@ Page({
           status: this.data.formData.status
         }
         await tableManagementService.updateTable(this.data.tableId, updatePayload)
+        const { failedCount } = await this.uploadPendingImages(this.data.tableId)
+        if (failedCount > 0) {
+          this.setData(buildTableImageBindRecoveryPatch())
+          wx.showToast({ title: TABLE_IMAGE_BIND_RECOVERY_MESSAGE, icon: 'none', duration: 3000 })
+          await this.notifyPreviousPage()
+          return
+        }
       } else {
         const createPayload: CreateTableRequest = payload
         const created = await tableManagementService.createTable(createPayload)
-        const { failedCount } = await this.uploadPendingImages(created.id)
+        const createdPatch = buildCreatedTableEditPatch(created, this.data.formData.table_no)
+        this.setData(createdPatch)
+        const createdTableId = createdPatch.tableId
+        const { failedCount } = await this.uploadPendingImages(createdTableId)
         if (failedCount > 0) {
-          wx.showToast({ title: '桌台已创建，部分图片关联失败，请稍后进入编辑页重试', icon: 'none', duration: 3000 })
+          this.setData(buildTableImageBindRecoveryPatch())
+          wx.showToast({ title: TABLE_IMAGE_BIND_RECOVERY_MESSAGE, icon: 'none', duration: 3000 })
+          await this.notifyPreviousPage()
+          return
         }
       }
 
-  await this.notifyPreviousPage()
+      if (this.data.imageBindRecoveryPending || this.data.imageBindRecoveryMessage) {
+        this.setData(buildTableImageBindRecoveredPatch())
+      }
+      await this.notifyPreviousPage()
       wx.navigateBack()
     } catch (err) {
       logger.error('Submit table failed', err)
@@ -642,5 +646,4 @@ Page({
       this.setData({ submitting: false })
     }
   }
-
 })
