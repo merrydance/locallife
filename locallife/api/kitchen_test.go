@@ -183,6 +183,30 @@ func TestListKitchenOrdersAPI(t *testing.T) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
 			},
 		},
+		{
+			name: "Forbidden_PendingStaffRole",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				pendingStaffMerchant := merchant
+				pendingStaffMerchant.OwnerUserID = user.ID + 1000
+				pendingStaffMerchant.Status = "active"
+				pendingStaffMerchant.RegionID = 1
+
+				expectResolveSingleStaffMerchant(store, user.ID, pendingStaffMerchant)
+				store.EXPECT().
+					GetUserMerchantRole(gomock.Any(), gomock.Eq(db.GetUserMerchantRoleParams{
+						MerchantID: pendingStaffMerchant.ID,
+						UserID:     user.ID,
+					})).
+					Times(1).
+					Return(db.MerchantStaffRolePending, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusForbidden, recorder.Code)
+			},
+		},
 	}
 
 	for i := range testCases {
