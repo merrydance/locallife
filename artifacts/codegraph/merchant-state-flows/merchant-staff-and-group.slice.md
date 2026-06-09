@@ -45,14 +45,14 @@ This slice does not fully cover:
 5. Employee bind page accepts QR/manual code, calls `POST /v1/bind-merchant`, invalidates cached console identity, and redirects pending staff away from the merchant dashboard.
    Evidence: `weapp/miniprogram/pages/user/bind-merchant/index.ts:259`, `weapp/miniprogram/pages/user/bind-merchant/index.ts:269`, `weapp/miniprogram/pages/user/bind-merchant/index.ts:297`, `weapp/miniprogram/api/personal.ts:530`.
 
-6. Bind route resolves the merchant by bind code, verifies expiry, rejects an existing membership row, and inserts `merchant_staff(role='pending', status='active')`. It deliberately does not grant the global `merchant_staff` user role yet.
-   Evidence: `locallife/api/server.go:722`, `locallife/api/staff.go:400`, `locallife/api/staff.go:409`, `locallife/api/staff.go:420`, `locallife/api/staff.go:426`, `locallife/api/staff.go:440`.
+6. Bind route resolves the merchant by bind code, verifies expiry, rejects an existing membership row, and calls `AddMerchantStaffTx` to insert `merchant_staff(role='pending', status='active')`. It deliberately does not grant the global `merchant_staff` user role yet.
+   Evidence: `locallife/api/server.go:722`, `locallife/api/staff.go:395`, `locallife/api/staff.go:408`, `locallife/db/sqlc/tx_merchant_staff.go:45`, `locallife/db/sqlc/tx_merchant_staff.go:60`.
 
-7. Owner role assignment changes `merchant_staff.role`, keeps the membership active, and then creates or reactivates `user_roles(role='merchant_staff')`.
-   Evidence: `locallife/api/staff.go:183`, `locallife/api/staff.go:215`, `locallife/api/staff.go:228`, `locallife/api/staff.go:237`, `locallife/api/staff.go:468`, `locallife/db/query/merchant_staff.sql:48`.
+7. Owner role assignment uses `AssignMerchantStaffRoleTx`: it locks the staff row, verifies merchant ownership and non-owner mutation, changes `merchant_staff.role`, keeps membership active, and creates/reactivates `user_roles(role='merchant_staff')` in the same transaction.
+   Evidence: `locallife/api/staff.go:177`, `locallife/api/staff.go:199`, `locallife/db/sqlc/tx_merchant_staff.go:73`, `locallife/db/sqlc/tx_merchant_staff.go:77`, `locallife/db/sqlc/tx_merchant_staff.go:88`, `locallife/db/sqlc/tx_merchant_staff.go:96`, `locallife/db/query/user_role.sql:11`.
 
-8. Owner removal soft-deletes the membership and then disables the coarse user role when no real active merchant role remains.
-   Evidence: `locallife/api/staff.go:266`, `locallife/api/staff.go:292`, `locallife/api/staff.go:304`, `locallife/api/staff.go:311`, `locallife/api/staff.go:500`.
+8. Owner removal uses `RemoveMerchantStaffTx`: it locks the staff row, verifies merchant ownership and non-owner mutation, soft-deletes the membership, then disables the coarse user role only when no assigned active merchant role remains.
+   Evidence: `locallife/api/staff.go:246`, `locallife/api/staff.go:262`, `locallife/db/sqlc/tx_merchant_staff.go:111`, `locallife/db/sqlc/tx_merchant_staff.go:115`, `locallife/db/sqlc/tx_merchant_staff.go:126`, `locallife/db/sqlc/tx_merchant_staff.go:151`, `locallife/db/query/merchant_staff.sql:53`.
 
 9. Group application page loads or creates the current user's latest draft, uploads private documents, starts OCR jobs, polls refreshed draft truth, and submits with agreement consent.
    Evidence: `weapp/miniprogram/pages/merchant/group/application/index.ts:350`, `weapp/miniprogram/pages/merchant/group/application/index.ts:366`, `weapp/miniprogram/pages/merchant/group/application/index.ts:404`, `weapp/miniprogram/pages/merchant/group/application/index.ts:537`, `weapp/miniprogram/pages/merchant/group/application/index.ts:586`.
@@ -89,11 +89,11 @@ This slice does not fully cover:
 
 ## Reverse-Reference Findings
 
-- `merchant_staff` is the merchant-specific authorization truth, while `user_roles(role='merchant_staff')` is a coarse global capability. Direct add, role assignment, and remove mutate these in separate calls without a transaction or recovery job.
+- Fixed 2026-06-09: `merchant_staff` is still the merchant-specific authorization truth and `user_roles(role='merchant_staff')` remains a coarse global capability, but direct add, invite bind, role assignment, and remove now mutate both through transaction helpers. Assigned roles create/reactivate the coarse role via `UpsertUserRoleActive`; pending staff does not grant it; removal disables it only when no assigned active staff remains.
 - A disabled `merchant_staff` row cannot rejoin through invite binding or direct add because both paths treat any existing row as a conflict. `UpdateMerchantStaffStatus` exists but no runtime reactivation caller was found.
 - Invite codes are reusable for up to 24 hours and there is no revoke/rotate action in the traced Mini Program page. This may be intentional for team onboarding, but it is a bearer credential with a wider blast radius than a one-person invite.
-- Bind creates `role='pending', status='active'`. `MerchantStaffMiddleware` later blocks roles not explicitly allowed, but `CheckUserHasMerchantAccess` checks only active status. Pending staff can therefore be treated as authorized by role-agnostic downstream checks such as dining-session access.
-- Migration `000070_add_staff_pending_status` introduced a `pending` status, but runtime bind uses a pending role plus active status. `UpdateMerchantStaffStatus`, hard delete queries, and count helpers are reverse-reference drift candidates.
+- Fixed 2026-06-09: bind still creates `role='pending', status='active'` for pending workbench display, but role-agnostic access is now role-aware. `CheckUserHasMerchantAccess`, `CountMerchantStaff`, `GetMerchantByOwner`, logic `resolveMerchantForUser`, and default accessible-merchant resolution exclude pending staff; `MerchantStaffMiddleware` resolves pending associations only for explicit denial/audit and defaults to granted staff merchants when granted and pending associations coexist.
+- Migration `000070_add_staff_pending_status` introduced a `pending` status, but runtime bind uses a pending role plus active status. `UpdateMerchantStaffStatus` and hard-delete queries remain reverse-reference drift candidates; count/access helpers are now role-aware.
 - Fixed 2026-06-09: group OCR writeback is concurrency-safe at the shared `application_data` JSON boundary. `UpdateGroupApplicationLicense` now JSONB-merges patches, and group OCR API/worker callers pass only current document keys instead of stale full blobs; DB/API/worker tests prove sibling document state is preserved and callers remain patch-only.
 - Fixed 2026-06-09: group application basic update now validates a submitted `license_image_asset_id` before draft mutation. The asset must belong to the applicant, be `confirmed`, and use one of the group business-license categories accepted by OCR (`business_license` or `group_license`); missing, cross-user, wrong-category, unconfirmed, and infrastructure-error branches are covered.
 - Group submit only requires `group_name` and `contact_phone`; backend does not require license, identity documents, successful OCR, address, or region. If those are required for approval, enforcement currently lives only in UI expectations or manual review.
@@ -132,7 +132,7 @@ This slice does not fully cover:
 
 - Generating an invite code is replay-friendly: an existing unexpired code is reused.
 - Binding the same active or disabled membership returns conflict. Disabled membership is not reactivated.
-- Role update and soft remove are convergent at the row level but not atomic with coarse `user_roles` propagation.
+- Role update and soft remove now use transaction helpers, so the membership row and coarse `user_roles` propagation commit or roll back together.
 - Group get-or-create is not protected by a unique active-draft constraint.
 - Group application approval and all join-request create/approve/reject/cancel transitions use transaction helpers for their state/audit boundaries.
 - Join-request create relies on a database uniqueness constraint for pending dedupe, but that same constraint causes terminal-history collisions.
@@ -140,7 +140,7 @@ This slice does not fully cover:
 
 ## Recovery And Async Convergence Paths
 
-- Staff membership/user-role propagation has no scheduler, reconciliation worker, or retry path after a partial write.
+- Staff membership/user-role propagation is transaction-owned for add, invite bind, role assignment, and removal. There is no separate scheduler or reconciliation worker; current recovery relies on the transaction boundary.
 - Group OCR uses `ocr_jobs`, asynq workers, polling from the Mini Program wrapper, and stale-binding guards before and after provider execution.
 - Group application review and group-join review are synchronous admin actions.
 - Merchant join page does not expose request history, cancel, or status refresh despite backend cancel/list capabilities.
@@ -156,8 +156,10 @@ This slice does not fully cover:
 
 Observed tests:
 
-- `locallife/api/staff_test.go` proves invite bind creates pending staff without granting the coarse merchant-staff role, and covers role activation/disable helpers.
-- `locallife/api/rbac_middleware_test.go` covers merchant staff middleware role selection.
+- `locallife/api/staff_test.go` proves invite bind creates pending staff through `AddMerchantStaffTx` without granting the coarse merchant-staff role, and proves add/update/delete handlers use the atomic staff-role tx entrypoints instead of split writes.
+- `locallife/db/sqlc/merchant_staff_test.go` proves pending staff is excluded from role-agnostic access/counts, assigned staff grants/reactivates coarse `user_roles.merchant_staff`, pending staff does not grant it, removal disables it only when no assigned active staff remains, pending-only remaining staff disables it, and owner staff cannot be mutated through staff tx helpers.
+- `locallife/db/sqlc/merchant_test.go` and `locallife/logic/service_support_test.go` prove `GetMerchantByOwner` excludes pending staff and logic `resolveMerchantForUser` does not fall back to a pending-only merchant association.
+- `locallife/api/rbac_middleware_test.go`, `locallife/api/merchant_access_test.go`, and `locallife/api/device_access_test.go` cover pending role denial, pending exclusion from default accessible merchants, mixed granted+pending default selection, and device-access denial with visible `staff_role=pending`.
 - `locallife/api/group_test.go` covers group draft create/update/submit/review, document delete, join create via transaction, joined-merchant create precheck/transaction conflict mapping, approve conflict, reject via transaction, cancel via transaction, and cancel conflict API paths.
 - `locallife/db/sqlc/tx_group_test.go` proves group application terminal review conflict, create request transaction writes audit and rejects already-joined merchants, approval prevents affiliation overwrite, reject writes audit and rejects non-pending replay, and cancel does not overwrite approved requests.
 - `locallife/api/ocr_test.go` covers group OCR create ownership/enqueue paths and patch-only pending/failure writebacks.
@@ -167,8 +169,7 @@ Observed tests:
 Missing high-value tests:
 
 - Disabled staff rejoin/reactivation contract.
-- Atomic rollback or reconciliation when `merchant_staff` succeeds but `user_roles` propagation fails.
-- Pending-role access test for every role-agnostic `CheckUserHasMerchantAccess` consumer.
+- Broader end-to-end tests for every higher-level pending-role consumer beyond `CheckUserHasMerchantAccess`, `GetMerchantByOwner`/`resolveMerchantForUser`, and focused adjacent API suites.
 - Invite-code revoke/rotation and disabled-merchant bind behavior.
 - Group submit completeness contract for documents/OCR/address/region.
 - Concurrent group draft get-or-create test.
@@ -177,9 +178,9 @@ Missing high-value tests:
 
 ## Gaps And Refactor Notes
 
-- Replace split staff membership/coarse-role updates with a transaction or an explicit reconciliation capability.
 - Define a reactivation path for disabled staff and decide whether invite bind should reactivate or require owner confirmation.
-- Align pending semantics: use status, role, or a stricter role-aware access query consistently.
+- Fixed 2026-06-09: staff membership/coarse-role updates now use transaction helpers for add, invite bind, role assignment, and removal.
+- Fixed 2026-06-09: pending staff semantics are role-aware in backend access helpers, `GetMerchantByOwner`, and logic merchant fallback while preserving `role='pending', status='active'` as the pending workbench model.
 - Decide whether staff invite codes should be reusable, revocable, rotated on demand, or one-time.
 - Fixed 2026-06-09: group OCR writeback is concurrency-safe at the durable JSON boundary.
 - Fixed 2026-06-09: apply media ownership/category/upload-status checks to direct group `license_image_asset_id` draft updates.
@@ -194,9 +195,9 @@ Missing high-value tests:
 - Entry branches checked: Mini Program staff list/invite/role/remove flows, staff invite binding, pending staff redirect, group application draft/update/document/OCR/submit, group join request page, group management/review backend paths, and staff/group dashboard/config entries. Flutter App has no staff/group management entry in `merchant_app/lib/features/**`. Web/admin UI is out of current scope except backend review effects.
 - Request branches checked: staff list/invite/bind/update-role/remove, group application get-or-create/update/delete/submit/review aliases, group OCR create/poll, group document binding/delete, group member/role routes, merchant group join create/cancel/reject/approve/list, and group audit-log writes.
 - Backend state branches checked: reusable staff invite code, pending/active/disabled `merchant_staff`, coarse `user_roles`, staff role update/removal, group application draft/submitted/approved/rejected states, group OCR JSON writeback, group creation, group membership roles, join request pending/approved/rejected/cancelled states, merchant `group_id/brand_id` affiliation, and audit logs.
-- Async branches checked: group OCR asynq worker and polling; staff propagation has no repair scheduler; group application review and join review are synchronous admin actions; group join Mini Program has no durable re-entry/status refresh despite backend list/cancel capability.
-- Failure/retry branches checked: invite-code reuse, disabled staff bind conflict, partial staff/user-role propagation failure, group draft duplicate get-or-create, OCR stale asset guard, group submit without backend completeness enforcement, join duplicate pending constraint, all-status unique collision after terminal history, fixed cancel-after-approve conflict handling, fixed join create/reject/cancel transaction-owned audit writes, and typed duplicate-key classification.
+- Async branches checked: group OCR asynq worker and polling; staff propagation is transaction-owned with no separate repair scheduler; group application review and join review are synchronous admin actions; group join Mini Program has no durable re-entry/status refresh despite backend list/cancel capability.
+- Failure/retry branches checked: invite-code reuse, disabled staff bind conflict, fixed transaction-owned staff/user-role propagation, group draft duplicate get-or-create, OCR stale asset guard, group submit without backend completeness enforcement, join duplicate pending constraint, all-status unique collision after terminal history, fixed cancel-after-approve conflict handling, fixed join create/reject/cancel transaction-owned audit writes, and typed duplicate-key classification.
 - Reader/consumer branches checked: merchant staff page, pending staff access checks, merchant dashboard/config access, group application page, group join page, group membership authorization, merchant affiliation readers, OCR result readers, and audit log consumers.
 - Authorization/tenant branches checked: owner/manager staff list/invite, owner-only role/remove, bind by server-side invite-code lookup, group applicant user ownership, OCR owner/media/category checks, group role authorization, merchant owner-only join create/cancel, review request/group ownership, optional brand-in-group validation, and transaction-protected one-group affiliation on approval.
-- Zombie/unreachable branches checked: reusable invite code has no revoke/rotation UI; disabled staff reactivation path is undefined; pending staff semantics can drift through role-agnostic access helpers; group review has two admin route aliases; group join backend cancel/list paths are not represented as durable Mini Program status recovery.
-- Test-proof gaps checked: existing tests cover invite pending semantics, typed duplicate-key classification, RBAC role selection, group draft/review/join basics, direct group license media validation, group OCR ownership/worker, group OCR JSON patch merging, join create/reject/cancel transaction paths, stable joined-merchant create conflict mapping, and terminal transaction conflicts. Missing proof remains for disabled rejoin contract, atomic staff/coarse-role propagation, every pending-role consumer, invite revocation/disabled-merchant bind, submit completeness, active draft uniqueness, all-status join history uniqueness, and Mini Program join recovery.
+- Zombie/unreachable branches checked: reusable invite code has no revoke/rotation UI; disabled staff reactivation path is undefined; group review has two admin route aliases; group join backend cancel/list paths are not represented as durable Mini Program status recovery.
+- Test-proof gaps checked: existing tests cover invite pending semantics, pending role-aware access helpers, `GetMerchantByOwner`/logic fallback filtering, atomic staff/coarse-role propagation, typed duplicate-key classification, RBAC role selection, group draft/review/join basics, direct group license media validation, group OCR ownership/worker, group OCR JSON patch merging, join create/reject/cancel transaction paths, stable joined-merchant create conflict mapping, and terminal transaction conflicts. Missing proof remains for disabled rejoin contract, every broader higher-level pending-role consumer beyond focused suites, invite revocation/disabled-merchant bind, submit completeness, active draft uniqueness, all-status join history uniqueness, and Mini Program join recovery.

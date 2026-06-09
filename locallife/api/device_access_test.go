@@ -73,6 +73,23 @@ func TestGetMerchantDeviceAccessAPI(t *testing.T) {
 			expectedRole:    "cashier",
 			expectedMessage: "打印设备和后厨协同设置仅支持老板或店长管理",
 		},
+		{
+			name:   "PendingDenied",
+			userID: user.ID,
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleStaffMerchant(store, user.ID, merchant)
+				store.EXPECT().
+					GetUserMerchantRole(gomock.Any(), gomock.Eq(db.GetUserMerchantRoleParams{
+						MerchantID: merchant.ID,
+						UserID:     user.ID,
+					})).
+					Times(1).
+					Return(db.MerchantStaffRolePending, nil)
+			},
+			expectedManage:  false,
+			expectedRole:    db.MerchantStaffRolePending,
+			expectedMessage: "打印设备和后厨协同设置仅支持老板或店长管理",
+		},
 	}
 
 	for i := range testCases {

@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -133,22 +132,17 @@ func (server *Server) addMerchantStaff(ctx *gin.Context) {
 	}
 
 	// 创建员工记录
-	staff, err := server.store.CreateMerchantStaff(ctx, db.CreateMerchantStaffParams{
+	result, err := server.store.AddMerchantStaffTx(ctx, db.AddMerchantStaffTxParams{
 		MerchantID: merchant.ID,
 		UserID:     req.UserID,
 		Role:       req.Role,
-		Status:     "active",
 		InvitedBy:  pgtype.Int8{Int64: authPayload.UserID, Valid: true},
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-
-	if err := server.ensureMerchantStaffUserRoleActive(ctx, req.UserID, merchant.ID); err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
+	staff := result.Staff
 
 	ctx.JSON(http.StatusCreated, staffResponse{
 		ID:         staff.ID,
@@ -201,43 +195,29 @@ func (server *Server) updateMerchantStaffRole(ctx *gin.Context) {
 		return
 	}
 
-	// 获取员工信息
-	staff, err := server.store.GetMerchantStaffByID(ctx, uriReq.ID)
+	// 更新角色
+	result, err := server.store.AssignMerchantStaffRoleTx(ctx, db.AssignMerchantStaffRoleTxParams{
+		MerchantID: merchant.ID,
+		StaffID:    uriReq.ID,
+		Role:       req.Role,
+	})
 	if err != nil {
 		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("staff not found")))
 			return
 		}
+		if errors.Is(err, db.ErrMerchantStaffMerchantMismatch) {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("staff does not belong to this merchant")))
+			return
+		}
+		if errors.Is(err, db.ErrMerchantStaffOwnerMutation) {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("cannot modify owner role")))
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-
-	// 验证员工属于当前商户
-	if staff.MerchantID != merchant.ID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("staff does not belong to this merchant")))
-		return
-	}
-
-	// 不能修改 owner 角色
-	if staff.Role == "owner" {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("cannot modify owner role")))
-		return
-	}
-
-	// 更新角色
-	updatedStaff, err := server.store.UpdateMerchantStaffRole(ctx, db.UpdateMerchantStaffRoleParams{
-		ID:   uriReq.ID,
-		Role: req.Role,
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	if err := server.ensureMerchantStaffUserRoleActive(ctx, updatedStaff.UserID, updatedStaff.MerchantID); err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
+	updatedStaff := result.Staff
 
 	ctx.JSON(http.StatusOK, staffResponse{
 		ID:         updatedStaff.ID,
@@ -278,37 +258,24 @@ func (server *Server) deleteMerchantStaff(ctx *gin.Context) {
 		return
 	}
 
-	// 获取员工信息
-	staff, err := server.store.GetMerchantStaffByID(ctx, uriReq.ID)
+	// 软删除员工记录（设置 status='disabled'）
+	_, err := server.store.RemoveMerchantStaffTx(ctx, db.RemoveMerchantStaffTxParams{
+		MerchantID: merchant.ID,
+		StaffID:    uriReq.ID,
+	})
 	if err != nil {
 		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("staff not found")))
 			return
 		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 验证员工属于当前商户
-	if staff.MerchantID != merchant.ID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("staff does not belong to this merchant")))
-		return
-	}
-
-	// 不能删除 owner
-	if staff.Role == "owner" {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("cannot remove owner")))
-		return
-	}
-
-	// 软删除员工记录（设置 status='disabled'）
-	_, err = server.store.SoftDeleteMerchantStaff(ctx, uriReq.ID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	if err := server.disableMerchantStaffUserRoleIfUnused(ctx, staff.UserID); err != nil {
+		if errors.Is(err, db.ErrMerchantStaffMerchantMismatch) {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("staff does not belong to this merchant")))
+			return
+		}
+		if errors.Is(err, db.ErrMerchantStaffOwnerMutation) {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("cannot remove owner")))
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -438,17 +405,17 @@ func (server *Server) bindMerchant(ctx *gin.Context) {
 	}
 
 	// 创建员工记录（role='pending' 表示待分配角色，status='active' 表示在职）
-	staff, err := server.store.CreateMerchantStaff(ctx, db.CreateMerchantStaffParams{
+	result, err := server.store.AddMerchantStaffTx(ctx, db.AddMerchantStaffTxParams{
 		MerchantID: merchant.ID,
 		UserID:     authPayload.UserID,
 		Role:       "pending", // 无角色，等待老板分配
-		Status:     "active",  // 在职状态
 		InvitedBy:  pgtype.Int8{Int64: merchant.OwnerUserID, Valid: true},
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+	staff := result.Staff
 
 	ctx.JSON(http.StatusOK, staffBindResponse{
 		Message:      "successfully bound to merchant",
@@ -461,81 +428,4 @@ func (server *Server) bindMerchant(ctx *gin.Context) {
 // isDuplicateKeyError 检查是否是重复 key 错误
 func isDuplicateKeyError(err error) bool {
 	return db.ErrorCode(err) == db.UniqueViolation
-}
-
-func (server *Server) ensureMerchantStaffUserRoleActive(ctx context.Context, userID, merchantID int64) error {
-	userRole, err := server.store.GetUserRoleByType(ctx, db.GetUserRoleByTypeParams{
-		UserID: userID,
-		Role:   RoleMerchantStaff,
-	})
-	if err != nil {
-		if isNotFoundError(err) {
-			_, err = server.store.CreateUserRole(ctx, db.CreateUserRoleParams{
-				UserID:          userID,
-				Role:            RoleMerchantStaff,
-				Status:          "active",
-				RelatedEntityID: pgtype.Int8{Int64: merchantID, Valid: true},
-			})
-			if err != nil && !isDuplicateKeyError(err) {
-				return err
-			}
-			return nil
-		}
-		return err
-	}
-
-	if userRole.Status == "active" {
-		return nil
-	}
-
-	_, err = server.store.UpdateUserRoleStatus(ctx, db.UpdateUserRoleStatusParams{
-		ID:     userRole.ID,
-		Status: "active",
-	})
-	return err
-}
-
-func (server *Server) disableMerchantStaffUserRoleIfUnused(ctx context.Context, userID int64) error {
-	merchants, err := server.store.ListMerchantsByStaff(ctx, userID)
-	if err != nil {
-		return err
-	}
-
-	for _, merchant := range merchants {
-		staffRole, err := server.store.GetUserMerchantRole(ctx, db.GetUserMerchantRoleParams{
-			MerchantID: merchant.ID,
-			UserID:     userID,
-		})
-		if err != nil {
-			if isNotFoundError(err) {
-				continue
-			}
-			return err
-		}
-
-		if staffRole != "pending" {
-			return nil
-		}
-	}
-
-	userRole, err := server.store.GetUserRoleByType(ctx, db.GetUserRoleByTypeParams{
-		UserID: userID,
-		Role:   RoleMerchantStaff,
-	})
-	if err != nil {
-		if isNotFoundError(err) {
-			return nil
-		}
-		return err
-	}
-
-	if userRole.Status != "active" {
-		return nil
-	}
-
-	_, err = server.store.UpdateUserRoleStatus(ctx, db.UpdateUserRoleStatusParams{
-		ID:     userRole.ID,
-		Status: "disabled",
-	})
-	return err
 }

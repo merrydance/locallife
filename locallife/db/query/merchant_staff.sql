@@ -45,6 +45,15 @@ ORDER BY m.created_at;
 SELECT role FROM merchant_staff 
 WHERE merchant_id = $1 AND user_id = $2 AND status = 'active';
 
+-- name: GetMerchantStaffForUpdate :one
+SELECT id, merchant_id, user_id, role, status, invited_by, created_at, updated_at FROM merchant_staff
+WHERE id = $1
+FOR UPDATE;
+
+-- name: CountAssignedActiveMerchantStaffByUser :one
+SELECT COUNT(*) FROM merchant_staff
+WHERE user_id = $1 AND status = 'active' AND role <> 'pending';
+
 -- name: UpdateMerchantStaffRole :one
 -- 更新角色时同时激活员工（从 pending 变为 active）
 UPDATE merchant_staff 
@@ -74,10 +83,10 @@ DELETE FROM merchant_staff WHERE merchant_id = $1;
 
 -- name: CountMerchantStaff :one
 SELECT COUNT(*) FROM merchant_staff 
-WHERE merchant_id = $1 AND status = 'active';
+WHERE merchant_id = $1 AND status = 'active' AND role <> 'pending';
 
 -- name: CheckUserHasMerchantAccess :one
 SELECT EXISTS(
     SELECT 1 FROM merchant_staff 
-    WHERE merchant_id = $1 AND user_id = $2 AND status = 'active'
+    WHERE merchant_id = $1 AND user_id = $2 AND status = 'active' AND role <> 'pending'
 ) AS has_access;

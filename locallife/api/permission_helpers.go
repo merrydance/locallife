@@ -93,6 +93,19 @@ func (server *Server) listAccessibleMerchants(ctx *gin.Context, userID int64) ([
 		appendMerchant(merchant)
 	}
 	for _, merchant := range staffMerchants {
+		role, err := server.store.GetUserMerchantRole(ctx, db.GetUserMerchantRoleParams{
+			MerchantID: merchant.ID,
+			UserID:     userID,
+		})
+		if err != nil {
+			if isNotFoundError(err) {
+				continue
+			}
+			return nil, err
+		}
+		if role == db.MerchantStaffRolePending {
+			continue
+		}
 		appendMerchant(merchant)
 	}
 
@@ -126,6 +139,54 @@ func (server *Server) resolveAccessibleMerchant(ctx *gin.Context, userID int64) 
 		return accessibleMerchants[0], nil
 	}
 
+	return db.Merchant{}, errMerchantSelectionRequired
+}
+
+func (server *Server) resolveAssociatedMerchant(ctx *gin.Context, userID int64) (db.Merchant, error) {
+	selectedMerchantID, hasExplicitSelection, err := selectedMerchantIDFromRequest(ctx)
+	if err != nil {
+		return db.Merchant{}, err
+	}
+
+	ownedMerchants, err := server.store.ListMerchantsByOwner(ctx, userID)
+	if err != nil {
+		return db.Merchant{}, err
+	}
+	staffMerchants, err := server.store.ListMerchantsByStaff(ctx, userID)
+	if err != nil {
+		return db.Merchant{}, err
+	}
+
+	associated := make([]db.Merchant, 0, len(ownedMerchants)+len(staffMerchants))
+	seen := make(map[int64]struct{}, len(ownedMerchants)+len(staffMerchants))
+	appendMerchant := func(merchant db.Merchant) {
+		if _, ok := seen[merchant.ID]; ok {
+			return
+		}
+		seen[merchant.ID] = struct{}{}
+		associated = append(associated, merchant)
+	}
+	for _, merchant := range ownedMerchants {
+		appendMerchant(merchant)
+	}
+	for _, merchant := range staffMerchants {
+		appendMerchant(merchant)
+	}
+
+	if len(associated) == 0 {
+		return db.Merchant{}, db.ErrRecordNotFound
+	}
+	if hasExplicitSelection {
+		for _, merchant := range associated {
+			if merchant.ID == selectedMerchantID {
+				return merchant, nil
+			}
+		}
+		return db.Merchant{}, db.ErrRecordNotFound
+	}
+	if len(associated) == 1 {
+		return associated[0], nil
+	}
 	return db.Merchant{}, errMerchantSelectionRequired
 }
 

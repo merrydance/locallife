@@ -15,7 +15,7 @@ import (
 const checkUserHasMerchantAccess = `-- name: CheckUserHasMerchantAccess :one
 SELECT EXISTS(
     SELECT 1 FROM merchant_staff 
-    WHERE merchant_id = $1 AND user_id = $2 AND status = 'active'
+    WHERE merchant_id = $1 AND user_id = $2 AND status = 'active' AND role <> 'pending'
 ) AS has_access
 `
 
@@ -31,9 +31,21 @@ func (q *Queries) CheckUserHasMerchantAccess(ctx context.Context, arg CheckUserH
 	return has_access, err
 }
 
+const countAssignedActiveMerchantStaffByUser = `-- name: CountAssignedActiveMerchantStaffByUser :one
+SELECT COUNT(*) FROM merchant_staff
+WHERE user_id = $1 AND status = 'active' AND role <> 'pending'
+`
+
+func (q *Queries) CountAssignedActiveMerchantStaffByUser(ctx context.Context, userID int64) (int64, error) {
+	row := q.db.QueryRow(ctx, countAssignedActiveMerchantStaffByUser, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countMerchantStaff = `-- name: CountMerchantStaff :one
 SELECT COUNT(*) FROM merchant_staff 
-WHERE merchant_id = $1 AND status = 'active'
+WHERE merchant_id = $1 AND status = 'active' AND role <> 'pending'
 `
 
 func (q *Queries) CountMerchantStaff(ctx context.Context, merchantID int64) (int64, error) {
@@ -132,6 +144,28 @@ WHERE id = $1
 
 func (q *Queries) GetMerchantStaffByID(ctx context.Context, id int64) (MerchantStaff, error) {
 	row := q.db.QueryRow(ctx, getMerchantStaffByID, id)
+	var i MerchantStaff
+	err := row.Scan(
+		&i.ID,
+		&i.MerchantID,
+		&i.UserID,
+		&i.Role,
+		&i.Status,
+		&i.InvitedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getMerchantStaffForUpdate = `-- name: GetMerchantStaffForUpdate :one
+SELECT id, merchant_id, user_id, role, status, invited_by, created_at, updated_at FROM merchant_staff
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *Queries) GetMerchantStaffForUpdate(ctx context.Context, id int64) (MerchantStaff, error) {
+	row := q.db.QueryRow(ctx, getMerchantStaffForUpdate, id)
 	var i MerchantStaff
 	err := row.Scan(
 		&i.ID,

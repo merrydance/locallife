@@ -168,6 +168,23 @@ func TestGetMerchantByOwner(t *testing.T) {
 	require.Equal(t, merchant1.OwnerUserID, merchant2.OwnerUserID)
 }
 
+func TestGetMerchantByOwnerRejectsPendingStaffRole(t *testing.T) {
+	ctx := context.Background()
+	merchant := createRandomMerchantForTest(t)
+	user := createRandomUser(t)
+
+	_, err := testStore.CreateMerchantStaff(ctx, CreateMerchantStaffParams{
+		MerchantID: merchant.ID,
+		UserID:     user.ID,
+		Role:       MerchantStaffRolePending,
+		Status:     MerchantStaffStatusActive,
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.GetMerchantByOwner(ctx, user.ID)
+	require.ErrorIs(t, err, ErrRecordNotFound)
+}
+
 func TestListAllMerchants(t *testing.T) {
 	// 创建多个商户
 	for i := 0; i < 3; i++ {

@@ -838,7 +838,7 @@ func (q *Queries) GetMerchantByBindCode(ctx context.Context, bindCode pgtype.Tex
 
 const getMerchantByOwner = `-- name: GetMerchantByOwner :one
 SELECT m.id, m.owner_user_id, m.name, m.description, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.group_id, m.brand_id, m.logo_media_asset_id, m.auto_open_by_business_hours, m.storefront_images, m.environment_images FROM merchants m
-LEFT JOIN merchant_staff ms ON m.id = ms.merchant_id AND ms.status = 'active'
+LEFT JOIN merchant_staff ms ON m.id = ms.merchant_id AND ms.status = 'active' AND ms.role <> 'pending'
 WHERE (m.owner_user_id = $1 OR ms.user_id = $1) AND m.deleted_at IS NULL
 ORDER BY CASE WHEN m.owner_user_id = $1 THEN 0 ELSE 1 END
 LIMIT 1

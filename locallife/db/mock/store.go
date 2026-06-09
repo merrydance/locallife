@@ -178,6 +178,21 @@ func (mr *MockStoreMockRecorder) AddFavoriteMerchant(ctx, arg any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddFavoriteMerchant", reflect.TypeOf((*MockStore)(nil).AddFavoriteMerchant), ctx, arg)
 }
 
+// AddMerchantStaffTx mocks base method.
+func (m *MockStore) AddMerchantStaffTx(ctx context.Context, arg db.AddMerchantStaffTxParams) (db.AddMerchantStaffTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddMerchantStaffTx", ctx, arg)
+	ret0, _ := ret[0].(db.AddMerchantStaffTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AddMerchantStaffTx indicates an expected call of AddMerchantStaffTx.
+func (mr *MockStoreMockRecorder) AddMerchantStaffTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddMerchantStaffTx", reflect.TypeOf((*MockStore)(nil).AddMerchantStaffTx), ctx, arg)
+}
+
 // AddMerchantTag mocks base method.
 func (m *MockStore) AddMerchantTag(ctx context.Context, arg db.AddMerchantTagParams) error {
 	m.ctrl.T.Helper()
@@ -505,6 +520,21 @@ func (m *MockStore) AssignDelivery(ctx context.Context, arg db.AssignDeliveryPar
 func (mr *MockStoreMockRecorder) AssignDelivery(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AssignDelivery", reflect.TypeOf((*MockStore)(nil).AssignDelivery), ctx, arg)
+}
+
+// AssignMerchantStaffRoleTx mocks base method.
+func (m *MockStore) AssignMerchantStaffRoleTx(ctx context.Context, arg db.AssignMerchantStaffRoleTxParams) (db.AssignMerchantStaffRoleTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AssignMerchantStaffRoleTx", ctx, arg)
+	ret0, _ := ret[0].(db.AssignMerchantStaffRoleTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AssignMerchantStaffRoleTx indicates an expected call of AssignMerchantStaffRoleTx.
+func (mr *MockStoreMockRecorder) AssignMerchantStaffRoleTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AssignMerchantStaffRoleTx", reflect.TypeOf((*MockStore)(nil).AssignMerchantStaffRoleTx), ctx, arg)
 }
 
 // AttachCloudPrinterProviderAuthorizationToPrinter mocks base method.
@@ -1740,6 +1770,21 @@ func (m *MockStore) CountAllReviewsByMerchant(ctx context.Context, merchantID in
 func (mr *MockStoreMockRecorder) CountAllReviewsByMerchant(ctx, merchantID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountAllReviewsByMerchant", reflect.TypeOf((*MockStore)(nil).CountAllReviewsByMerchant), ctx, merchantID)
+}
+
+// CountAssignedActiveMerchantStaffByUser mocks base method.
+func (m *MockStore) CountAssignedActiveMerchantStaffByUser(ctx context.Context, userID int64) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountAssignedActiveMerchantStaffByUser", ctx, userID)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountAssignedActiveMerchantStaffByUser indicates an expected call of CountAssignedActiveMerchantStaffByUser.
+func (mr *MockStoreMockRecorder) CountAssignedActiveMerchantStaffByUser(ctx, userID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountAssignedActiveMerchantStaffByUser", reflect.TypeOf((*MockStore)(nil).CountAssignedActiveMerchantStaffByUser), ctx, userID)
 }
 
 // CountAvailableTablesByMerchant mocks base method.
@@ -9822,6 +9867,21 @@ func (mr *MockStoreMockRecorder) GetMerchantStaffByID(ctx, id any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMerchantStaffByID", reflect.TypeOf((*MockStore)(nil).GetMerchantStaffByID), ctx, id)
 }
 
+// GetMerchantStaffForUpdate mocks base method.
+func (m *MockStore) GetMerchantStaffForUpdate(ctx context.Context, id int64) (db.MerchantStaff, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMerchantStaffForUpdate", ctx, id)
+	ret0, _ := ret[0].(db.MerchantStaff)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMerchantStaffForUpdate indicates an expected call of GetMerchantStaffForUpdate.
+func (mr *MockStoreMockRecorder) GetMerchantStaffForUpdate(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMerchantStaffForUpdate", reflect.TypeOf((*MockStore)(nil).GetMerchantStaffForUpdate), ctx, id)
+}
+
 // GetMerchantWithTags mocks base method.
 func (m *MockStore) GetMerchantWithTags(ctx context.Context, id int64) (db.GetMerchantWithTagsRow, error) {
 	m.ctrl.T.Helper()
@@ -12520,6 +12580,21 @@ func (m *MockStore) GetUserRoleByType(ctx context.Context, arg db.GetUserRoleByT
 func (mr *MockStoreMockRecorder) GetUserRoleByType(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserRoleByType", reflect.TypeOf((*MockStore)(nil).GetUserRoleByType), ctx, arg)
+}
+
+// GetUserRoleByTypeForUpdate mocks base method.
+func (m *MockStore) GetUserRoleByTypeForUpdate(ctx context.Context, arg db.GetUserRoleByTypeForUpdateParams) (db.UserRole, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetUserRoleByTypeForUpdate", ctx, arg)
+	ret0, _ := ret[0].(db.UserRole)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetUserRoleByTypeForUpdate indicates an expected call of GetUserRoleByTypeForUpdate.
+func (mr *MockStoreMockRecorder) GetUserRoleByTypeForUpdate(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserRoleByTypeForUpdate", reflect.TypeOf((*MockStore)(nil).GetUserRoleByTypeForUpdate), ctx, arg)
 }
 
 // GetUserVoucher mocks base method.
@@ -19093,6 +19168,21 @@ func (mr *MockStoreMockRecorder) RemoveFromDeliveryPool(ctx, orderID any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveFromDeliveryPool", reflect.TypeOf((*MockStore)(nil).RemoveFromDeliveryPool), ctx, orderID)
 }
 
+// RemoveMerchantStaffTx mocks base method.
+func (m *MockStore) RemoveMerchantStaffTx(ctx context.Context, arg db.RemoveMerchantStaffTxParams) (db.RemoveMerchantStaffTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RemoveMerchantStaffTx", ctx, arg)
+	ret0, _ := ret[0].(db.RemoveMerchantStaffTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RemoveMerchantStaffTx indicates an expected call of RemoveMerchantStaffTx.
+func (mr *MockStoreMockRecorder) RemoveMerchantStaffTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveMerchantStaffTx", reflect.TypeOf((*MockStore)(nil).RemoveMerchantStaffTx), ctx, arg)
+}
+
 // RemoveMerchantSystemLabel mocks base method.
 func (m *MockStore) RemoveMerchantSystemLabel(ctx context.Context, arg db.RemoveMerchantSystemLabelParams) error {
 	m.ctrl.T.Helper()
@@ -23504,6 +23594,21 @@ func (m *MockStore) UpsertUserDevice(ctx context.Context, arg db.UpsertUserDevic
 func (mr *MockStoreMockRecorder) UpsertUserDevice(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertUserDevice", reflect.TypeOf((*MockStore)(nil).UpsertUserDevice), ctx, arg)
+}
+
+// UpsertUserRoleActive mocks base method.
+func (m *MockStore) UpsertUserRoleActive(ctx context.Context, arg db.UpsertUserRoleActiveParams) (db.UserRole, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpsertUserRoleActive", ctx, arg)
+	ret0, _ := ret[0].(db.UserRole)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpsertUserRoleActive indicates an expected call of UpsertUserRoleActive.
+func (mr *MockStoreMockRecorder) UpsertUserRoleActive(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertUserRoleActive", reflect.TypeOf((*MockStore)(nil).UpsertUserRoleActive), ctx, arg)
 }
 
 // UpsertWechatAccessToken mocks base method.

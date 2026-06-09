@@ -154,6 +154,7 @@ type Querier interface {
 	CountAllRegionApplicationsAdmin(ctx context.Context, status pgtype.Text) (int64, error)
 	// 商户查看所有评价数量（包含不可见的）
 	CountAllReviewsByMerchant(ctx context.Context, merchantID int64) (int64, error)
+	CountAssignedActiveMerchantStaffByUser(ctx context.Context, userID int64) (int64, error)
 	CountAvailableTablesByMerchant(ctx context.Context, merchantID int64) (int64, error)
 	CountBaofuWithdrawalOrdersByOwner(ctx context.Context, arg CountBaofuWithdrawalOrdersByOwnerParams) (int64, error)
 	CountBrowseHistory(ctx context.Context, userID int64) (int64, error)
@@ -904,6 +905,7 @@ type Querier interface {
 	GetMerchantSettlementAdjustmentByRelatedAndType(ctx context.Context, arg GetMerchantSettlementAdjustmentByRelatedAndTypeParams) (MerchantSettlementAdjustment, error)
 	GetMerchantStaff(ctx context.Context, arg GetMerchantStaffParams) (MerchantStaff, error)
 	GetMerchantStaffByID(ctx context.Context, id int64) (MerchantStaff, error)
+	GetMerchantStaffForUpdate(ctx context.Context, id int64) (MerchantStaff, error)
 	// ==================== 高级查询（使用JOIN和聚合）====================
 	GetMerchantWithTags(ctx context.Context, id int64) (GetMerchantWithTagsRow, error)
 	// 批量获取商户详情
@@ -1169,6 +1171,7 @@ type Querier interface {
 	GetUserRecentClaims(ctx context.Context, userID int64) ([]Claim, error)
 	GetUserRole(ctx context.Context, id int64) (UserRole, error)
 	GetUserRoleByType(ctx context.Context, arg GetUserRoleByTypeParams) (UserRole, error)
+	GetUserRoleByTypeForUpdate(ctx context.Context, arg GetUserRoleByTypeForUpdateParams) (UserRole, error)
 	GetUserVoucher(ctx context.Context, id int64) (GetUserVoucherRow, error)
 	GetUserVoucherForUpdate(ctx context.Context, id int64) (UserVoucher, error)
 	// ==========================================
@@ -2016,6 +2019,7 @@ type Querier interface {
 	// 设备指纹查询（M9欺诈检测）
 	// ==========================================
 	UpsertUserDevice(ctx context.Context, arg UpsertUserDeviceParams) (UserDevice, error)
+	UpsertUserRoleActive(ctx context.Context, arg UpsertUserRoleActiveParams) (UserRole, error)
 	UpsertWechatAccessToken(ctx context.Context, arg UpsertWechatAccessTokenParams) (WechatAccessToken, error)
 	VoidBaofuAccountOpeningFlow(ctx context.Context, arg VoidBaofuAccountOpeningFlowParams) (BaofuAccountOpeningFlow, error)
 }

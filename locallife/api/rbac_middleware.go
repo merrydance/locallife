@@ -266,13 +266,25 @@ func (server *Server) writeMerchantStaffRejection(ctx *gin.Context, userID int64
 }
 
 func (server *Server) resolveMerchantStaffIdentity(ctx *gin.Context, userID int64) (db.Merchant, string, error) {
-	merchant, err := server.resolveMerchantForUser(ctx, userID)
+	_, hasExplicitSelection, err := selectedMerchantIDFromRequest(ctx)
 	if err != nil {
 		return db.Merchant{}, "", err
 	}
 
+	if hasExplicitSelection {
+		merchant, err := server.resolveAssociatedMerchant(ctx, userID)
+		if err != nil {
+			return db.Merchant{}, "", err
+		}
+		return server.resolveMerchantStaffRole(ctx, userID, merchant)
+	}
+
+	return server.resolveDefaultMerchantStaffIdentity(ctx, userID)
+}
+
+func (server *Server) resolveMerchantStaffRole(ctx *gin.Context, userID int64, merchant db.Merchant) (db.Merchant, string, error) {
 	if merchant.OwnerUserID == userID {
-		return merchant, "owner", nil
+		return merchant, db.MerchantStaffRoleOwner, nil
 	}
 
 	role, err := server.store.GetUserMerchantRole(ctx, db.GetUserMerchantRoleParams{
@@ -287,6 +299,79 @@ func (server *Server) resolveMerchantStaffIdentity(ctx *gin.Context, userID int6
 	}
 
 	return merchant, role, nil
+}
+
+func (server *Server) resolveDefaultMerchantStaffIdentity(ctx *gin.Context, userID int64) (db.Merchant, string, error) {
+	ownedMerchants, err := server.store.ListMerchantsByOwner(ctx, userID)
+	if err != nil {
+		return db.Merchant{}, "", err
+	}
+	staffMerchants, err := server.store.ListMerchantsByStaff(ctx, userID)
+	if err != nil {
+		return db.Merchant{}, "", err
+	}
+
+	type merchantStaffCandidate struct {
+		merchant db.Merchant
+		role     string
+	}
+
+	granted := make([]merchantStaffCandidate, 0, len(ownedMerchants)+len(staffMerchants))
+	pending := make([]merchantStaffCandidate, 0, len(staffMerchants))
+	seen := make(map[int64]struct{}, len(ownedMerchants)+len(staffMerchants))
+
+	for _, merchant := range ownedMerchants {
+		if _, ok := seen[merchant.ID]; ok {
+			continue
+		}
+		seen[merchant.ID] = struct{}{}
+		granted = append(granted, merchantStaffCandidate{
+			merchant: merchant,
+			role:     db.MerchantStaffRoleOwner,
+		})
+	}
+
+	for _, merchant := range staffMerchants {
+		if _, ok := seen[merchant.ID]; ok {
+			continue
+		}
+
+		role, err := server.store.GetUserMerchantRole(ctx, db.GetUserMerchantRoleParams{
+			MerchantID: merchant.ID,
+			UserID:     userID,
+		})
+		if err != nil {
+			if isNotFoundError(err) {
+				continue
+			}
+			return db.Merchant{}, "", err
+		}
+
+		seen[merchant.ID] = struct{}{}
+		candidate := merchantStaffCandidate{
+			merchant: merchant,
+			role:     role,
+		}
+		if role == db.MerchantStaffRolePending {
+			pending = append(pending, candidate)
+			continue
+		}
+		granted = append(granted, candidate)
+	}
+
+	if len(granted) == 1 {
+		return granted[0].merchant, granted[0].role, nil
+	}
+	if len(granted) > 1 {
+		return db.Merchant{}, "", errMerchantSelectionRequired
+	}
+	if len(pending) == 1 {
+		return pending[0].merchant, pending[0].role, nil
+	}
+	if len(pending) > 1 {
+		return db.Merchant{}, "", errMerchantSelectionRequired
+	}
+	return db.Merchant{}, "", db.ErrRecordNotFound
 }
 
 // RiderMiddleware 创建骑手验证中间件

@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -47,15 +46,14 @@ func TestBindMerchantDoesNotGrantMerchantStaffRoleWhenPending(t *testing.T) {
 		Times(1).
 		Return(db.MerchantStaff{}, db.ErrRecordNotFound)
 	store.EXPECT().
-		CreateMerchantStaff(gomock.Any(), gomock.Eq(db.CreateMerchantStaffParams{
+		AddMerchantStaffTx(gomock.Any(), gomock.Eq(db.AddMerchantStaffTxParams{
 			MerchantID: merchant.ID,
 			UserID:     user.ID,
 			Role:       "pending",
-			Status:     "active",
 			InvitedBy:  pgtype.Int8{Int64: merchant.OwnerUserID, Valid: true},
 		})).
 		Times(1).
-		Return(createdStaff, nil)
+		Return(db.AddMerchantStaffTxResult{Staff: createdStaff}, nil)
 	store.EXPECT().
 		CreateUserRole(gomock.Any(), gomock.Any()).
 		Times(0)
@@ -95,82 +93,161 @@ func TestIsDuplicateKeyErrorUsesTypedPostgresCode(t *testing.T) {
 	}))
 }
 
-func TestEnsureMerchantStaffUserRoleActive(t *testing.T) {
+func TestAddMerchantStaffAPIUsesAtomicStaffRoleTx(t *testing.T) {
 	user, _ := randomUser(t)
-	merchant := randomMerchant(user.ID + 200)
-
-	t.Run("create missing role", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-
-		store := mockdb.NewMockStore(ctrl)
-		store.EXPECT().
-			GetUserRoleByType(gomock.Any(), gomock.Eq(db.GetUserRoleByTypeParams{UserID: user.ID, Role: RoleMerchantStaff})).
-			Times(1).
-			Return(db.UserRole{}, db.ErrRecordNotFound)
-		store.EXPECT().
-			CreateUserRole(gomock.Any(), gomock.Eq(db.CreateUserRoleParams{
-				UserID:          user.ID,
-				Role:            RoleMerchantStaff,
-				Status:          "active",
-				RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-			})).
-			Times(1).
-			Return(db.UserRole{}, nil)
-
-		server := newTestServer(t, store)
-		err := server.ensureMerchantStaffUserRoleActive(context.Background(), user.ID, merchant.ID)
-		require.NoError(t, err)
-	})
-
-	t.Run("reactivate disabled role", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-
-		store := mockdb.NewMockStore(ctrl)
-		storedRole := db.UserRole{ID: 7, UserID: user.ID, Role: RoleMerchantStaff, Status: "disabled"}
-		store.EXPECT().
-			GetUserRoleByType(gomock.Any(), gomock.Eq(db.GetUserRoleByTypeParams{UserID: user.ID, Role: RoleMerchantStaff})).
-			Times(1).
-			Return(storedRole, nil)
-		store.EXPECT().
-			UpdateUserRoleStatus(gomock.Any(), gomock.Eq(db.UpdateUserRoleStatusParams{ID: storedRole.ID, Status: "active"})).
-			Times(1).
-			Return(db.UserRole{ID: storedRole.ID, UserID: user.ID, Role: RoleMerchantStaff, Status: "active"}, nil)
-
-		server := newTestServer(t, store)
-		err := server.ensureMerchantStaffUserRoleActive(context.Background(), user.ID, merchant.ID)
-		require.NoError(t, err)
-	})
-}
-
-func TestDisableMerchantStaffUserRoleIfUnused(t *testing.T) {
-	user, _ := randomUser(t)
-	pendingMerchant := randomMerchant(user.ID + 300)
-	activeRole := db.UserRole{ID: 9, UserID: user.ID, Role: RoleMerchantStaff, Status: "active"}
+	owner, _ := randomUser(t)
+	merchant := randomMerchant(owner.ID)
+	createdStaff := db.MerchantStaff{
+		ID:         21,
+		MerchantID: merchant.ID,
+		UserID:     user.ID,
+		Role:       "cashier",
+		Status:     "active",
+		InvitedBy:  pgtype.Int8{Int64: owner.ID, Valid: true},
+		CreatedAt:  time.Now(),
+		UpdatedAt:  pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	}
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
 	store.EXPECT().
-		ListMerchantsByStaff(gomock.Any(), gomock.Eq(user.ID)).
+		GetMerchantStaff(gomock.Any(), gomock.Eq(db.GetMerchantStaffParams{MerchantID: merchant.ID, UserID: user.ID})).
 		Times(1).
-		Return([]db.Merchant{pendingMerchant}, nil)
+		Return(db.MerchantStaff{}, db.ErrRecordNotFound)
 	store.EXPECT().
-		GetUserMerchantRole(gomock.Any(), gomock.Eq(db.GetUserMerchantRoleParams{MerchantID: pendingMerchant.ID, UserID: user.ID})).
+		AddMerchantStaffTx(gomock.Any(), gomock.Eq(db.AddMerchantStaffTxParams{
+			MerchantID: merchant.ID,
+			UserID:     user.ID,
+			Role:       "cashier",
+			InvitedBy:  pgtype.Int8{Int64: owner.ID, Valid: true},
+		})).
 		Times(1).
-		Return("pending", nil)
+		Return(db.AddMerchantStaffTxResult{Staff: createdStaff}, nil)
 	store.EXPECT().
-		GetUserRoleByType(gomock.Any(), gomock.Eq(db.GetUserRoleByTypeParams{UserID: user.ID, Role: RoleMerchantStaff})).
-		Times(1).
-		Return(activeRole, nil)
+		CreateMerchantStaff(gomock.Any(), gomock.Any()).
+		Times(0)
 	store.EXPECT().
-		UpdateUserRoleStatus(gomock.Any(), gomock.Eq(db.UpdateUserRoleStatusParams{ID: activeRole.ID, Status: "disabled"})).
-		Times(1).
-		Return(db.UserRole{ID: activeRole.ID, UserID: user.ID, Role: RoleMerchantStaff, Status: "disabled"}, nil)
+		CreateUserRole(gomock.Any(), gomock.Any()).
+		Times(0)
 
 	server := newTestServer(t, store)
-	err := server.disableMerchantStaffUserRoleIfUnused(context.Background(), user.ID)
+	recorder := httptest.NewRecorder()
+
+	body, err := json.Marshal(map[string]any{"user_id": user.ID, "role": "cashier"})
 	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/merchant/staff", bytes.NewReader(body))
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusCreated, recorder.Code)
+	var resp staffResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, createdStaff.ID, resp.ID)
+	require.Equal(t, "cashier", resp.Role)
+}
+
+func TestUpdateMerchantStaffRoleAPIUsesAtomicStaffRoleTx(t *testing.T) {
+	owner, _ := randomUser(t)
+	staffUser, _ := randomUser(t)
+	merchant := randomMerchant(owner.ID)
+	staff := db.MerchantStaff{
+		ID:         31,
+		MerchantID: merchant.ID,
+		UserID:     staffUser.ID,
+		Role:       "manager",
+		Status:     "active",
+		CreatedAt:  time.Now(),
+		UpdatedAt:  pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+	store.EXPECT().
+		AssignMerchantStaffRoleTx(gomock.Any(), gomock.Eq(db.AssignMerchantStaffRoleTxParams{
+			MerchantID: merchant.ID,
+			StaffID:    staff.ID,
+			Role:       "chef",
+		})).
+		Times(1).
+		Return(db.AssignMerchantStaffRoleTxResult{Staff: db.MerchantStaff{
+			ID:         staff.ID,
+			MerchantID: merchant.ID,
+			UserID:     staffUser.ID,
+			Role:       "chef",
+			Status:     "active",
+			CreatedAt:  staff.CreatedAt,
+			UpdatedAt:  pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		}}, nil)
+	store.EXPECT().
+		UpdateMerchantStaffRole(gomock.Any(), gomock.Any()).
+		Times(0)
+	store.EXPECT().
+		CreateUserRole(gomock.Any(), gomock.Any()).
+		Times(0)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	body, err := json.Marshal(map[string]string{"role": "chef"})
+	require.NoError(t, err)
+	request, err := http.NewRequest(http.MethodPatch, "/v1/merchant/staff/31/role", bytes.NewReader(body))
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var resp staffResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, "chef", resp.Role)
+}
+
+func TestDeleteMerchantStaffAPIUsesAtomicStaffRoleTx(t *testing.T) {
+	owner, _ := randomUser(t)
+	merchant := randomMerchant(owner.ID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+	store.EXPECT().
+		RemoveMerchantStaffTx(gomock.Any(), gomock.Eq(db.RemoveMerchantStaffTxParams{
+			MerchantID: merchant.ID,
+			StaffID:    41,
+		})).
+		Times(1).
+		Return(db.RemoveMerchantStaffTxResult{Staff: db.MerchantStaff{
+			ID:         41,
+			MerchantID: merchant.ID,
+			UserID:     owner.ID + 100,
+			Role:       "cashier",
+			Status:     "disabled",
+		}}, nil)
+	store.EXPECT().
+		SoftDeleteMerchantStaff(gomock.Any(), gomock.Any()).
+		Times(0)
+	store.EXPECT().
+		UpdateUserRoleStatus(gomock.Any(), gomock.Any()).
+		Times(0)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodDelete, "/v1/merchant/staff/41", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
 }

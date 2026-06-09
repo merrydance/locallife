@@ -1,10 +1,14 @@
 package logic
 
 import (
+	"context"
 	"testing"
 	"time"
 
+	mockdb "github.com/merrydance/locallife/db/mock"
+	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 )
 
 func TestDefaultIDGeneratorPickupCodeUsesFourDigits(t *testing.T) {
@@ -12,6 +16,21 @@ func TestDefaultIDGeneratorPickupCodeUsesFourDigits(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Regexp(t, `^\d{4}$`, code)
+}
+
+func TestResolveMerchantForUserRejectsPendingStaffFallback(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	const userID int64 = 10
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetMerchantByOwner(gomock.Any(), userID).
+		Times(1).
+		Return(db.Merchant{}, db.ErrRecordNotFound)
+
+	_, err := resolveMerchantForUser(context.Background(), store, userID)
+	require.ErrorIs(t, err, db.ErrRecordNotFound)
 }
 
 func TestDefaultOrderPolicyRejectsTakeawayAddress(t *testing.T) {

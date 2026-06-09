@@ -8,8 +8,16 @@ const (
 	UserRoleRider         = "rider"
 	UserRoleCustomer      = "customer"
 
-	MerchantStaffRoleOwner    = "owner"
-	MerchantStaffStatusActive = "active"
+	MerchantStaffRoleOwner      = "owner"
+	MerchantStaffRoleManager    = "manager"
+	MerchantStaffRoleChef       = "chef"
+	MerchantStaffRoleCashier    = "cashier"
+	MerchantStaffRolePending    = "pending"
+	MerchantStaffStatusActive   = "active"
+	MerchantStaffStatusDisabled = "disabled"
+
+	UserRoleStatusActive   = "active"
+	UserRoleStatusDisabled = "disabled"
 
 	MerchantStatusApproved          = "approved"
 	MerchantStatusActive            = "active"

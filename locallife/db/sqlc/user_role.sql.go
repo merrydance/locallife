@@ -117,6 +117,32 @@ func (q *Queries) GetUserRoleByType(ctx context.Context, arg GetUserRoleByTypePa
 	return i, err
 }
 
+const getUserRoleByTypeForUpdate = `-- name: GetUserRoleByTypeForUpdate :one
+SELECT id, user_id, role, status, related_entity_id, created_at FROM user_roles
+WHERE user_id = $1 AND role = $2
+LIMIT 1
+FOR UPDATE
+`
+
+type GetUserRoleByTypeForUpdateParams struct {
+	UserID int64  `json:"user_id"`
+	Role   string `json:"role"`
+}
+
+func (q *Queries) GetUserRoleByTypeForUpdate(ctx context.Context, arg GetUserRoleByTypeForUpdateParams) (UserRole, error) {
+	row := q.db.QueryRow(ctx, getUserRoleByTypeForUpdate, arg.UserID, arg.Role)
+	var i UserRole
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Role,
+		&i.Status,
+		&i.RelatedEntityID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const hasRole = `-- name: HasRole :one
 SELECT EXISTS(
   SELECT 1 FROM user_roles
@@ -183,6 +209,44 @@ type UpdateUserRoleStatusParams struct {
 
 func (q *Queries) UpdateUserRoleStatus(ctx context.Context, arg UpdateUserRoleStatusParams) (UserRole, error) {
 	row := q.db.QueryRow(ctx, updateUserRoleStatus, arg.ID, arg.Status)
+	var i UserRole
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Role,
+		&i.Status,
+		&i.RelatedEntityID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const upsertUserRoleActive = `-- name: UpsertUserRoleActive :one
+INSERT INTO user_roles (
+  user_id,
+  role,
+  status,
+  related_entity_id
+) VALUES (
+  $1, $2, 'active', $3
+)
+ON CONFLICT (user_id, role) DO UPDATE
+SET status = 'active',
+    related_entity_id = CASE
+      WHEN user_roles.status = 'active' THEN user_roles.related_entity_id
+      ELSE EXCLUDED.related_entity_id
+    END
+RETURNING id, user_id, role, status, related_entity_id, created_at
+`
+
+type UpsertUserRoleActiveParams struct {
+	UserID          int64       `json:"user_id"`
+	Role            string      `json:"role"`
+	RelatedEntityID pgtype.Int8 `json:"related_entity_id"`
+}
+
+func (q *Queries) UpsertUserRoleActive(ctx context.Context, arg UpsertUserRoleActiveParams) (UserRole, error) {
+	row := q.db.QueryRow(ctx, upsertUserRoleActive, arg.UserID, arg.Role, arg.RelatedEntityID)
 	var i UserRole
 	err := row.Scan(
 		&i.ID,
