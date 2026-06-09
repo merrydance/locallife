@@ -44,7 +44,7 @@ class TableImageGallery extends ConsumerWidget {
               const SizedBox(height: AppSpacing.md),
               MerchantImagePicker(
                 businessType: 'table',
-                mediaCategory: 'table_cover',
+                mediaCategory: 'table',
                 onSuccess: (mediaAssetId, url) async {
                   await ref
                       .read(tableImageProvider.notifier)
@@ -84,7 +84,7 @@ class TableImageGallery extends ConsumerWidget {
             ),
             MerchantImagePicker(
               businessType: 'table',
-              mediaCategory: 'table_cover',
+              mediaCategory: 'table',
               onSuccess: (mediaAssetId, url) async {
                 await ref
                     .read(tableImageProvider.notifier)

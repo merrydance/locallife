@@ -521,7 +521,7 @@ class _TableConfigSheetState extends ConsumerState<TableConfigSheet> {
             right: 8,
             child: MerchantImagePicker(
               businessType: 'table',
-              mediaCategory: 'table_cover',
+              mediaCategory: 'table',
               onSuccess: (mediaAssetId, url) {
                 setState(() {
                   _uploadedMediaAssetId = mediaAssetId;
@@ -564,7 +564,7 @@ class _TableConfigSheetState extends ConsumerState<TableConfigSheet> {
 
     return MerchantImagePicker(
       businessType: 'table',
-      mediaCategory: 'table_cover',
+      mediaCategory: 'table',
       onSuccess: (mediaAssetId, url) {
         setState(() {
           _uploadedMediaAssetId = mediaAssetId;
