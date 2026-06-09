@@ -876,13 +876,14 @@ func TestCreateGroupJoinRequestAPI(t *testing.T) {
 
 	joinReq := randomGroupJoinRequest(groupID, merchant.ID, user.ID)
 	store.EXPECT().
-		CreateGroupJoinRequest(gomock.Any(), gomock.Any()).
+		CreateGroupJoinRequestTx(gomock.Any(), db.CreateGroupJoinRequestTxParams{
+			GroupID:         groupID,
+			MerchantID:      merchant.ID,
+			ApplicantUserID: user.ID,
+			Reason:          pgtype.Text{String: *body.Reason, Valid: true},
+		}).
 		Times(1).
-		Return(joinReq, nil)
-
-	store.EXPECT().
-		CreateGroupAuditLog(gomock.Any(), gomock.Any()).
-		Times(1)
+		Return(db.CreateGroupJoinRequestTxResult{Request: joinReq}, nil)
 
 	server := newTestServer(t, store)
 	recorder := httptest.NewRecorder()
@@ -898,6 +899,74 @@ func TestCreateGroupJoinRequestAPI(t *testing.T) {
 	server.router.ServeHTTP(recorder, request)
 
 	require.Equal(t, http.StatusCreated, recorder.Code)
+}
+
+func TestCreateGroupJoinRequestAPIConflictWhenTxFindsJoinedMerchant(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	merchant.Status = "approved"
+	groupID := util.RandomInt(1, 1000)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetMerchantGroupAffiliation(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(db.GetMerchantGroupAffiliationRow{GroupID: pgtype.Int8{Valid: false}, BrandID: pgtype.Int8{Valid: false}}, nil)
+	store.EXPECT().
+		GetMerchantGroup(gomock.Any(), groupID).
+		Times(1).
+		Return(db.MerchantGroup{ID: groupID, Name: "测试集团", Status: "active", OwnerUserID: user.ID}, nil)
+	store.EXPECT().
+		CreateGroupJoinRequestTx(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.CreateGroupJoinRequestTxResult{}, db.ErrMerchantAlreadyJoinedGroup)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	url := "/v1/groups/" + strconv.FormatInt(groupID, 10) + "/join-requests"
+	request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader([]byte(`{}`)))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusConflict, recorder.Code)
+	requireAPIErrorCode(t, recorder, ErrMerchantAlreadyJoinedGroup)
+}
+
+func TestCreateGroupJoinRequestAPIConflictWhenPrecheckFindsJoinedMerchant(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	merchant.Status = "approved"
+	groupID := util.RandomInt(1, 1000)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetMerchantGroupAffiliation(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(db.GetMerchantGroupAffiliationRow{GroupID: pgtype.Int8{Int64: groupID + 1, Valid: true}, BrandID: pgtype.Int8{Valid: false}}, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	url := "/v1/groups/" + strconv.FormatInt(groupID, 10) + "/join-requests"
+	request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader([]byte(`{}`)))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusConflict, recorder.Code)
+	requireAPIErrorCode(t, recorder, ErrMerchantAlreadyJoinedGroup)
 }
 
 func TestApproveGroupJoinRequestAPI(t *testing.T) {
@@ -987,22 +1056,18 @@ func TestCancelGroupJoinRequestAPI(t *testing.T) {
 
 	store := mockdb.NewMockStore(ctrl)
 
-	joinReq := randomGroupJoinRequest(groupID, util.RandomInt(1, 1000), user.ID)
-	store.EXPECT().
-		GetGroupJoinRequest(gomock.Any(), requestID).
-		Times(1).
-		Return(joinReq, nil)
-
+	merchantID := util.RandomInt(1, 1000)
+	joinReq := randomGroupJoinRequest(groupID, merchantID, user.ID)
 	updated := joinReq
 	updated.Status = "cancelled"
 	store.EXPECT().
-		UpdateGroupJoinRequestStatus(gomock.Any(), gomock.Any()).
+		CancelGroupJoinRequestTx(gomock.Any(), db.CancelGroupJoinRequestTxParams{
+			RequestID:       requestID,
+			GroupID:         groupID,
+			ApplicantUserID: user.ID,
+		}).
 		Times(1).
-		Return(updated, nil)
-
-	store.EXPECT().
-		CreateGroupAuditLog(gomock.Any(), gomock.Any()).
-		Times(1)
+		Return(db.CancelGroupJoinRequestTxResult{Request: updated}, nil)
 
 	server := newTestServer(t, store)
 	recorder := httptest.NewRecorder()
@@ -1015,6 +1080,84 @@ func TestCancelGroupJoinRequestAPI(t *testing.T) {
 	server.router.ServeHTTP(recorder, request)
 
 	require.Equal(t, http.StatusOK, recorder.Code)
+}
+
+func TestRejectGroupJoinRequestAPIUsesAtomicTx(t *testing.T) {
+	user, _ := randomUser(t)
+	groupID := util.RandomInt(1, 1000)
+	requestID := util.RandomInt(1, 1000)
+	reason := "资料不完整"
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetGroupMemberRole(gomock.Any(), db.GetGroupMemberRoleParams{GroupID: groupID, UserID: user.ID}).
+		Times(1).
+		Return("owner", nil)
+
+	updated := randomGroupJoinRequest(groupID, util.RandomInt(1, 1000), user.ID)
+	updated.Status = "rejected"
+	store.EXPECT().
+		RejectGroupJoinRequestTx(gomock.Any(), db.RejectGroupJoinRequestTxParams{
+			RequestID:      requestID,
+			GroupID:        groupID,
+			ReviewerUserID: user.ID,
+			Reason:         pgtype.Text{String: reason, Valid: true},
+		}).
+		Times(1).
+		Return(db.RejectGroupJoinRequestTxResult{Request: updated}, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	body, err := json.Marshal(rejectGroupJoinRequestRequest{Reason: &reason})
+	require.NoError(t, err)
+	url := "/v1/groups/" + strconv.FormatInt(groupID, 10) + "/join-requests/" + strconv.FormatInt(requestID, 10) + "/reject"
+	request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+}
+
+func TestCancelGroupJoinRequestAPIConflict(t *testing.T) {
+	user, _ := randomUser(t)
+	groupID := util.RandomInt(1, 1000)
+	requestID := util.RandomInt(1, 1000)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		CancelGroupJoinRequestTx(gomock.Any(), db.CancelGroupJoinRequestTxParams{
+			RequestID:       requestID,
+			GroupID:         groupID,
+			ApplicantUserID: user.ID,
+		}).
+		Times(1).
+		Return(db.CancelGroupJoinRequestTxResult{}, db.ErrGroupJoinRequestReviewConflict)
+
+	server := newTestServer(t, store)
+	auditWriter := &auditSpyWriter{}
+	server.auditWriter = auditWriter
+
+	url := "/v1/groups/" + strconv.FormatInt(groupID, 10) + "/join-requests/" + strconv.FormatInt(requestID, 10) + "/cancel"
+	request, err := http.NewRequest(http.MethodPost, url, nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusConflict, recorder.Code)
+	requireAPIErrorCode(t, recorder, ErrGroupJoinRequestReviewConflict)
+	require.NotEmpty(t, auditWriter.Entries())
 }
 
 func strPtr(val string) *string {

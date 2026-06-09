@@ -671,6 +671,21 @@ func (mr *MockStoreMockRecorder) BatchUpdateDishOnlineStatus(ctx, arg any) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BatchUpdateDishOnlineStatus", reflect.TypeOf((*MockStore)(nil).BatchUpdateDishOnlineStatus), ctx, arg)
 }
 
+// CancelGroupJoinRequestTx mocks base method.
+func (m *MockStore) CancelGroupJoinRequestTx(ctx context.Context, arg db.CancelGroupJoinRequestTxParams) (db.CancelGroupJoinRequestTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CancelGroupJoinRequestTx", ctx, arg)
+	ret0, _ := ret[0].(db.CancelGroupJoinRequestTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CancelGroupJoinRequestTx indicates an expected call of CancelGroupJoinRequestTx.
+func (mr *MockStoreMockRecorder) CancelGroupJoinRequestTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CancelGroupJoinRequestTx", reflect.TypeOf((*MockStore)(nil).CancelGroupJoinRequestTx), ctx, arg)
+}
+
 // CancelMerchantFutureReservations mocks base method.
 func (m *MockStore) CancelMerchantFutureReservations(ctx context.Context, arg db.CancelMerchantFutureReservationsParams) (int64, error) {
 	m.ctrl.T.Helper()
@@ -714,6 +729,21 @@ func (m *MockStore) CancelOrderTx(ctx context.Context, arg db.CancelOrderTxParam
 func (mr *MockStoreMockRecorder) CancelOrderTx(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CancelOrderTx", reflect.TypeOf((*MockStore)(nil).CancelOrderTx), ctx, arg)
+}
+
+// CancelPendingGroupJoinRequest mocks base method.
+func (m *MockStore) CancelPendingGroupJoinRequest(ctx context.Context, arg db.CancelPendingGroupJoinRequestParams) (db.MerchantGroupJoinRequest, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CancelPendingGroupJoinRequest", ctx, arg)
+	ret0, _ := ret[0].(db.MerchantGroupJoinRequest)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CancelPendingGroupJoinRequest indicates an expected call of CancelPendingGroupJoinRequest.
+func (mr *MockStoreMockRecorder) CancelPendingGroupJoinRequest(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CancelPendingGroupJoinRequest", reflect.TypeOf((*MockStore)(nil).CancelPendingGroupJoinRequest), ctx, arg)
 }
 
 // CancelReservationTx mocks base method.
@@ -4005,6 +4035,21 @@ func (m *MockStore) CreateGroupJoinRequest(ctx context.Context, arg db.CreateGro
 func (mr *MockStoreMockRecorder) CreateGroupJoinRequest(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateGroupJoinRequest", reflect.TypeOf((*MockStore)(nil).CreateGroupJoinRequest), ctx, arg)
+}
+
+// CreateGroupJoinRequestTx mocks base method.
+func (m *MockStore) CreateGroupJoinRequestTx(ctx context.Context, arg db.CreateGroupJoinRequestTxParams) (db.CreateGroupJoinRequestTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateGroupJoinRequestTx", ctx, arg)
+	ret0, _ := ret[0].(db.CreateGroupJoinRequestTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateGroupJoinRequestTx indicates an expected call of CreateGroupJoinRequestTx.
+func (mr *MockStoreMockRecorder) CreateGroupJoinRequestTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateGroupJoinRequestTx", reflect.TypeOf((*MockStore)(nil).CreateGroupJoinRequestTx), ctx, arg)
 }
 
 // CreateGroupMember mocks base method.
@@ -14511,6 +14556,21 @@ func (mr *MockStoreMockRecorder) ListGlobalDishCategories(ctx any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListGlobalDishCategories", reflect.TypeOf((*MockStore)(nil).ListGlobalDishCategories), ctx)
 }
 
+// ListGroupAuditLogsByGroup mocks base method.
+func (m *MockStore) ListGroupAuditLogsByGroup(ctx context.Context, groupID pgtype.Int8) ([]db.MerchantGroupAuditLog, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListGroupAuditLogsByGroup", ctx, groupID)
+	ret0, _ := ret[0].([]db.MerchantGroupAuditLog)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListGroupAuditLogsByGroup indicates an expected call of ListGroupAuditLogsByGroup.
+func (mr *MockStoreMockRecorder) ListGroupAuditLogsByGroup(ctx, groupID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListGroupAuditLogsByGroup", reflect.TypeOf((*MockStore)(nil).ListGroupAuditLogsByGroup), ctx, groupID)
+}
+
 // ListGroupJoinRequestsByGroup mocks base method.
 func (m *MockStore) ListGroupJoinRequestsByGroup(ctx context.Context, groupID int64) ([]db.MerchantGroupJoinRequest, error) {
 	m.ctrl.T.Helper()
@@ -18689,6 +18749,21 @@ func (mr *MockStoreMockRecorder) RegisterMerchantAppDeviceTx(ctx, arg any) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterMerchantAppDeviceTx", reflect.TypeOf((*MockStore)(nil).RegisterMerchantAppDeviceTx), ctx, arg)
 }
 
+// RejectGroupJoinRequestTx mocks base method.
+func (m *MockStore) RejectGroupJoinRequestTx(ctx context.Context, arg db.RejectGroupJoinRequestTxParams) (db.RejectGroupJoinRequestTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RejectGroupJoinRequestTx", ctx, arg)
+	ret0, _ := ret[0].(db.RejectGroupJoinRequestTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RejectGroupJoinRequestTx indicates an expected call of RejectGroupJoinRequestTx.
+func (mr *MockStoreMockRecorder) RejectGroupJoinRequestTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RejectGroupJoinRequestTx", reflect.TypeOf((*MockStore)(nil).RejectGroupJoinRequestTx), ctx, arg)
+}
+
 // RejectMerchantApplication mocks base method.
 func (m *MockStore) RejectMerchantApplication(ctx context.Context, arg db.RejectMerchantApplicationParams) (db.MerchantApplication, error) {
 	m.ctrl.T.Helper()
@@ -21172,21 +21247,6 @@ func (m *MockStore) UpdateGroupApplicationLicense(ctx context.Context, arg db.Up
 func (mr *MockStoreMockRecorder) UpdateGroupApplicationLicense(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateGroupApplicationLicense", reflect.TypeOf((*MockStore)(nil).UpdateGroupApplicationLicense), ctx, arg)
-}
-
-// UpdateGroupJoinRequestStatus mocks base method.
-func (m *MockStore) UpdateGroupJoinRequestStatus(ctx context.Context, arg db.UpdateGroupJoinRequestStatusParams) (db.MerchantGroupJoinRequest, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateGroupJoinRequestStatus", ctx, arg)
-	ret0, _ := ret[0].(db.MerchantGroupJoinRequest)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// UpdateGroupJoinRequestStatus indicates an expected call of UpdateGroupJoinRequestStatus.
-func (mr *MockStoreMockRecorder) UpdateGroupJoinRequestStatus(ctx, arg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateGroupJoinRequestStatus", reflect.TypeOf((*MockStore)(nil).UpdateGroupJoinRequestStatus), ctx, arg)
 }
 
 // UpdateIngredient mocks base method.

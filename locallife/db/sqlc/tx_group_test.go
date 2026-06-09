@@ -122,6 +122,116 @@ func TestApproveGroupJoinRequestTxDoesNotOverwriteExistingMerchantAffiliation(t 
 	require.Equal(t, "pending", currentReq.Status)
 }
 
+func TestCreateGroupJoinRequestTxWritesAuditAndRequestTogether(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	group := createGroupForJoinTxTest(t, owner.ID)
+
+	result, err := testStore.CreateGroupJoinRequestTx(context.Background(), CreateGroupJoinRequestTxParams{
+		GroupID:         group.ID,
+		MerchantID:      merchant.ID,
+		ApplicantUserID: owner.ID,
+		Reason:          pgtype.Text{String: "申请加入集团", Valid: true},
+	})
+	require.NoError(t, err)
+	require.Equal(t, group.ID, result.Request.GroupID)
+	require.Equal(t, merchant.ID, result.Request.MerchantID)
+	require.Equal(t, "pending", result.Request.Status)
+
+	logs, err := testStore.ListGroupAuditLogsByGroup(context.Background(), pgtype.Int8{Int64: group.ID, Valid: true})
+	require.NoError(t, err)
+	require.NotEmpty(t, logs)
+	require.Equal(t, "group_join_request_created", logs[0].Action)
+	require.Equal(t, merchant.ID, logs[0].TargetID.Int64)
+}
+
+func TestCreateGroupJoinRequestTxRejectsJoinedMerchantInsideTransaction(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	existingGroup := createGroupForJoinTxTest(t, owner.ID)
+	targetGroup := createGroupForJoinTxTest(t, owner.ID)
+
+	err := testStore.UpdateMerchantGroupAffiliation(context.Background(), UpdateMerchantGroupAffiliationParams{
+		ID:      merchant.ID,
+		GroupID: pgtype.Int8{Int64: existingGroup.ID, Valid: true},
+		BrandID: pgtype.Int8{Valid: false},
+	})
+	require.NoError(t, err)
+
+	result, err := testStore.CreateGroupJoinRequestTx(context.Background(), CreateGroupJoinRequestTxParams{
+		GroupID:         targetGroup.ID,
+		MerchantID:      merchant.ID,
+		ApplicantUserID: owner.ID,
+		Reason:          pgtype.Text{String: "申请加入集团", Valid: true},
+	})
+	require.ErrorIs(t, err, ErrMerchantAlreadyJoinedGroup)
+	require.Empty(t, result.Request.Status)
+
+	rows, err := testStore.ListGroupJoinRequestsByGroup(context.Background(), targetGroup.ID)
+	require.NoError(t, err)
+	require.Empty(t, rows)
+}
+
+func TestRejectGroupJoinRequestTxWritesAuditAndRejectsOnlyPending(t *testing.T) {
+	reviewer := createRandomUser(t)
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	group := createGroupForJoinTxTest(t, reviewer.ID)
+	joinReq := createGroupJoinRequestForTxTest(t, group.ID, merchant.ID, owner.ID)
+
+	result, err := testStore.RejectGroupJoinRequestTx(context.Background(), RejectGroupJoinRequestTxParams{
+		RequestID:      joinReq.ID,
+		GroupID:        group.ID,
+		ReviewerUserID: reviewer.ID,
+		Reason:         pgtype.Text{String: "资料不完整", Valid: true},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "rejected", result.Request.Status)
+
+	logs, err := testStore.ListGroupAuditLogsByGroup(context.Background(), pgtype.Int8{Int64: group.ID, Valid: true})
+	require.NoError(t, err)
+	require.NotEmpty(t, logs)
+	require.Equal(t, "group_join_request_rejected", logs[0].Action)
+	require.Equal(t, merchant.ID, logs[0].TargetID.Int64)
+
+	second, err := testStore.RejectGroupJoinRequestTx(context.Background(), RejectGroupJoinRequestTxParams{
+		RequestID:      joinReq.ID,
+		GroupID:        group.ID,
+		ReviewerUserID: reviewer.ID,
+	})
+	require.ErrorIs(t, err, ErrGroupJoinRequestReviewConflict)
+	require.Empty(t, second.Request.Status)
+}
+
+func TestCancelGroupJoinRequestTxDoesNotOverwriteApprovedRequest(t *testing.T) {
+	reviewer := createRandomUser(t)
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	group := createGroupForJoinTxTest(t, reviewer.ID)
+	joinReq := createGroupJoinRequestForTxTest(t, group.ID, merchant.ID, owner.ID)
+
+	approved, err := testStore.ApproveGroupJoinRequestTx(context.Background(), ApproveGroupJoinRequestTxParams{
+		RequestID:      joinReq.ID,
+		GroupID:        group.ID,
+		ReviewerUserID: reviewer.ID,
+		BrandID:        pgtype.Int8{Valid: false},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "approved", approved.Request.Status)
+
+	cancelled, err := testStore.CancelGroupJoinRequestTx(context.Background(), CancelGroupJoinRequestTxParams{
+		RequestID:       joinReq.ID,
+		GroupID:         group.ID,
+		ApplicantUserID: owner.ID,
+	})
+	require.ErrorIs(t, err, ErrGroupJoinRequestReviewConflict)
+	require.Empty(t, cancelled.Request.Status)
+
+	currentReq, err := testStore.GetGroupJoinRequest(context.Background(), joinReq.ID)
+	require.NoError(t, err)
+	require.Equal(t, "approved", currentReq.Status)
+}
+
 func createGroupForJoinTxTest(t *testing.T, ownerUserID int64) MerchantGroup {
 	t.Helper()
 
@@ -138,4 +248,18 @@ func createGroupForJoinTxTest(t *testing.T, ownerUserID int64) MerchantGroup {
 	})
 	require.NoError(t, err)
 	return group
+}
+
+func createGroupJoinRequestForTxTest(t *testing.T, groupID, merchantID, applicantUserID int64) MerchantGroupJoinRequest {
+	t.Helper()
+
+	joinReq, err := testStore.CreateGroupJoinRequest(context.Background(), CreateGroupJoinRequestParams{
+		GroupID:         groupID,
+		MerchantID:      merchantID,
+		ApplicantUserID: applicantUserID,
+		Reason:          pgtype.Text{String: "申请加入集团", Valid: true},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "pending", joinReq.Status)
+	return joinReq
 }

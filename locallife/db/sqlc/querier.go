@@ -71,6 +71,7 @@ type Querier interface {
 	// 商户熔断时自动取消所有未来的预订
 	CancelMerchantFutureReservations(ctx context.Context, arg CancelMerchantFutureReservationsParams) (int64, error)
 	CancelOnboardingReviewRun(ctx context.Context, arg CancelOnboardingReviewRunParams) (OnboardingReviewRun, error)
+	CancelPendingGroupJoinRequest(ctx context.Context, arg CancelPendingGroupJoinRequestParams) (MerchantGroupJoinRequest, error)
 	CheckAndDecrementInventory(ctx context.Context, arg CheckAndDecrementInventoryParams) (DailyInventory, error)
 	// 检查营业执照号是否已被其他已通过的申请占用
 	CheckBusinessLicenseExists(ctx context.Context, arg CheckBusinessLicenseExistsParams) (int64, error)
@@ -1332,6 +1333,7 @@ type Querier interface {
 	ListFoodSafetyIncidentsByCase(ctx context.Context, caseID pgtype.Int8) ([]ListFoodSafetyIncidentsByCaseRow, error)
 	ListFraudPatterns(ctx context.Context, arg ListFraudPatternsParams) ([]FraudPattern, error)
 	ListGlobalDishCategories(ctx context.Context) ([]ListGlobalDishCategoriesRow, error)
+	ListGroupAuditLogsByGroup(ctx context.Context, groupID pgtype.Int8) ([]MerchantGroupAuditLog, error)
 	ListGroupJoinRequestsByGroup(ctx context.Context, groupID int64) ([]MerchantGroupJoinRequest, error)
 	// Group merchants
 	ListGroupMerchants(ctx context.Context, groupID pgtype.Int8) ([]ListGroupMerchantsRow, error)
@@ -1835,7 +1837,6 @@ type Querier interface {
 	UpdateFraudPatternReview(ctx context.Context, arg UpdateFraudPatternReviewParams) error
 	UpdateGroupApplicationBasic(ctx context.Context, arg UpdateGroupApplicationBasicParams) (MerchantGroupApplication, error)
 	UpdateGroupApplicationLicense(ctx context.Context, arg UpdateGroupApplicationLicenseParams) (MerchantGroupApplication, error)
-	UpdateGroupJoinRequestStatus(ctx context.Context, arg UpdateGroupJoinRequestStatusParams) (MerchantGroupJoinRequest, error)
 	UpdateIngredient(ctx context.Context, arg UpdateIngredientParams) (Ingredient, error)
 	UpdateMembershipBalance(ctx context.Context, arg UpdateMembershipBalanceParams) (MerchantMembership, error)
 	// ✅ P1-2: 使用乐观锁(version)防止并发更新丢失

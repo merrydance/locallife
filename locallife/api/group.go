@@ -1228,7 +1228,7 @@ func (server *Server) createGroupJoinRequest(ctx *gin.Context) {
 		return
 	}
 	if affiliation.GroupID.Valid {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("merchant already in a group")))
+		ctx.JSON(http.StatusConflict, errorResponse(ErrMerchantAlreadyJoinedGroup))
 		return
 	}
 
@@ -1253,7 +1253,7 @@ func (server *Server) createGroupJoinRequest(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	joinReq, err := server.store.CreateGroupJoinRequest(ctx, db.CreateGroupJoinRequestParams{
+	result, err := server.store.CreateGroupJoinRequestTx(ctx, db.CreateGroupJoinRequestTxParams{
 		GroupID:         groupID,
 		MerchantID:      merchant.ID,
 		ApplicantUserID: authPayload.UserID,
@@ -1264,17 +1264,15 @@ func (server *Server) createGroupJoinRequest(ctx *gin.Context) {
 			ctx.JSON(http.StatusConflict, errorResponse(errors.New("join request already exists")))
 			return
 		}
+		if errors.Is(err, db.ErrMerchantAlreadyJoinedGroup) {
+			ctx.JSON(http.StatusConflict, errorResponse(ErrMerchantAlreadyJoinedGroup))
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	meta, _ := json.Marshal(map[string]any{"merchant_id": merchant.ID, "group_id": groupID})
-	if err := server.createGroupAuditLog(ctx, pgtype.Int8{Int64: groupID, Valid: true}, authPayload.UserID, "group_join_request_created", "merchant", pgtype.Int8{Int64: merchant.ID, Valid: true}, meta); err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	ctx.JSON(http.StatusCreated, newGroupJoinRequestResponse(joinReq))
+	ctx.JSON(http.StatusCreated, newGroupJoinRequestResponse(result.Request))
 }
 
 // listGroupJoinRequests godoc
@@ -1435,6 +1433,7 @@ type rejectGroupJoinRequestRequest struct {
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /v1/groups/{id}/join-requests/{request_id}/reject [post]
 // @Security BearerAuth
@@ -1461,52 +1460,29 @@ func (server *Server) rejectGroupJoinRequest(ctx *gin.Context) {
 		return
 	}
 
-	joinReq, err := server.store.GetGroupJoinRequest(ctx, requestID)
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	result, err := server.store.RejectGroupJoinRequestTx(ctx, db.RejectGroupJoinRequestTxParams{
+		RequestID:      requestID,
+		GroupID:        groupID,
+		ReviewerUserID: authPayload.UserID,
+		Reason:         toPgText(req.Reason),
+	})
 	if err != nil {
 		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("request not found")))
 			return
 		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-	if joinReq.GroupID != groupID {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("request does not belong to group")))
-		return
-	}
-
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	if joinReq.Status != "pending" {
-		server.logSecurityRejection(ctx, securityRejectionInput{
-			ActorUserID: authPayload.UserID,
-			ActorRole:   "group",
-			Action:      "group_join_request_review_conflict",
-			TargetType:  "group_join_request",
-			TargetID:    joinReq.ID,
-			GroupID:     groupID,
-			Reason:      "join_request_status_not_pending",
-			Audit:       true,
-			Metadata: map[string]any{
-				"current_status": joinReq.Status,
-			},
-		})
-		ctx.JSON(http.StatusConflict, errorResponse(ErrGroupJoinRequestReviewConflict))
-		return
-	}
-
-	updated, err := server.store.RejectPendingGroupJoinRequest(ctx, db.RejectPendingGroupJoinRequestParams{
-		ID:         joinReq.ID,
-		ReviewedBy: pgtype.Int8{Int64: authPayload.UserID, Valid: true},
-		ReviewedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
-	})
-	if err != nil {
-		if isNotFoundError(err) {
+		if errors.Is(err, db.ErrGroupJoinRequestGroupMismatch) {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("request does not belong to group")))
+			return
+		}
+		if errors.Is(err, db.ErrGroupJoinRequestReviewConflict) {
 			server.logSecurityRejection(ctx, securityRejectionInput{
 				ActorUserID: authPayload.UserID,
 				ActorRole:   "group",
 				Action:      "group_join_request_review_conflict",
 				TargetType:  "group_join_request",
-				TargetID:    joinReq.ID,
+				TargetID:    requestID,
 				GroupID:     groupID,
 				Reason:      "reject_conflict",
 				Audit:       true,
@@ -1518,13 +1494,7 @@ func (server *Server) rejectGroupJoinRequest(ctx *gin.Context) {
 		return
 	}
 
-	meta, _ := json.Marshal(map[string]any{"request_id": joinReq.ID, "reason": req.Reason})
-	if err := server.createGroupAuditLog(ctx, pgtype.Int8{Int64: groupID, Valid: true}, authPayload.UserID, "group_join_request_rejected", "merchant", pgtype.Int8{Int64: joinReq.MerchantID, Valid: true}, meta); err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	ctx.JSON(http.StatusOK, newGroupJoinRequestResponse(updated))
+	ctx.JSON(http.StatusOK, newGroupJoinRequestResponse(result.Request))
 }
 
 // cancelGroupJoinRequest godoc
@@ -1539,6 +1509,7 @@ func (server *Server) rejectGroupJoinRequest(ctx *gin.Context) {
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /v1/groups/{id}/join-requests/{request_id}/cancel [post]
 // @Security BearerAuth
@@ -1554,48 +1525,44 @@ func (server *Server) cancelGroupJoinRequest(ctx *gin.Context) {
 		return
 	}
 
-	joinReq, err := server.store.GetGroupJoinRequest(ctx, requestID)
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	result, err := server.store.CancelGroupJoinRequestTx(ctx, db.CancelGroupJoinRequestTxParams{
+		RequestID:       requestID,
+		GroupID:         groupID,
+		ApplicantUserID: authPayload.UserID,
+	})
 	if err != nil {
 		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("request not found")))
 			return
 		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-	if joinReq.GroupID != groupID {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("request does not belong to group")))
-		return
-	}
-	if joinReq.Status != "pending" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("only pending requests can be cancelled")))
-		return
-	}
-
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	if joinReq.ApplicantUserID != authPayload.UserID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("only applicant can cancel")))
-		return
-	}
-
-	updated, err := server.store.UpdateGroupJoinRequestStatus(ctx, db.UpdateGroupJoinRequestStatusParams{
-		ID:         joinReq.ID,
-		Status:     "cancelled",
-		ReviewedBy: pgtype.Int8{Int64: authPayload.UserID, Valid: true},
-		ReviewedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	meta, _ := json.Marshal(map[string]any{"request_id": joinReq.ID})
-	if err := server.createGroupAuditLog(ctx, pgtype.Int8{Int64: groupID, Valid: true}, authPayload.UserID, "group_join_request_cancelled", "merchant", pgtype.Int8{Int64: joinReq.MerchantID, Valid: true}, meta); err != nil {
+		if errors.Is(err, db.ErrGroupJoinRequestGroupMismatch) {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("request does not belong to group")))
+			return
+		}
+		if errors.Is(err, db.ErrGroupJoinRequestApplicantMismatch) {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("only applicant can cancel")))
+			return
+		}
+		if errors.Is(err, db.ErrGroupJoinRequestReviewConflict) {
+			server.logSecurityRejection(ctx, securityRejectionInput{
+				ActorUserID: authPayload.UserID,
+				ActorRole:   "merchant",
+				Action:      "group_join_request_cancel_conflict",
+				TargetType:  "group_join_request",
+				TargetID:    requestID,
+				GroupID:     groupID,
+				Reason:      "cancel_conflict",
+				Audit:       true,
+			})
+			ctx.JSON(http.StatusConflict, errorResponse(ErrGroupJoinRequestReviewConflict))
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newGroupJoinRequestResponse(updated))
+	ctx.JSON(http.StatusOK, newGroupJoinRequestResponse(result.Request))
 }
 
 // ==================== Policies & Templates ====================

@@ -113,7 +113,10 @@ type Store interface {
 	MarkClaimRecoveryOverdueWithActionTx(ctx context.Context, arg MarkClaimRecoveryOverdueWithActionTxParams) (MarkClaimRecoveryOverdueWithActionTxResult, error)
 	// Group multi-store transactions
 	ApproveGroupApplicationTx(ctx context.Context, arg ApproveGroupApplicationTxParams) (ApproveGroupApplicationTxResult, error)
+	CreateGroupJoinRequestTx(ctx context.Context, arg CreateGroupJoinRequestTxParams) (CreateGroupJoinRequestTxResult, error)
 	ApproveGroupJoinRequestTx(ctx context.Context, arg ApproveGroupJoinRequestTxParams) (ApproveGroupJoinRequestTxResult, error)
+	RejectGroupJoinRequestTx(ctx context.Context, arg RejectGroupJoinRequestTxParams) (RejectGroupJoinRequestTxResult, error)
+	CancelGroupJoinRequestTx(ctx context.Context, arg CancelGroupJoinRequestTxParams) (CancelGroupJoinRequestTxResult, error)
 	// Review transactions
 	UpdateReviewTx(ctx context.Context, arg UpdateReviewTxParams) (UpdateReviewTxResult, error)
 	// Profit sharing config transactions

@@ -189,14 +189,6 @@ SELECT id, group_id, merchant_id, applicant_user_id, status, reason, reviewed_by
 WHERE group_id = $1
 ORDER BY created_at DESC;
 
--- name: UpdateGroupJoinRequestStatus :one
-UPDATE merchant_group_join_requests
-SET status = $2,
-    reviewed_by = $3,
-    reviewed_at = $4
-WHERE id = $1
-RETURNING *;
-
 -- name: ApprovePendingGroupJoinRequest :one
 UPDATE merchant_group_join_requests
 SET status = 'approved',
@@ -209,6 +201,15 @@ RETURNING *;
 -- name: RejectPendingGroupJoinRequest :one
 UPDATE merchant_group_join_requests
 SET status = 'rejected',
+    reviewed_by = $2,
+    reviewed_at = $3
+WHERE id = $1
+  AND status = 'pending'
+RETURNING *;
+
+-- name: CancelPendingGroupJoinRequest :one
+UPDATE merchant_group_join_requests
+SET status = 'cancelled',
     reviewed_by = $2,
     reviewed_at = $3
 WHERE id = $1
@@ -268,6 +269,12 @@ INSERT INTO merchant_group_audit_logs (
   group_id, actor_user_id, action, target_type, target_id, metadata
 ) VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING *;
+
+-- name: ListGroupAuditLogsByGroup :many
+SELECT id, group_id, actor_user_id, action, target_type, target_id, metadata, created_at
+FROM merchant_group_audit_logs
+WHERE group_id = $1
+ORDER BY created_at DESC, id DESC;
 
 -- Group merchants
 -- name: ListGroupMerchants :many

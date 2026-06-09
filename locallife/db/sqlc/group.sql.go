@@ -65,6 +65,39 @@ func (q *Queries) AttachMerchantToGroupIfUnassigned(ctx context.Context, arg Att
 	return result.RowsAffected(), nil
 }
 
+const cancelPendingGroupJoinRequest = `-- name: CancelPendingGroupJoinRequest :one
+UPDATE merchant_group_join_requests
+SET status = 'cancelled',
+    reviewed_by = $2,
+    reviewed_at = $3
+WHERE id = $1
+  AND status = 'pending'
+RETURNING id, group_id, merchant_id, applicant_user_id, status, reason, reviewed_by, reviewed_at, created_at
+`
+
+type CancelPendingGroupJoinRequestParams struct {
+	ID         int64              `json:"id"`
+	ReviewedBy pgtype.Int8        `json:"reviewed_by"`
+	ReviewedAt pgtype.Timestamptz `json:"reviewed_at"`
+}
+
+func (q *Queries) CancelPendingGroupJoinRequest(ctx context.Context, arg CancelPendingGroupJoinRequestParams) (MerchantGroupJoinRequest, error) {
+	row := q.db.QueryRow(ctx, cancelPendingGroupJoinRequest, arg.ID, arg.ReviewedBy, arg.ReviewedAt)
+	var i MerchantGroupJoinRequest
+	err := row.Scan(
+		&i.ID,
+		&i.GroupID,
+		&i.MerchantID,
+		&i.ApplicantUserID,
+		&i.Status,
+		&i.Reason,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const clearGroupApplicationBusinessLicense = `-- name: ClearGroupApplicationBusinessLicense :one
 UPDATE merchant_group_applications
 SET license_media_asset_id = NULL,
@@ -708,6 +741,42 @@ func (q *Queries) GetMerchantGroupAffiliationForUpdate(ctx context.Context, id i
 	return i, err
 }
 
+const listGroupAuditLogsByGroup = `-- name: ListGroupAuditLogsByGroup :many
+SELECT id, group_id, actor_user_id, action, target_type, target_id, metadata, created_at
+FROM merchant_group_audit_logs
+WHERE group_id = $1
+ORDER BY created_at DESC, id DESC
+`
+
+func (q *Queries) ListGroupAuditLogsByGroup(ctx context.Context, groupID pgtype.Int8) ([]MerchantGroupAuditLog, error) {
+	rows, err := q.db.Query(ctx, listGroupAuditLogsByGroup, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []MerchantGroupAuditLog{}
+	for rows.Next() {
+		var i MerchantGroupAuditLog
+		if err := rows.Scan(
+			&i.ID,
+			&i.GroupID,
+			&i.ActorUserID,
+			&i.Action,
+			&i.TargetType,
+			&i.TargetID,
+			&i.Metadata,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listGroupJoinRequestsByGroup = `-- name: ListGroupJoinRequestsByGroup :many
 SELECT id, group_id, merchant_id, applicant_user_id, status, reason, reviewed_by, reviewed_at, created_at FROM merchant_group_join_requests
 WHERE group_id = $1
@@ -1157,44 +1226,6 @@ func (q *Queries) UpdateGroupApplicationLicense(ctx context.Context, arg UpdateG
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.LicenseMediaAssetID,
-	)
-	return i, err
-}
-
-const updateGroupJoinRequestStatus = `-- name: UpdateGroupJoinRequestStatus :one
-UPDATE merchant_group_join_requests
-SET status = $2,
-    reviewed_by = $3,
-    reviewed_at = $4
-WHERE id = $1
-RETURNING id, group_id, merchant_id, applicant_user_id, status, reason, reviewed_by, reviewed_at, created_at
-`
-
-type UpdateGroupJoinRequestStatusParams struct {
-	ID         int64              `json:"id"`
-	Status     string             `json:"status"`
-	ReviewedBy pgtype.Int8        `json:"reviewed_by"`
-	ReviewedAt pgtype.Timestamptz `json:"reviewed_at"`
-}
-
-func (q *Queries) UpdateGroupJoinRequestStatus(ctx context.Context, arg UpdateGroupJoinRequestStatusParams) (MerchantGroupJoinRequest, error) {
-	row := q.db.QueryRow(ctx, updateGroupJoinRequestStatus,
-		arg.ID,
-		arg.Status,
-		arg.ReviewedBy,
-		arg.ReviewedAt,
-	)
-	var i MerchantGroupJoinRequest
-	err := row.Scan(
-		&i.ID,
-		&i.GroupID,
-		&i.MerchantID,
-		&i.ApplicantUserID,
-		&i.Status,
-		&i.Reason,
-		&i.ReviewedBy,
-		&i.ReviewedAt,
-		&i.CreatedAt,
 	)
 	return i, err
 }
