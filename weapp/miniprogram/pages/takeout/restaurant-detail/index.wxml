@@ -96,10 +96,30 @@
     <merchant-coupon-strip coupons="{{coupons}}" claiming-coupon-id="{{claimingCouponId}}" bind:claim="onClaimCoupon" />
 
     <view wx:if="{{activeTab !== 'rooms'}}" class="order-type-switch">
-      <t-radio-group value="{{orderType}}" bind:change="onOrderTypeChange" borderless="{{true}}" icon="line">
-        <t-radio value="takeout" label="外卖代取" block="{{true}}" />
-        <t-radio value="takeaway" label="到店自取" block="{{true}}" />
-      </t-radio-group>
+      <view class="order-type-segmented" aria-role="radiogroup">
+        <t-button
+          class="order-type-option {{orderType === 'takeout' ? 'active' : ''}}"
+          t-class="order-type-button"
+          data-value="takeout"
+          theme="{{orderType === 'takeout' ? 'primary' : 'default'}}"
+          variant="{{orderType === 'takeout' ? 'base' : 'text'}}"
+          size="small"
+          shape="round"
+          block
+          bindtap="onOrderTypeTap"
+        >外卖代取</t-button>
+        <t-button
+          class="order-type-option {{orderType === 'takeaway' ? 'active' : ''}}"
+          t-class="order-type-button"
+          data-value="takeaway"
+          theme="{{orderType === 'takeaway' ? 'primary' : 'default'}}"
+          variant="{{orderType === 'takeaway' ? 'base' : 'text'}}"
+          size="small"
+          shape="round"
+          block
+          bindtap="onOrderTypeTap"
+        >到店自取</t-button>
+      </view>
     </view>
 
     <!-- 菜品列表 Tab -->
@@ -267,6 +287,7 @@
   wx:if="{{!isError && activeTab !== 'rooms'}}"
   totalCount="{{cartCount}}"
   totalPrice="{{cartPrice}}"
+  feeTip="{{orderType === 'takeaway' ? '到店自取，无代取费' : ''}}"
   alwaysShow="{{true}}"
   dockBottom="{{true}}"
   bind:checkout="onCheckout"

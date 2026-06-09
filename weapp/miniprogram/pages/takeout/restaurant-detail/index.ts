@@ -481,8 +481,8 @@ Page({
     Navigation.toCart({ orderType: this.data.orderType })
   },
 
-  onOrderTypeChange(e: WechatMiniprogram.CustomEvent<{ value: 'takeout' | 'takeaway' }>) {
-    const orderType = e.detail.value === 'takeaway' ? 'takeaway' : 'takeout'
+  onOrderTypeTap(e: WechatMiniprogram.CustomEvent) {
+    const orderType = e.currentTarget.dataset.value === 'takeaway' ? 'takeaway' : 'takeout'
     if (orderType === this.data.orderType) {
       return
     }

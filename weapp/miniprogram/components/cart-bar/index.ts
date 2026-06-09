@@ -22,6 +22,10 @@ Component({
       type: String,
       value: ''
     },
+    feeTip: {
+      type: String,
+      value: ''
+    },
     alwaysShow: {
       type: Boolean,
       value: false

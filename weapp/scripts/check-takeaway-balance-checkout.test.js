@@ -244,10 +244,12 @@ Object.values(orderConfirmJson.usingComponents || {})
 
 assert(
   restaurantSource.includes("orderType: 'takeout' as 'takeout' | 'takeaway'") &&
-    restaurantSource.includes('onOrderTypeChange') &&
+    restaurantSource.includes('onOrderTypeTap') &&
     restaurantSource.includes('orderType: this.data.orderType') &&
-    restaurantWxml.includes('<t-radio value="takeaway"') &&
-    !restaurantWxml.includes('t-radio-button'),
+    restaurantWxml.includes('class="order-type-segmented"') &&
+    restaurantWxml.includes('data-value="takeaway"') &&
+    restaurantWxml.includes('bindtap="onOrderTypeTap"') &&
+    !restaurantWxml.includes('<t-radio'),
   'restaurant detail must let customers choose takeaway and pass that order_type into cart writes'
 )
 assert(

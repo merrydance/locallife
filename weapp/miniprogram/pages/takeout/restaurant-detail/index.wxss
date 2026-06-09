@@ -44,14 +44,26 @@
 }
 
 .order-type-switch {
-  padding: var(--spacer-sm) var(--spacer-md) 0;
+  padding: var(--spacer-sm) var(--spacer-md);
   background: var(--td-bg-color-container);
 }
 
-.order-type-switch t-radio-group {
+.order-type-segmented {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  column-gap: var(--spacer-sm);
+  gap: var(--spacer-xs);
+  padding: 6rpx;
+  background: var(--td-bg-color-page);
+  border-radius: var(--radius-round);
+}
+
+.order-type-option {
+  min-width: 0;
+}
+
+.order-type-button {
+  width: 100%;
+  box-shadow: none;
 }
 
 /* Tab切换 - 设计系统适配 */
