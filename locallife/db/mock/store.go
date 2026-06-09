@@ -20984,20 +20984,6 @@ func (mr *MockStoreMockRecorder) UpdateDish(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDish", reflect.TypeOf((*MockStore)(nil).UpdateDish), ctx, arg)
 }
 
-// UpdateDishAvailability mocks base method.
-func (m *MockStore) UpdateDishAvailability(ctx context.Context, arg db.UpdateDishAvailabilityParams) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateDishAvailability", ctx, arg)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UpdateDishAvailability indicates an expected call of UpdateDishAvailability.
-func (mr *MockStoreMockRecorder) UpdateDishAvailability(ctx, arg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDishAvailability", reflect.TypeOf((*MockStore)(nil).UpdateDishAvailability), ctx, arg)
-}
-
 // UpdateDishCustomizationGroup mocks base method.
 func (m *MockStore) UpdateDishCustomizationGroup(ctx context.Context, arg db.UpdateDishCustomizationGroupParams) (db.DishCustomizationGroup, error) {
 	m.ctrl.T.Helper()

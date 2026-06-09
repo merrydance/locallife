@@ -720,9 +720,9 @@ func TestPublicComboQueriesExcludeUnavailableChildDishes(t *testing.T) {
 
 	availableDish := createRandomDish(t, merchant.ID, category.ID)
 	unavailableDish := createRandomDish(t, merchant.ID, category.ID)
-	err = testStore.UpdateDishAvailability(context.Background(), UpdateDishAvailabilityParams{
+	_, err = testStore.UpdateDish(context.Background(), UpdateDishParams{
 		ID:          unavailableDish.ID,
-		IsAvailable: false,
+		IsAvailable: pgtype.Bool{Bool: false, Valid: true},
 	})
 	require.NoError(t, err)
 

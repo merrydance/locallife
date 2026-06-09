@@ -337,13 +337,6 @@ SET
 WHERE id = sqlc.arg('id') AND deleted_at IS NULL
 RETURNING *;
 
--- name: UpdateDishAvailability :exec
-UPDATE dishes
-SET 
-  is_available = $2,
-  updated_at = now()
-WHERE id = $1 AND deleted_at IS NULL;
-
 -- name: UpdateDishOnlineStatus :exec
 UPDATE dishes
 SET 

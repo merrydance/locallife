@@ -97,7 +97,7 @@ The merchant-visible dish and inventory workflow should have one coherent availa
 
 - Fixed 2026-06-03: `is_available` is persisted in `dishes`, preserved by the Mini Program editor, exposed as a merchant-facing availability switch, and submitted as backend truth.
 - Fixed 2026-06-03: public merchant dish list, public dish detail, scan menu, merchant/global search, recommendation ID/detail readers, order/cart paths, and reservation validation now consistently exclude or reject unavailable dishes.
-- `UpdateDishAvailability` SQL has coverage signals but no runtime caller was found in the merchant Mini Program or backend handlers; it looks like a legacy/zombie side path.
+- Fixed 2026-06-09: legacy `UpdateDishAvailability` SQL was removed after confirming no Mini Program/backend runtime caller; tests now set availability through the supported `UpdateDish` path.
 - Fixed 2026-06-03: unused Mini Program dish/inventory wrapper exposure was cleaned up. `batchUpdateDishStatus`, `checkInventory`, and `getInventoryStats` are no longer exported from the copied Mini Program dish API files because no current Mini Program runtime caller was found. Backend routes remain available and tested.
 - `ListDailyInventoryByMerchant` hides offline dishes from the inventory editor even if `daily_inventory` rows already exist for those dishes.
 - Fixed 2026-06-03: `GetInventoryStats` classifies sold-out/available using `sold_quantity + reserved_quantity`, matching page/backend available calculations.
@@ -177,6 +177,7 @@ Missing high-value tests:
 - Fixed 2026-06-03: merchant inventory saves and the database constraint now prevent finite total inventory from falling below `sold + reserved`.
 - Fixed 2026-06-03: inventory stats now classify finite rows with `sold + reserved >= total` as sold out and only treat rows with remaining uncommitted stock as available.
 - Fixed 2026-06-03: unused Mini Program `batchUpdateDishStatus`, `checkInventory`, and `getInventoryStats` wrapper exposure was removed from all copied dish API files. Backend routes remain tested; future page binding should add a fresh task-owned wrapper and contract test instead of reusing stale copied surface.
+- Fixed 2026-06-09: legacy `UpdateDishAvailability` sqlc surface was removed from `db/query`, generated sqlc, and `Store`; current tests and runtime availability writes use `UpdateDish`/dish update APIs as the supported path.
 
 ## Branch Exhaustion
 
@@ -187,5 +188,5 @@ Missing high-value tests:
 - Failure/retry branches checked: per-row status pending rollback, fixed batch-status partial SQL update reporting, fixed dish edit partial-save recovery, fixed featured-tag transactional failure, inventory last-write-wins, fixed direct inventory POST tenant denial, fixed read-only inventory check semantics, fixed total below sold+reserved rejection, and fixed `is_available` read/write inconsistency.
 - Reader/consumer branches checked: dish list/edit, inventory page, public merchant menu, search, scan-table menu, cart, direct order, reservation validation, packaging policy, and inventory stats.
 - Authorization/tenant branches checked: owner/manager/chef dish and inventory routes, dish ownership checks for most writes, inventory PUT ownership validation on missing-row create, direct inventory POST ownership check added 2026-06-02, and customer readers relying on persisted state.
-- Zombie/unreachable branches checked: legacy `UpdateDishAvailability` SQL remains without a runtime caller found now that edit/update handles the merchant-controlled field; fixed 2026-06-03 Mini Program unused wrapper exposure for batch status/inventory check/stats; single dish-edit submit is split across multiple backend writes.
+- Zombie/unreachable branches checked: fixed 2026-06-09 legacy `UpdateDishAvailability` SQL removal after no runtime caller was found; fixed 2026-06-03 Mini Program unused wrapper exposure for batch status/inventory check/stats; single dish-edit submit is split across multiple backend writes.
 - Test-proof gaps checked: existing tests cover packaging offline rejection, `is_available` product contract, dish-edit partial-save recovery, batch status partial SQL update reporting, create rollback, featured-tag transactional rollback, inventory update/check-only/decrement lower layers, direct POST tenant denial, finite inventory total guard, reserved-quantity stats classification, and reserve/release lower layers. Backend single-workflow transaction proof remains relevant only if the workflow is collapsed into one endpoint later.

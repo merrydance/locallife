@@ -1823,7 +1823,6 @@ type Querier interface {
 	UpdateDiningSessionActiveOrder(ctx context.Context, arg UpdateDiningSessionActiveOrderParams) (DiningSession, error)
 	UpdateDiscountRule(ctx context.Context, arg UpdateDiscountRuleParams) (DiscountRule, error)
 	UpdateDish(ctx context.Context, arg UpdateDishParams) (Dish, error)
-	UpdateDishAvailability(ctx context.Context, arg UpdateDishAvailabilityParams) error
 	UpdateDishCustomizationGroup(ctx context.Context, arg UpdateDishCustomizationGroupParams) (DishCustomizationGroup, error)
 	UpdateDishOnlineStatus(ctx context.Context, arg UpdateDishOnlineStatusParams) error
 	UpdateDishStats(ctx context.Context, arg UpdateDishStatsParams) error

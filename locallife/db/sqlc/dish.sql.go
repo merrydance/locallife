@@ -2316,24 +2316,6 @@ func (q *Queries) UpdateDish(ctx context.Context, arg UpdateDishParams) (Dish, e
 	return i, err
 }
 
-const updateDishAvailability = `-- name: UpdateDishAvailability :exec
-UPDATE dishes
-SET 
-  is_available = $2,
-  updated_at = now()
-WHERE id = $1 AND deleted_at IS NULL
-`
-
-type UpdateDishAvailabilityParams struct {
-	ID          int64 `json:"id"`
-	IsAvailable bool  `json:"is_available"`
-}
-
-func (q *Queries) UpdateDishAvailability(ctx context.Context, arg UpdateDishAvailabilityParams) error {
-	_, err := q.db.Exec(ctx, updateDishAvailability, arg.ID, arg.IsAvailable)
-	return err
-}
-
 const updateDishCustomizationGroup = `-- name: UpdateDishCustomizationGroup :one
 UPDATE dish_customization_groups
 SET

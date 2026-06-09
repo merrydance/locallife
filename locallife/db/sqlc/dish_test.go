@@ -802,17 +802,15 @@ func TestUpdateDishTxRejectsUnlinkedCategory(t *testing.T) {
 	require.Equal(t, category.ID, reloadedDish.CategoryID.Int64)
 }
 
-func TestUpdateDishAvailability(t *testing.T) {
+func TestUpdateDishCanSetAvailability(t *testing.T) {
 	merchant := createRandomMerchantForDish(t)
 	category := createRandomDishCategory(t)
 	dish := createRandomDish(t, merchant.ID, category.ID)
 
-	arg := UpdateDishAvailabilityParams{
+	_, err := testStore.UpdateDish(context.Background(), UpdateDishParams{
 		ID:          dish.ID,
-		IsAvailable: false,
-	}
-
-	err := testStore.UpdateDishAvailability(context.Background(), arg)
+		IsAvailable: pgtype.Bool{Bool: false, Valid: true},
+	})
 	require.NoError(t, err)
 
 	// 验证更新
