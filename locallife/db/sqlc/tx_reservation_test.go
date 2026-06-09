@@ -973,6 +973,111 @@ func TestReservationCompleteFlow(t *testing.T) {
 	require.Len(t, items, 1)
 }
 
+func TestMerchantReservationEditOpenAndCloseDiningSessionFlow(t *testing.T) {
+	operator := createRandomUser(t)
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	originalRoom := createRandomRoom(t, merchant.ID)
+	targetRoom := createRandomRoom(t, merchant.ID)
+	targetRoom, err := testStore.UpdateTable(context.Background(), UpdateTableParams{
+		ID:           targetRoom.ID,
+		MinimumSpend: pgtype.Int8{Int64: 0, Valid: true},
+	})
+	require.NoError(t, err)
+
+	reservationDate := time.Now().Add(24 * time.Hour)
+	reservation, err := testStore.CreateMerchantReservationTx(context.Background(), CreateMerchantReservationTxParams{
+		CreateTableReservationByMerchantParams: CreateTableReservationByMerchantParams{
+			TableID:         originalRoom.ID,
+			UserID:          operator.ID,
+			MerchantID:      merchant.ID,
+			ReservationDate: pgtype.Date{Time: reservationDate, Valid: true},
+			ReservationTime: pgtype.Time{Microseconds: 18 * 3600 * 1000000, Valid: true},
+			GuestCount:      4,
+			ContactName:     "到店客人",
+			ContactPhone:    "13800138000",
+			PaymentMode:     "deposit",
+			DepositAmount:   0,
+			PrepaidAmount:   0,
+			RefundDeadline:  time.Now(),
+			PaymentDeadline: time.Now().Add(365 * 24 * time.Hour),
+			Notes:           pgtype.Text{String: "电话预约", Valid: true},
+			Source:          pgtype.Text{String: "merchant", Valid: true},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, ReservationStatusConfirmed, reservation.Status)
+	require.True(t, reservation.ConfirmedAt.Valid)
+
+	edited, err := testStore.UpdateReservationTx(context.Background(), UpdateReservationTxParams{
+		MerchantID: merchant.ID,
+		Reservation: UpdateReservationParams{
+			ID:           reservation.ID,
+			TableID:      pgtype.Int8{Int64: targetRoom.ID, Valid: true},
+			GuestCount:   pgtype.Int2{Int16: 5, Valid: true},
+			ContactName:  pgtype.Text{String: "更新后的客人", Valid: true},
+			ContactPhone: pgtype.Text{String: "13900139000", Valid: true},
+			Notes:        pgtype.Text{String: "改到目标包间", Valid: true},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, targetRoom.ID, edited.TableID)
+	require.Equal(t, int16(5), edited.GuestCount)
+	require.Equal(t, ReservationStatusConfirmed, edited.Status)
+
+	originalRoomAfterEdit, err := testStore.GetTable(context.Background(), originalRoom.ID)
+	require.NoError(t, err)
+	require.Equal(t, TableStatusAvailable, originalRoomAfterEdit.Status)
+	require.False(t, originalRoomAfterEdit.CurrentReservationID.Valid)
+
+	openResult, err := testStore.OpenDiningSessionTx(context.Background(), OpenDiningSessionTxParams{
+		TableID:                edited.TableID,
+		MerchantID:             merchant.ID,
+		UserID:                 operator.ID,
+		ReservationID:          pgtype.Int8{Int64: edited.ID, Valid: true},
+		ImportReservationItems: false,
+	})
+	require.NoError(t, err)
+	require.NotZero(t, openResult.Session.ID)
+	require.Equal(t, targetRoom.ID, openResult.Session.TableID)
+	require.Equal(t, edited.ID, openResult.Session.ReservationID.Int64)
+	require.NotZero(t, openResult.BillingGroup.ID)
+	require.Equal(t, openResult.Session.ID, openResult.BillingGroup.DiningSessionID)
+	require.True(t, openResult.BillingGroup.IsDefault)
+
+	checkedIn, err := testStore.GetTableReservation(context.Background(), edited.ID)
+	require.NoError(t, err)
+	require.Equal(t, ReservationStatusCheckedIn, checkedIn.Status)
+	require.True(t, checkedIn.CheckedInAt.Valid)
+
+	occupiedRoom, err := testStore.GetTable(context.Background(), targetRoom.ID)
+	require.NoError(t, err)
+	require.Equal(t, TableStatusOccupied, occupiedRoom.Status)
+	require.True(t, occupiedRoom.CurrentReservationID.Valid)
+	require.Equal(t, edited.ID, occupiedRoom.CurrentReservationID.Int64)
+
+	closeResult, err := testStore.CloseDiningSessionTx(context.Background(), CloseDiningSessionTxParams{
+		ID:         openResult.Session.ID,
+		MerchantID: merchant.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "closed", closeResult.Session.Status)
+
+	completed, err := testStore.GetTableReservation(context.Background(), edited.ID)
+	require.NoError(t, err)
+	require.Equal(t, ReservationStatusCompleted, completed.Status)
+	require.True(t, completed.CompletedAt.Valid)
+
+	availableRoom, err := testStore.GetTable(context.Background(), targetRoom.ID)
+	require.NoError(t, err)
+	require.Equal(t, TableStatusAvailable, availableRoom.Status)
+	require.False(t, availableRoom.CurrentReservationID.Valid)
+
+	closedGroup, err := testStore.GetDefaultBillingGroupBySession(context.Background(), openResult.Session.ID)
+	require.NoError(t, err)
+	require.Equal(t, "closed", closedGroup.Status)
+}
+
 func TestReservationCancelFlow(t *testing.T) {
 	// 取消流程测试：创建 → 支付 → 确认 → 取消
 	user := createRandomUser(t)

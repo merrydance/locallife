@@ -1475,6 +1475,66 @@ func TestUpdateTableStatusAPI(t *testing.T) {
 			},
 		},
 		{
+			name:    "ManualReleaseClosesActiveDiningSession",
+			tableID: table.ID,
+			body: gin.H{
+				"status": db.TableStatusAvailable,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				tableWithReservation := table
+				tableWithReservation.Status = db.TableStatusOccupied
+				tableWithReservation.CurrentReservationID = pgtype.Int8{Int64: 88, Valid: true}
+
+				session := db.DiningSession{
+					ID:            99,
+					MerchantID:    merchant.ID,
+					TableID:       table.ID,
+					ReservationID: tableWithReservation.CurrentReservationID,
+					UserID:        user.ID,
+					Status:        "open",
+				}
+
+				releasedTable := tableWithReservation
+				releasedTable.Status = db.TableStatusAvailable
+				releasedTable.CurrentReservationID = pgtype.Int8{Valid: false}
+
+				store.EXPECT().
+					GetTable(gomock.Any(), gomock.Eq(table.ID)).
+					Times(1).
+					Return(tableWithReservation, nil)
+
+				store.EXPECT().
+					GetActiveDiningSessionByTable(gomock.Any(), gomock.Eq(table.ID)).
+					Times(1).
+					Return(session, nil)
+
+				store.EXPECT().
+					CloseDiningSessionTx(gomock.Any(), db.CloseDiningSessionTxParams{
+						ID:         session.ID,
+						MerchantID: merchant.ID,
+					}).
+					Times(1).
+					Return(db.CloseDiningSessionTxResult{Session: db.DiningSession{ID: session.ID, Status: "closed"}}, nil)
+
+				store.EXPECT().
+					GetTable(gomock.Any(), gomock.Eq(table.ID)).
+					Times(1).
+					Return(releasedTable, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp tableResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, db.TableStatusAvailable, resp.Status)
+				require.Nil(t, resp.CurrentReservationID)
+			},
+		},
+		{
 			name:    "ReleaseTableFailsWhenReservationCleanupFails",
 			tableID: table.ID,
 			body: gin.H{
