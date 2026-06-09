@@ -146,13 +146,13 @@ export function getReservationActionDialogConfig(
 ): { title: string, content: string, confirmText: string, confirmTheme: 'primary' | 'danger' } {
   switch (actionKey) {
     case 'confirm':
-      return { title: '确认预订', content: `确认 ${contact || '该顾客'} 的预订后，状态会进入“已确认”。`, confirmText: '确认预订', confirmTheme: 'primary' }
+      return { title: '确认预订', content: `确认 ${contact || '该顾客'} 的预订后，状态会进入“已确认”，但不会占用桌台；实际占用需在到店后开台并进入“就餐中”。`, confirmText: '确认预订', confirmTheme: 'primary' }
     case 'check_in':
       return { title: '登记顾客到店', content: `${contact || '该顾客'} 到店后，预订会进入“已到店”状态，可继续安排入座或完成预订。`, confirmText: '确认登记', confirmTheme: 'primary' }
     case 'start_cooking':
       return { title: '通知后厨起菜', content: `确认通知后厨为${contact || '该顾客'}备菜后，厨房看板会同步显示起菜状态。`, confirmText: '立即通知', confirmTheme: 'primary' }
     case 'complete':
-      return { title: '完成预订', content: `确认 ${contact || '该顾客'} 已离店并完成就餐后，桌台会释放回空闲状态。`, confirmText: '确认完成', confirmTheme: 'primary' }
+      return { title: '完成预订', content: `确认 ${contact || '该顾客'} 已离店并完成就餐后，若当前桌台仍关联该预订，桌台会释放回空闲状态。`, confirmText: '确认完成', confirmTheme: 'primary' }
     case 'no_show':
       return { title: '标记未到店', content: `确认 ${contact || '该顾客'} 未到店后，预订会进入“未到店”状态且不可直接恢复。`, confirmText: '确认标记', confirmTheme: 'danger' }
     case 'cancel':

@@ -224,7 +224,7 @@ Page({
 
     wx.showModal({
       title: '释放桌台',
-      content: `确认手动释放 ${no || '当前桌台'} 吗？状态会改为空闲。`,
+      content: `确认手动释放 ${no || '当前桌台'} 吗？若存在当前就餐会话，会关闭当前就餐会话；如有关联预订，会一并完成后改为空闲。`,
       confirmText: '确认释放',
       cancelText: '取消',
       success: async (res) => {
