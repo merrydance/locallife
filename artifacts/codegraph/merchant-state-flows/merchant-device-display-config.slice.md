@@ -8,7 +8,7 @@ Scope: Mini Program display/printer pages -> device/display-config APIs -> durab
 
 This slice covers:
 
-- Merchant Mini Program display config page for print dispatch, trigger mode, auto-accept, voice, and KDS flags.
+- Merchant Mini Program display config page for print dispatch, trigger mode, auto-accept, legacy voice controls slated for removal, and KDS flags.
 - Merchant Mini Program printer list and printer edit pages for create, update, delete, test print, and live status.
 - Flutter merchant App local Bluetooth printer scan/connect/disconnect and order-receipt printing.
 - Flutter merchant App local notification settings for sound, voice, auto-accept, and BLE auto-print after accept.
@@ -42,7 +42,7 @@ Device and display settings must be truthful configuration, not decorative toggl
 2. Display-config page checks device-management access, then loads backend config.
    Evidence: `weapp/miniprogram/pages/merchant/settings/display-config/index.ts:104`, `weapp/miniprogram/pages/merchant/settings/display-config/index.ts:115`, `weapp/miniprogram/pages/merchant/settings/display-config/index.ts:135`, `weapp/miniprogram/pages/merchant/settings/display-config/index.ts:164`, `weapp/miniprogram/pages/merchant/settings/display-config/index.ts:189`.
 
-3. Display-config page maps backend truth into a local form for `enable_print`, order-type print flags, dispatch mode, trigger mode, auto-accept, voice flags, and KDS flags. It blocks pull refresh while dirty.
+3. Display-config page maps backend truth into a local form for `enable_print`, order-type print flags, dispatch mode, trigger mode, auto-accept, legacy voice flags, and KDS flags. Product decision 2026-06-10 says the Mini Program voice controls should be removed/hidden. The page blocks pull refresh while dirty.
    Evidence: `weapp/miniprogram/pages/merchant/settings/display-config/index.ts:49`, `weapp/miniprogram/pages/merchant/settings/display-config/index.ts:51`, `weapp/miniprogram/pages/merchant/settings/display-config/index.ts:55`, `weapp/miniprogram/pages/merchant/settings/display-config/index.ts:59`, `weapp/miniprogram/pages/merchant/settings/display-config/index.ts:156`.
 
 4. Display-config page updates only local draft on switches/mode selections and saves through `displayConfigService.updateDisplayConfig`, then rehydrates from the backend response.
@@ -134,7 +134,7 @@ Device and display settings must be truthful configuration, not decorative toggl
 - `auto_accept_paid_orders` is not a dead field. It is consumed by `task_payment_domain_outbox.go` after order payment success.
 - Auto-accept is intentionally coupled to print configuration: worker requires `AutoAcceptPaidOrders`, `EnablePrint`, order-type flag, `PrintTriggerMode=accepted`, and eligible active printer.
 - Normal accepted/ready/manual print flows consume the same `order_display_configs` and `cloud_printers` state through order service and print worker.
-- `enable_voice`, `voice_takeout`, and `voice_dine_in` currently look like persisted but unconsumed settings. No backend, Mini Program merchant page, or Flutter merchant app consumer was found in this trace. Clarification recorded 2026-06-10: this audit item primarily refers to the Mini Program display-config voice toggles plus their persisted backend fields; whether those toggles should remain visible, be hidden, or be wired to a real consumer is still a product clarification item.
+- Product decision 2026-06-10: Mini Program display-config voice controls should be removed/hidden because the Mini Program environment cannot satisfy the merchant keep-alive/push-data requirement for this feature. Persisted `enable_voice`, `voice_takeout`, and `voice_dine_in` fields should be treated as deprecated/no-op compatibility state until safe cleanup. No backend, Mini Program merchant page, or Flutter merchant app consumer was found in this trace.
 - `DeviceManagementService.listPrinterReconciliationJobs` and `retryPrinterReconciliationJob` wrappers exist, but the current merchant printer pages do not call them.
 - `getActivePrinters` and `batchTestPrinters` helper exports exist but no current caller was found in the Mini Program search.
 - Printer update changes local `printer_key` and `printer_name`, but no provider update/rename path was found. Provider/local metadata can drift by design after update.
@@ -144,7 +144,7 @@ Device and display settings must be truthful configuration, not decorative toggl
 
 ## SQL And Durable State Boundaries
 
-- `order_display_configs`: owns print enablement, order-type print flags, dispatch mode, trigger mode, auto-accept, voice flags, KDS flag, and KDS URL. Unique by merchant.
+- `order_display_configs`: owns print enablement, order-type print flags, dispatch mode, trigger mode, auto-accept, deprecated/no-op voice fields, KDS flag, and KDS URL. Unique by merchant.
 - `cloud_printers`: owns local printer name, serial number, secret key, provider type, role, per-order-type flags, active flag, and soft-delete timestamp. Active printer serial numbers are unique while soft-deleted historical rows may keep the same SN.
 - `cloud_printer_reconciliation_jobs`: owns pending/resolved provider/local drift jobs after provider-first create/delete local failures. Pending jobs are unique by `(merchant_id, printer_sn, desired_action)`.
 - `print_logs`: owns order-print execution observability and references `cloud_printers(id)`. It keeps historical printer identity after soft delete.
@@ -207,7 +207,7 @@ Observed tests:
 Missing high-value tests:
 
 - Mini Program wrapper/page test for display config save/reload and auto-accept/enable-print combined semantics.
-- Test proving voice fields have a consumer, or an explicit test documenting that they are disabled/unavailable.
+- Mini Program display-config test proving voice controls are hidden/removed, plus backend/API compatibility proof that deprecated `voice_*` fields are ignored or safely quarantined until cleanup.
 - Fixed 2026-06-09: deletion-with-existing-print-logs DB test now proves soft delete/deactivate preserves historical print logs and permits active SN re-registration; Yilianyun rebind after soft delete, historical print-job status over soft-deleted printers, skipped retry failure logging, and duplicate-SN migration down are also covered.
 - End-to-end test that a paid order with `auto_accept_paid_orders=true` updates order state and enqueues one accepted print task only once across outbox retries.
 - Reconciliation UI coverage if merchants are expected to recover provider/local drift themselves.
@@ -216,7 +216,7 @@ Missing high-value tests:
 
 ## Gaps And Refactor Notes
 
-- Pending clarification 2026-06-10: the voice-setting audit item primarily points to Mini Program display-config voice toggles and their persisted backend fields. Decide whether those fields are real product controls; if not, hide them or label them as unavailable; if yes, wire them to the actual merchant notification/audio consumer.
+- Product decision 2026-06-10: remove/hide Mini Program display-config voice controls. Keep persisted backend `voice_*` fields as deprecated/no-op compatibility state until a safe API/schema cleanup removes or quarantines them.
 - Add a merchant-visible reconciliation section or remove/defer the Mini Program reconciliation wrappers to avoid unreachable recovery controls.
 - Fixed 2026-06-09: physical printer deletion has been replaced with a soft deactivate/deleted state, preserving print-log history while excluding deleted printers from current printer reads and active printer selection.
 - Decide whether provider printer metadata should be updated when local name/key changes. If key changes are only for future provider commands, document the boundary.
@@ -229,10 +229,10 @@ Missing high-value tests:
 
 - Entry branches checked: Mini Program display-config settings, printer list/edit/delete/test/status, print anomaly linkage, hidden reconciliation wrappers, backend auto-accept after payment, backend cloud-print tasks, Flutter local notification settings, Flutter local auto-accept, Flutter BLE printer connect/reconnect/print, and App order alert flow.
 - Request branches checked: display-config GET/PUT, device access check, printer CRUD/test/live-status, reconciliation list/retry, order accept endpoint used by Flutter local auto-accept, backend print-task enqueue, and Flutter local shared-preferences paths with no backend request.
-- Backend state branches checked: default versus persisted display config, `auto_accept_paid_orders`, `enable_print`, per-order-type print flags, voice/KDS fields, cloud printer registration and delete, provider-first/local-failure reconciliation jobs, print logs, manual/test print commands, accepted/ready print triggers, and App-local BLE state outside backend.
+- Backend state branches checked: default versus persisted display config, `auto_accept_paid_orders`, `enable_print`, per-order-type print flags, deprecated voice fields, KDS fields, cloud printer registration and delete, provider-first/local-failure reconciliation jobs, print logs, manual/test print commands, accepted/ready print triggers, and App-local BLE state outside backend.
 - Async branches checked: payment-domain outbox auto-accept, Redis print worker, provider print callback/anomaly scheduler, reconciliation retry, provider live status direct query, Flutter local BLE print after manual/local auto-accept, and App notification/voice delivery. Flutter BLE currently has no backend recovery or observability path; product decision 2026-06-10 requires that boundary to be added and tied to backend display config.
 - Failure/retry branches checked: duplicate save/delete/test guards, provider add/delete success followed by local DB failure, reconciliation retry repeatability, soft-delete with historical print logs, default display-config path without row persistence, outbox retry idempotency, print task key dedupe, manual/test repeated commands, BLE duplicate paper prints, and local auto-accept retries. Product decision 2026-06-10 requires single backend auto-accept truth and BLE print deduplication/observability.
 - Reader/consumer branches checked: display settings UI, printer list, print anomalies, order outbox, order service print scheduler, print worker, Flutter order alerts, Flutter local printer page, and merchant staff device access gate.
 - Authorization/tenant branches checked: Mini Program device-management access guard, backend owner/manager device routes, active/approved/region device access check, printer merchant ownership checks, reconciliation merchant scope, and downstream print/auto-accept loading merchant ids from durable orders/printers.
-- Zombie/unreachable branches checked: voice settings lack a proven consumer; reconciliation wrappers have no merchant UI surface; Flutter notification settings are not synchronized with backend display config; Flutter BLE prints are not `print_logs`; Flutter local auto-accept is a second auto-accept path separate from backend config despite the 2026-06-10 decision to unify it with backend truth.
-- Test-proof gaps checked: backend tests cover display config, printer provider/reconciliation, soft-delete with historical print logs, Yilianyun rebind after soft delete, historical print-job status/retry behavior for soft-deleted printers, duplicate-SN migration down, outbox auto-accept, print tasks, and print scheduling. Missing proof remains for Mini Program display-config semantics, voice consumer decision, one accepted print across outbox retries, reconciliation UI, Flutter BLE backend-config/dedupe/observability behavior, and cross-client backend-truth auto-accept convergence.
+- Zombie/unreachable branches checked: Mini Program voice settings are deprecated/no-op and should be removed/hidden; reconciliation wrappers have no merchant UI surface; Flutter notification settings are not synchronized with backend display config; Flutter BLE prints are not `print_logs`; Flutter local auto-accept is a second auto-accept path separate from backend config despite the 2026-06-10 decision to unify it with backend truth.
+- Test-proof gaps checked: backend tests cover display config, printer provider/reconciliation, soft-delete with historical print logs, Yilianyun rebind after soft delete, historical print-job status/retry behavior for soft-deleted printers, duplicate-SN migration down, outbox auto-accept, print tasks, and print scheduling. Missing proof remains for Mini Program display-config semantics including hidden/removed voice controls, one accepted print across outbox retries, reconciliation UI, Flutter BLE backend-config/dedupe/observability behavior, and cross-client backend-truth auto-accept convergence.
