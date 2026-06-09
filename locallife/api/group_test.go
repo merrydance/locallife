@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
 	"github.com/stretchr/testify/require"
@@ -36,6 +38,20 @@ func randomGroupApplicationWithData(userID int64) db.MerchantGroupApplication {
 	app.LicenseNumber = pgtype.Text{String: "91310000123456789A", Valid: true}
 	app.ApplicationData = []byte(`{"business_license_ocr":{"status":"done","credit_code":"91310000123456789A"},"legal_person_name":"张三","legal_person_id_number":"110101199001011234","id_card_front_asset_id":22,"id_card_front_ocr":{"status":"done","name":"张三","id_number":"110101199001011234"},"id_card_back_asset_id":23,"id_card_back_ocr":{"status":"done","valid_date":"2035-01-01"}}`)
 	return app
+}
+
+func groupTestMediaAsset(id, uploadedBy int64, category media.Category, uploadStatus string) db.MediaAsset {
+	visibility := string(media.VisibilityPublic)
+	if category == media.CategoryGroupLicense {
+		visibility = string(media.VisibilityPrivate)
+	}
+	return db.MediaAsset{
+		ID:            id,
+		UploadedBy:    uploadedBy,
+		MediaCategory: string(category),
+		UploadStatus:  uploadStatus,
+		Visibility:    visibility,
+	}
 }
 
 func TestNewGroupApplicationResponseRejectsInvalidApplicationData(t *testing.T) {
@@ -141,16 +157,21 @@ func TestCreateGroupApplicationDraftAPI(t *testing.T) {
 
 func TestUpdateGroupApplicationBasicAPI(t *testing.T) {
 	user, _ := randomUser(t)
+	licenseAssetID := int64(9001)
 
 	body := updateGroupApplicationBasicRequest{
-		GroupName:    strPtr("测试集团"),
-		ContactPhone: strPtr("13800138000"),
-		Address:      strPtr("北京市朝阳区测试路"),
-		RegionID:     int64Ptr(1),
+		GroupName:           strPtr("测试集团"),
+		ContactPhone:        strPtr("13800138000"),
+		LicenseImageAssetID: &licenseAssetID,
+		Address:             strPtr("北京市朝阳区测试路"),
+		RegionID:            int64Ptr(1),
 	}
+	noLicenseAssetBody := body
+	noLicenseAssetBody.LicenseImageAssetID = nil
 
 	testCases := []struct {
 		name          string
+		body          *updateGroupApplicationBasicRequest
 		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
 		buildStubs    func(store *mockdb.MockStore)
 		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
@@ -166,13 +187,48 @@ func TestUpdateGroupApplicationBasicAPI(t *testing.T) {
 					GetLatestGroupApplicationByApplicant(gomock.Any(), user.ID).
 					Times(1).
 					Return(app, nil)
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), licenseAssetID).
+					Times(1).
+					Return(groupTestMediaAsset(licenseAssetID, user.ID, media.CategoryBusinessLicense, "confirmed"), nil)
 
 				updated := app
 				updated.GroupName = "测试集团"
 				store.EXPECT().
-					UpdateGroupApplicationBasic(gomock.Any(), gomock.Any()).
+					UpdateGroupApplicationBasic(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateGroupApplicationBasicParams{})).
 					Times(1).
-					Return(updated, nil)
+					DoAndReturn(func(_ any, arg db.UpdateGroupApplicationBasicParams) (db.MerchantGroupApplication, error) {
+						require.True(t, arg.LicenseMediaAssetID.Valid)
+						require.Equal(t, licenseAssetID, arg.LicenseMediaAssetID.Int64)
+						return updated, nil
+					})
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+			},
+		},
+		{
+			name: "OKWithoutLicenseAssetSkipsMediaValidation",
+			body: &noLicenseAssetBody,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomGroupApplication(user.ID)
+				store.EXPECT().
+					GetLatestGroupApplicationByApplicant(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+
+				updated := app
+				updated.GroupName = "测试集团"
+				store.EXPECT().
+					UpdateGroupApplicationBasic(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateGroupApplicationBasicParams{})).
+					Times(1).
+					DoAndReturn(func(_ any, arg db.UpdateGroupApplicationBasicParams) (db.MerchantGroupApplication, error) {
+						require.False(t, arg.LicenseMediaAssetID.Valid)
+						return updated, nil
+					})
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -193,6 +249,152 @@ func TestUpdateGroupApplicationBasicAPI(t *testing.T) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
 			},
 		},
+		{
+			name: "RejectsForeignLicenseAssetBeforeMutation",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomGroupApplication(user.ID)
+				store.EXPECT().
+					GetLatestGroupApplicationByApplicant(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), licenseAssetID).
+					Times(1).
+					Return(groupTestMediaAsset(licenseAssetID, user.ID+99, media.CategoryGroupLicense, "confirmed"), nil)
+				store.EXPECT().
+					UpdateGroupApplicationBasic(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusForbidden, recorder.Code)
+			},
+		},
+		{
+			name: "RejectsMissingLicenseAssetBeforeMutation",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomGroupApplication(user.ID)
+				store.EXPECT().
+					GetLatestGroupApplicationByApplicant(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), licenseAssetID).
+					Times(1).
+					Return(db.MediaAsset{}, db.ErrRecordNotFound)
+				store.EXPECT().
+					UpdateGroupApplicationBasic(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusNotFound, recorder.Code)
+			},
+		},
+		{
+			name: "RejectedApplicationInvalidLicenseAssetDoesNotResetOrMutate",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomGroupApplication(user.ID)
+				app.Status = "rejected"
+				store.EXPECT().
+					GetLatestGroupApplicationByApplicant(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), licenseAssetID).
+					Times(1).
+					Return(groupTestMediaAsset(licenseAssetID, user.ID+99, media.CategoryGroupLicense, "confirmed"), nil)
+				store.EXPECT().
+					ResetGroupApplicationToDraft(gomock.Any(), gomock.Any()).
+					Times(0)
+				store.EXPECT().
+					UpdateGroupApplicationBasic(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusForbidden, recorder.Code)
+			},
+		},
+		{
+			name: "RejectsWrongCategoryLicenseAssetBeforeMutation",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomGroupApplication(user.ID)
+				store.EXPECT().
+					GetLatestGroupApplicationByApplicant(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), licenseAssetID).
+					Times(1).
+					Return(groupTestMediaAsset(licenseAssetID, user.ID, media.CategoryIDCardFront, "confirmed"), nil)
+				store.EXPECT().
+					UpdateGroupApplicationBasic(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name: "RejectsUnconfirmedLicenseAssetBeforeMutation",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomGroupApplication(user.ID)
+				store.EXPECT().
+					GetLatestGroupApplicationByApplicant(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), licenseAssetID).
+					Times(1).
+					Return(groupTestMediaAsset(licenseAssetID, user.ID, media.CategoryGroupLicense, "uploaded"), nil)
+				store.EXPECT().
+					UpdateGroupApplicationBasic(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name: "MediaLookupFailureIsInternalAndDoesNotMutate",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomGroupApplication(user.ID)
+				store.EXPECT().
+					GetLatestGroupApplicationByApplicant(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), licenseAssetID).
+					Times(1).
+					Return(db.MediaAsset{}, errors.New("database connection details"))
+				store.EXPECT().
+					UpdateGroupApplicationBasic(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusInternalServerError, recorder.Code)
+				var resp APIResponse
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+				require.Equal(t, "internal server error", resp.Message)
+				require.NotContains(t, recorder.Body.String(), "database connection details")
+			},
+		},
 	}
 
 	for i := range testCases {
@@ -207,7 +409,11 @@ func TestUpdateGroupApplicationBasicAPI(t *testing.T) {
 			server := newTestServer(t, store)
 			recorder := httptest.NewRecorder()
 
-			data, err := json.Marshal(body)
+			requestBody := body
+			if tc.body != nil {
+				requestBody = *tc.body
+			}
+			data, err := json.Marshal(requestBody)
 			require.NoError(t, err)
 
 			request, err := http.NewRequest(http.MethodPut, "/v1/groups/applications/basic", bytes.NewReader(data))

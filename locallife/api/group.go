@@ -7,12 +7,14 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/media"
+	"github.com/merrydance/locallife/ocr"
 	"github.com/merrydance/locallife/token"
 	"github.com/rs/zerolog/log"
 )
@@ -372,6 +374,7 @@ type updateGroupApplicationBasicRequest struct {
 // @Success 200 {object} groupApplicationResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 401 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /v1/groups/applications/basic [put]
@@ -399,6 +402,17 @@ func (server *Server) updateGroupApplicationBasic(ctx *gin.Context) {
 		return
 	}
 
+	if req.LicenseImageAssetID != nil {
+		status, err := server.validateGroupApplicationLicenseMediaAsset(ctx, authPayload.UserID, *req.LicenseImageAssetID)
+		if err != nil {
+			if status == http.StatusInternalServerError {
+				ctx.JSON(status, internalError(ctx, err))
+				return
+			}
+			ctx.JSON(status, errorResponse(err))
+			return
+		}
+	}
 	if app.Status == "rejected" {
 		app, err = server.store.ResetGroupApplicationToDraft(ctx, app.ID)
 		if err != nil {
@@ -433,6 +447,26 @@ func (server *Server) updateGroupApplicationBasic(ctx *gin.Context) {
 	}
 
 	server.writeGroupApplicationResponse(ctx, http.StatusOK, updated)
+}
+
+func (server *Server) validateGroupApplicationLicenseMediaAsset(ctx *gin.Context, applicantUserID, mediaAssetID int64) (int, error) {
+	asset, err := server.store.GetMediaAssetByID(ctx, mediaAssetID)
+	if err != nil {
+		if isNotFoundError(err) {
+			return http.StatusNotFound, errors.New("media asset not found")
+		}
+		return http.StatusInternalServerError, err
+	}
+	if asset.UploadedBy != applicantUserID {
+		return http.StatusForbidden, errors.New("forbidden")
+	}
+	if strings.ToLower(strings.TrimSpace(asset.UploadStatus)) != "confirmed" {
+		return http.StatusBadRequest, errOCRMediaNotConfirmed
+	}
+	if !ocrMediaCategoryAllowed(asset.MediaCategory, expectedGroupApplicationOCRMediaCategories(ocr.DocumentTypeBusinessLicense, ocr.DocumentSideUnknown)) {
+		return http.StatusBadRequest, errOCRMediaWrongCategory
+	}
+	return 0, nil
 }
 
 func (server *Server) deleteGroupApplicationDocumentByType(ctx *gin.Context, documentType groupApplicationDocumentType) {

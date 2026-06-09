@@ -6590,6 +6590,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
                     "404": {
                         "description": "Not Found",
                         "schema": {
