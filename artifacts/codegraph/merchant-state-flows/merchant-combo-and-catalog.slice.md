@@ -1,6 +1,6 @@
 # Merchant Combo And Catalog Slice
 
-Status: merchant-state flow slice created
+Status: tested; known combo/catalog repair items closed 2026-06-06; continue only if new evidence appears
 Risk class: G2 - merchant-controlled combo/catalog state affects customer menu visibility, cart/order/reservation validation, and dish/category organization
 Scope: merchant combo list/edit and dish-category pages -> combo/category APIs -> combo/category durable state -> public menu/search/cart/order/reservation readers
 
