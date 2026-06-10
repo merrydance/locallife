@@ -110,8 +110,20 @@
         <t-empty description="{{inviteErrorMessage || '生成邀请失败，请重试'}}" />
       </view>
 
-      <view wx:else class="invite-qr-only">
-        <t-qrcode value="{{inviteQRCodeValue}}" size="220" level="M" borderless="{{true}}" />
+      <view wx:else class="invite-content">
+        <view wx:if="{{inviteCode}}" class="invite-qr-only">
+          <t-qrcode value="{{inviteQRCodeValue}}" size="220" level="M" borderless="{{true}}" />
+        </view>
+        <view wx:else class="popup-state">
+          <t-empty description="当前邀请码已停用" />
+          <t-button theme="primary" loading="{{inviteLoading}}" bind:tap="onRetryInviteCode">重新生成</t-button>
+        </view>
+        <text wx:if="{{inviteCode}}" class="invite-expire">有效期至 {{inviteExpiresAtLabel}}</text>
+        <view wx:if="{{inviteCode}}" class="invite-actions">
+          <t-button size="small" theme="default" disabled="{{inviteActionSubmitting}}" bind:tap="onCopyInviteCode">复制</t-button>
+          <t-button size="small" theme="primary" loading="{{inviteActionSubmitting}}" disabled="{{inviteActionSubmitting}}" bind:tap="onRotateInviteCode">更换</t-button>
+          <t-button size="small" theme="danger" variant="outline" loading="{{inviteActionSubmitting}}" disabled="{{inviteActionSubmitting}}" bind:tap="onRevokeInviteCode">停用</t-button>
+        </view>
       </view>
     </view>
   </t-popup>

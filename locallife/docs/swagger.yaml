@@ -19552,7 +19552,7 @@ paths:
       - 员工管理
   /v1/merchant/staff/invite-code:
     post:
-      description: 商户老板或店长生成员工邀请码
+      description: 商户老板或店长获取当前有效员工邀请码；没有有效邀请码时生成一个新码
       produces:
       - application/json
       responses:
@@ -19574,7 +19574,61 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: 生成邀请码
+      summary: 获取或生成员工邀请码
+      tags:
+      - 员工管理
+  /v1/merchant/staff/invite-code/revoke:
+    post:
+      description: 商户老板或店长停用当前员工邀请码；旧邀请码立即失效
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 邀请码已停用
+          schema:
+            $ref: '#/definitions/api.successMessageResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 停用员工邀请码
+      tags:
+      - 员工管理
+  /v1/merchant/staff/invite-code/rotate:
+    post:
+      description: 商户老板或店长强制生成新的员工邀请码；旧邀请码立即失效
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 新邀请码
+          schema:
+            $ref: '#/definitions/api.generateInviteCodeResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 轮换员工邀请码
       tags:
       - 员工管理
   /v1/merchant/stats/categories:

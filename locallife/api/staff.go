@@ -1,8 +1,6 @@
 package api
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"net/http"
 	"time"
@@ -285,69 +283,6 @@ func (server *Server) deleteMerchantStaff(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, successMessage("staff removed successfully"))
-}
-
-// ==================== 邀请码绑定 ====================
-
-type generateInviteCodeResponse struct {
-	InviteCode string `json:"invite_code"`
-	ExpiresAt  string `json:"expires_at"`
-}
-
-// generateInviteCode 生成邀请码
-// @Summary 生成邀请码
-// @Description 商户老板或店长生成员工邀请码
-// @Tags 员工管理
-// @Produce json
-// @Success 200 {object} generateInviteCodeResponse "邀请码"
-// @Failure 401 {object} ErrorResponse "未认证"
-// @Failure 403 {object} ErrorResponse "权限不足"
-// @Failure 500 {object} ErrorResponse "服务器错误"
-// @Router /v1/merchant/staff/invite-code [post]
-// @Security BearerAuth
-func (server *Server) generateInviteCode(ctx *gin.Context) {
-	merchant, ok := GetMerchantFromContext(ctx)
-	if !ok {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant not found in context")))
-		return
-	}
-
-	// 检查是否有未过期的邀请码，有则复用
-	if merchant.BindCode.Valid && merchant.BindCode.String != "" &&
-		merchant.BindCodeExpiresAt.Valid && merchant.BindCodeExpiresAt.Time.After(time.Now()) {
-		ctx.JSON(http.StatusOK, generateInviteCodeResponse{
-			InviteCode: merchant.BindCode.String,
-			ExpiresAt:  merchant.BindCodeExpiresAt.Time.Format(time.RFC3339),
-		})
-		return
-	}
-
-	// 生成随机邀请码
-	bytes := make([]byte, 16)
-	if _, err := rand.Read(bytes); err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-	inviteCode := hex.EncodeToString(bytes)
-
-	// 设置过期时间（24小时）
-	expiresAt := time.Now().Add(24 * time.Hour)
-
-	// 更新商户的绑定码
-	_, err := server.store.UpdateMerchantBindCode(ctx, db.UpdateMerchantBindCodeParams{
-		ID:                merchant.ID,
-		BindCode:          pgtype.Text{String: inviteCode, Valid: true},
-		BindCodeExpiresAt: pgtype.Timestamptz{Time: expiresAt, Valid: true},
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	ctx.JSON(http.StatusOK, generateInviteCodeResponse{
-		InviteCode: inviteCode,
-		ExpiresAt:  expiresAt.Format(time.RFC3339),
-	})
 }
 
 type bindMerchantRequest struct {

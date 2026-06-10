@@ -185,6 +185,114 @@ func TestGetMerchantByOwnerRejectsPendingStaffRole(t *testing.T) {
 	require.ErrorIs(t, err, ErrRecordNotFound)
 }
 
+func TestUpdateMerchantBindCodeRotationInvalidatesOldCode(t *testing.T) {
+	ctx := context.Background()
+	merchant := createRandomMerchantForTest(t)
+	oldCode := fmt.Sprintf("%016x%016x", merchant.ID, time.Now().UnixNano())
+	newCode := fmt.Sprintf("%016x%016x", merchant.ID+1, time.Now().Add(time.Second).UnixNano())
+
+	_, err := testStore.UpdateMerchantBindCode(ctx, UpdateMerchantBindCodeParams{
+		ID:                merchant.ID,
+		BindCode:          pgtype.Text{String: oldCode, Valid: true},
+		BindCodeExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
+	})
+	require.NoError(t, err)
+
+	found, err := testStore.GetMerchantByBindCode(ctx, pgtype.Text{String: oldCode, Valid: true})
+	require.NoError(t, err)
+	require.Equal(t, merchant.ID, found.ID)
+
+	_, err = testStore.UpdateMerchantBindCode(ctx, UpdateMerchantBindCodeParams{
+		ID:                merchant.ID,
+		BindCode:          pgtype.Text{String: newCode, Valid: true},
+		BindCodeExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.GetMerchantByBindCode(ctx, pgtype.Text{String: oldCode, Valid: true})
+	require.ErrorIs(t, err, ErrRecordNotFound)
+
+	found, err = testStore.GetMerchantByBindCode(ctx, pgtype.Text{String: newCode, Valid: true})
+	require.NoError(t, err)
+	require.Equal(t, merchant.ID, found.ID)
+}
+
+func TestCreateMerchantBindCodeWhenInactiveDoesNotOverwriteActiveCode(t *testing.T) {
+	ctx := context.Background()
+	merchant := createRandomMerchantForTest(t)
+	oldCode := fmt.Sprintf("%016x%016x", merchant.ID, time.Now().UnixNano())
+	newCode := fmt.Sprintf("%016x%016x", merchant.ID+1, time.Now().Add(time.Second).UnixNano())
+
+	_, err := testStore.UpdateMerchantBindCode(ctx, UpdateMerchantBindCodeParams{
+		ID:                merchant.ID,
+		BindCode:          pgtype.Text{String: oldCode, Valid: true},
+		BindCodeExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.CreateMerchantBindCodeWhenInactive(ctx, CreateMerchantBindCodeWhenInactiveParams{
+		ID:                merchant.ID,
+		BindCode:          pgtype.Text{String: newCode, Valid: true},
+		BindCodeExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(2 * time.Hour), Valid: true},
+	})
+	require.ErrorIs(t, err, ErrRecordNotFound)
+
+	found, err := testStore.GetMerchantByBindCode(ctx, pgtype.Text{String: oldCode, Valid: true})
+	require.NoError(t, err)
+	require.Equal(t, merchant.ID, found.ID)
+
+	_, err = testStore.GetMerchantByBindCode(ctx, pgtype.Text{String: newCode, Valid: true})
+	require.ErrorIs(t, err, ErrRecordNotFound)
+}
+
+func TestUpdateMerchantBindCodeRejectsDuplicateActiveCode(t *testing.T) {
+	ctx := context.Background()
+	merchant := createRandomMerchantForTest(t)
+	otherMerchant := createRandomMerchantForTest(t)
+	code := fmt.Sprintf("%016x%016x", merchant.ID, time.Now().UnixNano())
+
+	_, err := testStore.UpdateMerchantBindCode(ctx, UpdateMerchantBindCodeParams{
+		ID:                merchant.ID,
+		BindCode:          pgtype.Text{String: code, Valid: true},
+		BindCodeExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.UpdateMerchantBindCode(ctx, UpdateMerchantBindCodeParams{
+		ID:                otherMerchant.ID,
+		BindCode:          pgtype.Text{String: code, Valid: true},
+		BindCodeExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
+	})
+	require.Equal(t, UniqueViolation, ErrorCode(err))
+}
+
+func TestUpdateMerchantBindCodeRevokeInvalidatesOldCode(t *testing.T) {
+	ctx := context.Background()
+	merchant := createRandomMerchantForTest(t)
+	oldCode := fmt.Sprintf("%016x%016x", merchant.ID, time.Now().UnixNano())
+
+	_, err := testStore.UpdateMerchantBindCode(ctx, UpdateMerchantBindCodeParams{
+		ID:                merchant.ID,
+		BindCode:          pgtype.Text{String: oldCode, Valid: true},
+		BindCodeExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
+	})
+	require.NoError(t, err)
+
+	found, err := testStore.GetMerchantByBindCode(ctx, pgtype.Text{String: oldCode, Valid: true})
+	require.NoError(t, err)
+	require.Equal(t, merchant.ID, found.ID)
+
+	_, err = testStore.UpdateMerchantBindCode(ctx, UpdateMerchantBindCodeParams{
+		ID:                merchant.ID,
+		BindCode:          pgtype.Text{},
+		BindCodeExpiresAt: pgtype.Timestamptz{},
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.GetMerchantByBindCode(ctx, pgtype.Text{String: oldCode, Valid: true})
+	require.ErrorIs(t, err, ErrRecordNotFound)
+}
+
 func TestListAllMerchants(t *testing.T) {
 	// 创建多个商户
 	for i := 0; i < 3; i++ {

@@ -22,6 +22,8 @@
    | `/v1/merchant/application/submit` | POST | 提交商户入驻申请 |
    | `/v1/merchant/application/reset` | POST | 重置商户申请 |
    | `/v1/merchant/applyment/bindbank` | POST | 商户绑定银行卡 |
+   | `/v1/merchant/staff/invite-code/rotate` | POST | 员工邀请凭据轮换，旧码立即失效 |
+   | `/v1/merchant/staff/invite-code/revoke` | POST | 员工邀请凭据停用，当前码立即失效 |
    | `/v1/merchant/orders/{id}/accept` | POST | 商户接单 |
    | `/v1/merchant/orders/{id}/reject` | POST | 商户拒单 |
    | `/v1/merchant/orders/{id}/complete` | POST | 商户标记完成 |
@@ -107,4 +109,3 @@
 4. 空态是否误用 `404`
 5. 响应结构是否稳定且可预测
 6. 是否补充或更新测试
-

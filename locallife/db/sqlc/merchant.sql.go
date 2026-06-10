@@ -530,6 +530,65 @@ func (q *Queries) CreateMerchantApplication(ctx context.Context, arg CreateMerch
 	return i, err
 }
 
+const createMerchantBindCodeWhenInactive = `-- name: CreateMerchantBindCodeWhenInactive :one
+UPDATE merchants
+SET
+  bind_code = $2,
+  bind_code_expires_at = $3,
+  updated_at = now()
+WHERE id = $1
+  AND deleted_at IS NULL
+  AND (
+    bind_code IS NULL
+    OR bind_code = ''
+    OR bind_code_expires_at IS NULL
+    OR bind_code_expires_at <= now()
+  )
+RETURNING id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images, manual_open_status_until
+`
+
+type CreateMerchantBindCodeWhenInactiveParams struct {
+	ID                int64              `json:"id"`
+	BindCode          pgtype.Text        `json:"bind_code"`
+	BindCodeExpiresAt pgtype.Timestamptz `json:"bind_code_expires_at"`
+}
+
+// 仅在商户当前没有有效邀请码时创建邀请码，避免并发打开邀请弹窗互相覆盖
+func (q *Queries) CreateMerchantBindCodeWhenInactive(ctx context.Context, arg CreateMerchantBindCodeWhenInactiveParams) (Merchant, error) {
+	row := q.db.QueryRow(ctx, createMerchantBindCodeWhenInactive, arg.ID, arg.BindCode, arg.BindCodeExpiresAt)
+	var i Merchant
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerUserID,
+		&i.Name,
+		&i.Description,
+		&i.Phone,
+		&i.Address,
+		&i.Latitude,
+		&i.Longitude,
+		&i.Status,
+		&i.ApplicationData,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Version,
+		&i.RegionID,
+		&i.IsOpen,
+		&i.AutoCloseAt,
+		&i.DeletedAt,
+		&i.PendingOwnerBind,
+		&i.BindCode,
+		&i.BindCodeExpiresAt,
+		&i.GroupID,
+		&i.BrandID,
+		&i.LogoMediaAssetID,
+		&i.AutoOpenByBusinessHours,
+		&i.StorefrontImages,
+		&i.EnvironmentImages,
+		&i.ManualOpenStatusUntil,
+	)
+	return i, err
+}
+
 const deleteBusinessHour = `-- name: DeleteBusinessHour :exec
 DELETE FROM merchant_business_hours
 WHERE id = $1

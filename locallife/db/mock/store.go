@@ -4277,6 +4277,21 @@ func (mr *MockStoreMockRecorder) CreateMerchantApplicationDraft(ctx, userID any)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateMerchantApplicationDraft", reflect.TypeOf((*MockStore)(nil).CreateMerchantApplicationDraft), ctx, userID)
 }
 
+// CreateMerchantBindCodeWhenInactive mocks base method.
+func (m *MockStore) CreateMerchantBindCodeWhenInactive(ctx context.Context, arg db.CreateMerchantBindCodeWhenInactiveParams) (db.Merchant, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateMerchantBindCodeWhenInactive", ctx, arg)
+	ret0, _ := ret[0].(db.Merchant)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateMerchantBindCodeWhenInactive indicates an expected call of CreateMerchantBindCodeWhenInactive.
+func (mr *MockStoreMockRecorder) CreateMerchantBindCodeWhenInactive(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateMerchantBindCodeWhenInactive", reflect.TypeOf((*MockStore)(nil).CreateMerchantBindCodeWhenInactive), ctx, arg)
+}
+
 // CreateMerchantBoss mocks base method.
 func (m *MockStore) CreateMerchantBoss(ctx context.Context, arg db.CreateMerchantBossParams) (db.MerchantBoss, error) {
 	m.ctrl.T.Helper()

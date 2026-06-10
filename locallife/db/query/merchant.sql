@@ -205,6 +205,23 @@ SET
 WHERE id = $1 AND deleted_at IS NULL
 RETURNING *;
 
+-- name: CreateMerchantBindCodeWhenInactive :one
+-- 仅在商户当前没有有效邀请码时创建邀请码，避免并发打开邀请弹窗互相覆盖
+UPDATE merchants
+SET
+  bind_code = $2,
+  bind_code_expires_at = $3,
+  updated_at = now()
+WHERE id = $1
+  AND deleted_at IS NULL
+  AND (
+    bind_code IS NULL
+    OR bind_code = ''
+    OR bind_code_expires_at IS NULL
+    OR bind_code_expires_at <= now()
+  )
+RETURNING *;
+
 -- name: DeleteMerchant :exec
 -- 软删除商户
 UPDATE merchants SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL;

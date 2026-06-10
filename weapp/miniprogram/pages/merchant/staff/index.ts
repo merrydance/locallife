@@ -11,6 +11,8 @@ import {
   MerchantStaffItem,
   MerchantStaffRole,
   removeMerchantStaff,
+  revokeMerchantStaffInviteCode,
+  rotateMerchantStaffInviteCode,
   updateMerchantStaffRole
 } from '../_api/merchant-staff'
 import { ensureMerchantConsoleAccess } from '../../../utils/console-access'
@@ -128,6 +130,7 @@ Page({
     inviteCode: '',
     inviteQRCodeValue: '',
     inviteExpiresAtLabel: '--',
+    inviteActionSubmitting: false,
     rolePopupVisible: false,
     roleSubmitting: false,
     editingStaffId: 0,
@@ -240,16 +243,13 @@ Page({
       inviteErrorMessage: '',
       inviteCode: '',
       inviteQRCodeValue: '',
-      inviteExpiresAtLabel: '--'
+      inviteExpiresAtLabel: '--',
+      inviteActionSubmitting: false
     })
 
     try {
       const response = await generateMerchantStaffInviteCode()
-      this.setData({
-        inviteCode: response.invite_code,
-        inviteQRCodeValue: buildInviteQRCodeValue(response.invite_code),
-        inviteExpiresAtLabel: response.expires_at ? response.expires_at.replace('T', ' ').slice(0, 16) : '--'
-      })
+      this.applyInviteCode(response)
     } catch (err: unknown) {
       logger.error('Generate merchant invite code failed', err)
       const message = getErrorMessage(err, '生成邀请码失败，请重试')
@@ -266,6 +266,7 @@ Page({
   },
 
   onCloseInvitePopup() {
+    if (this.data.inviteActionSubmitting) return
     this.setData({ inviteVisible: false })
   },
 
@@ -281,6 +282,85 @@ Page({
 
   onRetryInviteCode() {
     this.onOpenInvitePopup()
+  },
+
+  applyInviteCode(response: { invite_code: string, expires_at: string }) {
+    this.setData({
+      inviteCode: response.invite_code,
+      inviteQRCodeValue: buildInviteQRCodeValue(response.invite_code),
+      inviteExpiresAtLabel: response.expires_at ? response.expires_at.replace('T', ' ').slice(0, 16) : '--',
+      inviteError: false,
+      inviteErrorMessage: ''
+    })
+  },
+
+  onRotateInviteCode() {
+    if (this.data.inviteActionSubmitting || this.data.inviteLoading) return
+
+    this.setData({ inviteActionSubmitting: true })
+    wx.showModal({
+      title: '更换邀请码',
+      content: '更换后，之前分享出去的员工邀请二维码会立即失效。',
+      confirmText: '确认更换',
+      cancelText: '取消',
+      success: async (res) => {
+        if (!res.confirm) {
+          this.setData({ inviteActionSubmitting: false })
+          return
+        }
+        try {
+          const response = await rotateMerchantStaffInviteCode()
+          this.applyInviteCode(response)
+          wx.showToast({ title: '已生成新邀请码', icon: 'success' })
+        } catch (err: unknown) {
+          logger.error('Rotate merchant invite code failed', err)
+          const message = getErrorMessage(err, '更换邀请码失败，请稍后重试')
+          wx.showToast({ title: message, icon: 'none' })
+        } finally {
+          this.setData({ inviteActionSubmitting: false })
+        }
+      },
+      fail: () => {
+        this.setData({ inviteActionSubmitting: false })
+      }
+    })
+  },
+
+  onRevokeInviteCode() {
+    if (this.data.inviteActionSubmitting || this.data.inviteLoading || !this.data.inviteCode) return
+
+    this.setData({ inviteActionSubmitting: true })
+    wx.showModal({
+      title: '停用邀请码',
+      content: '停用后，当前员工邀请二维码会立即失效，需要重新生成后才能邀请新员工。',
+      confirmText: '确认停用',
+      confirmColor: '#d54941',
+      cancelText: '取消',
+      success: async (res) => {
+        if (!res.confirm) {
+          this.setData({ inviteActionSubmitting: false })
+          return
+        }
+        try {
+          await revokeMerchantStaffInviteCode()
+          this.setData({
+            inviteCode: '',
+            inviteQRCodeValue: '',
+            inviteExpiresAtLabel: '--'
+          })
+          wx.showToast({ title: '邀请码已停用', icon: 'success' })
+        } catch (err: unknown) {
+          logger.error('Revoke merchant invite code failed', err)
+          const message = getErrorMessage(err, '停用邀请码失败，请稍后重试')
+          wx.showToast({ title: message, icon: 'none' })
+        } finally {
+          this.setData({ inviteActionSubmitting: false })
+        }
+      },
+      fail: () => {
+        this.setData({ inviteActionSubmitting: false })
+      }
+    })
   },
 
   onOpenRolePopup(e: WechatMiniprogram.TouchEvent) {

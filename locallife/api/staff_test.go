@@ -199,6 +199,281 @@ func TestBindMerchantRejectsExistingActiveOrPendingStaff(t *testing.T) {
 	}
 }
 
+func TestGenerateInviteCodeReusesExistingActiveCode(t *testing.T) {
+	owner, _ := randomUser(t)
+	merchant := randomMerchant(owner.ID)
+	merchant.BindCode = pgtype.Text{String: "1234567890abcdef1234567890abcdef", Valid: true}
+	merchant.BindCodeExpiresAt = pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+	store.EXPECT().
+		UpdateMerchantBindCode(gomock.Any(), gomock.Any()).
+		Times(0)
+	store.EXPECT().
+		CreateMerchantBindCodeWhenInactive(gomock.Any(), gomock.Any()).
+		Times(0)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodPost, "/v1/merchant/staff/invite-code", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var resp generateInviteCodeResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, merchant.BindCode.String, resp.InviteCode)
+	require.NotEmpty(t, resp.ExpiresAt)
+}
+
+func TestGenerateInviteCodeStaleSnapshotReusesCodeCreatedByConcurrentRequest(t *testing.T) {
+	owner, _ := randomUser(t)
+	merchant := randomMerchant(owner.ID)
+	merchant.BindCode = pgtype.Text{}
+	merchant.BindCodeExpiresAt = pgtype.Timestamptz{}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+
+	var firstCode string
+	var firstExpiresAt pgtype.Timestamptz
+	gomock.InOrder(
+		store.EXPECT().
+			CreateMerchantBindCodeWhenInactive(gomock.Any(), gomock.AssignableToTypeOf(db.CreateMerchantBindCodeWhenInactiveParams{})).
+			Times(1).
+			DoAndReturn(func(_ any, arg db.CreateMerchantBindCodeWhenInactiveParams) (db.Merchant, error) {
+				require.Equal(t, merchant.ID, arg.ID)
+				require.True(t, arg.BindCode.Valid)
+				require.Len(t, arg.BindCode.String, 32)
+				firstCode = arg.BindCode.String
+				firstExpiresAt = arg.BindCodeExpiresAt
+				updated := merchant
+				updated.BindCode = arg.BindCode
+				updated.BindCodeExpiresAt = arg.BindCodeExpiresAt
+				return updated, nil
+			}),
+		store.EXPECT().
+			CreateMerchantBindCodeWhenInactive(gomock.Any(), gomock.AssignableToTypeOf(db.CreateMerchantBindCodeWhenInactiveParams{})).
+			Times(1).
+			DoAndReturn(func(_ any, arg db.CreateMerchantBindCodeWhenInactiveParams) (db.Merchant, error) {
+				require.Equal(t, merchant.ID, arg.ID)
+				require.True(t, arg.BindCode.Valid)
+				require.Len(t, arg.BindCode.String, 32)
+				require.NotEqual(t, firstCode, arg.BindCode.String)
+				return db.Merchant{}, db.ErrRecordNotFound
+			}),
+		store.EXPECT().
+			GetMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
+			Times(1).
+			DoAndReturn(func(_ any, _ int64) (db.Merchant, error) {
+				current := merchant
+				current.BindCode = pgtype.Text{String: firstCode, Valid: true}
+				current.BindCodeExpiresAt = firstExpiresAt
+				return current, nil
+			}),
+	)
+	store.EXPECT().
+		UpdateMerchantBindCode(gomock.Any(), gomock.Any()).
+		Times(0)
+
+	server := newTestServer(t, store)
+
+	firstRecorder := httptest.NewRecorder()
+	firstRequest, err := http.NewRequest(http.MethodPost, "/v1/merchant/staff/invite-code", nil)
+	require.NoError(t, err)
+	addAuthorization(t, firstRequest, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
+	server.router.ServeHTTP(firstRecorder, firstRequest)
+
+	require.Equal(t, http.StatusOK, firstRecorder.Code)
+	var firstResp generateInviteCodeResponse
+	requireUnmarshalAPIResponseData(t, firstRecorder.Body.Bytes(), &firstResp)
+	require.Equal(t, firstCode, firstResp.InviteCode)
+
+	secondRecorder := httptest.NewRecorder()
+	secondRequest, err := http.NewRequest(http.MethodPost, "/v1/merchant/staff/invite-code", nil)
+	require.NoError(t, err)
+	addAuthorization(t, secondRequest, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
+	server.router.ServeHTTP(secondRecorder, secondRequest)
+
+	require.Equal(t, http.StatusOK, secondRecorder.Code)
+	var secondResp generateInviteCodeResponse
+	requireUnmarshalAPIResponseData(t, secondRecorder.Body.Bytes(), &secondResp)
+	require.Equal(t, firstResp.InviteCode, secondResp.InviteCode)
+}
+
+func TestRotateInviteCodeReplacesExistingActiveCode(t *testing.T) {
+	owner, _ := randomUser(t)
+	merchant := randomMerchant(owner.ID)
+	merchant.BindCode = pgtype.Text{String: "1234567890abcdef1234567890abcdef", Valid: true}
+	merchant.BindCodeExpiresAt = pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+	store.EXPECT().
+		UpdateMerchantBindCode(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateMerchantBindCodeParams{})).
+		Times(1).
+		DoAndReturn(func(_ any, arg db.UpdateMerchantBindCodeParams) (db.Merchant, error) {
+			require.Equal(t, merchant.ID, arg.ID)
+			require.True(t, arg.BindCode.Valid)
+			require.Len(t, arg.BindCode.String, 32)
+			require.NotEqual(t, merchant.BindCode.String, arg.BindCode.String)
+			require.True(t, arg.BindCodeExpiresAt.Valid)
+			require.True(t, arg.BindCodeExpiresAt.Time.After(time.Now()))
+
+			updated := merchant
+			updated.BindCode = arg.BindCode
+			updated.BindCodeExpiresAt = arg.BindCodeExpiresAt
+			return updated, nil
+		})
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodPost, "/v1/merchant/staff/invite-code/rotate", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var resp generateInviteCodeResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Len(t, resp.InviteCode, 32)
+	require.NotEqual(t, merchant.BindCode.String, resp.InviteCode)
+	require.NotEmpty(t, resp.ExpiresAt)
+}
+
+func TestRotateInviteCodeRetriesOnBindCodeCollision(t *testing.T) {
+	owner, _ := randomUser(t)
+	merchant := randomMerchant(owner.ID)
+	merchant.BindCode = pgtype.Text{String: "1234567890abcdef1234567890abcdef", Valid: true}
+	merchant.BindCodeExpiresAt = pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+
+	var firstGeneratedCode string
+	gomock.InOrder(
+		store.EXPECT().
+			UpdateMerchantBindCode(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateMerchantBindCodeParams{})).
+			Times(1).
+			DoAndReturn(func(_ any, arg db.UpdateMerchantBindCodeParams) (db.Merchant, error) {
+				require.Equal(t, merchant.ID, arg.ID)
+				require.True(t, arg.BindCode.Valid)
+				require.Len(t, arg.BindCode.String, 32)
+				firstGeneratedCode = arg.BindCode.String
+				return db.Merchant{}, db.ErrUniqueViolation
+			}),
+		store.EXPECT().
+			UpdateMerchantBindCode(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateMerchantBindCodeParams{})).
+			Times(1).
+			DoAndReturn(func(_ any, arg db.UpdateMerchantBindCodeParams) (db.Merchant, error) {
+				require.Equal(t, merchant.ID, arg.ID)
+				require.True(t, arg.BindCode.Valid)
+				require.Len(t, arg.BindCode.String, 32)
+				require.NotEqual(t, merchant.BindCode.String, arg.BindCode.String)
+				require.NotEqual(t, firstGeneratedCode, arg.BindCode.String)
+
+				updated := merchant
+				updated.BindCode = arg.BindCode
+				updated.BindCodeExpiresAt = arg.BindCodeExpiresAt
+				return updated, nil
+			}),
+	)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodPost, "/v1/merchant/staff/invite-code/rotate", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var resp generateInviteCodeResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Len(t, resp.InviteCode, 32)
+	require.NotEqual(t, merchant.BindCode.String, resp.InviteCode)
+	require.NotEqual(t, firstGeneratedCode, resp.InviteCode)
+	require.NotEmpty(t, resp.ExpiresAt)
+}
+
+func TestRevokeInviteCodeClearsCurrentCode(t *testing.T) {
+	owner, _ := randomUser(t)
+	merchant := randomMerchant(owner.ID)
+	merchant.BindCode = pgtype.Text{String: "1234567890abcdef1234567890abcdef", Valid: true}
+	merchant.BindCodeExpiresAt = pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+	store.EXPECT().
+		UpdateMerchantBindCode(gomock.Any(), gomock.Eq(db.UpdateMerchantBindCodeParams{
+			ID:                merchant.ID,
+			BindCode:          pgtype.Text{},
+			BindCodeExpiresAt: pgtype.Timestamptz{},
+		})).
+		Times(1).
+		Return(db.Merchant{}, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodPost, "/v1/merchant/staff/invite-code/revoke", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+}
+
+func TestBindMerchantRejectsRevokedInviteCode(t *testing.T) {
+	user, _ := randomUser(t)
+	revokedCode := "1234567890abcdef1234567890abcdef"
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetMerchantByBindCode(gomock.Any(), gomock.Eq(pgtype.Text{String: revokedCode, Valid: true})).
+		Times(1).
+		Return(db.Merchant{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		AddMerchantStaffTx(gomock.Any(), gomock.Any()).
+		Times(0)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	body, err := json.Marshal(map[string]string{"invite_code": revokedCode})
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/bind-merchant", bytes.NewReader(body))
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+}
+
 func TestIsDuplicateKeyErrorUsesTypedPostgresCode(t *testing.T) {
 	require.False(t, isDuplicateKeyError(nil))
 	require.False(t, isDuplicateKeyError(db.ErrRecordNotFound))

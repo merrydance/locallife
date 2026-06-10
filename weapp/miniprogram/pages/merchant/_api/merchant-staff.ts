@@ -76,6 +76,20 @@ export function generateMerchantStaffInviteCode() {
   })
 }
 
+export function rotateMerchantStaffInviteCode() {
+  return request<MerchantStaffInviteCodeResponse>({
+    url: '/v1/merchant/staff/invite-code/rotate',
+    method: 'POST'
+  })
+}
+
+export function revokeMerchantStaffInviteCode() {
+  return request<{ message?: string }>({
+    url: '/v1/merchant/staff/invite-code/revoke',
+    method: 'POST'
+  })
+}
+
 export function updateMerchantStaffRole(staffId: number, data: UpdateMerchantStaffRoleRequest) {
   return request<MerchantStaffItem>({
     url: `/v1/merchant/staff/${staffId}/role`,

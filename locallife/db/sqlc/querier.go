@@ -418,6 +418,8 @@ type Querier interface {
 	// ==================== 商户入驻申请（草稿模式+自动审核） ====================
 	// 创建商户申请草稿（仅需用户ID）
 	CreateMerchantApplicationDraft(ctx context.Context, userID int64) (MerchantApplication, error)
+	// 仅在商户当前没有有效邀请码时创建邀请码，避免并发打开邀请弹窗互相覆盖
+	CreateMerchantBindCodeWhenInactive(ctx context.Context, arg CreateMerchantBindCodeWhenInactiveParams) (Merchant, error)
 	// Boss 店铺认领查询
 	CreateMerchantBoss(ctx context.Context, arg CreateMerchantBossParams) (MerchantBoss, error)
 	CreateMerchantBrand(ctx context.Context, arg CreateMerchantBrandParams) (MerchantBrand, error)

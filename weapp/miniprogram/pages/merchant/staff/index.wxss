@@ -241,6 +241,13 @@
   padding: 48rpx 0 var(--spacer-sm);
 }
 
+.invite-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacer-sm);
+}
+
 .invite-qr-only {
   padding: 28rpx;
   border-radius: var(--radius-md);
@@ -248,6 +255,13 @@
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.invite-actions {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--spacer-xs);
 }
 
 .role-options {

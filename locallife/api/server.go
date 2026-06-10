@@ -764,6 +764,8 @@ func (server *Server) setupRouter() {
 	{
 		merchantStaffGroup.GET("", server.listMerchantStaff)
 		merchantStaffGroup.POST("/invite-code", server.generateInviteCode)
+		merchantStaffGroup.POST("/invite-code/rotate", server.rotateInviteCode)
+		merchantStaffGroup.POST("/invite-code/revoke", server.revokeInviteCode)
 	}
 
 	// M3.5: 仅老板可操作的员工管理
