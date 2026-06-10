@@ -11,7 +11,7 @@ This slice covers:
 - Merchant Mini Program order list accept/reject/ready/complete actions.
 - Merchant order detail status actions, print retry/status/manual print, and manual refund workflow.
 - Kitchen board and kitchen detail preparing/ready actions.
-- Flutter merchant App order list/detail/alert accept/reject/ready actions, including local auto-accept and BLE auto-print after accept.
+- Flutter merchant App order list/detail/alert accept/reject/ready actions, including backend-authorized alert auto-accept and BLE auto-print after accept.
 - Backend merchant/kitchen order routes, handlers, logic, transactions, SQL writes, printing tasks, refund creation, refund callback/fact/outbox/recovery, and merchant websocket publish.
 
 This slice does not fully cover:
@@ -79,8 +79,8 @@ Merchant order operations must converge from merchant action to durable order/re
 15. Fixed 2026-06-01: Flutter reject handling extracts nested `order` and backend `refund_submission.message`, then shows that message after a successful reject.
     Evidence: `merchant_app/lib/features/order/order_provider.dart`, `merchant_app/lib/features/order/order_detail_page.dart`, `merchant_app/lib/features/order/order_alert_page.dart`.
 
-16. Flutter App can auto-accept a newly alerted order from push/poll/backfill if local `notificationSettings.autoAcceptEnabled` is true. This is an App-local SharedPreferences setting and does not read backend `order_display_configs.auto_accept_paid_orders`.
-    Evidence: `merchant_app/lib/features/order/order_alert_coordinator.dart:127`, `merchant_app/lib/features/order/order_alert_coordinator.dart:140`, `merchant_app/lib/features/order/order_alert_coordinator.dart:378`, `merchant_app/lib/features/settings/notification_settings_provider.dart:41`, `merchant_app/lib/features/settings/notification_settings_provider.dart:68`.
+16. Fixed 2026-06-10: Flutter App alert-driven auto-accept reads backend display-config truth before calling the shared merchant accept endpoint. If `GET /v1/merchant/display-config` does not authorize effective `enable_print && auto_accept_paid_orders`, or if the config read fails/times out, the App skips auto-accept and continues the ordinary alert/pending flow.
+    Evidence: `merchant_app/lib/features/display_config/display_config_provider.dart`, `merchant_app/lib/features/order/order_alert_coordinator.dart`, `merchant_app/test/display_config_provider_test.dart`, `merchant_app/test/order_alert_coordinator_test.dart`.
 
 17. Flutter App can print a local Bluetooth receipt after manual or automatic accept when local `autoPrintAfterAcceptEnabled` is true and a BLE printer is connected. This does not create backend `print_logs`.
     Evidence: `merchant_app/lib/features/order/order_alert_coordinator.dart:388`, `merchant_app/lib/features/order/order_alert_coordinator.dart:390`, `merchant_app/lib/features/order/order_detail_page.dart:513`, `merchant_app/lib/features/order/order_detail_page.dart:521`, `merchant_app/lib/features/order/order_list_page.dart:724`, `merchant_app/lib/features/order/order_list_page.dart:735`, `merchant_app/lib/features/printer/printer_provider.dart:146`, `merchant_app/lib/features/printer/printer_provider.dart:198`.
@@ -136,7 +136,7 @@ Merchant order operations must converge from merchant action to durable order/re
 ## Reverse-Reference Findings
 
 - Merchant order list, merchant order detail, and kitchen board/detail intentionally converge on the same order service methods. This is a shared writer boundary, not a zombie path.
-- Flutter merchant App order list, detail, alert modal, native push, websocket, and polling paths are another client of the same merchant order endpoints. Its local auto-accept setting can mutate backend order state independently of Mini Program display-config auto-accept.
+- Flutter merchant App order list, detail, alert modal, native push, websocket, and polling paths are another client of the same merchant order endpoints. Fixed 2026-06-10: alert-driven auto-accept now consults backend display-config truth instead of a local App preference before mutating backend order state.
 - Kitchen `startPreparing` is semantically the same backend state transition as merchant accept: it calls `AcceptMerchantOrder`.
 - `CompleteOrderTx` is broader than merchant completion logic. Merchant logic allows ready-only non-takeout completion, while the SQL primitive allows any non-cancelled/non-completed order. DB tests use it from non-merchant flows, so it should be documented as a broad shared primitive/refactor risk rather than immediately called a defect.
 - Fixed 2026-05-31 in `6a19a9c0`: manual refund creation now satisfies the frontend/backend idempotency header contract and has a Mini Program wrapper contract test.
@@ -184,7 +184,7 @@ Merchant order operations must converge from merchant action to durable order/re
 ## Recovery And Async Convergence Paths
 
 - Same-terminal merchant actions rehydrate through HTTP: list reloads orders, detail reloads detail/print/refund state, kitchen reloads board state.
-- Flutter App rehydrates with order list/detail HTTP reads and updates local rows from mutation responses; local auto-accept fetches orders after accept before optional BLE printing.
+- Flutter App rehydrates with order list/detail HTTP reads and updates local rows from mutation responses; backend-authorized alert auto-accept fetches orders after accept before optional BLE printing.
 - Backend sends customer notifications for accept/reject/ready/complete and publishes merchant order snapshots for merchant realtime refresh.
 - Takeout accept can publish a delivery-pool event for rider-side flows.
 - Accepted/ready status transitions enqueue print tasks according to display/printer config; manual print can create a task only when manual trigger mode is enabled.
@@ -200,7 +200,7 @@ Merchant order operations must converge from merchant action to durable order/re
 - Manual refund popup holds local amount/type/reason draft. After creation it closes the popup, polls the refund row, then reloads order detail truth.
 - Detail secondary reads can preserve stale print/refund results with an explicit "保留上次结果" message, which is useful but means stale subflow state can remain visible until a later successful sync.
 - Fixed 2026-06-02: realtime `order_update` now triggers backend-truth rehydration in Mini Program order list/detail and kitchen board/detail.
-- Flutter's local auto-accept/auto-print toggles persist in SharedPreferences and are not rehydrated from backend display-config truth.
+- Fixed 2026-06-10: Flutter no longer persists or reads a local auto-accept preference; only sound, voice, and BLE auto-print settings remain local SharedPreferences preferences. Alert auto-accept is re-read from backend display-config truth and fails closed when that read cannot complete.
 
 ## Branch Exhaustion
 
@@ -210,7 +210,7 @@ Entry branches:
 - Mini Program order detail: load detail, load payments/refunds/refund returns, accept/reject/ready/complete, print retry/status/manual print, manual refund popup, refund polling, previous-page reload, and stale secondary subview preservation are included.
 - Mini Program kitchen/KDS: board/detail reads, start-preparing as accept, mark-ready, open-status gate, notification-style realtime refresh, and realtime disconnect on open-status refresh failure are included.
 - Mini Program print anomalies: anomaly list and retry routes are included through print-log retry/status surfaces.
-- Flutter merchant App: order list/detail/alert modal actions, push/native notification tap, websocket/poll/backfill order alert coordinator, local auto-accept, and BLE auto-print after accept are included.
+- Flutter merchant App: order list/detail/alert modal actions, push/native notification tap, websocket/poll/backfill order alert coordinator, backend-authorized alert auto-accept, and BLE auto-print after accept are included.
 - Out of current scope by decision: Web merchant console. It was briefly scanned and maps to existing flows, but it is not part of this Mini Program/App branch-exhaustion completion gate.
 
 Request branches:
@@ -237,7 +237,7 @@ Async branches:
 - Payment/refund terminal truth flows through Baofu callback/query facts, payment fact application, payment-domain outbox, and notification/alert workers.
 - Refund recovery scans no-refund cancelled payments, pending normal-order refunds, pending reservation refunds, and stuck `processing` refunds; it does not cover historical terminal `failed` rows after merchant reject unless a future evidence-backed reconciliation explicitly promotes them.
 - Print async branches include Redis print worker, Feieyun direct response, Feieyun callback by vendor order id, retry print jobs, manual print jobs, and timed print anomaly scheduler.
-- Flutter local notification/foreground/polling branches can trigger local auto-accept and BLE print; backend observes only the ordinary accept call, not the local alert or local print side effect.
+- Flutter local notification/foreground/polling branches can trigger backend-authorized alert auto-accept and BLE print; backend observes the ordinary accept call and still does not observe the local alert or local BLE print side effect.
 
 Failure and retry branches:
 
@@ -254,7 +254,7 @@ Reader and consumer branches:
 - Customer and delivery readers: customer order detail/notifications, delivery pool/rider assignment flows after takeout accept, and cancellation/refund visibility.
 - Finance/payment readers: payment/refund detail, refund returns, settlement/profit-sharing side effects, payment-domain outbox, and operator alert surfaces.
 - Config readers affecting this flow: `order_display_configs` and `cloud_printers` are consumed for cloud print and backend auto-accept but are owned by `merchant-device-display-config`.
-- Local App readers affecting this flow: SharedPreferences notification settings and BLE saved device id affect App-side auto-accept/auto-print but are not backend truth.
+- Local App readers affecting this flow: SharedPreferences notification settings and BLE saved device id affect sound/voice/BLE auto-print only; alert auto-accept reads backend display-config truth owned by `merchant-device-display-config`.
 
 Authorization and tenant branches:
 
@@ -269,7 +269,7 @@ Zombie and unreachable branches:
 - Fixed 2026-06-02: Mini Program websocket `order_update` handling is reachable through the shared enum and order/kitchen subscribers.
 - Fixed 2026-05-31 in `6a19a9c0`: manual refund UI path now sends `Idempotency-Key`.
 - Fixed for new writes 2026-06-02: existing pending order refund rows after merchant reject are picked up, and new retryable/queryable Baofu create errors avoid terminal `failed`; historical terminal `failed` rows are still not retried automatically by status alone.
-- Flutter local auto-accept and backend display-config auto-accept are distinct paths; neither is a zombie, but the dual-control contract is undocumented.
+- Fixed 2026-06-10: Flutter alert auto-accept and backend display-config auto-accept no longer have separate local/remote controls; the App consults backend display-config truth before executing alert-driven accept.
 
 Test-proof gaps:
 
@@ -278,7 +278,7 @@ Test-proof gaps:
 - Fixed for `pending` on 2026-05-31 in `d3e84050`: worker and sqlc tests prove recovery includes existing normal-order refund rows stuck in `pending`. Eligible retryable `failed` rows remain open.
 - Fixed 2026-06-02: `check-merchant-order-update-websocket-contract.test.js` proves backend `order_update` is declared and Mini Program order list/detail plus kitchen board/detail subscribe through dedicated refresh handlers.
 - Prove Flutter push/websocket/polling duplicate alerts cannot double-accept or double-print local BLE receipts.
-- Prove backend display-config auto-accept and Flutter local alert auto-accept converge safely on one order status and one intended print policy.
+- Fixed 2026-06-10 in `merchant-device-display-config`: Flutter alert auto-accept now reads backend display-config truth and fails closed when config read fails/times out.
 
 ## Test Coverage Signals
 
@@ -299,7 +299,7 @@ Missing high-value tests:
 - Optional historical refund reconciliation tests, only if a future migration proves retryable/queryable `failed` rows from durable command/fact evidence and intentionally promotes them.
 - Fixed 2026-06-02: Mini Program contract test proves `order_update` is declared and wired to order list/detail plus kitchen board/detail refresh handlers.
 - Kitchen realtime degradation test for open-status refresh failure.
-- Flutter App contract tests proving local auto-accept uses the same backend accept endpoint, dedupes push/poll/websocket duplicates, and does not double-print BLE receipts after retries.
+- Flutter App contract tests proving push/poll/websocket duplicates cannot double-accept and do not double-print BLE receipts after retries. Backend-truth auto-accept convergence is covered in `merchant-device-display-config`.
 
 ## Gaps And Refactor Notes
 
@@ -308,4 +308,4 @@ Missing high-value tests:
 - Fixed for new writes 2026-06-02: refund recovery covers order refund rows stuck in `pending` and uses original `out_refund_no`; Baofu create/provider errors now classify retryable, queryable, and terminal outcomes before writing refund state. Historical `failed` retry remains a separate evidence-backed reconciliation question.
 - Fixed 2026-06-02: websocket message types were aligned by adding `order_update` handling in Mini Program order/kitchen flows and a durable contract script.
 - Keep `CompleteOrderTx` broad only if all callers deliberately guard it before use. If refactoring, rename or split it to avoid accidental merchant-like use without ready-state checks.
-- Decide product semantics for the two auto-accept controls: backend display-config `auto_accept_paid_orders` plus cloud-printer gating, and Flutter App local `autoAcceptEnabled` on new-order alerts. They currently coexist and can both accept the same order through conditional backend status logic.
+- Fixed 2026-06-10 in `merchant-device-display-config`: the App local auto-accept control was removed; alert-driven auto-accept reads backend display-config truth before calling the ordinary accept endpoint. Remaining App print-policy work is BLE observability/deduplication and backend display-config enforcement for local receipt printing.

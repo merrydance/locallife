@@ -12,6 +12,7 @@ import 'package:merchant_app/core/service/message_dedup.dart';
 import 'package:merchant_app/core/service/order_alert_checkpoint_store.dart';
 import 'package:merchant_app/core/service/pending_order_alert_store.dart';
 import 'package:merchant_app/features/auth/auth_provider.dart';
+import 'package:merchant_app/features/display_config/display_config_provider.dart';
 import 'package:merchant_app/features/order/order_alert_page.dart';
 import 'package:merchant_app/features/order/order_detail_page.dart';
 import 'package:merchant_app/features/order/order_provider.dart';
@@ -22,6 +23,10 @@ import 'package:merchant_app/models/push_message.dart';
 
 final orderAlertCoordinatorProvider = Provider<OrderAlertCoordinator>((ref) {
   return OrderAlertCoordinator(ref);
+});
+
+final orderAlertDisplayConfigTimeoutProvider = Provider<Duration>((ref) {
+  return const Duration(seconds: 2);
 });
 
 final pendingOrderAlertDrainManagerProvider = Provider<void>((ref) {
@@ -137,7 +142,7 @@ class OrderAlertCoordinator {
       }
     });
 
-    if (notificationSettings.autoAcceptEnabled) {
+    if (await _isBackendAutoAcceptEnabled()) {
       final accepted = await _acceptAndPrint(hydratedMessage);
       if (accepted) {
         await deduplicator.markAccepted(dedupKeys);
@@ -225,6 +230,21 @@ class OrderAlertCoordinator {
         .read(orderProvider.notifier)
         .fetchOrderDetail(message.orderId);
     return order == null ? message : message.withOrderSnapshot(order);
+  }
+
+  Future<bool> _isBackendAutoAcceptEnabled() async {
+    try {
+      final config = await _ref
+          .read(orderDisplayConfigRepositoryProvider)
+          .fetchDisplayConfig()
+          .timeout(_ref.read(orderAlertDisplayConfigTimeoutProvider));
+      return config.allowsAutoAcceptPaidOrders;
+    } catch (error) {
+      debugPrint(
+        'Failed to load backend display config for auto accept: $error',
+      );
+      return false;
+    }
   }
 
   Future<void> handleNotificationTap(PushMessage message) async {
@@ -386,9 +406,12 @@ class OrderAlertCoordinator {
     await _ref.read(orderProvider.notifier).fetchOrders();
 
     final notificationSettings = _ref.read(notificationSettingsProvider);
+    if (!notificationSettings.autoPrintAfterAcceptEnabled) {
+      return true;
+    }
+
     final printerState = _ref.read(printerProvider);
-    if (notificationSettings.autoPrintAfterAcceptEnabled &&
-        printerState.connectedDevice != null) {
+    if (printerState.connectedDevice != null) {
       await _ref.read(printerProvider.notifier).printReceipt(message);
     }
 

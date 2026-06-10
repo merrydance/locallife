@@ -108,7 +108,7 @@ class SettingsPage extends ConsumerWidget {
                 const SizedBox(height: AppSpacing.lg),
                 _buildSectionCard(
                   title: '提醒与保活',
-                  description: '设置来单提醒、接单方式和接单后打印，并检查系统保活状态。',
+                  description: '设置来单提醒和接单后打印，并检查系统保活状态。',
                   children: [
                     _buildToggleTile(
                       icon: Icons.music_note_outlined,
@@ -127,18 +127,9 @@ class SettingsPage extends ConsumerWidget {
                     ),
                     const SizedBox(height: AppSpacing.md),
                     _buildToggleTile(
-                      icon: Icons.flash_auto_outlined,
-                      title: '自动接单',
-                      subtitle: '新订单到达后自动确认接单；如果失败，订单仍会保留为待处理。',
-                      value: notificationSettings.autoAcceptEnabled,
-                      onChanged:
-                          notificationSettingsNotifier.setAutoAcceptEnabled,
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    _buildToggleTile(
                       icon: Icons.print_outlined,
                       title: '接单后自动打印',
-                      subtitle: '手工接单或自动接单成功后，如已连接蓝牙打印机则自动打印小票。',
+                      subtitle: '接单成功后，如已连接蓝牙打印机则自动打印小票。',
                       value: notificationSettings.autoPrintAfterAcceptEnabled,
                       onChanged: notificationSettingsNotifier
                           .setAutoPrintAfterAcceptEnabled,

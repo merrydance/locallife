@@ -124,13 +124,9 @@ class _FakeNotificationSettingsNotifier
         const NotificationSettingsState(
           soundEnabled: false,
           voiceEnabled: false,
-          autoAcceptEnabled: false,
           autoPrintAfterAcceptEnabled: false,
         ),
       );
-
-  @override
-  Future<void> setAutoAcceptEnabled(bool enabled) async {}
 
   @override
   Future<void> setAutoPrintAfterAcceptEnabled(bool enabled) async {}

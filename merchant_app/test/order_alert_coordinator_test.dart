@@ -13,6 +13,7 @@ import 'package:merchant_app/core/service/message_dedup.dart';
 import 'package:merchant_app/core/service/navigation_service.dart';
 import 'package:merchant_app/core/service/order_alert_checkpoint_store.dart';
 import 'package:merchant_app/core/service/pending_order_alert_store.dart';
+import 'package:merchant_app/features/display_config/display_config_provider.dart';
 import 'package:merchant_app/features/auth/auth_provider.dart';
 import 'package:merchant_app/features/auth/auth_service.dart';
 import 'package:merchant_app/features/auth/auth_state.dart';
@@ -138,6 +139,272 @@ void main() {
         );
       },
     );
+
+    test(
+      'does not auto accept when backend display config disables it',
+      () async {
+        TestWidgetsFlutterBinding.ensureInitialized();
+        SharedPreferences.setMockInitialValues(<String, Object>{});
+        final pendingStore = MemoryPendingOrderAlertStore();
+        final apiClient = _AutoAcceptApiClient();
+        final container = ProviderContainer(
+          overrides: [
+            apiClientProvider.overrideWithValue(apiClient),
+            messageDeduplicatorProvider.overrideWithValue(
+              MessageDeduplicator.memoryOnly(),
+            ),
+            localNotificationServiceProvider.overrideWithValue(
+              _CountingLocalNotificationService(),
+            ),
+            pendingOrderAlertStoreProvider.overrideWithValue(pendingStore),
+            notificationSettingsProvider.overrideWith(
+              (ref) => _FakeNotificationSettingsNotifier(),
+            ),
+            orderDisplayConfigRepositoryProvider.overrideWithValue(
+              _FakeOrderDisplayConfigRepository(
+                const OrderDisplayConfig(
+                  enablePrint: true,
+                  autoAcceptPaidOrders: false,
+                ),
+              ),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final coordinator = container.read(orderAlertCoordinatorProvider);
+
+        await coordinator.handleIncomingOrder(
+          PushMessage(
+            messageId: 'merchant:new_order:509',
+            orderId: '509',
+            orderNumber: 'ORD509',
+            title: '新订单',
+            content: '您有一笔新订单',
+            amount: 18.5,
+            shopName: '测试门店',
+          ),
+          showLocalNotification: false,
+        );
+
+        expect(apiClient.acceptPostCalls, 0);
+        final pendingAlerts = await pendingStore.loadPendingAlerts();
+        expect(pendingAlerts.map((alert) => alert.orderId), ['509']);
+      },
+    );
+
+    test(
+      'does not auto accept when backend disables printing even if auto accept is true',
+      () async {
+        TestWidgetsFlutterBinding.ensureInitialized();
+        SharedPreferences.setMockInitialValues(<String, Object>{});
+        final pendingStore = MemoryPendingOrderAlertStore();
+        final apiClient = _AutoAcceptApiClient();
+        final container = ProviderContainer(
+          overrides: [
+            apiClientProvider.overrideWithValue(apiClient),
+            messageDeduplicatorProvider.overrideWithValue(
+              MessageDeduplicator.memoryOnly(),
+            ),
+            localNotificationServiceProvider.overrideWithValue(
+              _CountingLocalNotificationService(),
+            ),
+            pendingOrderAlertStoreProvider.overrideWithValue(pendingStore),
+            notificationSettingsProvider.overrideWith(
+              (ref) => _FakeNotificationSettingsNotifier(),
+            ),
+            orderDisplayConfigRepositoryProvider.overrideWithValue(
+              _FakeOrderDisplayConfigRepository(
+                const OrderDisplayConfig(
+                  enablePrint: false,
+                  autoAcceptPaidOrders: true,
+                ),
+              ),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final coordinator = container.read(orderAlertCoordinatorProvider);
+
+        await coordinator.handleIncomingOrder(
+          PushMessage(
+            messageId: 'merchant:new_order:512',
+            orderId: '512',
+            orderNumber: 'ORD512',
+            title: '新订单',
+            content: '您有一笔新订单',
+            amount: 18.5,
+            shopName: '测试门店',
+          ),
+          showLocalNotification: false,
+        );
+
+        expect(apiClient.acceptPostCalls, 0);
+        final pendingAlerts = await pendingStore.loadPendingAlerts();
+        expect(pendingAlerts.map((alert) => alert.orderId), ['512']);
+      },
+    );
+
+    test(
+      'auto accepts only when backend display config authorizes it',
+      () async {
+        TestWidgetsFlutterBinding.ensureInitialized();
+        SharedPreferences.setMockInitialValues(<String, Object>{});
+        final pendingStore = MemoryPendingOrderAlertStore();
+        final checkpointStore = MemoryOrderAlertCheckpointStore();
+        final apiClient = _AutoAcceptApiClient();
+        final deduplicator = MessageDeduplicator.memoryOnly();
+        await deduplicator.ensureInitialized();
+        final container = ProviderContainer(
+          overrides: [
+            apiClientProvider.overrideWithValue(apiClient),
+            messageDeduplicatorProvider.overrideWithValue(deduplicator),
+            localNotificationServiceProvider.overrideWithValue(
+              _CountingLocalNotificationService(),
+            ),
+            orderAlertCheckpointStoreProvider.overrideWithValue(
+              checkpointStore,
+            ),
+            pendingOrderAlertStoreProvider.overrideWithValue(pendingStore),
+            notificationSettingsProvider.overrideWith(
+              (ref) => _FakeNotificationSettingsNotifier(),
+            ),
+            orderDisplayConfigRepositoryProvider.overrideWithValue(
+              _FakeOrderDisplayConfigRepository(
+                const OrderDisplayConfig(
+                  enablePrint: true,
+                  autoAcceptPaidOrders: true,
+                ),
+              ),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final coordinator = container.read(orderAlertCoordinatorProvider);
+
+        await coordinator.handleIncomingOrder(
+          PushMessage(
+            messageId: 'merchant:new_order:510',
+            orderId: '510',
+            orderNumber: 'ORD510',
+            title: '新订单',
+            content: '您有一笔新订单',
+            amount: 18.5,
+            shopName: '测试门店',
+          ),
+          showLocalNotification: false,
+        );
+
+        expect(apiClient.acceptPostCalls, 1);
+        expect(await pendingStore.loadPendingAlerts(), isEmpty);
+        expect(await checkpointStore.hasAlerted('510'), isTrue);
+        expect(
+          await deduplicator.tryAcceptGroup([
+            MessageDeduplicator.messageKey('merchant:new_order:510'),
+            MessageDeduplicator.orderKey('510'),
+          ]),
+          isFalse,
+        );
+      },
+    );
+
+    test(
+      'fails closed quickly when backend display config read hangs',
+      () async {
+        TestWidgetsFlutterBinding.ensureInitialized();
+        SharedPreferences.setMockInitialValues(<String, Object>{});
+        final pendingStore = MemoryPendingOrderAlertStore();
+        final apiClient = _AutoAcceptApiClient();
+        final container = ProviderContainer(
+          overrides: [
+            apiClientProvider.overrideWithValue(apiClient),
+            messageDeduplicatorProvider.overrideWithValue(
+              MessageDeduplicator.memoryOnly(),
+            ),
+            localNotificationServiceProvider.overrideWithValue(
+              _CountingLocalNotificationService(),
+            ),
+            pendingOrderAlertStoreProvider.overrideWithValue(pendingStore),
+            notificationSettingsProvider.overrideWith(
+              (ref) => _FakeNotificationSettingsNotifier(),
+            ),
+            orderAlertDisplayConfigTimeoutProvider.overrideWithValue(
+              const Duration(milliseconds: 1),
+            ),
+            orderDisplayConfigRepositoryProvider.overrideWithValue(
+              _HangingOrderDisplayConfigRepository(),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final coordinator = container.read(orderAlertCoordinatorProvider);
+
+        await coordinator.handleIncomingOrder(
+          PushMessage(
+            messageId: 'merchant:new_order:511',
+            orderId: '511',
+            orderNumber: 'ORD511',
+            title: '新订单',
+            content: '您有一笔新订单',
+            amount: 18.5,
+            shopName: '测试门店',
+          ),
+          showLocalNotification: false,
+        );
+
+        expect(apiClient.acceptPostCalls, 0);
+        final pendingAlerts = await pendingStore.loadPendingAlerts();
+        expect(pendingAlerts.map((alert) => alert.orderId), ['511']);
+      },
+    );
+
+    test('fails closed when backend display config read throws', () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      final pendingStore = MemoryPendingOrderAlertStore();
+      final apiClient = _AutoAcceptApiClient();
+      final container = ProviderContainer(
+        overrides: [
+          apiClientProvider.overrideWithValue(apiClient),
+          messageDeduplicatorProvider.overrideWithValue(
+            MessageDeduplicator.memoryOnly(),
+          ),
+          localNotificationServiceProvider.overrideWithValue(
+            _CountingLocalNotificationService(),
+          ),
+          pendingOrderAlertStoreProvider.overrideWithValue(pendingStore),
+          notificationSettingsProvider.overrideWith(
+            (ref) => _FakeNotificationSettingsNotifier(),
+          ),
+          orderDisplayConfigRepositoryProvider.overrideWithValue(
+            _ThrowingOrderDisplayConfigRepository(),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final coordinator = container.read(orderAlertCoordinatorProvider);
+
+      await coordinator.handleIncomingOrder(
+        PushMessage(
+          messageId: 'merchant:new_order:513',
+          orderId: '513',
+          orderNumber: 'ORD513',
+          title: '新订单',
+          content: '您有一笔新订单',
+          amount: 18.5,
+          shopName: '测试门店',
+        ),
+        showLocalNotification: false,
+      );
+
+      expect(apiClient.acceptPostCalls, 0);
+      final pendingAlerts = await pendingStore.loadPendingAlerts();
+      expect(pendingAlerts.map((alert) => alert.orderId), ['513']);
+    });
   });
 
   group('OrderAlertCoordinator.drainPendingAlerts', () {
@@ -1164,13 +1431,9 @@ class _FakeNotificationSettingsNotifier
         const NotificationSettingsState(
           soundEnabled: false,
           voiceEnabled: false,
-          autoAcceptEnabled: false,
           autoPrintAfterAcceptEnabled: false,
         ),
       );
-
-  @override
-  Future<void> setAutoAcceptEnabled(bool enabled) async {}
 
   @override
   Future<void> setAutoPrintAfterAcceptEnabled(bool enabled) async {}
@@ -1180,6 +1443,119 @@ class _FakeNotificationSettingsNotifier
 
   @override
   Future<void> setVoiceEnabled(bool enabled) async {}
+}
+
+class _FakeOrderDisplayConfigRepository
+    implements OrderDisplayConfigRepository {
+  _FakeOrderDisplayConfigRepository(this.config);
+
+  final OrderDisplayConfig config;
+
+  @override
+  Future<OrderDisplayConfig> fetchDisplayConfig() async => config;
+}
+
+class _HangingOrderDisplayConfigRepository
+    implements OrderDisplayConfigRepository {
+  @override
+  Future<OrderDisplayConfig> fetchDisplayConfig() =>
+      Completer<OrderDisplayConfig>().future;
+}
+
+class _ThrowingOrderDisplayConfigRepository
+    implements OrderDisplayConfigRepository {
+  @override
+  Future<OrderDisplayConfig> fetchDisplayConfig() {
+    throw StateError('display config unavailable');
+  }
+}
+
+class _AutoAcceptApiClient implements ApiClient {
+  int acceptPostCalls = 0;
+
+  @override
+  Future<Response<dynamic>> get(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    bool requiresAuth = true,
+  }) async {
+    if (path.startsWith('/merchant/orders/')) {
+      final orderId = path.split('/').last;
+      return Response<dynamic>(
+        requestOptions: RequestOptions(path: path),
+        data: <String, dynamic>{
+          'code': 0,
+          'message': 'ok',
+          'data': _orderJson(id: orderId, status: 'paid'),
+        },
+      );
+    }
+    if (path == '/merchant/orders') {
+      return Response<dynamic>(
+        requestOptions: RequestOptions(path: path),
+        data: <String, dynamic>{
+          'code': 0,
+          'message': 'ok',
+          'data': <String, dynamic>{
+            'orders': <Map<String, dynamic>>[],
+            'total': 0,
+            'page_id': 1,
+            'page_size': 20,
+          },
+        },
+      );
+    }
+    throw UnimplementedError('Unexpected GET $path');
+  }
+
+  @override
+  Future<Response<dynamic>> post(
+    String path, {
+    dynamic data,
+    bool requiresAuth = true,
+  }) async {
+    if (path.startsWith('/merchant/orders/') && path.endsWith('/accept')) {
+      acceptPostCalls += 1;
+      final orderId = path.split('/')[3];
+      return Response<dynamic>(
+        requestOptions: RequestOptions(path: path),
+        data: <String, dynamic>{
+          'code': 0,
+          'message': 'ok',
+          'data': _orderJson(id: orderId, status: 'preparing'),
+        },
+      );
+    }
+    throw UnimplementedError('Unexpected POST $path');
+  }
+
+  @override
+  Future<Response<dynamic>> delete(String path, {bool requiresAuth = true}) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<Response<dynamic>> patch(
+    String path, {
+    dynamic data,
+    bool requiresAuth = true,
+  }) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<Response<dynamic>> put(
+    String path, {
+    dynamic data,
+    bool requiresAuth = true,
+  }) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<Map<String, String?>?> refreshSessionTokens() {
+    throw UnimplementedError();
+  }
 }
 
 class _FakeAuthService implements AuthService {
