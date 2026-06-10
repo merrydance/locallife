@@ -4,6 +4,7 @@ import {
   deleteGroupApplicationDocument,
   ocrGroupIdCard,
   ocrGroupBusinessLicense,
+  uploadGroupTrademarkCertificate,
   submitGroupApplication,
   type GroupApplicationResponse
 } from '../../_main_shared/api/group-application'
@@ -52,9 +53,10 @@ type GroupUploadFeedback = {
   license: UploadFeedback
   idFront: UploadFeedback
   idBack: UploadFeedback
+  trademark: UploadFeedback
 }
 
-type GroupUploadField = 'license' | 'idFront' | 'idBack'
+type GroupUploadField = 'license' | 'idFront' | 'idBack' | 'trademark'
 
 type GroupResultStatusView = AdminApprovalDisplay & {
   iconName: 'check-circle-filled' | 'time-filled'
@@ -88,7 +90,8 @@ const EMPTY_UPLOAD_FEEDBACK: UploadFeedback = {
 const DEFAULT_GROUP_UPLOAD_FEEDBACK: GroupUploadFeedback = {
   license: { ...EMPTY_UPLOAD_FEEDBACK },
   idFront: { ...EMPTY_UPLOAD_FEEDBACK },
-  idBack: { ...EMPTY_UPLOAD_FEEDBACK }
+  idBack: { ...EMPTY_UPLOAD_FEEDBACK },
+  trademark: { ...EMPTY_UPLOAD_FEEDBACK }
 }
 
 const CONFIG_PAGE_ROUTE = 'pages/merchant/config/index'
@@ -133,6 +136,8 @@ const hasGroupIdentityFrontResult = (res?: GroupApplicationResponse): boolean =>
 
 const hasGroupIdentityBackResult = (res?: GroupApplicationResponse): boolean => hasGroupText(res?.id_card_back_ocr?.valid_date)
 
+const hasPersistedDocument = (value?: UploadFieldValue): boolean => Boolean(value?.assetId)
+
 Page({
   data: {
     navBarHeight: 88,
@@ -149,6 +154,7 @@ Page({
     idFront: { url: '', rawUrl: '', assetId: undefined } as UploadFieldValue,
     idBack: { url: '', rawUrl: '', assetId: undefined } as UploadFieldValue,
     license: { url: '', rawUrl: '', assetId: undefined } as UploadFieldValue,
+    trademark: { url: '', rawUrl: '', assetId: undefined } as UploadFieldValue,
     ocrDisplayState: DEFAULT_GROUP_OCR_DISPLAY_STATE,
     uploadFeedback: DEFAULT_GROUP_UPLOAD_FEEDBACK,
     formData: {
@@ -235,10 +241,11 @@ Page({
 
   async refreshUploadPreviewURLs() {
     const refreshVersion = ++this.previewRefreshVersion
-    const uploads: Array<{ key: 'license' | 'idFront' | 'idBack', value: UploadFieldValue }> = [
+    const uploads: Array<{ key: GroupUploadField, value: UploadFieldValue }> = [
       { key: 'license', value: this.data.license },
       { key: 'idFront', value: this.data.idFront },
-      { key: 'idBack', value: this.data.idBack }
+      { key: 'idBack', value: this.data.idBack },
+      { key: 'trademark', value: this.data.trademark }
     ]
 
     for (const item of uploads) {
@@ -271,6 +278,7 @@ Page({
       license: { url: '', rawUrl: '', assetId: res.license_image_asset_id },
       idFront: { url: '', rawUrl: '', assetId: res.id_card_front_asset_id },
       idBack: { url: '', rawUrl: '', assetId: res.id_card_back_asset_id },
+      trademark: { url: '', rawUrl: '', assetId: res.trademark_certificate_asset_id },
       ocrDisplayState: this.buildGroupOCRDisplayState(res),
       uploadFeedback: this.buildGroupUploadFeedback(res)
     }, () => {
@@ -310,6 +318,7 @@ Page({
     const licenseUploaded = Boolean(res?.license_image_asset_id || this.data.license.assetId || this.data.license.url)
     const idFrontUploaded = Boolean(res?.id_card_front_asset_id || this.data.idFront.assetId || this.data.idFront.url)
     const idBackUploaded = Boolean(res?.id_card_back_asset_id || this.data.idBack.assetId || this.data.idBack.url)
+    const trademarkUploaded = Boolean(res?.trademark_certificate_asset_id || this.data.trademark.assetId || this.data.trademark.url)
     const licenseReady = licenseStatus === 'done' || hasGroupLicenseResult(res)
     const idFrontReady = idFrontStatus === 'done' || hasGroupIdentityFrontResult(res)
     const idBackReady = idBackStatus === 'done' || hasGroupIdentityBackResult(res)
@@ -335,6 +344,9 @@ Page({
           : idBackReady
             ? createUploadFeedback('success', '识别成功', '已识别证件有效期')
             : createUploadFeedback('processing', '证照识别中', '正在识别身份证国徽面信息')
+        : { ...EMPTY_UPLOAD_FEEDBACK },
+      trademark: trademarkUploaded
+        ? createUploadFeedback('success', '上传成功', '已上传注册商标证书')
         : { ...EMPTY_UPLOAD_FEEDBACK }
     }
   },
@@ -417,9 +429,23 @@ Page({
     }
   },
 
+  async onTrademarkUpload(e: UploadEvent) {
+    const { path } = e.detail
+    if (!path) return
+    this.setData({ 'trademark.url': path, 'trademark.rawUrl': path })
+    this.setUploadFeedback('trademark', createUploadFeedback('processing', '上传中', '正在上传注册商标证书'))
+    try {
+      const res = await uploadGroupTrademarkCertificate(path)
+      this.mapResponseToData(res)
+    } catch (e) {
+      const message = getErrorMessage(e, '上传失败，请重新选择清晰、完整的证书图片')
+      this.setUploadFeedback('trademark', createUploadFeedback('error', '上传失败', message))
+    }
+  },
+
   async removeUploadedDocument(field: GroupUploadField) {
     const documentMap: Record<GroupUploadField, {
-      documentType: 'business_license' | 'id_card_front' | 'id_card_back'
+      documentType: 'business_license' | 'id_card_front' | 'id_card_back' | 'trademark_certificate'
       data: Record<string, unknown>
     }> = {
       license: {
@@ -443,6 +469,13 @@ Page({
         data: {
           idBack: { url: '', rawUrl: '', assetId: undefined },
           'uploadFeedback.idBack': { ...EMPTY_UPLOAD_FEEDBACK }
+        }
+      },
+      trademark: {
+        documentType: 'trademark_certificate',
+        data: {
+          trademark: { url: '', rawUrl: '', assetId: undefined },
+          'uploadFeedback.trademark': { ...EMPTY_UPLOAD_FEEDBACK }
         }
       }
     }
@@ -473,6 +506,10 @@ Page({
 
   onIdBackRemove() {
     this.removeUploadedDocument('idBack')
+  },
+
+  onTrademarkRemove() {
+    this.removeUploadedDocument('trademark')
   },
 
   onInput(e: InputEvent) {
@@ -535,15 +572,15 @@ Page({
   },
 
   async onNext() {
-    const { currentStep, idFront, idBack, formData } = this.data
+    const { currentStep, idFront, idBack, license, trademark, formData } = this.data
 
     if (currentStep === 0 && !this.ensureConsent()) {
       return
     }
 
     if (currentStep === 1) {
-      if (!idFront.url || !idBack.url) {
-        wx.showToast({ title: '请上传身份证正反面', icon: 'none' })
+      if (!hasPersistedDocument(idFront) || !hasPersistedDocument(idBack) || !hasPersistedDocument(license) || !hasPersistedDocument(trademark)) {
+        wx.showToast({ title: '请上传必填资质材料', icon: 'none' })
         return
       }
     }
@@ -570,7 +607,8 @@ Page({
           contact_phone: contactPhone,
           address: formData.address,
           license_number: formData.licenseNumber,
-          license_image_asset_id: this.data.license.assetId
+          license_image_asset_id: this.data.license.assetId,
+          trademark_certificate_asset_id: this.data.trademark.assetId
         })
         wx.hideLoading()
       } catch (e) {

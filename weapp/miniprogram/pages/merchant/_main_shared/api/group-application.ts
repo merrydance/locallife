@@ -45,6 +45,7 @@ export interface GroupApplicationResponse {
   id_card_back_asset_id?: number
   id_card_front_ocr?: GroupIDCardOCR
   id_card_back_ocr?: GroupIDCardOCR
+  trademark_certificate_asset_id?: number
   address?: string
   region_id?: number
   status: ApplicationStatus
@@ -60,6 +61,7 @@ export interface UpdateGroupApplicationBasicRequest {
   contact_phone?: string
   license_number?: string
   license_image_asset_id?: number
+  trademark_certificate_asset_id?: number
   address?: string
   region_id?: number
 }
@@ -147,7 +149,7 @@ export function updateGroupApplicationBasic(data: UpdateGroupApplicationBasicReq
 }
 
 export function deleteGroupApplicationDocument(
-  documentType: 'business_license' | 'id_card_front' | 'id_card_back'
+  documentType: 'business_license' | 'id_card_front' | 'id_card_back' | 'trademark_certificate'
 ) {
   return request<GroupApplicationResponse>({
     url: `/v1/groups/applications/documents/${documentType}`,
@@ -161,7 +163,7 @@ export function deleteGroupApplicationDocument(
 export async function ocrGroupBusinessLicense(filePath: string) {
   const { mediaId } = await uploadMedia(filePath, {
     businessType: 'group',
-    mediaCategory: 'business_license'
+    mediaCategory: 'group_license'
   })
   const draft = await getOrCreateGroupApplication()
   return enqueueOCRJobAndRefresh(
@@ -178,6 +180,20 @@ export async function ocrGroupBusinessLicense(filePath: string) {
       intervalMs: 1000
     }
   )
+}
+
+/**
+ * 上传集团注册商标证书
+ */
+export async function uploadGroupTrademarkCertificate(filePath: string) {
+  const { mediaId } = await uploadMedia(filePath, {
+    businessType: 'group',
+    mediaCategory: 'group_trademark_certificate'
+  })
+  await getOrCreateGroupApplication()
+  return updateGroupApplicationBasic({
+    trademark_certificate_asset_id: mediaId
+  })
 }
 
 /**

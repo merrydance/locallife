@@ -37,7 +37,7 @@ func TestPolicy_AllCategoriesAreRegistered(t *testing.T) {
 		CategoryMerchantLogo, CategoryStorefrontImage, CategoryEnvironmentImage, CategoryDishImage, CategoryComboImage,
 		CategoryTableImage, CategoryReviewImage, CategoryAvatar,
 		CategoryBusinessLicense, CategoryFoodPermit, CategoryIDCardFront,
-		CategoryIDCardBack, CategoryHealthCert, CategoryGroupLicense,
+		CategoryIDCardBack, CategoryHealthCert, CategoryGroupLicense, CategoryGroupTrademarkCertificate,
 		CategorySafetyReportImage, CategoryMerchantCancelWithdrawMaterial,
 	}
 	for _, cat := range known {
@@ -56,7 +56,7 @@ func TestPolicy_VisibilityMapping(t *testing.T) {
 	}
 	privateCats := []Category{
 		CategoryIDCardFront,
-		CategoryIDCardBack, CategoryHealthCert, CategoryGroupLicense,
+		CategoryIDCardBack, CategoryHealthCert, CategoryGroupLicense, CategoryGroupTrademarkCertificate,
 		CategorySafetyReportImage, CategoryMerchantCancelWithdrawMaterial,
 	}
 

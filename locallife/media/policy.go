@@ -24,6 +24,7 @@ const (
 	CategoryIDCardBack                     Category = "id_card_back"
 	CategoryHealthCert                     Category = "health_cert"
 	CategoryGroupLicense                   Category = "group_license"
+	CategoryGroupTrademarkCertificate      Category = "group_trademark_certificate"
 	CategorySafetyReportImage              Category = "safety_report"
 	CategoryMerchantCancelWithdrawMaterial Category = "merchant_cancel_withdraw"
 )
@@ -59,6 +60,7 @@ var registry = map[Category]categoryMeta{
 	CategoryIDCardBack:                     {VisibilityPrivate, "id_card/back", imageTypes},
 	CategoryHealthCert:                     {VisibilityPrivate, "rider/health_cert", imageTypes},
 	CategoryGroupLicense:                   {VisibilityPrivate, "group/license", imageTypes},
+	CategoryGroupTrademarkCertificate:      {VisibilityPrivate, "group/trademark_certificate", imageTypes},
 	CategorySafetyReportImage:              {VisibilityPrivate, "operator/safety", imageTypes},
 	CategoryMerchantCancelWithdrawMaterial: {VisibilityPrivate, "merchant/cancel_withdraw", imageTypes},
 }

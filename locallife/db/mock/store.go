@@ -1162,6 +1162,21 @@ func (mr *MockStoreMockRecorder) ClearGroupApplicationIDCardFront(ctx, id any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearGroupApplicationIDCardFront", reflect.TypeOf((*MockStore)(nil).ClearGroupApplicationIDCardFront), ctx, id)
 }
 
+// ClearGroupApplicationTrademarkCertificate mocks base method.
+func (m *MockStore) ClearGroupApplicationTrademarkCertificate(ctx context.Context, id int64) (db.MerchantGroupApplication, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClearGroupApplicationTrademarkCertificate", ctx, id)
+	ret0, _ := ret[0].(db.MerchantGroupApplication)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ClearGroupApplicationTrademarkCertificate indicates an expected call of ClearGroupApplicationTrademarkCertificate.
+func (mr *MockStoreMockRecorder) ClearGroupApplicationTrademarkCertificate(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearGroupApplicationTrademarkCertificate", reflect.TypeOf((*MockStore)(nil).ClearGroupApplicationTrademarkCertificate), ctx, id)
+}
+
 // ClearMerchantApplicationBusinessLicense mocks base method.
 func (m *MockStore) ClearMerchantApplicationBusinessLicense(ctx context.Context, id int64) (db.MerchantApplication, error) {
 	m.ctrl.T.Helper()

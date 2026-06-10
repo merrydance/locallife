@@ -40,9 +40,16 @@ func randomGroupApplicationWithData(userID int64) db.MerchantGroupApplication {
 	return app
 }
 
+func randomCompleteGroupApplication(userID int64) db.MerchantGroupApplication {
+	app := randomGroupApplicationWithData(userID)
+	app.ApplicationData = []byte(`{"business_license_ocr":{"status":"done","credit_code":"91310000123456789A"},"legal_person_name":"张三","legal_person_id_number":"110101199001011234","id_card_front_asset_id":22,"id_card_front_ocr":{"status":"done","name":"张三","id_number":"110101199001011234"},"id_card_back_asset_id":23,"id_card_back_ocr":{"status":"done","valid_date":"2035-01-01"},"trademark_certificate_asset_id":24}`)
+	return app
+}
+
 func groupTestMediaAsset(id, uploadedBy int64, category media.Category, uploadStatus string) db.MediaAsset {
 	visibility := string(media.VisibilityPublic)
-	if category == media.CategoryGroupLicense {
+	switch category {
+	case media.CategoryGroupLicense, media.CategoryGroupTrademarkCertificate:
 		visibility = string(media.VisibilityPrivate)
 	}
 	return db.MediaAsset{
@@ -158,6 +165,7 @@ func TestCreateGroupApplicationDraftAPI(t *testing.T) {
 func TestUpdateGroupApplicationBasicAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	licenseAssetID := int64(9001)
+	trademarkAssetID := int64(9002)
 
 	body := updateGroupApplicationBasicRequest{
 		GroupName:           strPtr("测试集团"),
@@ -168,6 +176,10 @@ func TestUpdateGroupApplicationBasicAPI(t *testing.T) {
 	}
 	noLicenseAssetBody := body
 	noLicenseAssetBody.LicenseImageAssetID = nil
+	trademarkBody := updateGroupApplicationBasicRequest{
+		TrademarkCertificateAssetID: &trademarkAssetID,
+	}
+	wrongTrademarkBody := trademarkBody
 
 	testCases := []struct {
 		name          string
@@ -205,6 +217,44 @@ func TestUpdateGroupApplicationBasicAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
+			},
+		},
+		{
+			name: "OKTrademarkCertificateAssetMergesApplicationData",
+			body: &trademarkBody,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomGroupApplication(user.ID)
+				store.EXPECT().
+					GetLatestGroupApplicationByApplicant(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), trademarkAssetID).
+					Times(1).
+					Return(groupTestMediaAsset(trademarkAssetID, user.ID, media.CategoryGroupTrademarkCertificate, "confirmed"), nil)
+
+				updated := app
+				updated.ApplicationData = []byte(`{"trademark_certificate_asset_id":9002}`)
+				store.EXPECT().
+					UpdateGroupApplicationBasic(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateGroupApplicationBasicParams{})).
+					Times(1).
+					DoAndReturn(func(_ any, arg db.UpdateGroupApplicationBasicParams) (db.MerchantGroupApplication, error) {
+						require.NotEmpty(t, arg.ApplicationData)
+						var patch map[string]int64
+						require.NoError(t, json.Unmarshal(arg.ApplicationData, &patch))
+						require.Equal(t, trademarkAssetID, patch["trademark_certificate_asset_id"])
+						return updated, nil
+					})
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp groupApplicationResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.NotNil(t, resp.TrademarkCertificateAssetID)
+				require.Equal(t, trademarkAssetID, *resp.TrademarkCertificateAssetID)
 			},
 		},
 		{
@@ -369,6 +419,30 @@ func TestUpdateGroupApplicationBasicAPI(t *testing.T) {
 			},
 		},
 		{
+			name: "RejectsWrongCategoryTrademarkCertificateBeforeMutation",
+			body: &wrongTrademarkBody,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomGroupApplication(user.ID)
+				store.EXPECT().
+					GetLatestGroupApplicationByApplicant(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), trademarkAssetID).
+					Times(1).
+					Return(groupTestMediaAsset(trademarkAssetID, user.ID, media.CategoryGroupLicense, "confirmed"), nil)
+				store.EXPECT().
+					UpdateGroupApplicationBasic(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
 			name: "MediaLookupFailureIsInternalAndDoesNotMutate",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -428,20 +502,23 @@ func TestUpdateGroupApplicationBasicAPI(t *testing.T) {
 
 func TestSubmitGroupApplicationAPI(t *testing.T) {
 	user, _ := randomUser(t)
+	consentBody := []byte(`{"user_agreement_version":"user-v1","privacy_policy_version":"privacy-v1","consented_at":"2026-06-10T12:00:00Z"}`)
 
 	testCases := []struct {
 		name          string
+		body          []byte
 		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
 		buildStubs    func(store *mockdb.MockStore)
-		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder, auditWriter *auditSpyWriter)
 	}{
 		{
 			name: "OK",
+			body: consentBody,
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				app := randomGroupApplication(user.ID)
+				app := randomCompleteGroupApplication(user.ID)
 				store.EXPECT().
 					GetLatestGroupApplicationByApplicant(gomock.Any(), user.ID).
 					Times(1).
@@ -454,8 +531,9 @@ func TestSubmitGroupApplicationAPI(t *testing.T) {
 					Times(1).
 					Return(updated, nil)
 			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder, auditWriter *auditSpyWriter) {
 				require.Equal(t, http.StatusOK, recorder.Code)
+				require.Len(t, auditWriter.Entries(), 1)
 			},
 		},
 		{
@@ -471,8 +549,9 @@ func TestSubmitGroupApplicationAPI(t *testing.T) {
 					Times(1).
 					Return(app, nil)
 			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder, auditWriter *auditSpyWriter) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Empty(t, auditWriter.Entries())
 			},
 		},
 		{
@@ -488,8 +567,97 @@ func TestSubmitGroupApplicationAPI(t *testing.T) {
 					Times(1).
 					Return(app, nil)
 			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder, auditWriter *auditSpyWriter) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Empty(t, auditWriter.Entries())
+			},
+		},
+		{
+			name: "MissingBusinessLicenseDocument",
+			body: consentBody,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomCompleteGroupApplication(user.ID)
+				app.LicenseMediaAssetID = pgtype.Int8{}
+				store.EXPECT().
+					GetLatestGroupApplicationByApplicant(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+				store.EXPECT().
+					SubmitGroupApplication(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder, auditWriter *auditSpyWriter) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Empty(t, auditWriter.Entries())
+			},
+		},
+		{
+			name: "MissingIDCardFrontDocument",
+			body: consentBody,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomCompleteGroupApplication(user.ID)
+				app.ApplicationData = []byte(`{"id_card_back_asset_id":23,"trademark_certificate_asset_id":24}`)
+				store.EXPECT().
+					GetLatestGroupApplicationByApplicant(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+				store.EXPECT().
+					SubmitGroupApplication(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder, auditWriter *auditSpyWriter) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Empty(t, auditWriter.Entries())
+			},
+		},
+		{
+			name: "MissingIDCardBackDocument",
+			body: consentBody,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomCompleteGroupApplication(user.ID)
+				app.ApplicationData = []byte(`{"id_card_front_asset_id":22,"trademark_certificate_asset_id":24}`)
+				store.EXPECT().
+					GetLatestGroupApplicationByApplicant(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+				store.EXPECT().
+					SubmitGroupApplication(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder, auditWriter *auditSpyWriter) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Empty(t, auditWriter.Entries())
+			},
+		},
+		{
+			name: "MissingTrademarkCertificateDocument",
+			body: consentBody,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomCompleteGroupApplication(user.ID)
+				app.ApplicationData = []byte(`{"id_card_front_asset_id":22,"id_card_back_asset_id":23}`)
+				store.EXPECT().
+					GetLatestGroupApplicationByApplicant(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+				store.EXPECT().
+					SubmitGroupApplication(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder, auditWriter *auditSpyWriter) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Empty(t, auditWriter.Entries())
 			},
 		},
 	}
@@ -504,14 +672,25 @@ func TestSubmitGroupApplicationAPI(t *testing.T) {
 			tc.buildStubs(store)
 
 			server := newTestServer(t, store)
+			auditWriter := &auditSpyWriter{}
+			server.auditWriter = auditWriter
 			recorder := httptest.NewRecorder()
 
-			request, err := http.NewRequest(http.MethodPost, "/v1/groups/applications/submit", nil)
+			var body *bytes.Reader
+			if tc.body != nil {
+				body = bytes.NewReader(tc.body)
+			} else {
+				body = bytes.NewReader(nil)
+			}
+			request, err := http.NewRequest(http.MethodPost, "/v1/groups/applications/submit", body)
 			require.NoError(t, err)
+			if tc.body != nil {
+				request.Header.Set("Content-Type", "application/json")
+			}
 
 			tc.setupAuth(t, request, server.tokenMaker)
 			server.router.ServeHTTP(recorder, request)
-			tc.checkResponse(t, recorder)
+			tc.checkResponse(t, recorder, auditWriter)
 		})
 	}
 }
@@ -811,6 +990,41 @@ func TestDeleteGroupApplicationDocumentAPI(t *testing.T) {
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Nil(t, resp.IDCardBackAssetID)
 				require.Nil(t, resp.IDCardBackOCR)
+			},
+		},
+		{
+			name:         "OKTrademarkCertificate",
+			documentType: "trademark_certificate",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomCompleteGroupApplication(user.ID)
+				updated := app
+				updated.ApplicationData = []byte(`{"business_license_ocr":{"status":"done","credit_code":"91310000123456789A"},"legal_person_name":"张三","legal_person_id_number":"110101199001011234","id_card_front_asset_id":22,"id_card_front_ocr":{"status":"done","name":"张三"},"id_card_back_asset_id":23,"id_card_back_ocr":{"status":"done","valid_date":"2035-01-01"}}`)
+
+				store.EXPECT().
+					GetLatestGroupApplicationByApplicant(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+				store.EXPECT().
+					ClearGroupApplicationTrademarkCertificate(gomock.Any(), app.ID).
+					Times(1).
+					Return(updated, nil)
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), int64(24)).
+					Times(1).
+					Return(db.MediaAsset{ID: 24, UploadedBy: user.ID}, nil)
+				store.EXPECT().
+					SoftDeleteMediaAsset(gomock.Any(), int64(24)).
+					Times(1).
+					Return(db.MediaAsset{ID: 24, UploadedBy: user.ID}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp groupApplicationResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Nil(t, resp.TrademarkCertificateAssetID)
 			},
 		},
 		{

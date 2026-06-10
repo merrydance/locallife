@@ -105,6 +105,53 @@ func TestUpdateGroupApplicationLicenseMergesApplicationDataPatch(t *testing.T) {
 	require.Equal(t, int64(233), idCardAssetID)
 }
 
+func TestUpdateGroupApplicationBasicMergesAndClearsTrademarkCertificatePatch(t *testing.T) {
+	user := createRandomUser(t)
+	app, err := testStore.CreateGroupApplicationDraft(context.Background(), user.ID)
+	require.NoError(t, err)
+
+	app, err = testStore.UpdateGroupApplicationLicense(context.Background(), UpdateGroupApplicationLicenseParams{
+		ID: app.ID,
+		ApplicationData: []byte(`{
+			"id_card_front_asset_id": 233,
+			"id_card_front_ocr": {
+				"status": "done",
+				"ocr_job_id": 502,
+				"name": "张三",
+				"id_number": "110101199001011234"
+			}
+		}`),
+	})
+	require.NoError(t, err)
+
+	app, err = testStore.UpdateGroupApplicationBasic(context.Background(), UpdateGroupApplicationBasicParams{
+		ID:              app.ID,
+		GroupName:       "group_" + util.RandomString(8),
+		ContactPhone:    "13800138000",
+		ApplicationData: []byte(`{"trademark_certificate_asset_id":24}`),
+	})
+	require.NoError(t, err)
+
+	var merged map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(app.ApplicationData, &merged))
+	require.Contains(t, merged, "id_card_front_asset_id")
+	require.Contains(t, merged, "id_card_front_ocr")
+	require.Contains(t, merged, "trademark_certificate_asset_id")
+
+	var trademarkAssetID int64
+	require.NoError(t, json.Unmarshal(merged["trademark_certificate_asset_id"], &trademarkAssetID))
+	require.Equal(t, int64(24), trademarkAssetID)
+
+	app, err = testStore.ClearGroupApplicationTrademarkCertificate(context.Background(), app.ID)
+	require.NoError(t, err)
+
+	var cleared map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(app.ApplicationData, &cleared))
+	require.Contains(t, cleared, "id_card_front_asset_id")
+	require.Contains(t, cleared, "id_card_front_ocr")
+	require.NotContains(t, cleared, "trademark_certificate_asset_id")
+}
+
 func TestCreateGroupApplicationDraftIsIdempotentForActiveDraft(t *testing.T) {
 	ctx := context.Background()
 	user := createRandomUser(t)

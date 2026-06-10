@@ -53,7 +53,7 @@
       </view>
       <view class="requirement-tip">
         <t-icon name="info-circle" size="28rpx" />
-        <text>集团入驻需提供申请人身份证信息。系统会自动识别负责人姓名，审核时继续核验证件原图。</text>
+        <text>集团入驻需提供营业执照、负责人身份证正反面和注册商标证书，审核时会核验证件原图。</text>
       </view>
     </view>
 
@@ -92,8 +92,7 @@
 
       <view class="upload-section">
         <view class="label-row">
-          <text class="label">营业执照 (选填)</text>
-          <text class="hint">若无执照可暂跳过</text>
+          <text class="label required">营业执照</text>
         </view>
         <document-uploader
           type="license"
@@ -105,6 +104,23 @@
           feedbackDescription="{{uploadFeedback.license.description}}"
           bind:change="onLicenseUpload"
           bind:remove="onLicenseRemove"
+        />
+      </view>
+
+      <view class="upload-section">
+        <view class="label-row">
+          <text class="label required">注册商标证书</text>
+        </view>
+        <document-uploader
+          type="license"
+          title="点击上传注册商标证书"
+          value="{{trademark.url}}"
+          rawUrl="{{trademark.rawUrl}}"
+          feedbackState="{{uploadFeedback.trademark.state}}"
+          feedbackTitle="{{uploadFeedback.trademark.title}}"
+          feedbackDescription="{{uploadFeedback.trademark.description}}"
+          bind:change="onTrademarkUpload"
+          bind:remove="onTrademarkRemove"
         />
       </view>
     </view>
@@ -158,7 +174,8 @@
         <t-cell title="申请机构" note="{{formData.groupName}}" />
         <t-cell title="联系电话" note="{{formData.contactPhone}}" />
         <t-cell title="负责人" note="{{formData.legalPerson || (ocrDisplayState.identity === 'processing' ? '身份证识别中' : '待审核核验')}}" />
-        <t-cell title="是否有执照" note="{{license.url ? '是' : '否'}}" />
+        <t-cell title="营业执照" note="{{license.assetId || license.url ? '已上传' : '未上传'}}" />
+        <t-cell title="注册商标证书" note="{{trademark.assetId || trademark.url ? '已上传' : '未上传'}}" />
       </view>
     </view>
 

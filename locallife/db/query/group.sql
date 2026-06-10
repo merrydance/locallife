@@ -32,6 +32,10 @@ SET group_name = COALESCE($2, group_name),
     license_media_asset_id = COALESCE($5, license_media_asset_id),
     address = COALESCE($6, address),
     region_id = COALESCE($7, region_id),
+    application_data = CASE
+      WHEN sqlc.arg('application_data')::jsonb IS NULL THEN application_data
+      ELSE COALESCE(application_data, '{}'::jsonb) || sqlc.arg('application_data')::jsonb
+    END,
     updated_at = now()
 WHERE id = $1
 RETURNING *;
@@ -73,6 +77,14 @@ UPDATE merchant_group_applications
 SET application_data = COALESCE(application_data, '{}'::jsonb)
       - 'id_card_back_asset_id'
       - 'id_card_back_ocr',
+    updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING *;
+
+-- name: ClearGroupApplicationTrademarkCertificate :one
+UPDATE merchant_group_applications
+SET application_data = COALESCE(application_data, '{}'::jsonb)
+      - 'trademark_certificate_asset_id',
     updated_at = now()
 WHERE id = $1 AND status = 'draft'
 RETURNING *;

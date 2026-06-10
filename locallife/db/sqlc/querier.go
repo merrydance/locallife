@@ -105,6 +105,7 @@ type Querier interface {
 	ClearGroupApplicationBusinessLicense(ctx context.Context, id int64) (MerchantGroupApplication, error)
 	ClearGroupApplicationIDCardBack(ctx context.Context, id int64) (MerchantGroupApplication, error)
 	ClearGroupApplicationIDCardFront(ctx context.Context, id int64) (MerchantGroupApplication, error)
+	ClearGroupApplicationTrademarkCertificate(ctx context.Context, id int64) (MerchantGroupApplication, error)
 	// 清空营业执照关联和 OCR 结果
 	ClearMerchantApplicationBusinessLicense(ctx context.Context, id int64) (MerchantApplication, error)
 	// 清空食品经营许可证关联和 OCR 结果

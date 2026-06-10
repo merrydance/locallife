@@ -22,37 +22,39 @@ import (
 // ==================== Group Application ====================
 
 type groupApplicationResponse struct {
-	ID                  int64                   `json:"id"`
-	ApplicantUserID     int64                   `json:"applicant_user_id"`
-	GroupName           string                  `json:"group_name"`
-	ContactPhone        string                  `json:"contact_phone"`
-	LicenseNumber       *string                 `json:"license_number,omitempty"`
-	LicenseImageAssetID *int64                  `json:"license_image_asset_id,omitempty"`
-	BusinessLicenseOCR  *BusinessLicenseOCRData `json:"business_license_ocr,omitempty"`
-	LegalPersonName     string                  `json:"legal_person_name,omitempty"`
-	LegalPersonIDNumber string                  `json:"legal_person_id_number,omitempty"`
-	IDCardFrontAssetID  *int64                  `json:"id_card_front_asset_id,omitempty"`
-	IDCardBackAssetID   *int64                  `json:"id_card_back_asset_id,omitempty"`
-	IDCardFrontOCR      *MerchantIDCardOCRData  `json:"id_card_front_ocr,omitempty"`
-	IDCardBackOCR       *MerchantIDCardOCRData  `json:"id_card_back_ocr,omitempty"`
-	Address             *string                 `json:"address,omitempty"`
-	RegionID            *int64                  `json:"region_id,omitempty"`
-	Status              string                  `json:"status"`
-	RejectReason        *string                 `json:"reject_reason,omitempty"`
-	ReviewedBy          *int64                  `json:"reviewed_by,omitempty"`
-	ReviewedAt          *time.Time              `json:"reviewed_at,omitempty"`
-	CreatedAt           time.Time               `json:"created_at"`
-	UpdatedAt           time.Time               `json:"updated_at"`
+	ID                          int64                   `json:"id"`
+	ApplicantUserID             int64                   `json:"applicant_user_id"`
+	GroupName                   string                  `json:"group_name"`
+	ContactPhone                string                  `json:"contact_phone"`
+	LicenseNumber               *string                 `json:"license_number,omitempty"`
+	LicenseImageAssetID         *int64                  `json:"license_image_asset_id,omitempty"`
+	BusinessLicenseOCR          *BusinessLicenseOCRData `json:"business_license_ocr,omitempty"`
+	LegalPersonName             string                  `json:"legal_person_name,omitempty"`
+	LegalPersonIDNumber         string                  `json:"legal_person_id_number,omitempty"`
+	IDCardFrontAssetID          *int64                  `json:"id_card_front_asset_id,omitempty"`
+	IDCardBackAssetID           *int64                  `json:"id_card_back_asset_id,omitempty"`
+	IDCardFrontOCR              *MerchantIDCardOCRData  `json:"id_card_front_ocr,omitempty"`
+	IDCardBackOCR               *MerchantIDCardOCRData  `json:"id_card_back_ocr,omitempty"`
+	TrademarkCertificateAssetID *int64                  `json:"trademark_certificate_asset_id,omitempty"`
+	Address                     *string                 `json:"address,omitempty"`
+	RegionID                    *int64                  `json:"region_id,omitempty"`
+	Status                      string                  `json:"status"`
+	RejectReason                *string                 `json:"reject_reason,omitempty"`
+	ReviewedBy                  *int64                  `json:"reviewed_by,omitempty"`
+	ReviewedAt                  *time.Time              `json:"reviewed_at,omitempty"`
+	CreatedAt                   time.Time               `json:"created_at"`
+	UpdatedAt                   time.Time               `json:"updated_at"`
 }
 
 type groupApplicationDataPayload struct {
-	BusinessLicenseOCR  *BusinessLicenseOCRData `json:"business_license_ocr,omitempty"`
-	LegalPersonName     string                  `json:"legal_person_name,omitempty"`
-	LegalPersonIDNumber string                  `json:"legal_person_id_number,omitempty"`
-	IDCardFrontAssetID  *int64                  `json:"id_card_front_asset_id,omitempty"`
-	IDCardBackAssetID   *int64                  `json:"id_card_back_asset_id,omitempty"`
-	IDCardFrontOCR      *MerchantIDCardOCRData  `json:"id_card_front_ocr,omitempty"`
-	IDCardBackOCR       *MerchantIDCardOCRData  `json:"id_card_back_ocr,omitempty"`
+	BusinessLicenseOCR          *BusinessLicenseOCRData `json:"business_license_ocr,omitempty"`
+	LegalPersonName             string                  `json:"legal_person_name,omitempty"`
+	LegalPersonIDNumber         string                  `json:"legal_person_id_number,omitempty"`
+	IDCardFrontAssetID          *int64                  `json:"id_card_front_asset_id,omitempty"`
+	IDCardBackAssetID           *int64                  `json:"id_card_back_asset_id,omitempty"`
+	IDCardFrontOCR              *MerchantIDCardOCRData  `json:"id_card_front_ocr,omitempty"`
+	IDCardBackOCR               *MerchantIDCardOCRData  `json:"id_card_back_ocr,omitempty"`
+	TrademarkCertificateAssetID *int64                  `json:"trademark_certificate_asset_id,omitempty"`
 }
 
 type groupResponse struct {
@@ -129,10 +131,13 @@ type groupTemplateResponse struct {
 type groupApplicationDocumentType string
 
 const (
-	groupApplicationDocumentBusinessLicense groupApplicationDocumentType = "business_license"
-	groupApplicationDocumentIDCardFront     groupApplicationDocumentType = "id_card_front"
-	groupApplicationDocumentIDCardBack      groupApplicationDocumentType = "id_card_back"
+	groupApplicationDocumentBusinessLicense      groupApplicationDocumentType = "business_license"
+	groupApplicationDocumentIDCardFront          groupApplicationDocumentType = "id_card_front"
+	groupApplicationDocumentIDCardBack           groupApplicationDocumentType = "id_card_back"
+	groupApplicationDocumentTrademarkCertificate groupApplicationDocumentType = "trademark_certificate"
 )
+
+var errGroupApplicationRequiredDocumentsMissing = errors.New("请上传营业执照、负责人身份证正反面和注册商标证书后再提交")
 
 type brandTemplateResponse struct {
 	ID        int64     `json:"id"`
@@ -180,6 +185,7 @@ func newGroupApplicationResponse(app db.MerchantGroupApplication) (groupApplicat
 	resp.IDCardBackAssetID = payload.IDCardBackAssetID
 	resp.IDCardFrontOCR = payload.IDCardFrontOCR
 	resp.IDCardBackOCR = payload.IDCardBackOCR
+	resp.TrademarkCertificateAssetID = payload.TrademarkCertificateAssetID
 	return resp, nil
 }
 
@@ -373,12 +379,13 @@ func (server *Server) getOrCreateGroupApplicationDraft(ctx *gin.Context) {
 }
 
 type updateGroupApplicationBasicRequest struct {
-	GroupName           *string `json:"group_name,omitempty"`
-	ContactPhone        *string `json:"contact_phone,omitempty"`
-	LicenseNumber       *string `json:"license_number,omitempty"`
-	LicenseImageAssetID *int64  `json:"license_image_asset_id,omitempty"`
-	Address             *string `json:"address,omitempty"`
-	RegionID            *int64  `json:"region_id,omitempty"`
+	GroupName                   *string `json:"group_name,omitempty"`
+	ContactPhone                *string `json:"contact_phone,omitempty"`
+	LicenseNumber               *string `json:"license_number,omitempty"`
+	LicenseImageAssetID         *int64  `json:"license_image_asset_id,omitempty"`
+	TrademarkCertificateAssetID *int64  `json:"trademark_certificate_asset_id,omitempty"`
+	Address                     *string `json:"address,omitempty"`
+	RegionID                    *int64  `json:"region_id,omitempty"`
 }
 
 // updateGroupApplicationBasic godoc
@@ -420,7 +427,18 @@ func (server *Server) updateGroupApplicationBasic(ctx *gin.Context) {
 	}
 
 	if req.LicenseImageAssetID != nil {
-		status, err := server.validateGroupApplicationLicenseMediaAsset(ctx, authPayload.UserID, *req.LicenseImageAssetID)
+		status, err := server.validateGroupApplicationDocumentMediaAsset(ctx, authPayload.UserID, *req.LicenseImageAssetID, expectedGroupApplicationOCRMediaCategories(ocr.DocumentTypeBusinessLicense, ocr.DocumentSideUnknown))
+		if err != nil {
+			if status == http.StatusInternalServerError {
+				ctx.JSON(status, internalError(ctx, err))
+				return
+			}
+			ctx.JSON(status, errorResponse(err))
+			return
+		}
+	}
+	if req.TrademarkCertificateAssetID != nil {
+		status, err := server.validateGroupApplicationDocumentMediaAsset(ctx, authPayload.UserID, *req.TrademarkCertificateAssetID, []media.Category{media.CategoryGroupTrademarkCertificate})
 		if err != nil {
 			if status == http.StatusInternalServerError {
 				ctx.JSON(status, internalError(ctx, err))
@@ -446,6 +464,16 @@ func (server *Server) updateGroupApplicationBasic(ctx *gin.Context) {
 	if req.ContactPhone != nil {
 		contactPhone = *req.ContactPhone
 	}
+	var applicationData []byte
+	if req.TrademarkCertificateAssetID != nil {
+		applicationData, err = marshalGroupApplicationDataPatch(map[string]any{
+			"trademark_certificate_asset_id": *req.TrademarkCertificateAssetID,
+		})
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+	}
 
 	update := db.UpdateGroupApplicationBasicParams{
 		ID:                  app.ID,
@@ -455,6 +483,7 @@ func (server *Server) updateGroupApplicationBasic(ctx *gin.Context) {
 		LicenseMediaAssetID: toPgInt8(req.LicenseImageAssetID),
 		Address:             toPgText(req.Address),
 		RegionID:            toPgInt8(req.RegionID),
+		ApplicationData:     applicationData,
 	}
 
 	updated, err := server.store.UpdateGroupApplicationBasic(ctx, update)
@@ -466,7 +495,7 @@ func (server *Server) updateGroupApplicationBasic(ctx *gin.Context) {
 	server.writeGroupApplicationResponse(ctx, http.StatusOK, updated)
 }
 
-func (server *Server) validateGroupApplicationLicenseMediaAsset(ctx *gin.Context, applicantUserID, mediaAssetID int64) (int, error) {
+func (server *Server) validateGroupApplicationDocumentMediaAsset(ctx *gin.Context, applicantUserID, mediaAssetID int64, expectedCategories []media.Category) (int, error) {
 	asset, err := server.store.GetMediaAssetByID(ctx, mediaAssetID)
 	if err != nil {
 		if isNotFoundError(err) {
@@ -480,17 +509,37 @@ func (server *Server) validateGroupApplicationLicenseMediaAsset(ctx *gin.Context
 	if strings.ToLower(strings.TrimSpace(asset.UploadStatus)) != "confirmed" {
 		return http.StatusBadRequest, errOCRMediaNotConfirmed
 	}
-	if !ocrMediaCategoryAllowed(asset.MediaCategory, expectedGroupApplicationOCRMediaCategories(ocr.DocumentTypeBusinessLicense, ocr.DocumentSideUnknown)) {
+	if !ocrMediaCategoryAllowed(asset.MediaCategory, expectedCategories) {
 		return http.StatusBadRequest, errOCRMediaWrongCategory
 	}
 	return 0, nil
+}
+
+func validateGroupApplicationSubmitDocuments(app db.MerchantGroupApplication) error {
+	resp, err := newGroupApplicationResponse(app)
+	if err != nil {
+		return err
+	}
+	if resp.LicenseImageAssetID == nil || *resp.LicenseImageAssetID <= 0 {
+		return errGroupApplicationRequiredDocumentsMissing
+	}
+	if resp.IDCardFrontAssetID == nil || *resp.IDCardFrontAssetID <= 0 {
+		return errGroupApplicationRequiredDocumentsMissing
+	}
+	if resp.IDCardBackAssetID == nil || *resp.IDCardBackAssetID <= 0 {
+		return errGroupApplicationRequiredDocumentsMissing
+	}
+	if resp.TrademarkCertificateAssetID == nil || *resp.TrademarkCertificateAssetID <= 0 {
+		return errGroupApplicationRequiredDocumentsMissing
+	}
+	return nil
 }
 
 func (server *Server) deleteGroupApplicationDocumentByType(ctx *gin.Context, documentType groupApplicationDocumentType) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	switch documentType {
-	case groupApplicationDocumentBusinessLicense, groupApplicationDocumentIDCardFront, groupApplicationDocumentIDCardBack:
+	case groupApplicationDocumentBusinessLicense, groupApplicationDocumentIDCardFront, groupApplicationDocumentIDCardBack, groupApplicationDocumentTrademarkCertificate:
 	default:
 		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid document type")))
 		return
@@ -540,11 +589,16 @@ func (server *Server) deleteGroupApplicationDocumentByType(ctx *gin.Context, doc
 			assetID = *resp.IDCardFrontAssetID
 		}
 		updated, err = server.store.ClearGroupApplicationIDCardFront(ctx, app.ID)
-	default:
+	case groupApplicationDocumentIDCardBack:
 		if resp.IDCardBackAssetID != nil {
 			assetID = *resp.IDCardBackAssetID
 		}
 		updated, err = server.store.ClearGroupApplicationIDCardBack(ctx, app.ID)
+	default:
+		if resp.TrademarkCertificateAssetID != nil {
+			assetID = *resp.TrademarkCertificateAssetID
+		}
+		updated, err = server.store.ClearGroupApplicationTrademarkCertificate(ctx, app.ID)
 	}
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -562,10 +616,10 @@ func (server *Server) deleteGroupApplicationDocumentByType(ctx *gin.Context, doc
 
 // deleteGroupApplicationDocument godoc
 // @Summary 删除集团申请证照
-// @Description 删除集团草稿中的单个证照绑定，并清空对应 OCR 结果。支持证照类型：business_license、id_card_front、id_card_back。
+// @Description 删除集团草稿中的单个证照绑定，并清空对应 OCR 结果。支持证照类型：business_license、id_card_front、id_card_back、trademark_certificate。
 // @Tags 集团申请
 // @Produce json
-// @Param document_type path string true "证照类型: business_license|id_card_front|id_card_back"
+// @Param document_type path string true "证照类型: business_license|id_card_front|id_card_back|trademark_certificate"
 // @Success 200 {object} groupApplicationResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 401 {object} ErrorResponse
@@ -614,6 +668,14 @@ func (server *Server) submitGroupApplication(ctx *gin.Context) {
 	}
 	if app.GroupName == "" || app.ContactPhone == "" {
 		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("group_name and contact_phone are required")))
+		return
+	}
+	if err := validateGroupApplicationSubmitDocuments(app); err != nil {
+		if errors.Is(err, errGroupApplicationRequiredDocumentsMissing) {
+			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 

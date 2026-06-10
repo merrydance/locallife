@@ -200,6 +200,38 @@ func (q *Queries) ClearGroupApplicationIDCardFront(ctx context.Context, id int64
 	return i, err
 }
 
+const clearGroupApplicationTrademarkCertificate = `-- name: ClearGroupApplicationTrademarkCertificate :one
+UPDATE merchant_group_applications
+SET application_data = COALESCE(application_data, '{}'::jsonb)
+      - 'trademark_certificate_asset_id',
+    updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING id, applicant_user_id, group_name, contact_phone, license_number, address, region_id, status, reject_reason, reviewed_by, reviewed_at, application_data, created_at, updated_at, license_media_asset_id
+`
+
+func (q *Queries) ClearGroupApplicationTrademarkCertificate(ctx context.Context, id int64) (MerchantGroupApplication, error) {
+	row := q.db.QueryRow(ctx, clearGroupApplicationTrademarkCertificate, id)
+	var i MerchantGroupApplication
+	err := row.Scan(
+		&i.ID,
+		&i.ApplicantUserID,
+		&i.GroupName,
+		&i.ContactPhone,
+		&i.LicenseNumber,
+		&i.Address,
+		&i.RegionID,
+		&i.Status,
+		&i.RejectReason,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.ApplicationData,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.LicenseMediaAssetID,
+	)
+	return i, err
+}
+
 const createBrandMenuTemplate = `-- name: CreateBrandMenuTemplate :one
 INSERT INTO brand_menu_templates (brand_id, payload, version, status)
 VALUES ($1, $2, $3, $4)
@@ -1230,6 +1262,10 @@ SET group_name = COALESCE($2, group_name),
     license_media_asset_id = COALESCE($5, license_media_asset_id),
     address = COALESCE($6, address),
     region_id = COALESCE($7, region_id),
+    application_data = CASE
+      WHEN $8::jsonb IS NULL THEN application_data
+      ELSE COALESCE(application_data, '{}'::jsonb) || $8::jsonb
+    END,
     updated_at = now()
 WHERE id = $1
 RETURNING id, applicant_user_id, group_name, contact_phone, license_number, address, region_id, status, reject_reason, reviewed_by, reviewed_at, application_data, created_at, updated_at, license_media_asset_id
@@ -1243,6 +1279,7 @@ type UpdateGroupApplicationBasicParams struct {
 	LicenseMediaAssetID pgtype.Int8 `json:"license_media_asset_id"`
 	Address             pgtype.Text `json:"address"`
 	RegionID            pgtype.Int8 `json:"region_id"`
+	ApplicationData     []byte      `json:"application_data"`
 }
 
 func (q *Queries) UpdateGroupApplicationBasic(ctx context.Context, arg UpdateGroupApplicationBasicParams) (MerchantGroupApplication, error) {
@@ -1254,6 +1291,7 @@ func (q *Queries) UpdateGroupApplicationBasic(ctx context.Context, arg UpdateGro
 		arg.LicenseMediaAssetID,
 		arg.Address,
 		arg.RegionID,
+		arg.ApplicationData,
 	)
 	var i MerchantGroupApplication
 	err := row.Scan(

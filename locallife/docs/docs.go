@@ -6618,7 +6618,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "删除集团草稿中的单个证照绑定，并清空对应 OCR 结果。支持证照类型：business_license、id_card_front、id_card_back。",
+                "description": "删除集团草稿中的单个证照绑定，并清空对应 OCR 结果。支持证照类型：business_license、id_card_front、id_card_back、trademark_certificate。",
                 "produces": [
                     "application/json"
                 ],
@@ -6629,7 +6629,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "证照类型: business_license|id_card_front|id_card_back",
+                        "description": "证照类型: business_license|id_card_front|id_card_back|trademark_certificate",
                         "name": "document_type",
                         "in": "path",
                         "required": true
@@ -37184,6 +37184,9 @@ const docTemplate = `{
                 "status": {
                     "type": "string"
                 },
+                "trademark_certificate_asset_id": {
+                    "type": "integer"
+                },
                 "updated_at": {
                     "type": "string"
                 }
@@ -46129,6 +46132,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "region_id": {
+                    "type": "integer"
+                },
+                "trademark_certificate_asset_id": {
                     "type": "integer"
                 }
             }

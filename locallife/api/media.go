@@ -251,7 +251,8 @@ func isPrivateDocumentMediaModerationExempt(category string) bool {
 	case string(media.CategoryIDCardFront),
 		string(media.CategoryIDCardBack),
 		string(media.CategoryHealthCert),
-		string(media.CategoryGroupLicense):
+		string(media.CategoryGroupLicense),
+		string(media.CategoryGroupTrademarkCertificate):
 		return true
 	default:
 		return false
