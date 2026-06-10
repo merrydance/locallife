@@ -30,8 +30,12 @@ assert(
   'display config form builder should read auto_accept_paid_orders from backend response'
 )
 assert(
-  /auto_accept_paid_orders:\s*this\.data\.settingsForm\.auto_accept_paid_orders/.test(pageTsSource),
-  'display config save payload should submit auto_accept_paid_orders'
+  /field === 'enable_print' && !nextValue[\s\S]*auto_accept_paid_orders:\s*false/.test(pageTsSource),
+  'display config page should clear auto_accept_paid_orders in local draft when print is disabled'
+)
+assert(
+  /auto_accept_paid_orders:\s*this\.data\.settingsForm\.enable_print\s*&&\s*this\.data\.settingsForm\.auto_accept_paid_orders/.test(pageTsSource),
+  'display config save payload should force auto_accept_paid_orders=false when print is disabled'
 )
 assert(
   pageWxmlSource.includes('title="自动接单"') &&

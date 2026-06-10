@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/cloudprint"
 	mockdb "github.com/merrydance/locallife/db/mock"
@@ -1608,12 +1609,12 @@ func TestUpdateDisplayConfigAPI(t *testing.T) {
 
 				updatedConfig := config
 				updatedConfig.EnablePrint = false
-				updatedConfig.AutoAcceptPaidOrders = true
+				updatedConfig.AutoAcceptPaidOrders = false
 				store.EXPECT().
 					UpdateOrderDisplayConfig(gomock.Any(), gomock.Any()).
 					DoAndReturn(func(_ context.Context, arg db.UpdateOrderDisplayConfigParams) (db.OrderDisplayConfig, error) {
 						require.True(t, arg.AutoAcceptPaidOrders.Valid)
-						require.True(t, arg.AutoAcceptPaidOrders.Bool)
+						require.False(t, arg.AutoAcceptPaidOrders.Bool)
 						require.False(t, arg.EnableVoice.Valid)
 						require.False(t, arg.VoiceTakeout.Valid)
 						require.False(t, arg.VoiceDineIn.Valid)
@@ -1627,10 +1628,82 @@ func TestUpdateDisplayConfigAPI(t *testing.T) {
 				var response getDisplayConfigResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, false, response.EnablePrint)
-				require.Equal(t, true, response.AutoAcceptPaidOrders)
+				require.Equal(t, false, response.AutoAcceptPaidOrders)
 				require.Equal(t, config.EnableVoice, response.EnableVoice)
 				require.Equal(t, config.VoiceTakeout, response.VoiceTakeout)
 				require.Equal(t, config.VoiceDineIn, response.VoiceDineIn)
+			},
+		},
+		{
+			name: "OK_UpdateExistingPrintAlreadyDisabledForcesAutoAcceptOff",
+			body: map[string]interface{}{
+				"auto_accept_paid_orders": true,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				existingConfig := config
+				existingConfig.EnablePrint = false
+				existingConfig.AutoAcceptPaidOrders = false
+				store.EXPECT().
+					GetOrderDisplayConfigByMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
+					Times(1).
+					Return(existingConfig, nil)
+
+				updatedConfig := existingConfig
+				updatedConfig.AutoAcceptPaidOrders = false
+				store.EXPECT().
+					UpdateOrderDisplayConfig(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, arg db.UpdateOrderDisplayConfigParams) (db.OrderDisplayConfig, error) {
+						require.False(t, arg.EnablePrint.Valid)
+						require.True(t, arg.AutoAcceptPaidOrders.Valid)
+						require.False(t, arg.AutoAcceptPaidOrders.Bool)
+						return updatedConfig, nil
+					}).
+					Times(1)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var response getDisplayConfigResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Equal(t, false, response.EnablePrint)
+				require.Equal(t, false, response.AutoAcceptPaidOrders)
+			},
+		},
+		{
+			name: "Conflict_DBRejectsPrintDisabledAutoAcceptDrift",
+			body: map[string]interface{}{
+				"auto_accept_paid_orders": true,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				existingConfig := config
+				existingConfig.EnablePrint = true
+				existingConfig.AutoAcceptPaidOrders = false
+				store.EXPECT().
+					GetOrderDisplayConfigByMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
+					Times(1).
+					Return(existingConfig, nil)
+
+				store.EXPECT().
+					UpdateOrderDisplayConfig(gomock.Any(), gomock.Any()).
+					Return(db.OrderDisplayConfig{}, &pgconn.PgError{
+						Code:           "23514",
+						ConstraintName: "order_display_configs_print_auto_accept_check",
+					}).
+					Times(1)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusConflict, recorder.Code)
+				require.Contains(t, recorder.Body.String(), "关闭打印")
 			},
 		},
 		{
@@ -1671,6 +1744,44 @@ func TestUpdateDisplayConfigAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
+			},
+		},
+		{
+			name: "OK_CreateNewWithPrintDisabledForcesAutoAcceptOff",
+			body: map[string]interface{}{
+				"enable_print":            false,
+				"auto_accept_paid_orders": true,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetOrderDisplayConfigByMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
+					Times(1).
+					Return(db.OrderDisplayConfig{}, db.ErrRecordNotFound)
+
+				newConfig := config
+				newConfig.EnablePrint = false
+				newConfig.AutoAcceptPaidOrders = false
+				store.EXPECT().
+					CreateOrderDisplayConfig(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, arg db.CreateOrderDisplayConfigParams) (db.OrderDisplayConfig, error) {
+						require.False(t, arg.EnablePrint)
+						require.False(t, arg.AutoAcceptPaidOrders)
+						return newConfig, nil
+					}).
+					Times(1)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var response getDisplayConfigResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Equal(t, false, response.EnablePrint)
+				require.Equal(t, false, response.AutoAcceptPaidOrders)
 			},
 		},
 		{

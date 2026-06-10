@@ -10918,7 +10918,7 @@ const docTemplate = `{
                         "Bearer": []
                     }
                 ],
-                "description": "商户更新订单展示配置，包括打印、自动接单、KDS等设置；语音字段仅兼容旧客户端请求并保持为 no-op",
+                "description": "商户更新订单展示配置，包括打印、自动接单、KDS等设置；关闭打印时自动接单会同步关闭；语音字段仅兼容旧客户端请求并保持为 no-op",
                 "consumes": [
                     "application/json"
                 ],
@@ -10963,6 +10963,13 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "商户不存在",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "409": {
+                        "description": "配置状态冲突",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true

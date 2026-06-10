@@ -12,13 +12,16 @@ import (
 	"github.com/merrydance/locallife/token"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const (
-	printerTypeFeieyun   = string(cloudprint.ProviderFeieyun)
-	printerTypeYilianyun = string(cloudprint.ProviderYilianyun)
-	printerTypeShangpeng = string(cloudprint.ProviderShangpeng)
+	orderDisplayConfigPrintAutoAcceptConstraint = "order_display_configs_print_auto_accept_check"
+	orderDisplayConfigPrintAutoAcceptMessage    = "关闭打印后不能启用自动接单，请刷新设置后重试"
+	printerTypeFeieyun                          = string(cloudprint.ProviderFeieyun)
+	printerTypeYilianyun                        = string(cloudprint.ProviderYilianyun)
+	printerTypeShangpeng                        = string(cloudprint.ProviderShangpeng)
 )
 
 // ==================== 注册打印机 ====================
@@ -895,7 +898,7 @@ type updateDisplayConfigRequest struct {
 
 // updateDisplayConfig 更新订单展示配置
 // @Summary 更新订单展示配置
-// @Description 商户更新订单展示配置，包括打印、自动接单、KDS等设置；语音字段仅兼容旧客户端请求并保持为 no-op
+// @Description 商户更新订单展示配置，包括打印、自动接单、KDS等设置；关闭打印时自动接单会同步关闭；语音字段仅兼容旧客户端请求并保持为 no-op
 // @Tags 商户设备管理
 // @Accept json
 // @Produce json
@@ -905,6 +908,7 @@ type updateDisplayConfigRequest struct {
 // @Failure 400 {object} map[string]interface{} "参数错误"
 // @Failure 401 {object} map[string]interface{} "未授权"
 // @Failure 404 {object} map[string]interface{} "商户不存在"
+// @Failure 409 {object} map[string]interface{} "配置状态冲突"
 // @Failure 500 {object} map[string]interface{} "服务器错误"
 // @Router /v1/merchant/display-config [put]
 func (server *Server) updateDisplayConfig(ctx *gin.Context) {
@@ -929,7 +933,7 @@ func (server *Server) updateDisplayConfig(ctx *gin.Context) {
 	}
 
 	// 检查是否已有配置
-	_, err = server.store.GetOrderDisplayConfigByMerchant(ctx, merchant.ID)
+	existingConfig, err := server.store.GetOrderDisplayConfigByMerchant(ctx, merchant.ID)
 	configNotFound := isNotFoundError(err)
 	if err != nil && !configNotFound {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -982,9 +986,16 @@ func (server *Server) updateDisplayConfig(ctx *gin.Context) {
 		if req.KdsURL != nil {
 			createParams.KdsUrl = pgtype.Text{String: *req.KdsURL, Valid: true}
 		}
+		if !createParams.EnablePrint {
+			createParams.AutoAcceptPaidOrders = false
+		}
 
 		config, err = server.store.CreateOrderDisplayConfig(ctx, createParams)
 		if err != nil {
+			if isOrderDisplayConfigPrintAutoAcceptConstraintError(err) {
+				ctx.JSON(http.StatusConflict, errorResponse(errors.New(orderDisplayConfigPrintAutoAcceptMessage)))
+				return
+			}
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
@@ -993,9 +1004,11 @@ func (server *Server) updateDisplayConfig(ctx *gin.Context) {
 		updateParams := db.UpdateOrderDisplayConfigParams{
 			MerchantID: merchant.ID,
 		}
+		effectiveEnablePrint := existingConfig.EnablePrint
 
 		if req.EnablePrint != nil {
 			updateParams.EnablePrint = pgtype.Bool{Bool: *req.EnablePrint, Valid: true}
+			effectiveEnablePrint = *req.EnablePrint
 		}
 		if req.PrintTakeout != nil {
 			updateParams.PrintTakeout = pgtype.Bool{Bool: *req.PrintTakeout, Valid: true}
@@ -1021,9 +1034,16 @@ func (server *Server) updateDisplayConfig(ctx *gin.Context) {
 		if req.KdsURL != nil {
 			updateParams.KdsUrl = pgtype.Text{String: *req.KdsURL, Valid: true}
 		}
+		if !effectiveEnablePrint {
+			updateParams.AutoAcceptPaidOrders = pgtype.Bool{Bool: false, Valid: true}
+		}
 
 		config, err = server.store.UpdateOrderDisplayConfig(ctx, updateParams)
 		if err != nil {
+			if isOrderDisplayConfigPrintAutoAcceptConstraintError(err) {
+				ctx.JSON(http.StatusConflict, errorResponse(errors.New(orderDisplayConfigPrintAutoAcceptMessage)))
+				return
+			}
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
@@ -1059,6 +1079,13 @@ func (server *Server) updateDisplayConfig(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, resp)
+}
+
+func isOrderDisplayConfigPrintAutoAcceptConstraintError(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) &&
+		pgErr.Code == "23514" &&
+		pgErr.ConstraintName == orderDisplayConfigPrintAutoAcceptConstraint
 }
 
 // ==================== 辅助函数 ====================

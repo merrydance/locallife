@@ -39,7 +39,7 @@
             <text class="section-caption">统一管理后厨和前台打印分发，订单是否打印仍由后端真实状态决定。</text>
           </view>
           <t-cell-group theme="card">
-            <t-cell title="启用打印" description="关闭后，不再向打印机分发小票，但会保留当前细项配置值">
+            <t-cell title="启用打印" description="关闭后，不再向打印机分发小票，并同步关闭自动接单">
               <t-switch slot="note" value="{{settingsForm.enable_print}}" data-field="enable_print" bind:change="onSettingsSwitchChange" size="large" />
             </t-cell>
             <t-cell title="打印外卖订单" description="顾客下单成功后向绑定打印机下发外卖小票">

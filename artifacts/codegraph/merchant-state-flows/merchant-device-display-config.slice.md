@@ -1,6 +1,6 @@
 # Merchant Device Display Config Slice
 
-Status: partially fixed; Mini Program voice-control removal/backend no-op compatibility fixed 2026-06-10
+Status: partially fixed; Mini Program voice-control removal/backend no-op compatibility and print-disabled auto-accept normalization fixed 2026-06-10
 Risk class: G2 - merchant configuration controls automatic order acceptance, print task dispatch, cloud-printer provider state, and async recovery surfaces
 Scope: Mini Program display/printer pages -> device/display-config APIs -> durable config/device truth -> payment outbox auto-accept, print workers, provider calls, reconciliation jobs, and print-log consumers
 
@@ -27,6 +27,7 @@ This slice does not fully cover:
 Device and display settings must be truthful configuration, not decorative toggles:
 
 - `order_display_configs` is the durable source for whether paid orders can be auto-accepted and when/what order types are printed.
+- `auto_accept_paid_orders` cannot be stored as true when `enable_print=false`; the backend write boundary, migration `000262`, and the database CHECK constraint all enforce that auto-accept truth cannot contradict print-disabled state. If a stale or direct write still hits that database constraint through the API, the API maps it to a stable 409 conflict rather than leaking a raw database failure.
 - `cloud_printers` is the durable local source for which merchant printers are active and which order types/roles they support.
 - Provider registration/removal/status is external truth; local DB and provider state must either change together or expose a recovery path.
 - Auto-accept may only happen when backend truth allows it and at least one eligible active printer exists.
@@ -48,8 +49,8 @@ Device and display settings must be truthful configuration, not decorative toggl
 4. Display-config page updates only local draft on switches/mode selections and saves through `displayConfigService.updateDisplayConfig`, then rehydrates from the backend response.
    Evidence: `weapp/miniprogram/pages/merchant/settings/display-config/index.ts:231`, `weapp/miniprogram/pages/merchant/settings/display-config/index.ts:244`, `weapp/miniprogram/pages/merchant/settings/display-config/index.ts:267`, `weapp/miniprogram/pages/merchant/settings/display-config/index.ts:290`, `weapp/miniprogram/pages/merchant/settings/display-config/index.ts:303`, `weapp/miniprogram/pages/merchant/settings/display-config/index.ts:315`.
 
-5. The display-config UI disables the auto-accept switch when `enable_print` is false, but the save payload still sends the stored form value for both fields.
-   Evidence: `weapp/miniprogram/pages/merchant/settings/display-config/index.wxml:55`, `weapp/miniprogram/pages/merchant/settings/display-config/index.ts:303`, `weapp/miniprogram/pages/merchant/settings/display-config/index.ts:310`.
+5. Fixed 2026-06-10: when `enable_print` is false, `auto_accept_paid_orders` is forced false. The Mini Program clears the local auto-accept draft when print is switched off and defensively submits false while print is disabled; backend PUT normalizes create/update params before store writes and maps the DB CHECK constraint to 409 on stale conflicts; migration `000262` cleans historical dirty rows and adds `order_display_configs_print_auto_accept_check`.
+   Evidence: `weapp/miniprogram/pages/merchant/settings/display-config/index.wxml:42`, `weapp/miniprogram/pages/merchant/settings/display-config/index.ts:225`, `weapp/miniprogram/pages/merchant/settings/display-config/index.ts:304`, `locallife/api/device.go:933`, `locallife/api/device.go:987`, `locallife/api/device.go:1002`, `locallife/api/device.go:1037`, `locallife/api/device.go:1085`, `locallife/db/migration/000262_harden_order_display_config_auto_accept.up.sql`, `locallife/db/sqlc/order_display_config_test.go`, `locallife/db/sqlc/order_display_config_migration_test.go`.
 
 6. Device-management access uses `GET /v1/merchant/devices/access`; frontend caches capability for 60 seconds and only grants the page when backend says `can_manage`.
    Evidence: `weapp/miniprogram/utils/console-access.ts:20`, `weapp/miniprogram/utils/console-access.ts:191`, `weapp/miniprogram/utils/console-access.ts:203`, `weapp/miniprogram/utils/console-access.ts:289`, `weapp/miniprogram/utils/console-access.ts:303`, `weapp/miniprogram/utils/console-access.ts:304`.
@@ -66,7 +67,7 @@ Device and display settings must be truthful configuration, not decorative toggl
 10. Display-config GET reads `order_display_configs` by merchant. Missing rows return default config without persisting it.
     Evidence: `locallife/api/device.go:721`, `locallife/api/device.go:726`, `locallife/api/device.go:737`, `locallife/api/device.go:739`, `locallife/api/device.go:741`, `locallife/api/device.go:749`, `locallife/api/device.go:790`.
 
-11. Display-config PUT resolves the merchant, checks whether a row exists, then creates or updates a partial config. Fixed 2026-06-10: legacy `enable_voice`, `voice_takeout`, and `voice_dine_in` request fields are accepted for old-client compatibility but ignored; new rows keep default compatibility values and existing rows keep their prior voice values. The response is built from the persisted row.
+11. Display-config PUT resolves the merchant, checks whether a row exists, then creates or updates a partial config. Fixed 2026-06-10: legacy `enable_voice`, `voice_takeout`, and `voice_dine_in` request fields are accepted for old-client compatibility but ignored; new rows keep default compatibility values and existing rows keep their prior voice values. Fixed 2026-06-10: effective `enable_print=false` forces `auto_accept_paid_orders=false`, including existing rows where print was already disabled. The response is built from the persisted row.
     Evidence: `locallife/api/device.go:875`, `locallife/api/device.go:883`, `locallife/api/device.go:925`, `locallife/api/device.go:945`, `locallife/api/device.go:970`, `locallife/api/device.go:987`, `locallife/api/device.go:1009`, `locallife/api/device.go:1036`.
 
 12. SQL stores display config in one unique row per merchant and supports partial update by `COALESCE`.
@@ -144,7 +145,7 @@ Device and display settings must be truthful configuration, not decorative toggl
 
 ## SQL And Durable State Boundaries
 
-- `order_display_configs`: owns print enablement, order-type print flags, dispatch mode, trigger mode, auto-accept, deprecated/no-op voice compatibility fields, KDS flag, and KDS URL. Unique by merchant.
+- `order_display_configs`: owns print enablement, order-type print flags, dispatch mode, trigger mode, auto-accept, deprecated/no-op voice compatibility fields, KDS flag, and KDS URL. Unique by merchant. Since 2026-06-10 migration `000262`, a CHECK constraint rejects `enable_print=false AND auto_accept_paid_orders=true`.
 - `cloud_printers`: owns local printer name, serial number, secret key, provider type, role, per-order-type flags, active flag, and soft-delete timestamp. Active printer serial numbers are unique while soft-deleted historical rows may keep the same SN.
 - `cloud_printer_reconciliation_jobs`: owns pending/resolved provider/local drift jobs after provider-first create/delete local failures. Pending jobs are unique by `(merchant_id, printer_sn, desired_action)`.
 - `print_logs`: owns order-print execution observability and references `cloud_printers(id)`. It keeps historical printer identity after soft delete.
@@ -198,7 +199,7 @@ Device and display settings must be truthful configuration, not decorative toggl
 
 Observed tests:
 
-- `locallife/api/device_test.go` covers printer create/update/delete provider paths, reconciliation job creation after local failure, display-config default/create/update, `auto_accept_paid_orders` propagation, and deprecated `voice_*` PUT compatibility/no-op semantics.
+- `locallife/api/device_test.go` covers printer create/update/delete provider paths, reconciliation job creation after local failure, display-config default/create/update, `auto_accept_paid_orders` propagation, `enable_print=false` forcing auto-accept off, DB CHECK conflict-to-409 mapping, and deprecated `voice_*` PUT compatibility/no-op semantics.
 - `locallife/api/device_reconciliation_test.go` covers reconciliation list and retry success/failure/resolved paths.
 - `locallife/worker/task_payment_domain_outbox_test.go` covers auto-accept after paid order under display/printer config.
 - `locallife/worker/task_print_order_test.go` covers split front/kitchen printing, manual-trigger gating, unsupported printer skips, retry print-log replay, and duplicate task-key re-entry.
@@ -206,7 +207,8 @@ Observed tests:
 
 Missing high-value tests:
 
-- Mini Program wrapper/page test for display config save/reload and auto-accept/enable-print combined semantics.
+- Fixed 2026-06-10: Mini Program display-config contract check proves save payloads force `auto_accept_paid_orders=false` when print is disabled and local draft clears auto-accept when `enable_print` is switched off.
+- Fixed 2026-06-10: DB/sqlc and migration tests prove direct writes reject `enable_print=false AND auto_accept_paid_orders=true`, clean databases apply the constraint, and historical dirty rows are cleaned by `000262`.
 - Fixed 2026-06-10: Mini Program display-config contract check proves voice controls are hidden/removed and the save payload no longer submits deprecated `voice_*` fields; backend API tests prove deprecated request fields are ignored while compatibility response/default state remains.
 - Fixed 2026-06-09: deletion-with-existing-print-logs DB test now proves soft delete/deactivate preserves historical print logs and permits active SN re-registration; Yilianyun rebind after soft delete, historical print-job status over soft-deleted printers, skipped retry failure logging, and duplicate-SN migration down are also covered.
 - End-to-end test that a paid order with `auto_accept_paid_orders=true` updates order state and enqueues one accepted print task only once across outbox retries.
@@ -217,10 +219,10 @@ Missing high-value tests:
 ## Gaps And Refactor Notes
 
 - Fixed 2026-06-10: Mini Program display-config voice controls are hidden/removed. Persisted backend `voice_*` fields remain deprecated/no-op compatibility state until a safe API/schema cleanup removes or quarantines them.
+- Fixed 2026-06-10: `auto_accept_paid_orders` and `enable_print` semantics are normalized by forcing `auto_accept_paid_orders=false` whenever `enable_print=false` at the backend write boundary, DB constraint/migration boundary, and Mini Program draft/payload boundary.
 - Add a merchant-visible reconciliation section or remove/defer the Mini Program reconciliation wrappers to avoid unreachable recovery controls.
 - Fixed 2026-06-09: physical printer deletion has been replaced with a soft deactivate/deleted state, preserving print-log history while excluding deleted printers from current printer reads and active printer selection.
 - Decide whether provider printer metadata should be updated when local name/key changes. If key changes are only for future provider commands, document the boundary.
-- Normalize `auto_accept_paid_orders` and `enable_print` semantics: either clear auto-accept when print is disabled, or make the UI/response explain that auto-accept is stored but inactive.
 - Consider persisting a display-config row when GET returns defaults so future audits have one durable truth shape instead of a default-response path plus persisted path.
 - Product decision 2026-06-10: Flutter local Bluetooth printing must honor backend display config and add backend-visible observability/deduplication boundaries. Implement this instead of keeping BLE receipts as an unconstrained invisible local convenience.
 - Product decision 2026-06-10: Flutter local auto-accept must be unified with backend `auto_accept_paid_orders` as the same backend truth. The App should execute/display backend-authorized behavior, not own a separate auto-accept preference.
@@ -235,4 +237,4 @@ Missing high-value tests:
 - Reader/consumer branches checked: display settings UI, printer list, print anomalies, order outbox, order service print scheduler, print worker, Flutter order alerts, Flutter local printer page, and merchant staff device access gate.
 - Authorization/tenant branches checked: Mini Program device-management access guard, backend owner/manager device routes, active/approved/region device access check, printer merchant ownership checks, reconciliation merchant scope, and downstream print/auto-accept loading merchant ids from durable orders/printers.
 - Zombie/unreachable branches checked: Mini Program voice settings are deprecated/no-op and now removed/hidden from the display-config page; backend PUT treats legacy `voice_*` request fields as ignored compatibility input; reconciliation wrappers have no merchant UI surface; Flutter notification settings are not synchronized with backend display config; Flutter BLE prints are not `print_logs`; Flutter local auto-accept is a second auto-accept path separate from backend config despite the 2026-06-10 decision to unify it with backend truth.
-- Test-proof gaps checked: backend tests cover display config, deprecated `voice_*` no-op compatibility, printer provider/reconciliation, soft-delete with historical print logs, Yilianyun rebind after soft delete, historical print-job status/retry behavior for soft-deleted printers, duplicate-SN migration down, outbox auto-accept, print tasks, and print scheduling. Mini Program contract proof covers hidden/removed voice controls and the absence of voice fields in the save payload. Missing proof remains for one accepted print across outbox retries, reconciliation UI, Flutter BLE backend-config/dedupe/observability behavior, and cross-client backend-truth auto-accept convergence.
+- Test-proof gaps checked: backend tests cover display config, deprecated `voice_*` no-op compatibility, print-disabled auto-accept normalization, DB CHECK/migration enforcement, DB CHECK conflict-to-409 mapping, printer provider/reconciliation, soft-delete with historical print logs, Yilianyun rebind after soft delete, historical print-job status/retry behavior for soft-deleted printers, duplicate-SN migration down, outbox auto-accept, print tasks, and print scheduling. Mini Program contract proof covers hidden/removed voice controls, absence of voice fields in the save payload, and print-disabled auto-accept draft/payload normalization. Missing proof remains for one accepted print across outbox retries, reconciliation UI, Flutter BLE backend-config/dedupe/observability behavior, and cross-client backend-truth auto-accept convergence.

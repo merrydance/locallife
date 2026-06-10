@@ -224,9 +224,16 @@ Page({
 
   onSettingsSwitchChange(e: WechatMiniprogram.CustomEvent<{ value: boolean }>) {
     const { field } = e.currentTarget.dataset as { field: keyof DisplayConfigForm }
-    const settingsForm = {
+    const nextValue = !!e.detail?.value
+    let settingsForm = {
       ...this.data.settingsForm,
-      [field]: !!e.detail?.value
+      [field]: nextValue
+    }
+    if (field === 'enable_print' && !nextValue) {
+      settingsForm = {
+        ...settingsForm,
+        auto_accept_paid_orders: false
+      }
     }
     this.setData({
       settingsForm,
@@ -301,7 +308,7 @@ Page({
         print_reservation: this.data.settingsForm.print_reservation,
         print_dispatch_mode: this.data.settingsForm.print_dispatch_mode,
         print_trigger_mode: this.data.settingsForm.print_trigger_mode,
-        auto_accept_paid_orders: this.data.settingsForm.auto_accept_paid_orders
+        auto_accept_paid_orders: this.data.settingsForm.enable_print && this.data.settingsForm.auto_accept_paid_orders
       })
       const settingsForm = buildDisplayConfigForm(savedConfig)
       this.setData({
