@@ -310,6 +310,110 @@ func TestBaofuWithdrawalBalanceRoutesUseServerResolvedOwnerScope(t *testing.T) {
 	}
 }
 
+func TestMerchantFinanceOverviewAndBaofuWithdrawalBalanceUseSeparateTruthSources(t *testing.T) {
+	owner, _ := randomUser(t)
+	merchant := randomMerchant(owner.ID)
+	startAt, err := time.Parse("2006-01-02", "2026-06-01")
+	require.NoError(t, err)
+	endAt, err := time.Parse("2006-01-02", "2026-06-10")
+	require.NoError(t, err)
+	endAt = endAt.Add(24*time.Hour - time.Nanosecond)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+	store.EXPECT().
+		GetMerchantFinanceOverview(gomock.Any(), db.GetMerchantFinanceOverviewParams{
+			MerchantID: merchant.ID,
+			StartAt:    startAt,
+			EndAt:      endAt,
+		}).
+		Times(1).
+		Return(db.GetMerchantFinanceOverviewRow{
+			CompletedOrders:                 12,
+			PendingOrders:                   2,
+			TotalGmv:                        600000,
+			TotalMerchantReceivableAmount:   500000,
+			TotalPlatformServiceFeeAmount:   60000,
+			TotalPaymentChannelFeeAmount:    5000,
+			PendingMerchantReceivableAmount: 7000,
+		}, nil)
+	store.EXPECT().
+		GetMerchantPromotionExpenses(gomock.Any(), db.GetMerchantPromotionExpensesParams{
+			MerchantID: merchant.ID,
+			StartAt:    startAt,
+			EndAt:      endAt,
+		}).
+		Times(1).
+		Return(db.GetMerchantPromotionExpensesRow{
+			PromoOrderCount: 3,
+			TotalDiscount:   20000,
+		}, nil)
+	store.EXPECT().
+		SumMerchantSettlementAdjustments(gomock.Any(), db.SumMerchantSettlementAdjustmentsParams{
+			MerchantID: merchant.ID,
+			StartAt:    startAt,
+			EndAt:      endAt,
+		}).
+		Times(1).
+		Return(int64(15000), nil)
+	binding := activeBaofuWithdrawalBinding(db.BaofuAccountOwnerTypeMerchant, merchant.ID)
+	store.EXPECT().
+		GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:   merchant.ID,
+		}).
+		Times(1).
+		Return(binding, nil)
+
+	client := &fakeAPIBaofuWithdrawClient{
+		balanceRes: &baofucontracts.BalanceResult{
+			ContractNo:         binding.ContractNo.String,
+			AvailableAmountFen: 12345,
+			PendingAmountFen:   678,
+			LedgerAmountFen:    99999,
+			FrozenAmountFen:    111,
+		},
+	}
+	server := newTestServer(t, store)
+	configureBaofuWithdrawServiceForAPITest(server, store, client)
+
+	overviewRecorder := httptest.NewRecorder()
+	overviewRequest, err := http.NewRequest(http.MethodGet, "/v1/merchant/finance/overview?start_date=2026-06-01&end_date=2026-06-10", nil)
+	require.NoError(t, err)
+	addAuthorization(t, overviewRequest, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
+	server.router.ServeHTTP(overviewRecorder, overviewRequest)
+
+	require.Equal(t, http.StatusOK, overviewRecorder.Code)
+	require.Empty(t, client.balanceReqs)
+	var overview map[string]interface{}
+	requireUnmarshalAPIResponseData(t, overviewRecorder.Body.Bytes(), &overview)
+	require.Equal(t, float64(515000), overview["total_merchant_receivable_amount"])
+	require.Equal(t, float64(7000), overview["pending_merchant_receivable_amount"])
+	require.Equal(t, float64(495000), overview["net_income"])
+	require.NotContains(t, overviewRecorder.Body.String(), "available_amount")
+
+	balanceRecorder := httptest.NewRecorder()
+	balanceRequest, err := http.NewRequest(http.MethodGet, "/v1/merchant/finance/baofu-withdrawal/balance", nil)
+	require.NoError(t, err)
+	addAuthorization(t, balanceRequest, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
+	server.router.ServeHTTP(balanceRecorder, balanceRequest)
+
+	require.Equal(t, http.StatusOK, balanceRecorder.Code)
+	require.Len(t, client.balanceReqs, 1)
+	require.Equal(t, "COLLECT_MER", client.balanceReqs[0].MerchantID)
+	require.Equal(t, binding.ContractNo.String, client.balanceReqs[0].ContractNo)
+	var balance baofuWithdrawalBalanceResponse
+	requireUnmarshalAPIResponseData(t, balanceRecorder.Body.Bytes(), &balance)
+	require.Equal(t, int64(12345), balance.AvailableAmount)
+	require.Equal(t, int64(678), balance.PendingAmount)
+	require.Equal(t, int64(99999), balance.LedgerAmount)
+	require.Equal(t, int64(111), balance.FrozenAmount)
+	require.NotContains(t, balanceRecorder.Body.String(), "total_merchant_receivable_amount")
+}
+
 func TestListBaofuWithdrawalsReturnsStablePaginationAndStatusText(t *testing.T) {
 	owner, _ := randomUser(t)
 	merchant := randomMerchant(owner.ID)
