@@ -222,6 +222,57 @@ func TestValidateVoucher(t *testing.T) {
 			},
 		},
 		{
+			name:  "VoucherTemplateInactive",
+			input: VoucherValidationInput{UserID: userID, MerchantID: merchantID, OrderType: "takeaway", Subtotal: 2000, UserVoucherID: &voucherID},
+			buildStubs: func(store *mockdb.MockStore) {
+				voucher := baseVoucher
+				voucher.VoucherTemplateBlockReason = "inactive"
+				store.EXPECT().
+					GetUserVoucher(gomock.Any(), voucherID).
+					Times(1).
+					Return(voucher, nil)
+			},
+			check: func(t *testing.T, _ VoucherValidationResult, err error) {
+				reqErr := assertRequestError(t, err)
+				require.Equal(t, 400, reqErr.Status)
+				require.Equal(t, "优惠券已停用或已失效", reqErr.Err.Error())
+			},
+		},
+		{
+			name:  "VoucherTemplateDeleted",
+			input: VoucherValidationInput{UserID: userID, MerchantID: merchantID, OrderType: "takeaway", Subtotal: 2000, UserVoucherID: &voucherID},
+			buildStubs: func(store *mockdb.MockStore) {
+				voucher := baseVoucher
+				voucher.VoucherTemplateBlockReason = "deleted"
+				store.EXPECT().
+					GetUserVoucher(gomock.Any(), voucherID).
+					Times(1).
+					Return(voucher, nil)
+			},
+			check: func(t *testing.T, _ VoucherValidationResult, err error) {
+				reqErr := assertRequestError(t, err)
+				require.Equal(t, 400, reqErr.Status)
+				require.Equal(t, "优惠券已停用或已失效", reqErr.Err.Error())
+			},
+		},
+		{
+			name:  "VoucherTemplateExpired",
+			input: VoucherValidationInput{UserID: userID, MerchantID: merchantID, OrderType: "takeaway", Subtotal: 2000, UserVoucherID: &voucherID},
+			buildStubs: func(store *mockdb.MockStore) {
+				voucher := baseVoucher
+				voucher.VoucherTemplateBlockReason = "expired"
+				store.EXPECT().
+					GetUserVoucher(gomock.Any(), voucherID).
+					Times(1).
+					Return(voucher, nil)
+			},
+			check: func(t *testing.T, _ VoucherValidationResult, err error) {
+				reqErr := assertRequestError(t, err)
+				require.Equal(t, 400, reqErr.Status)
+				require.Equal(t, "优惠券已停用或已失效", reqErr.Err.Error())
+			},
+		},
+		{
 			name:  "VoucherMerchantMismatch",
 			input: VoucherValidationInput{UserID: userID, MerchantID: merchantID, OrderType: "takeaway", Subtotal: 2000, UserVoucherID: &voucherID},
 			buildStubs: func(store *mockdb.MockStore) {

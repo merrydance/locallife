@@ -289,6 +289,59 @@ func TestGetUserVoucher(t *testing.T) {
 	require.Equal(t, voucher.MerchantID, got.MerchantID)
 	require.Equal(t, voucher.Code, got.Code)
 	require.Equal(t, voucher.Amount, got.Amount)
+	require.Empty(t, got.VoucherTemplateBlockReason)
+}
+
+func TestGetUserVoucherReturnsTemplateBlockReason(t *testing.T) {
+	user := createRandomUser(t)
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+
+	inactiveVoucher := createRandomVoucher(t, merchant.ID)
+	inactiveUserVoucher := createRandomUserVoucher(t, inactiveVoucher.ID, user.ID)
+	_, err := testStore.UpdateVoucher(context.Background(), UpdateVoucherParams{
+		ID:       inactiveVoucher.ID,
+		IsActive: pgtype.Bool{Bool: false, Valid: true},
+	})
+	require.NoError(t, err)
+
+	deletedVoucher := createRandomVoucher(t, merchant.ID)
+	deletedUserVoucher := createRandomUserVoucher(t, deletedVoucher.ID, user.ID)
+	require.NoError(t, testStore.DeleteVoucher(context.Background(), deletedVoucher.ID))
+
+	notStartedTemplateVoucher := createRandomVoucher(t, merchant.ID)
+	notStartedTemplateUserVoucher := createRandomUserVoucher(t, notStartedTemplateVoucher.ID, user.ID)
+	_, err = testStore.UpdateVoucher(context.Background(), UpdateVoucherParams{
+		ID:         notStartedTemplateVoucher.ID,
+		ValidFrom:  pgtype.Timestamptz{Time: time.Now().AddDate(0, 1, 0), Valid: true},
+		ValidUntil: pgtype.Timestamptz{Time: time.Now().AddDate(0, 2, 0), Valid: true},
+	})
+	require.NoError(t, err)
+
+	expiredTemplateVoucher := createRandomVoucher(t, merchant.ID)
+	expiredTemplateUserVoucher := createRandomUserVoucher(t, expiredTemplateVoucher.ID, user.ID)
+	_, err = testStore.UpdateVoucher(context.Background(), UpdateVoucherParams{
+		ID:         expiredTemplateVoucher.ID,
+		ValidFrom:  pgtype.Timestamptz{Time: time.Now().AddDate(0, -2, 0), Valid: true},
+		ValidUntil: pgtype.Timestamptz{Time: time.Now().AddDate(0, -1, 0), Valid: true},
+	})
+	require.NoError(t, err)
+
+	inactiveGot, err := testStore.GetUserVoucher(context.Background(), inactiveUserVoucher.ID)
+	require.NoError(t, err)
+	require.Equal(t, "inactive", inactiveGot.VoucherTemplateBlockReason)
+
+	deletedGot, err := testStore.GetUserVoucher(context.Background(), deletedUserVoucher.ID)
+	require.NoError(t, err)
+	require.Equal(t, "deleted", deletedGot.VoucherTemplateBlockReason)
+
+	notStartedTemplateGot, err := testStore.GetUserVoucher(context.Background(), notStartedTemplateUserVoucher.ID)
+	require.NoError(t, err)
+	require.Equal(t, "not_started", notStartedTemplateGot.VoucherTemplateBlockReason)
+
+	expiredTemplateGot, err := testStore.GetUserVoucher(context.Background(), expiredTemplateUserVoucher.ID)
+	require.NoError(t, err)
+	require.Equal(t, "expired", expiredTemplateGot.VoucherTemplateBlockReason)
 }
 
 func TestListUserVouchers(t *testing.T) {
@@ -398,6 +451,54 @@ func TestListUserAvailableVouchers(t *testing.T) {
 	require.Len(t, vouchers, 3) // 只有3张可用
 }
 
+func TestListUserAvailableVouchersFiltersInactiveAndDeletedTemplates(t *testing.T) {
+	user := createRandomUser(t)
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+
+	activeVoucher := createRandomVoucher(t, merchant.ID)
+	createRandomUserVoucher(t, activeVoucher.ID, user.ID)
+
+	inactiveVoucher := createRandomVoucher(t, merchant.ID)
+	createRandomUserVoucher(t, inactiveVoucher.ID, user.ID)
+	_, err := testStore.UpdateVoucher(context.Background(), UpdateVoucherParams{
+		ID:       inactiveVoucher.ID,
+		IsActive: pgtype.Bool{Bool: false, Valid: true},
+	})
+	require.NoError(t, err)
+
+	deletedVoucher := createRandomVoucher(t, merchant.ID)
+	createRandomUserVoucher(t, deletedVoucher.ID, user.ID)
+	require.NoError(t, testStore.DeleteVoucher(context.Background(), deletedVoucher.ID))
+
+	notStartedTemplateVoucher := createRandomVoucher(t, merchant.ID)
+	createRandomUserVoucher(t, notStartedTemplateVoucher.ID, user.ID)
+	_, err = testStore.UpdateVoucher(context.Background(), UpdateVoucherParams{
+		ID:         notStartedTemplateVoucher.ID,
+		ValidFrom:  pgtype.Timestamptz{Time: time.Now().AddDate(0, 1, 0), Valid: true},
+		ValidUntil: pgtype.Timestamptz{Time: time.Now().AddDate(0, 2, 0), Valid: true},
+	})
+	require.NoError(t, err)
+
+	expiredTemplateVoucher := createRandomVoucher(t, merchant.ID)
+	createRandomUserVoucher(t, expiredTemplateVoucher.ID, user.ID)
+	_, err = testStore.UpdateVoucher(context.Background(), UpdateVoucherParams{
+		ID:         expiredTemplateVoucher.ID,
+		ValidFrom:  pgtype.Timestamptz{Time: time.Now().AddDate(0, -2, 0), Valid: true},
+		ValidUntil: pgtype.Timestamptz{Time: time.Now().AddDate(0, -1, 0), Valid: true},
+	})
+	require.NoError(t, err)
+
+	vouchers, err := testStore.ListUserAvailableVouchers(context.Background(), ListUserAvailableVouchersParams{
+		UserID: user.ID,
+		Limit:  10,
+		Offset: 0,
+	})
+	require.NoError(t, err)
+	require.Len(t, vouchers, 1)
+	require.Equal(t, activeVoucher.ID, vouchers[0].VoucherID)
+}
+
 func TestListUserAvailableVouchersForMerchant(t *testing.T) {
 	user := createRandomUser(t)
 	owner := createRandomUser(t)
@@ -452,6 +553,54 @@ func TestListUserAvailableVouchersForMerchant(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, vouchers, 2)
+}
+
+func TestListUserAvailableVouchersForMerchantFiltersInactiveAndDeletedTemplates(t *testing.T) {
+	user := createRandomUser(t)
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+
+	activeVoucher := createRandomVoucher(t, merchant.ID)
+	createRandomUserVoucher(t, activeVoucher.ID, user.ID)
+
+	inactiveVoucher := createRandomVoucher(t, merchant.ID)
+	createRandomUserVoucher(t, inactiveVoucher.ID, user.ID)
+	_, err := testStore.UpdateVoucher(context.Background(), UpdateVoucherParams{
+		ID:       inactiveVoucher.ID,
+		IsActive: pgtype.Bool{Bool: false, Valid: true},
+	})
+	require.NoError(t, err)
+
+	deletedVoucher := createRandomVoucher(t, merchant.ID)
+	createRandomUserVoucher(t, deletedVoucher.ID, user.ID)
+	require.NoError(t, testStore.DeleteVoucher(context.Background(), deletedVoucher.ID))
+
+	notStartedTemplateVoucher := createRandomVoucher(t, merchant.ID)
+	createRandomUserVoucher(t, notStartedTemplateVoucher.ID, user.ID)
+	_, err = testStore.UpdateVoucher(context.Background(), UpdateVoucherParams{
+		ID:         notStartedTemplateVoucher.ID,
+		ValidFrom:  pgtype.Timestamptz{Time: time.Now().AddDate(0, 1, 0), Valid: true},
+		ValidUntil: pgtype.Timestamptz{Time: time.Now().AddDate(0, 2, 0), Valid: true},
+	})
+	require.NoError(t, err)
+
+	expiredTemplateVoucher := createRandomVoucher(t, merchant.ID)
+	createRandomUserVoucher(t, expiredTemplateVoucher.ID, user.ID)
+	_, err = testStore.UpdateVoucher(context.Background(), UpdateVoucherParams{
+		ID:         expiredTemplateVoucher.ID,
+		ValidFrom:  pgtype.Timestamptz{Time: time.Now().AddDate(0, -2, 0), Valid: true},
+		ValidUntil: pgtype.Timestamptz{Time: time.Now().AddDate(0, -1, 0), Valid: true},
+	})
+	require.NoError(t, err)
+
+	vouchers, err := testStore.ListUserAvailableVouchersForMerchant(context.Background(), ListUserAvailableVouchersForMerchantParams{
+		UserID:         user.ID,
+		MerchantID:     merchant.ID,
+		MinOrderAmount: activeVoucher.MinOrderAmount,
+	})
+	require.NoError(t, err)
+	require.Len(t, vouchers, 1)
+	require.Equal(t, activeVoucher.ID, vouchers[0].VoucherID)
 }
 
 func TestCheckUserVoucherExists(t *testing.T) {

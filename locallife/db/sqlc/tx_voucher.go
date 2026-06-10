@@ -2,11 +2,34 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+var ErrVoucherTemplateUnavailable = errors.New("voucher template is unavailable")
+
+func lockUsableVoucherTemplate(ctx context.Context, q *Queries, voucherID int64, now time.Time) (Voucher, error) {
+	voucher, err := q.GetVoucherForUpdate(ctx, voucherID)
+	if err != nil {
+		if errors.Is(err, ErrRecordNotFound) {
+			return Voucher{}, fmt.Errorf("%w: deleted", ErrVoucherTemplateUnavailable)
+		}
+		return Voucher{}, fmt.Errorf("get voucher template: %w", err)
+	}
+	if !voucher.IsActive {
+		return voucher, fmt.Errorf("%w: inactive", ErrVoucherTemplateUnavailable)
+	}
+	if now.Before(voucher.ValidFrom) {
+		return voucher, fmt.Errorf("%w: not_started", ErrVoucherTemplateUnavailable)
+	}
+	if now.After(voucher.ValidUntil) {
+		return voucher, fmt.Errorf("%w: expired", ErrVoucherTemplateUnavailable)
+	}
+	return voucher, nil
+}
 
 // ClaimVoucherTxParams contains the input parameters for claiming a voucher
 type ClaimVoucherTxParams struct {
@@ -115,7 +138,15 @@ func (store *SQLStore) UseVoucherTx(ctx context.Context, arg UseVoucherTxParams)
 			return fmt.Errorf("voucher has expired")
 		}
 
-		// 4. Mark user voucher as used
+		// 4. Lock and re-check template truth at use time. A claimed voucher
+		// must stop being usable for new orders once its template is disabled,
+		// soft-deleted, not started, or expired.
+		voucher, err := lockUsableVoucherTemplate(ctx, q, userVoucher.VoucherID, time.Now())
+		if err != nil {
+			return err
+		}
+
+		// 5. Mark user voucher as used
 		result.UserVoucher, err = q.MarkUserVoucherAsUsed(ctx, MarkUserVoucherAsUsedParams{
 			ID:      arg.UserVoucherID,
 			OrderID: pgtype.Int8{Int64: arg.OrderID, Valid: true},
@@ -124,8 +155,8 @@ func (store *SQLStore) UseVoucherTx(ctx context.Context, arg UseVoucherTxParams)
 			return fmt.Errorf("mark voucher as used: %w", err)
 		}
 
-		// 5. Increment voucher used quantity
-		result.Voucher, err = q.IncrementVoucherUsedQuantity(ctx, userVoucher.VoucherID)
+		// 6. Increment voucher used quantity
+		result.Voucher, err = q.IncrementVoucherUsedQuantity(ctx, voucher.ID)
 		if err != nil {
 			return fmt.Errorf("increment used quantity: %w", err)
 		}

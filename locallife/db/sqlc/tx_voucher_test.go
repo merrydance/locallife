@@ -332,6 +332,81 @@ func TestUseVoucherTxExpired(t *testing.T) {
 	require.Empty(t, result)
 }
 
+func TestUseVoucherTxRejectsUnavailableTemplate(t *testing.T) {
+	cases := []struct {
+		name  string
+		block func(t *testing.T, voucher Voucher)
+	}{
+		{
+			name: "inactive",
+			block: func(t *testing.T, voucher Voucher) {
+				_, err := testStore.UpdateVoucher(context.Background(), UpdateVoucherParams{
+					ID:       voucher.ID,
+					IsActive: pgtype.Bool{Bool: false, Valid: true},
+				})
+				require.NoError(t, err)
+			},
+		},
+		{
+			name: "deleted",
+			block: func(t *testing.T, voucher Voucher) {
+				require.NoError(t, testStore.DeleteVoucher(context.Background(), voucher.ID))
+			},
+		},
+		{
+			name: "not_started",
+			block: func(t *testing.T, voucher Voucher) {
+				_, err := testStore.UpdateVoucher(context.Background(), UpdateVoucherParams{
+					ID:         voucher.ID,
+					ValidFrom:  pgtype.Timestamptz{Time: time.Now().AddDate(0, 1, 0), Valid: true},
+					ValidUntil: pgtype.Timestamptz{Time: time.Now().AddDate(0, 2, 0), Valid: true},
+				})
+				require.NoError(t, err)
+			},
+		},
+		{
+			name: "expired",
+			block: func(t *testing.T, voucher Voucher) {
+				_, err := testStore.UpdateVoucher(context.Background(), UpdateVoucherParams{
+					ID:         voucher.ID,
+					ValidFrom:  pgtype.Timestamptz{Time: time.Now().AddDate(0, -2, 0), Valid: true},
+					ValidUntil: pgtype.Timestamptz{Time: time.Now().AddDate(0, -1, 0), Valid: true},
+				})
+				require.NoError(t, err)
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			user := createRandomUser(t)
+			merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+
+			voucher := createRandomVoucher(t, merchant.ID)
+			claimResult, err := testStore.ClaimVoucherTx(context.Background(), ClaimVoucherTxParams{
+				VoucherID: voucher.ID,
+				UserID:    user.ID,
+			})
+			require.NoError(t, err)
+
+			tc.block(t, voucher)
+
+			result, err := testStore.UseVoucherTx(context.Background(), UseVoucherTxParams{
+				UserVoucherID: claimResult.UserVoucher.ID,
+				OrderID:       99999,
+			})
+			require.Error(t, err)
+			require.ErrorIs(t, err, ErrVoucherTemplateUnavailable)
+			require.Empty(t, result)
+
+			userVoucher, err := testStore.GetUserVoucherForUpdate(context.Background(), claimResult.UserVoucher.ID)
+			require.NoError(t, err)
+			require.Equal(t, "unused", userVoucher.Status)
+			require.False(t, userVoucher.OrderID.Valid)
+		})
+	}
+}
+
 // ==================== Concurrent Tests ====================
 
 // 测试并发领取优惠券（验证库存扣减的正确性）

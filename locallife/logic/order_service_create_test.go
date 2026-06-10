@@ -114,6 +114,82 @@ func TestOrderServiceCreateOrder_RejectsVoucherWhenMerchantDiscountCannotStack(t
 	require.Equal(t, "当前活动不可与所选优惠券叠加", reqErr.Err.Error())
 }
 
+func TestOrderServiceCreateOrderMapsVoucherTemplateUnavailable(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	service := NewOrderService(
+		store,
+		nil,
+		nil,
+		nil,
+		nil,
+		createOrderNormalizerStub{},
+		nil,
+		nil,
+		createOrderClockStub{now: time.Date(2026, 6, 10, 10, 0, 0, 0, time.UTC)},
+		createOrderIDGeneratorStub{orderNo: "ORDER-VOUCHER-TEMPLATE-BLOCK"},
+		nil,
+	)
+
+	merchantID := int64(10)
+	userID := int64(20)
+	dishID := int64(30)
+	voucherID := int64(40)
+	now := time.Now()
+
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchantID).
+		Times(1).
+		Return(db.Merchant{ID: merchantID, Status: "active", IsOpen: true}, nil)
+	store.EXPECT().
+		GetDish(gomock.Any(), dishID).
+		Times(1).
+		Return(db.Dish{ID: dishID, MerchantID: merchantID, Name: "菜品", Price: 2000, IsOnline: true, IsAvailable: true}, nil)
+	store.EXPECT().
+		CountActivePackagingDishesByMerchant(gomock.Any(), merchantID).
+		Times(1).
+		Return(int64(0), nil)
+	store.EXPECT().
+		ListActiveDiscountRules(gomock.Any(), merchantID).
+		Times(1).
+		Return([]db.DiscountRule{}, nil)
+	store.EXPECT().
+		GetUserVoucher(gomock.Any(), voucherID).
+		Times(1).
+		Return(db.GetUserVoucherRow{
+			ID:                voucherID,
+			UserID:            userID,
+			Status:            "unused",
+			ExpiresAt:         now.Add(time.Hour),
+			MerchantID:        merchantID,
+			Amount:            200,
+			MinOrderAmount:    1000,
+			AllowedOrderTypes: []string{"takeaway"},
+		}, nil)
+	store.EXPECT().
+		CreateOrderTx(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.CreateOrderTxResult{}, db.ErrVoucherTemplateUnavailable)
+
+	_, err := service.CreateOrder(context.Background(), CreateOrderCommandInput{
+		UserID:        userID,
+		MerchantID:    merchantID,
+		OrderType:     "takeaway",
+		UserVoucherID: &voucherID,
+		Items: []OrderItemInput{{
+			DishID:   &dishID,
+			Quantity: 1,
+		}},
+	})
+
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 400, reqErr.Status)
+	require.Equal(t, "优惠券已停用或已失效", reqErr.Err.Error())
+	require.ErrorIs(t, err, db.ErrVoucherTemplateUnavailable)
+}
+
 func TestOrderServiceCreateOrder_MarketingTotalsMatchCartAndOrderPreview(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

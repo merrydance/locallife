@@ -248,6 +248,9 @@ func isVoucherValid(v db.GetUserVoucherRow, opt OrderContext, now time.Time) boo
 	if v.Status != "unused" {
 		return false
 	}
+	if v.VoucherTemplateBlockReason != "" {
+		return false
+	}
 	if now.After(v.ExpiresAt) {
 		return false
 	}

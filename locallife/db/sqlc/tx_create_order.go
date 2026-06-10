@@ -107,6 +107,10 @@ func (store *SQLStore) CreateOrderTx(ctx context.Context, arg CreateOrderTxParam
 				return fmt.Errorf("voucher has expired")
 			}
 
+			if _, err := lockUsableVoucherTemplate(ctx, q, userVoucher.VoucherID, time.Now()); err != nil {
+				return err
+			}
+
 			result.UserVoucher = &userVoucher
 		}
 

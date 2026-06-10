@@ -85,6 +85,9 @@ func ValidateVoucher(ctx context.Context, store db.Store, input VoucherValidatio
 	if time.Now().After(voucher.ExpiresAt) {
 		return result, NewRequestError(http.StatusBadRequest, errors.New("优惠券已过期"))
 	}
+	if voucher.VoucherTemplateBlockReason != "" {
+		return result, NewRequestError(http.StatusBadRequest, errors.New("优惠券已停用或已失效"))
+	}
 	if voucher.MerchantID != input.MerchantID {
 		return result, NewRequestError(http.StatusBadRequest, errors.New("该优惠券不能在此商户使用"))
 	}

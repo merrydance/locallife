@@ -336,6 +336,9 @@ func (s *OrderService) CreateOrder(ctx context.Context, input CreateOrderCommand
 		if err.Error() == "voucher has expired" {
 			return CreateOrderCommandResult{}, NewRequestError(http.StatusBadRequest, errors.New("优惠券已过期"))
 		}
+		if errors.Is(err, db.ErrVoucherTemplateUnavailable) {
+			return CreateOrderCommandResult{}, NewRequestErrorWithCause(http.StatusBadRequest, errors.New("优惠券已停用或已失效"), err)
+		}
 		if err.Error() == "insufficient balance" {
 			return CreateOrderCommandResult{}, NewRequestError(http.StatusBadRequest, errors.New("会员余额不足"))
 		}

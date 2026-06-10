@@ -73,6 +73,9 @@ func TestIsVoucherValid(t *testing.T) {
 	require.True(t, isVoucherValid(voucher, OrderContext{MerchantID: 10, OrderType: "takeaway", Subtotal: 1500}, now))
 	require.False(t, isVoucherValid(voucher, OrderContext{MerchantID: 10, OrderType: "dine_in", Subtotal: 1500}, now))
 	require.False(t, isVoucherValid(voucher, OrderContext{MerchantID: 10, OrderType: "takeaway", Subtotal: 500}, now))
+
+	voucher.VoucherTemplateBlockReason = "inactive"
+	require.False(t, isVoucherValid(voucher, OrderContext{MerchantID: 10, OrderType: "takeaway", Subtotal: 1500}, now))
 }
 
 func TestSuggestBestVoucher(t *testing.T) {

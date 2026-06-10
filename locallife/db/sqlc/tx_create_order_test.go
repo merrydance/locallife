@@ -698,6 +698,106 @@ func TestCreateOrderTxVoucherAlreadyUsed(t *testing.T) {
 	require.Contains(t, err.Error(), "already used")
 }
 
+func TestCreateOrderTxRejectsUnavailableVoucherTemplate(t *testing.T) {
+	cases := []struct {
+		name  string
+		block func(t *testing.T, voucher Voucher)
+	}{
+		{
+			name: "inactive",
+			block: func(t *testing.T, voucher Voucher) {
+				_, err := testStore.UpdateVoucher(context.Background(), UpdateVoucherParams{
+					ID:       voucher.ID,
+					IsActive: pgtype.Bool{Bool: false, Valid: true},
+				})
+				require.NoError(t, err)
+			},
+		},
+		{
+			name: "deleted",
+			block: func(t *testing.T, voucher Voucher) {
+				require.NoError(t, testStore.DeleteVoucher(context.Background(), voucher.ID))
+			},
+		},
+		{
+			name: "not_started",
+			block: func(t *testing.T, voucher Voucher) {
+				_, err := testStore.UpdateVoucher(context.Background(), UpdateVoucherParams{
+					ID:         voucher.ID,
+					ValidFrom:  pgtype.Timestamptz{Time: time.Now().AddDate(0, 1, 0), Valid: true},
+					ValidUntil: pgtype.Timestamptz{Time: time.Now().AddDate(0, 2, 0), Valid: true},
+				})
+				require.NoError(t, err)
+			},
+		},
+		{
+			name: "expired",
+			block: func(t *testing.T, voucher Voucher) {
+				_, err := testStore.UpdateVoucher(context.Background(), UpdateVoucherParams{
+					ID:         voucher.ID,
+					ValidFrom:  pgtype.Timestamptz{Time: time.Now().AddDate(0, -2, 0), Valid: true},
+					ValidUntil: pgtype.Timestamptz{Time: time.Now().AddDate(0, -1, 0), Valid: true},
+				})
+				require.NoError(t, err)
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			user := createRandomUser(t)
+			merchantOwner := createRandomUser(t)
+			merchant := createRandomMerchantWithOwner(t, merchantOwner.ID)
+
+			voucher := createRandomVoucher(t, merchant.ID)
+			userVoucher, err := testStore.ClaimVoucherTx(context.Background(), ClaimVoucherTxParams{
+				VoucherID: voucher.ID,
+				UserID:    user.ID,
+			})
+			require.NoError(t, err)
+
+			tc.block(t, voucher)
+
+			orderNo := util.RandomString(20)
+			orderParams := CreateOrderTxParams{
+				CreateOrderParams: CreateOrderParams{
+					OrderNo:       orderNo,
+					UserID:        user.ID,
+					MerchantID:    merchant.ID,
+					OrderType:     "takeaway",
+					DeliveryFee:   0,
+					Subtotal:      10000,
+					TotalAmount:   9000,
+					VoucherAmount: 1000,
+					UserVoucherID: pgtype.Int8{Int64: userVoucher.UserVoucher.ID, Valid: true},
+					Status:        "pending",
+				},
+				Items: []CreateOrderItemParams{
+					{
+						DishID:    pgtype.Int8{Int64: 1, Valid: true},
+						Name:      "Test Dish",
+						UnitPrice: 10000,
+						Quantity:  1,
+						Subtotal:  10000,
+					},
+				},
+				UserVoucherID: &userVoucher.UserVoucher.ID,
+				VoucherAmount: 1000,
+			}
+
+			result, err := testStore.CreateOrderTx(context.Background(), orderParams)
+			require.Error(t, err)
+			require.ErrorIs(t, err, ErrVoucherTemplateUnavailable)
+			require.Empty(t, result)
+
+			dbUserVoucher, err := testStore.GetUserVoucherForUpdate(context.Background(), userVoucher.UserVoucher.ID)
+			require.NoError(t, err)
+			require.Equal(t, "unused", dbUserVoucher.Status)
+			require.False(t, dbUserVoucher.OrderID.Valid)
+		})
+	}
+}
+
 func TestCreateOrderTxInsufficientBalance(t *testing.T) {
 	user := createRandomUser(t)
 	merchantOwner := createRandomUser(t)

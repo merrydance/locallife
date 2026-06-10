@@ -108,7 +108,28 @@ INSERT INTO user_vouchers (
 ) RETURNING *;
 
 -- name: GetUserVoucher :one
-SELECT uv.id, uv.voucher_id, uv.user_id, uv.status, uv.order_id, uv.used_at, uv.obtained_at, uv.expires_at, v.merchant_id, v.code, v.name, v.amount, v.min_order_amount, v.allowed_order_types
+SELECT
+    uv.id,
+    uv.voucher_id,
+    uv.user_id,
+    uv.status,
+    uv.order_id,
+    uv.used_at,
+    uv.obtained_at,
+    uv.expires_at,
+    v.merchant_id,
+    v.code,
+    v.name,
+    v.amount,
+    v.min_order_amount,
+    v.allowed_order_types,
+    CASE
+        WHEN v.deleted_at IS NOT NULL THEN 'deleted'
+        WHEN v.is_active IS NOT TRUE THEN 'inactive'
+        WHEN v.valid_from > NOW() THEN 'not_started'
+        WHEN v.valid_until < NOW() THEN 'expired'
+        ELSE ''
+    END AS voucher_template_block_reason
 FROM user_vouchers uv
 JOIN vouchers v ON v.id = uv.voucher_id
 WHERE uv.id = $1 LIMIT 1;
@@ -135,6 +156,10 @@ JOIN merchants m ON m.id = v.merchant_id
 WHERE uv.user_id = $1 
     AND uv.status = 'unused'
     AND uv.expires_at > NOW()
+    AND v.deleted_at IS NULL
+    AND v.is_active = TRUE
+    AND v.valid_from <= NOW()
+    AND v.valid_until >= NOW()
 ORDER BY v.amount DESC
 LIMIT $2 OFFSET $3;
 
@@ -146,6 +171,10 @@ WHERE uv.user_id = $1
     AND v.merchant_id = $2
     AND uv.status = 'unused'
     AND uv.expires_at > NOW()
+    AND v.deleted_at IS NULL
+    AND v.is_active = TRUE
+    AND v.valid_from <= NOW()
+    AND v.valid_until >= NOW()
     AND v.min_order_amount <= $3
 ORDER BY v.amount DESC;
 
