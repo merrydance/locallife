@@ -1,6 +1,6 @@
 # Merchant Finance Withdrawal Slice
 
-Status: withdrawal idempotency, manager create permission, callback fact durability, provider-error command diagnostics, applied-schema idempotency hardening, and provider/local balance truth-boundary proof implemented 2026-06-10; Baofu account-opening provider failure reasons preserved 2026-06-07
+Status: withdrawal idempotency, manager create permission, callback fact durability, provider-error command diagnostics, applied-schema idempotency hardening, provider/local balance truth-boundary proof, and Mini Program durable-detail terminal polling proof implemented 2026-06-10; Baofu account-opening provider failure reasons preserved 2026-06-07
 Risk class: G3 - merchant money movement, Baofu settlement-account onboarding, provider callbacks, recovery schedulers, sensitive profile data, and finance authorization boundaries
 Scope: Mini Program merchant finance pages -> merchant finance read APIs -> Baofu settlement account onboarding -> Baofu withdrawal create/read APIs -> provider callback/recovery fact application -> durable finance truth
 
@@ -35,6 +35,7 @@ Merchant finance state must separate read-only financial reporting from money mo
 - Implemented 2026-06-10: withdrawal provider callbacks first persist a durable `external_payment_facts` callback fact, then asynchronously enqueue terminal withdrawal-state application.
 - Provider callback, query recovery, and task application must converge `baofu_withdrawal_orders` from `processing` to a terminal state without regressing already terminal rows.
 - A merchant-visible "withdrawal submitted" result must mean there is a durable local withdrawal row the merchant can later inspect.
+- Implemented 2026-06-10: Mini Program accepted/unknown withdrawal create results redirect with the backend-returned durable withdrawal id, the detail page reloads that id, polls non-terminal states while visible, and stops polling once terminal truth is observed.
 
 ## Primary Forward Chain
 
@@ -125,6 +126,7 @@ Merchant finance state must separate read-only financial reporting from money mo
 - Fixed 2026-06-10: `external_payment_commands` records withdrawal provider commands with internal Baofu diagnostics. Provider create errors preserve upstream code, classified/sanitized message, and sanitized diagnostic snapshot in command rows; user-facing create-unknown copy remains stable and non-sensitive. Withdrawal create idempotency now lives on `baofu_withdrawal_orders`, while command rows remain the provider-call audit trail.
 - Withdrawal callback and recovery both converge through the same fact-application task, which is a good single write path for terminal status.
 - Fixed 2026-06-10: withdrawal callbacks persist a durable `external_payment_facts` callback fact before asynchronous terminal application; if fact persistence fails, the callback returns failure and does not enqueue the application task.
+- Fixed 2026-06-10: Mini Program withdrawal create/detail runtime proof covers duplicate-submit blocking, stable draft `Idempotency-Key`, durable-id redirect after accepted/unknown create response, detail reload by that id, visible-page polling for non-terminal rows, terminal status refresh, and polling cleanup.
 
 ## SQL And Durable State Boundaries
 
@@ -167,7 +169,7 @@ Merchant finance state must separate read-only financial reporting from money mo
 - Account-opening recovery scheduler scans recoverable opening/report/app-auth states every five minutes.
 - Payment fact application can continue account opening after verify-fee payment for roles that require it; merchant onboarding does not depend on verify-fee payment in the current Mini Program path.
 - Withdrawal callback persists a durable callback fact first, then enqueue/applies asynchronously. Withdrawal recovery scheduler queries provider for old processing rows and enqueues the same terminal-application task.
-- Withdrawal detail/list pages do not appear to subscribe to realtime updates; user recovery is refresh/re-entry.
+- Withdrawal detail page polls non-terminal rows while visible and stops once terminal status is observed. Withdrawal list still has no realtime subscription; list recovery is refresh/re-entry.
 - There is no discovered local wallet/freeze reconciliation path for merchant withdrawals because available balance is provider-owned.
 
 ## Frontend Draft And Backend Rehydration
@@ -177,7 +179,7 @@ Merchant finance state must separate read-only financial reporting from money mo
 - Settlement-account submit page drafts enterprise/profile fields from backend defaults/masks, validates locally, then relies on `startBaofuAccountOnboarding` and subsequent polling for backend truth.
 - Withdrawal list page uses provider balance response to decide whether create is allowed; when balance is unavailable, it still shows records but blocks create.
 - Withdrawal create page keeps a local per-draft idempotency key, refreshes it when the amount changes, and reuses it for retry while the draft is unchanged. After successful/accepted/unknown response with a durable ID, it redirects to detail.
-- Withdrawal detail page reloads the durable row by id; terminal convergence depends on refresh/re-entry.
+- Withdrawal detail page reloads the durable row by id, polls non-terminal rows while visible, and stops polling after terminal convergence. Withdrawal list terminal convergence still depends on refresh/re-entry.
 
 ## Test Coverage Signals
 
@@ -192,11 +194,11 @@ Observed tests:
 - `locallife/db/sqlc/baofu_withdrawal_order_test.go` covers withdrawal idempotency uniqueness per owner, terminal-status non-regression, and DB rejection of partial idempotency key/hash pairs.
 - `locallife/api/baofu_callback_test.go` covers Baofu withdrawal callback parse/identity, durable fact persistence before enqueue/ACK, and no enqueue when fact persistence fails.
 - `locallife/worker/baofu_withdrawal_recovery_scheduler_test.go` and `task_baofu_withdrawal_fact_application_test.go` cover provider query enqueue and terminal fact application.
+- `weapp/scripts/check-baofu-withdrawal-workflow.js` covers Mini Program withdrawal API wrapper scope, required client idempotency key, shared role route registration, merchant create-page duplicate-submit blocking, durable-id redirect after accepted/unknown create response, and merchant detail-page durable reload plus terminal polling cleanup.
 
 Missing high-value tests:
 
 - Manager finance read test across all finance list/detail/balance routes, including selected-merchant header behavior.
-- Mini Program page-level runtime test proving withdrawal unknown-result `202` with durable id redirects to detail and blocks duplicate tap.
 - End-to-end withdrawal ambiguity test from POST timeout/provider unknown -> recovery query -> terminal detail/list update.
 - Cross-check finance overview/timeline totals against settlement adjustments and Baofu v2 fee fields after refunds/returns.
 
@@ -208,17 +210,18 @@ Missing high-value tests:
 - Fixed 2026-06-10: managers may operate withdrawal create/list/detail/balance while settlement-account onboarding stays owner-only.
 - Fixed 2026-06-10: withdrawal callbacks persist durable callback facts before asynchronous fact application, matching the account-open/payment/refund callback audit model.
 - Fixed 2026-06-10: provider withdrawable balance versus local finance-report reconciliation is documented as an intentional split truth boundary and covered by `TestMerchantFinanceOverviewAndBaofuWithdrawalBalanceUseSeparateTruthSources`.
+- Fixed 2026-06-10: Mini Program withdrawal accepted/unknown create response -> durable detail redirect -> non-terminal polling -> terminal refresh behavior is covered by `check:baofu-withdrawal-workflow`.
 - Clarify product copy and backend behavior for provider `returned`: whether it should trigger any merchant-facing balance refresh hint, alert, or manual handling.
-- Add Mini Program state recovery coverage for settlement-account submit/status long-wait flows and withdrawal detail refresh after async terminal updates.
+- Add Mini Program state recovery coverage for settlement-account submit/status long-wait flows.
 
 ## Branch Exhaustion
 
 - Entry branches checked: Mini Program finance entry, bills, settlements, settlement-account status, settlement-account submit, withdrawal list, withdrawal create, withdrawal detail, external cancel-withdraw detail link, dashboard Baofoo readiness precheck, and shared role Baofu onboarding behaviors. Flutter App search found no settlement, withdrawal, or finance write entry in `merchant_app/lib/features/**`; App is out of this flow except for shared merchant status readiness depending on settlement truth. Web is intentionally out of current scope.
 - Request branches checked: read-only merchant finance APIs, settlement-account `GET/POST`, withdrawal `balance/list/detail/create`, Baofu account wrappers, Baofu withdrawal wrappers, and shared role wrapper variants. Operator/platform/rider variants are noted only as shared-code drift risks because the current audit scope is merchant Mini Program plus App.
 - Backend state branches checked: finance reads over `profit_sharing_orders` and `merchant_settlement_adjustments`; settlement onboarding profile defaults, masked fields, encrypted fields, active binding reuse, latest opening flow reuse, provider opening states, merchant report states, applet authorization states, and failed-flow recovery; withdrawal active binding lookup, fee-member validation, provider balance query, provider accepted/rejected/unknown responses, local `processing` row creation, command logging, callback lookup, and terminal fact application.
-- Async branches checked: account-open callback fact persistence, account-opening recovery scheduler, merchant report/app-auth recovery, withdrawal callback enqueue, withdrawal recovery scheduler, fact-application worker, and Mini Program long-poll/refresh recovery. No realtime withdrawal subscription was found.
-- Failure/retry branches checked: frontend duplicate-submit guards, onboarding reuse/recover behavior, Baofu account-opening provider failure-reason persistence/display with sanitization boundaries, provider unavailable balance, withdrawal unknown result with durable id, withdrawal callback after terminal status, 30-second task de-dupe, and ambiguous create retry. Fixed 2026-06-10: withdrawal create now has durable client/server idempotency.
+- Async branches checked: account-open callback fact persistence, account-opening recovery scheduler, merchant report/app-auth recovery, withdrawal callback enqueue, withdrawal recovery scheduler, fact-application worker, Mini Program settlement-account long-poll/refresh recovery, and Mini Program withdrawal detail polling until terminal status. No realtime withdrawal subscription was found.
+- Failure/retry branches checked: frontend duplicate-submit guards, onboarding reuse/recover behavior, Baofu account-opening provider failure-reason persistence/display with sanitization boundaries, provider unavailable balance, withdrawal unknown result with durable id, withdrawal callback after terminal status, 30-second task de-dupe, and ambiguous create retry. Fixed 2026-06-10: withdrawal create now has durable client/server idempotency and Mini Program page-level durable-detail terminal-refresh proof.
 - Reader/consumer branches checked: finance reports, dashboard settlement readiness, manual open-status readiness, withdrawal list/detail, settlement-account status, and provider balance versus local finance totals. Fixed 2026-06-10: the intentionally split boundary is proof-covered; provider balance is withdrawable truth and local finance tables are reporting truth.
 - Authorization/tenant branches checked: owner/manager finance reads, owner-only settlement-account submission, owner/manager withdrawal reads and creates, selected merchant resolution, callback provider identity checks, and cross-owner withdrawal detail denial.
 - Zombie/unreachable branches checked: shared Baofu verify-fee payment recovery exists but merchant settlement status config disables payment recovery; role-agnostic wrappers exist beyond merchant scope; App finance/withdrawal entries were not found; no local wallet/freeze repair path was found because merchant withdrawal balance is provider-owned.
-- Test-proof gaps checked: backend coverage is broad for settlement onboarding, withdrawal create/callback/recovery, required withdrawal `Idempotency-Key` semantics, callback durable fact parity, manager create permission, finance overview, and finance-report-vs-provider-balance boundary proof. Missing proof remains around Mini Program page-level unknown-result recovery.
+- Test-proof gaps checked: backend coverage is broad for settlement onboarding, withdrawal create/callback/recovery, required withdrawal `Idempotency-Key` semantics, callback durable fact parity, manager create permission, finance overview, and finance-report-vs-provider-balance boundary proof. Mini Program withdrawal page-level unknown-result recovery is now proof-covered; remaining Mini Program proof gap is settlement-account submit/status long-wait runtime behavior plus broader end-to-end provider-timeout recovery.

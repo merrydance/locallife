@@ -10,7 +10,7 @@ function read(relativePath) {
   return fs.readFileSync(path.join(ROOT, relativePath), 'utf8')
 }
 
-function loadTsModule(relativePath, requireStub = () => ({})) {
+function loadTsModule(relativePath, requireStub = () => ({}), extraSandbox = {}) {
   const sourcePath = path.join(ROOT, relativePath)
   const source = fs.readFileSync(sourcePath, 'utf8')
   const compiled = ts.transpileModule(source, {
@@ -25,12 +25,55 @@ function loadTsModule(relativePath, requireStub = () => ({})) {
     exports: {},
     module: { exports: {} },
     require: requireStub,
-    console
+    console,
+    ...extraSandbox
   }
 
   sandbox.exports = sandbox.module.exports
   vm.runInNewContext(compiled, sandbox, { filename: sourcePath })
   return sandbox.module.exports
+}
+
+function clone(value) {
+  return JSON.parse(JSON.stringify(value))
+}
+
+function applySetData(target, patch) {
+  for (const [key, value] of Object.entries(patch)) {
+    if (!key.includes('.')) {
+      target.data[key] = value
+      continue
+    }
+
+    const parts = key.split('.')
+    let cursor = target.data
+    for (let index = 0; index < parts.length - 1; index += 1) {
+      const part = parts[index]
+      if (!cursor[part] || typeof cursor[part] !== 'object') {
+        cursor[part] = {}
+      }
+      cursor = cursor[part]
+    }
+    cursor[parts[parts.length - 1]] = value
+  }
+}
+
+function createPageContext(page, overrides = {}) {
+  return {
+    ...page,
+    data: {
+      ...clone(page.data),
+      ...overrides
+    },
+    setData(patch) {
+      applySetData(this, patch)
+    }
+  }
+}
+
+async function flushMicrotasks() {
+  await Promise.resolve()
+  await Promise.resolve()
 }
 
 const apiSource = read('miniprogram/pages/merchant/_main_shared/api/baofu-withdrawal.ts')
@@ -105,6 +148,245 @@ assert.strictEqual(workflow.buildBaofuWithdrawalSubmitCheck('200.00', workflow.b
   can_withdraw: true,
   disabled_reason: ''
 })).errorMessage, '提现金额最多 ¥100.00')
+
+function loadMerchantWithdrawalCreatePage(events, apiStub) {
+  let pageConfig
+
+  loadTsModule('miniprogram/pages/merchant/finance/withdrawals/create/index.ts', (id) => {
+    if (id === '../../../_main_shared/api/baofu-withdrawal') {
+      return apiStub
+    }
+    if (id === '../../../_main_shared/services/baofu-withdrawal-workflow') {
+      return workflow
+    }
+    if (id === '../../../../../utils/logger') {
+      return { logger: { warn() {}, error() {}, info() {} } }
+    }
+    if (id === '../../../../../utils/responsive') {
+      return { getStableBarHeights: () => ({ navBarHeight: 88 }) }
+    }
+    if (id === '../../../../../utils/user-facing') {
+      return { getErrorUserMessage: (_error, fallback) => fallback }
+    }
+    throw new Error(`unexpected merchant withdrawal create require: ${id}`)
+  }, {
+    Page(config) {
+      pageConfig = config
+    },
+    wx: {
+      showToast(payload) {
+        events.toasts.push(payload)
+      },
+      redirectTo(payload) {
+        events.redirects.push(payload)
+      }
+    },
+    Date,
+    Math,
+    Promise
+  })
+
+  assert(pageConfig, 'merchant withdrawal create page should register itself')
+  return pageConfig
+}
+
+function loadMerchantWithdrawalDetailPage(events, apiStub) {
+  let pageConfig
+
+  loadTsModule('miniprogram/pages/merchant/finance/withdrawals/detail/index.ts', (id) => {
+    if (id === '../../../_main_shared/api/baofu-withdrawal') {
+      return apiStub
+    }
+    if (id === '../../../_main_shared/services/baofu-withdrawal-workflow') {
+      return workflow
+    }
+    if (id === '../../../../../utils/logger') {
+      return { logger: { warn() {}, error() {}, info() {} } }
+    }
+    if (id === '../../../../../utils/responsive') {
+      return { getStableBarHeights: () => ({ navBarHeight: 88 }) }
+    }
+    if (id === '../../../../../utils/user-facing') {
+      return { getErrorUserMessage: (_error, fallback) => fallback }
+    }
+    throw new Error(`unexpected merchant withdrawal detail require: ${id}`)
+  }, {
+    Page(config) {
+      pageConfig = config
+    },
+    wx: {
+      redirectTo(payload) {
+        events.redirects.push(payload)
+      }
+    },
+    setInterval(callback, intervalMs) {
+      const timerID = events.nextTimerID
+      events.nextTimerID += 1
+      events.intervals.set(timerID, { callback, intervalMs })
+      return timerID
+    },
+    clearInterval(timerID) {
+      events.clearedTimers.push(timerID)
+      events.intervals.delete(timerID)
+    },
+    Date,
+    Promise
+  })
+
+  assert(pageConfig, 'merchant withdrawal detail page should register itself')
+  return pageConfig
+}
+
+async function assertMerchantCreateRedirectsToDurableDetailAndBlocksDuplicateSubmit() {
+  const events = {
+    toasts: [],
+    redirects: []
+  }
+  const createCalls = []
+  let releaseCreate
+  const createPromise = new Promise((resolve) => {
+    releaseCreate = resolve
+  })
+  const page = createPageContext(loadMerchantWithdrawalCreatePage(events, {
+    getBaofuWithdrawalBalance: async () => ({
+      available_amount: 30000,
+      pending_amount: 0,
+      ledger_amount: 30000,
+      frozen_amount: 0,
+      min_withdraw_amount: 100,
+      max_withdraw_amount: 500000000,
+      can_withdraw: true,
+      disabled_reason: ''
+    }),
+    createBaofuWithdrawal: async (role, payload, options) => {
+      createCalls.push({ role, payload, options })
+      return createPromise
+    }
+  }), {
+    initialLoading: false,
+    balanceView: workflow.buildBaofuWithdrawalBalanceView({
+      available_amount: 30000,
+      pending_amount: 0,
+      ledger_amount: 30000,
+      frozen_amount: 0,
+      min_withdraw_amount: 100,
+      max_withdraw_amount: 500000000,
+      can_withdraw: true,
+      disabled_reason: ''
+    }),
+    amountInput: '123.45',
+    withdrawalIdempotencyKey: 'merchant-withdrawal:test-key'
+  })
+
+  const firstSubmit = page.onSubmit.call(page)
+  const secondSubmit = page.onSubmit.call(page)
+
+  assert.strictEqual(createCalls.length, 1, 'merchant withdrawal create page must ignore duplicate submit while request is in flight')
+  assert.strictEqual(createCalls[0].role, 'merchant')
+  assert.strictEqual(createCalls[0].payload.amount, 12345)
+  assert.strictEqual(
+    createCalls[0].options.idempotencyKey,
+    'merchant-withdrawal:test-key',
+    'create page must submit with the stable draft idempotency key'
+  )
+
+  releaseCreate({
+    withdrawal: {
+      id: 2468,
+      out_request_no: 'W20260610001',
+      amount: 12345,
+      status: 'processing',
+      sync_state: 'accepted',
+      sync_message: '银行处理中',
+      created_at: '2026-06-10T10:00:00Z',
+      updated_at: '2026-06-10T10:00:00Z'
+    },
+    message: '提现申请已受理'
+  })
+
+  await firstSubmit
+  await secondSubmit
+
+  assert.strictEqual(events.toasts[0].title, '提现申请已受理')
+  assert.strictEqual(events.toasts[0].icon, 'none')
+  assert.strictEqual(events.redirects.length, 1)
+  assert.strictEqual(
+    events.redirects[0].url,
+    '/pages/merchant/finance/withdrawals/detail/index?id=2468&created=1',
+    'create page must redirect to durable withdrawal detail returned by backend'
+  )
+  assert.strictEqual(
+    page.data.submitting,
+    true,
+    'create page must keep submitting state through redirect instead of enabling a second request'
+  )
+}
+
+async function assertMerchantDetailLoadsDurableRecordAndPollsUntilTerminal() {
+  const events = {
+    redirects: [],
+    intervals: new Map(),
+    clearedTimers: [],
+    nextTimerID: 1
+  }
+  const detailCalls = []
+  const withdrawals = [
+    {
+      id: 2468,
+      out_request_no: 'W20260610001',
+      amount: 12345,
+      status: 'processing',
+      sync_state: 'accepted',
+      sync_message: '银行处理中',
+      created_at: '2026-06-10T10:00:00Z',
+      updated_at: '2026-06-10T10:00:00Z'
+    },
+    {
+      id: 2468,
+      out_request_no: 'W20260610001',
+      amount: 12345,
+      status: 'succeeded',
+      sync_state: 'confirmed',
+      sync_message: '提现已到账',
+      created_at: '2026-06-10T10:00:00Z',
+      updated_at: '2026-06-10T10:01:00Z'
+    }
+  ]
+
+  const page = createPageContext(loadMerchantWithdrawalDetailPage(events, {
+    getBaofuWithdrawal: async (role, id) => {
+      detailCalls.push({ role, id })
+      return { withdrawal: withdrawals[Math.min(detailCalls.length - 1, withdrawals.length - 1)] }
+    }
+  }))
+
+  page._pageVisible = true
+  await page.onLoad.call(page, { id: '2468', created: '1' })
+
+  assert.deepStrictEqual(detailCalls[0], { role: 'merchant', id: 2468 })
+  assert.strictEqual(page.data.id, 2468)
+  assert.strictEqual(page.data.createdNotice, true)
+  assert.strictEqual(page.data.item.statusView.isTerminal, false)
+  assert.strictEqual(page.data.item.statusView.text, '提现处理中')
+  assert.strictEqual(events.intervals.size, 1, 'detail page must poll non-terminal withdrawal detail')
+
+  const [{ callback, intervalMs }] = Array.from(events.intervals.values())
+  assert.strictEqual(intervalMs, 15000)
+  callback()
+  await flushMicrotasks()
+
+  assert.strictEqual(detailCalls.length, 2, 'detail polling must re-read durable withdrawal detail')
+  assert.deepStrictEqual(detailCalls[1], { role: 'merchant', id: 2468 })
+  assert.strictEqual(page.data.item.statusView.isTerminal, true)
+  assert.strictEqual(page.data.item.statusView.text, '提现成功')
+  assert.deepStrictEqual(events.clearedTimers, [1], 'detail page must stop polling after terminal status')
+  assert.strictEqual(events.intervals.size, 0)
+}
+
+async function assertMerchantWithdrawalPageRecoveryRuntimeContract() {
+  await assertMerchantCreateRedirectsToDurableDetailAndBlocksDuplicateSubmit()
+  await assertMerchantDetailLoadsDurableRecordAndPollsUntilTerminal()
+}
 
 const merchantWithdrawalSources = [
   read('miniprogram/pages/merchant/finance/withdrawals/index.ts'),
@@ -259,4 +541,11 @@ const riderDepositSources = [
 ].join('\n')
 assert(!riderDepositSources.includes('baofu-withdrawal'), 'Rider deposit refund pages must stay separate from Baofoo income withdrawal')
 
-console.log('Baofu withdrawal workflow contract check passed')
+assertMerchantWithdrawalPageRecoveryRuntimeContract()
+  .then(() => {
+    console.log('check-baofu-withdrawal-workflow: server-scoped Baofoo withdrawal workflow keeps durable detail recovery and terminal polling contracts')
+  })
+  .catch((error) => {
+    console.error(error)
+    process.exit(1)
+  })
