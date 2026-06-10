@@ -269,6 +269,7 @@ export interface DisplayConfigResponse {
     id: number
     merchant_id: number
     enable_print: boolean
+    /** 旧客户端兼容响应字段；小程序不再展示或提交语音配置。 */
     enable_voice: boolean
     enable_kds: boolean
     print_takeout: boolean
@@ -277,7 +278,9 @@ export interface DisplayConfigResponse {
     print_dispatch_mode: 'single_full' | 'split' | string
     print_trigger_mode: 'accepted' | 'ready' | 'manual' | string
     auto_accept_paid_orders: boolean
+    /** 旧客户端兼容响应字段；小程序不再展示或提交语音配置。 */
     voice_takeout: boolean
+    /** 旧客户端兼容响应字段；小程序不再展示或提交语音配置。 */
     voice_dine_in: boolean
     kds_url?: string
     created_at: string
@@ -287,6 +290,7 @@ export interface DisplayConfigResponse {
 /** 更新显示配置请求 - 基于swagger api.updateDisplayConfigRequest */
 export interface UpdateDisplayConfigRequest extends Record<string, unknown> {
     enable_print?: boolean
+    /** Deprecated/no-op: 旧客户端兼容请求字段，后端接受但忽略。 */
     enable_voice?: boolean
     enable_kds?: boolean
     print_takeout?: boolean
@@ -295,7 +299,9 @@ export interface UpdateDisplayConfigRequest extends Record<string, unknown> {
     print_dispatch_mode?: 'single_full' | 'split' | string
     print_trigger_mode?: 'accepted' | 'ready' | 'manual' | string
     auto_accept_paid_orders?: boolean
+    /** Deprecated/no-op: 旧客户端兼容请求字段，后端接受但忽略。 */
     voice_takeout?: boolean
+    /** Deprecated/no-op: 旧客户端兼容请求字段，后端接受但忽略。 */
     voice_dine_in?: boolean
     kds_url?: string
 }
@@ -640,7 +646,7 @@ export class DeviceManagementService {
 
 /**
  * 显示配置服务
- * 提供订单展示配置管理，包括打印、语音播报、KDS等设置
+ * 提供订单展示配置管理，包括打印、自动接单、KDS和旧客户端语音字段兼容
  */
 export class DisplayConfigService {
     /**

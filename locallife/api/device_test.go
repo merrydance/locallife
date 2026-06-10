@@ -1592,6 +1592,8 @@ func TestUpdateDisplayConfigAPI(t *testing.T) {
 				"enable_print":            false,
 				"auto_accept_paid_orders": true,
 				"enable_voice":            true,
+				"voice_takeout":           false,
+				"voice_dine_in":           false,
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -1607,12 +1609,14 @@ func TestUpdateDisplayConfigAPI(t *testing.T) {
 				updatedConfig := config
 				updatedConfig.EnablePrint = false
 				updatedConfig.AutoAcceptPaidOrders = true
-				updatedConfig.EnableVoice = true
 				store.EXPECT().
 					UpdateOrderDisplayConfig(gomock.Any(), gomock.Any()).
 					DoAndReturn(func(_ context.Context, arg db.UpdateOrderDisplayConfigParams) (db.OrderDisplayConfig, error) {
 						require.True(t, arg.AutoAcceptPaidOrders.Valid)
 						require.True(t, arg.AutoAcceptPaidOrders.Bool)
+						require.False(t, arg.EnableVoice.Valid)
+						require.False(t, arg.VoiceTakeout.Valid)
+						require.False(t, arg.VoiceDineIn.Valid)
 						return updatedConfig, nil
 					}).
 					Times(1)
@@ -1624,7 +1628,9 @@ func TestUpdateDisplayConfigAPI(t *testing.T) {
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, false, response.EnablePrint)
 				require.Equal(t, true, response.AutoAcceptPaidOrders)
-				require.Equal(t, true, response.EnableVoice)
+				require.Equal(t, config.EnableVoice, response.EnableVoice)
+				require.Equal(t, config.VoiceTakeout, response.VoiceTakeout)
+				require.Equal(t, config.VoiceDineIn, response.VoiceDineIn)
 			},
 		},
 		{
@@ -1632,6 +1638,9 @@ func TestUpdateDisplayConfigAPI(t *testing.T) {
 			body: map[string]interface{}{
 				"auto_accept_paid_orders": true,
 				"enable_kds":              true,
+				"enable_voice":            true,
+				"voice_takeout":           false,
+				"voice_dine_in":           false,
 				"kds_url":                 "https://kds.example.com",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
@@ -1653,6 +1662,9 @@ func TestUpdateDisplayConfigAPI(t *testing.T) {
 					CreateOrderDisplayConfig(gomock.Any(), gomock.Any()).
 					DoAndReturn(func(_ context.Context, arg db.CreateOrderDisplayConfigParams) (db.OrderDisplayConfig, error) {
 						require.True(t, arg.AutoAcceptPaidOrders)
+						require.False(t, arg.EnableVoice)
+						require.True(t, arg.VoiceTakeout)
+						require.True(t, arg.VoiceDineIn)
 						return newConfig, nil
 					}).
 					Times(1)

@@ -10871,7 +10871,7 @@ const docTemplate = `{
                         "Bearer": []
                     }
                 ],
-                "description": "商户获取订单展示配置，包括打印、语音播报、KDS等设置",
+                "description": "商户获取订单展示配置，包括打印、自动接单、KDS以及兼容旧客户端的语音字段",
                 "consumes": [
                     "application/json"
                 ],
@@ -10918,7 +10918,7 @@ const docTemplate = `{
                         "Bearer": []
                     }
                 ],
-                "description": "商户更新订单展示配置，包括打印、语音播报、KDS等设置",
+                "description": "商户更新订单展示配置，包括打印、自动接单、KDS等设置；语音字段仅兼容旧客户端请求并保持为 no-op",
                 "consumes": [
                     "application/json"
                 ],
@@ -37022,6 +37022,7 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "enable_voice": {
+                    "description": "旧客户端兼容响应字段；语音播报已在小程序下线，不再作为可配置能力。",
                     "type": "boolean"
                 },
                 "id": {
@@ -37052,9 +37053,11 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "voice_dine_in": {
+                    "description": "旧客户端兼容响应字段；语音播报已在小程序下线，不再作为可配置能力。",
                     "type": "boolean"
                 },
                 "voice_takeout": {
+                    "description": "旧客户端兼容响应字段；语音播报已在小程序下线，不再作为可配置能力。",
                     "type": "boolean"
                 }
             }
@@ -46059,6 +46062,7 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "enable_voice": {
+                    "description": "Deprecated/no-op: 旧客户端兼容请求字段，后端接受但忽略，不再更新语音配置。",
                     "type": "boolean"
                 },
                 "kds_url": {
@@ -46090,9 +46094,11 @@ const docTemplate = `{
                     ]
                 },
                 "voice_dine_in": {
+                    "description": "Deprecated/no-op: 旧客户端兼容请求字段，后端接受但忽略，不再更新语音配置。",
                     "type": "boolean"
                 },
                 "voice_takeout": {
+                    "description": "Deprecated/no-op: 旧客户端兼容请求字段，后端接受但忽略，不再更新语音配置。",
                     "type": "boolean"
                 }
             }

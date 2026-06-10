@@ -777,18 +777,21 @@ type getDisplayConfigResponse struct {
 	PrintDispatchMode    string `json:"print_dispatch_mode"`
 	PrintTriggerMode     string `json:"print_trigger_mode"`
 	AutoAcceptPaidOrders bool   `json:"auto_accept_paid_orders"`
-	EnableVoice          bool   `json:"enable_voice"`
-	VoiceTakeout         bool   `json:"voice_takeout"`
-	VoiceDineIn          bool   `json:"voice_dine_in"`
-	EnableKDS            bool   `json:"enable_kds"`
-	KdsURL               string `json:"kds_url,omitempty"`
-	CreatedAt            string `json:"created_at"`
-	UpdatedAt            string `json:"updated_at,omitempty"`
+	// 旧客户端兼容响应字段；语音播报已在小程序下线，不再作为可配置能力。
+	EnableVoice bool `json:"enable_voice"`
+	// 旧客户端兼容响应字段；语音播报已在小程序下线，不再作为可配置能力。
+	VoiceTakeout bool `json:"voice_takeout"`
+	// 旧客户端兼容响应字段；语音播报已在小程序下线，不再作为可配置能力。
+	VoiceDineIn bool   `json:"voice_dine_in"`
+	EnableKDS   bool   `json:"enable_kds"`
+	KdsURL      string `json:"kds_url,omitempty"`
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at,omitempty"`
 }
 
 // getDisplayConfig 获取订单展示配置
 // @Summary 获取订单展示配置
-// @Description 商户获取订单展示配置，包括打印、语音播报、KDS等设置
+// @Description 商户获取订单展示配置，包括打印、自动接单、KDS以及兼容旧客户端的语音字段
 // @Tags 商户设备管理
 // @Accept json
 // @Produce json
@@ -880,16 +883,19 @@ type updateDisplayConfigRequest struct {
 	PrintDispatchMode    *string `json:"print_dispatch_mode" binding:"omitempty,oneof=single_full split"`
 	PrintTriggerMode     *string `json:"print_trigger_mode" binding:"omitempty,oneof=accepted ready manual"`
 	AutoAcceptPaidOrders *bool   `json:"auto_accept_paid_orders"`
-	EnableVoice          *bool   `json:"enable_voice"`
-	VoiceTakeout         *bool   `json:"voice_takeout"`
-	VoiceDineIn          *bool   `json:"voice_dine_in"`
-	EnableKDS            *bool   `json:"enable_kds"`
-	KdsURL               *string `json:"kds_url" binding:"omitempty,url,max=500"`
+	// Deprecated/no-op: 旧客户端兼容请求字段，后端接受但忽略，不再更新语音配置。
+	EnableVoice *bool `json:"enable_voice"`
+	// Deprecated/no-op: 旧客户端兼容请求字段，后端接受但忽略，不再更新语音配置。
+	VoiceTakeout *bool `json:"voice_takeout"`
+	// Deprecated/no-op: 旧客户端兼容请求字段，后端接受但忽略，不再更新语音配置。
+	VoiceDineIn *bool   `json:"voice_dine_in"`
+	EnableKDS   *bool   `json:"enable_kds"`
+	KdsURL      *string `json:"kds_url" binding:"omitempty,url,max=500"`
 }
 
 // updateDisplayConfig 更新订单展示配置
 // @Summary 更新订单展示配置
-// @Description 商户更新订单展示配置，包括打印、语音播报、KDS等设置
+// @Description 商户更新订单展示配置，包括打印、自动接单、KDS等设置；语音字段仅兼容旧客户端请求并保持为 no-op
 // @Tags 商户设备管理
 // @Accept json
 // @Produce json
@@ -970,15 +976,6 @@ func (server *Server) updateDisplayConfig(ctx *gin.Context) {
 		if req.AutoAcceptPaidOrders != nil {
 			createParams.AutoAcceptPaidOrders = *req.AutoAcceptPaidOrders
 		}
-		if req.EnableVoice != nil {
-			createParams.EnableVoice = *req.EnableVoice
-		}
-		if req.VoiceTakeout != nil {
-			createParams.VoiceTakeout = *req.VoiceTakeout
-		}
-		if req.VoiceDineIn != nil {
-			createParams.VoiceDineIn = *req.VoiceDineIn
-		}
 		if req.EnableKDS != nil {
 			createParams.EnableKds = *req.EnableKDS
 		}
@@ -1017,15 +1014,6 @@ func (server *Server) updateDisplayConfig(ctx *gin.Context) {
 		}
 		if req.AutoAcceptPaidOrders != nil {
 			updateParams.AutoAcceptPaidOrders = pgtype.Bool{Bool: *req.AutoAcceptPaidOrders, Valid: true}
-		}
-		if req.EnableVoice != nil {
-			updateParams.EnableVoice = pgtype.Bool{Bool: *req.EnableVoice, Valid: true}
-		}
-		if req.VoiceTakeout != nil {
-			updateParams.VoiceTakeout = pgtype.Bool{Bool: *req.VoiceTakeout, Valid: true}
-		}
-		if req.VoiceDineIn != nil {
-			updateParams.VoiceDineIn = pgtype.Bool{Bool: *req.VoiceDineIn, Valid: true}
 		}
 		if req.EnableKDS != nil {
 			updateParams.EnableKds = pgtype.Bool{Bool: *req.EnableKDS, Valid: true}

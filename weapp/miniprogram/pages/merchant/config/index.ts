@@ -78,7 +78,7 @@ const CONFIG_SECTIONS: ConfigSection[] = [
     title: '设备与展示',
     desc: '维护显示、打印和门店设备设置。',
     items: [
-      { id: 'display-config', title: '后厨协同设置', desc: '统一维护打印分发与语音播报配置', path: '/pages/merchant/settings/display-config/index' },
+      { id: 'display-config', title: '后厨协同设置', desc: '统一维护打印分发与自动接单配置', path: '/pages/merchant/settings/display-config/index' },
       { id: 'printers', title: '打印机管理', desc: '添加、配置和维护云打印机设备', path: '/pages/merchant/printers/index' }
     ]
   },

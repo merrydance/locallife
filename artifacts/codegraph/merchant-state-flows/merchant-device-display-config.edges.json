@@ -652,7 +652,7 @@
     {
       "id": "field.order_display_configs.enable_voice",
       "kind": "field",
-      "label": "order_display_configs.enable_voice / voice_*"
+      "label": "order_display_configs.enable_voice / voice_* deprecated no-op compatibility"
     }
   ],
   "edges": [
@@ -844,12 +844,12 @@
     {
       "from": "sql.createOrderDisplayConfig",
       "to": "field.order_display_configs.enable_voice",
-      "kind": "write"
+      "kind": "default_compat_write"
     },
     {
-      "from": "sql.updateOrderDisplayConfig",
+      "from": "api.updateDisplayConfig",
       "to": "field.order_display_configs.enable_voice",
-      "kind": "write"
+      "kind": "legacy_request_ignored"
     },
     {
       "from": "api.updateDisplayConfig",

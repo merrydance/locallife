@@ -97,23 +97,6 @@
           </view>
         </view>
 
-        <view class="section-panel">
-          <view class="section-top">
-            <text class="section-title">语音提醒</text>
-            <text class="section-caption">保留外卖与堂食的独立提醒偏好，便于不同岗位协作。</text>
-          </view>
-          <t-cell-group theme="card">
-            <t-cell title="启用语音播报" description="关闭后，新单与履约关键节点不再播报语音提示，但会保留当前细项配置值">
-              <t-switch slot="note" value="{{settingsForm.enable_voice}}" data-field="enable_voice" bind:change="onSettingsSwitchChange" size="large" />
-            </t-cell>
-            <t-cell title="外卖语音提醒" description="新外卖订单到达时播报提醒，适合前台接单场景">
-              <t-switch slot="note" value="{{settingsForm.voice_takeout}}" data-field="voice_takeout" bind:change="onSettingsSwitchChange" size="large" disabled="{{!settingsForm.enable_voice}}" />
-            </t-cell>
-            <t-cell title="堂食语音提醒" description="堂食新单和履约变化时播报，减少漏单和错单">
-              <t-switch slot="note" value="{{settingsForm.voice_dine_in}}" data-field="voice_dine_in" bind:change="onSettingsSwitchChange" size="large" disabled="{{!settingsForm.enable_voice}}" />
-            </t-cell>
-          </t-cell-group>
-        </view>
         <view class="form-actions">
           <t-button theme="primary" loading="{{settingsSaving}}" disabled="{{settingsSaving}}" bind:tap="onSaveSettings">保存后厨协同设置</t-button>
         </view>

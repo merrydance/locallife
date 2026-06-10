@@ -17,9 +17,6 @@ interface DisplayConfigForm {
   print_dispatch_mode: 'single_full' | 'split'
   print_trigger_mode: 'accepted' | 'ready' | 'manual'
   auto_accept_paid_orders: boolean
-  enable_voice: boolean
-  voice_takeout: boolean
-  voice_dine_in: boolean
 }
 
 interface DisplayConfigOption<T extends string> {
@@ -56,10 +53,7 @@ function buildDisplayConfigForm(config?: DisplayConfigResponse): DisplayConfigFo
     print_trigger_mode: config?.print_trigger_mode === 'ready' || config?.print_trigger_mode === 'manual'
       ? config.print_trigger_mode
       : 'accepted',
-    auto_accept_paid_orders: Boolean(config?.auto_accept_paid_orders),
-    enable_voice: Boolean(config?.enable_voice),
-    voice_takeout: Boolean(config?.voice_takeout),
-    voice_dine_in: Boolean(config?.voice_dine_in)
+    auto_accept_paid_orders: Boolean(config?.auto_accept_paid_orders)
   }
 }
 
@@ -307,10 +301,7 @@ Page({
         print_reservation: this.data.settingsForm.print_reservation,
         print_dispatch_mode: this.data.settingsForm.print_dispatch_mode,
         print_trigger_mode: this.data.settingsForm.print_trigger_mode,
-        auto_accept_paid_orders: this.data.settingsForm.auto_accept_paid_orders,
-        enable_voice: this.data.settingsForm.enable_voice,
-        voice_takeout: this.data.settingsForm.voice_takeout,
-        voice_dine_in: this.data.settingsForm.voice_dine_in
+        auto_accept_paid_orders: this.data.settingsForm.auto_accept_paid_orders
       })
       const settingsForm = buildDisplayConfigForm(savedConfig)
       this.setData({
