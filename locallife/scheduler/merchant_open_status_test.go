@@ -29,6 +29,12 @@ func TestMerchantOpenStatusScheduler_RunOnce(t *testing.T) {
 			return []int64{1001}, nil
 		},
 	)
+	store.EXPECT().ClearExpiredMerchantManualOpenStatusOverrides(gomock.Any()).DoAndReturn(
+		func(ctx context.Context) (int64, error) {
+			require.NotNil(t, ctx)
+			return int64(0), nil
+		},
+	)
 	store.EXPECT().GetMerchantIsOpen(gomock.Any(), int64(1001)).DoAndReturn(
 		func(ctx context.Context, merchantID int64) (db.GetMerchantIsOpenRow, error) {
 			require.NotNil(t, ctx)
@@ -78,6 +84,7 @@ func TestMerchantOpenStatusScheduler_RunOnceAutoClosesExpiredManualStatus(t *tes
 		},
 	)
 	store.EXPECT().SyncMerchantOpenStatusByBusinessHours(gomock.Any()).Return(nil, nil)
+	store.EXPECT().ClearExpiredMerchantManualOpenStatusOverrides(gomock.Any()).Return(int64(0), nil)
 
 	publisher := &testMerchantStatusChangePublisher{}
 

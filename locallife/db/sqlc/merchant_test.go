@@ -1383,6 +1383,160 @@ func TestSyncMerchantOpenStatusByBusinessHoursSpecialDateRowsOverrideWeeklyRows(
 	require.True(t, status.IsOpen)
 }
 
+func TestSyncMerchantOpenStatusByBusinessHoursPreservesManualOverrideUntilBoundary(t *testing.T) {
+	ctx := context.Background()
+	merchant := createRandomMerchantForTest(t)
+	createRandomMerchantPaymentConfig(t, merchant)
+	enableAutoOpenByBusinessHours(t, merchant.ID)
+	setMerchantOpenForBusinessHourTest(t, merchant.ID, false)
+
+	current := currentBusinessHourTestClock(t)
+	createBusinessHourForSyncTest(t, merchant.ID, current.dayOfWeek, startOfDayBusinessHour(), endOfDayBusinessHour(), pgtype.Date{}, false)
+
+	_, err := testStore.(*SQLStore).connPool.Exec(ctx, `
+		UPDATE merchants
+		SET manual_open_status_until = now() + interval '1 hour'
+		WHERE id = $1
+	`, merchant.ID)
+	require.NoError(t, err)
+
+	updatedMerchantIDs, err := testStore.SyncMerchantOpenStatusByBusinessHours(ctx)
+	require.NoError(t, err)
+	require.NotContains(t, updatedMerchantIDs, merchant.ID)
+
+	status, err := testStore.GetMerchantIsOpen(ctx, merchant.ID)
+	require.NoError(t, err)
+	require.False(t, status.IsOpen)
+
+	_, err = testStore.(*SQLStore).connPool.Exec(ctx, `
+		UPDATE merchants
+		SET manual_open_status_until = now() - interval '1 second'
+		WHERE id = $1
+	`, merchant.ID)
+	require.NoError(t, err)
+
+	updatedMerchantIDs, err = testStore.SyncMerchantOpenStatusByBusinessHours(ctx)
+	require.NoError(t, err)
+	require.Contains(t, updatedMerchantIDs, merchant.ID)
+
+	status, err = testStore.GetMerchantIsOpen(ctx, merchant.ID)
+	require.NoError(t, err)
+	require.True(t, status.IsOpen)
+	require.False(t, status.ManualOpenStatusUntil.Valid)
+}
+
+func TestSyncMerchantOpenStatusByBusinessHoursClosesWhenPaymentConfigInvalidDespiteManualOverride(t *testing.T) {
+	ctx := context.Background()
+	merchant := createRandomMerchantForTest(t)
+	createRandomMerchantPaymentConfig(t, merchant)
+	enableAutoOpenByBusinessHours(t, merchant.ID)
+	setMerchantOpenForBusinessHourTest(t, merchant.ID, true)
+
+	current := currentBusinessHourTestClock(t)
+	createBusinessHourForSyncTest(t, merchant.ID, current.dayOfWeek, startOfDayBusinessHour(), endOfDayBusinessHour(), pgtype.Date{}, false)
+
+	_, err := testStore.UpdateMerchantIsOpen(ctx, UpdateMerchantIsOpenParams{
+		ID:     merchant.ID,
+		IsOpen: true,
+		ManualOpenStatusUntil: pgtype.Timestamptz{
+			Time:  time.Now().Add(time.Hour),
+			Valid: true,
+		},
+	})
+	require.NoError(t, err)
+	_, err = testStore.UpdateMerchantPaymentConfig(ctx, UpdateMerchantPaymentConfigParams{
+		MerchantID: merchant.ID,
+		Status:     pgtype.Text{String: MerchantPaymentConfigStatusPendingAuthorization, Valid: true},
+	})
+	require.NoError(t, err)
+
+	updatedMerchantIDs, err := testStore.SyncMerchantOpenStatusByBusinessHours(ctx)
+	require.NoError(t, err)
+	require.Contains(t, updatedMerchantIDs, merchant.ID)
+
+	status, err := testStore.GetMerchantIsOpen(ctx, merchant.ID)
+	require.NoError(t, err)
+	require.False(t, status.IsOpen)
+	require.False(t, status.ManualOpenStatusUntil.Valid)
+}
+
+func TestClearExpiredMerchantManualOpenStatusOverrides(t *testing.T) {
+	ctx := context.Background()
+	expiredAutoMerchant := createRandomMerchantForTest(t)
+	futureAutoMerchant := createRandomMerchantForTest(t)
+	manualModeMerchant := createRandomMerchantForTest(t)
+	enableAutoOpenByBusinessHours(t, expiredAutoMerchant.ID)
+	enableAutoOpenByBusinessHours(t, futureAutoMerchant.ID)
+
+	_, err := testStore.UpdateMerchantIsOpen(ctx, UpdateMerchantIsOpenParams{
+		ID:     expiredAutoMerchant.ID,
+		IsOpen: false,
+		ManualOpenStatusUntil: pgtype.Timestamptz{
+			Time:  time.Now().Add(-time.Hour),
+			Valid: true,
+		},
+	})
+	require.NoError(t, err)
+	_, err = testStore.UpdateMerchantIsOpen(ctx, UpdateMerchantIsOpenParams{
+		ID:     futureAutoMerchant.ID,
+		IsOpen: false,
+		ManualOpenStatusUntil: pgtype.Timestamptz{
+			Time:  time.Now().Add(time.Hour),
+			Valid: true,
+		},
+	})
+	require.NoError(t, err)
+	_, err = testStore.UpdateMerchantIsOpen(ctx, UpdateMerchantIsOpenParams{
+		ID:     manualModeMerchant.ID,
+		IsOpen: false,
+		ManualOpenStatusUntil: pgtype.Timestamptz{
+			Time:  time.Now().Add(-time.Hour),
+			Valid: true,
+		},
+	})
+	require.NoError(t, err)
+
+	clearedCount, err := testStore.ClearExpiredMerchantManualOpenStatusOverrides(ctx)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, clearedCount, int64(1))
+
+	expiredStatus, err := testStore.GetMerchantIsOpen(ctx, expiredAutoMerchant.ID)
+	require.NoError(t, err)
+	require.False(t, expiredStatus.ManualOpenStatusUntil.Valid)
+
+	futureStatus, err := testStore.GetMerchantIsOpen(ctx, futureAutoMerchant.ID)
+	require.NoError(t, err)
+	require.True(t, futureStatus.ManualOpenStatusUntil.Valid)
+
+	manualModeStatus, err := testStore.GetMerchantIsOpen(ctx, manualModeMerchant.ID)
+	require.NoError(t, err)
+	require.True(t, manualModeStatus.ManualOpenStatusUntil.Valid)
+}
+
+func TestCreateBusinessHourRejectsNonClosedReverseWindow(t *testing.T) {
+	merchant := createRandomMerchantForTest(t)
+
+	_, err := testStore.CreateBusinessHour(context.Background(), CreateBusinessHourParams{
+		MerchantID:  merchant.ID,
+		DayOfWeek:   3,
+		OpenTime:    pgtype.Time{Microseconds: 21 * 3600 * 1000000, Valid: true},
+		CloseTime:   pgtype.Time{Microseconds: 9 * 3600 * 1000000, Valid: true},
+		IsClosed:    false,
+		SpecialDate: pgtype.Date{},
+	})
+	require.Error(t, err)
+
+	_, err = testStore.CreateBusinessHour(context.Background(), CreateBusinessHourParams{
+		MerchantID:  merchant.ID,
+		DayOfWeek:   3,
+		OpenTime:    pgtype.Time{Microseconds: 21 * 3600 * 1000000, Valid: true},
+		CloseTime:   pgtype.Time{Microseconds: 9 * 3600 * 1000000, Valid: true},
+		IsClosed:    true,
+		SpecialDate: pgtype.Date{},
+	})
+	require.NoError(t, err)
+}
+
 type businessHourWindow struct {
 	start pgtype.Time
 	end   pgtype.Time

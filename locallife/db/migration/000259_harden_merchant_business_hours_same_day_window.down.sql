@@ -1,0 +1,2 @@
+ALTER TABLE merchant_business_hours
+DROP CONSTRAINT IF EXISTS merchant_business_hours_same_day_window_chk;

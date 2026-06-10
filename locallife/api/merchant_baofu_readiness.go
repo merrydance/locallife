@@ -12,6 +12,7 @@ import (
 var (
 	errMerchantBaofuAccountMissing       = errors.New("商户结算账户未开通，暂不能开业接收分账订单")
 	errMerchantBaofuWechatChannelPending = errors.New("商户微信支付通道待开通，暂不能开业接收微信生态支付订单")
+	errMerchantPaymentConfigInactive     = errors.New("商户支付配置未生效，暂不能开业接收订单")
 )
 
 func (server *Server) ensureMerchantBaofuPaymentReady(ctx context.Context, merchant db.Merchant) error {
@@ -26,6 +27,20 @@ func (server *Server) ensureMerchantBaofuPaymentReady(ctx context.Context, merch
 		return errMerchantBaofuWechatChannelPending
 	}
 	return errMerchantBaofuAccountMissing
+}
+
+func (server *Server) ensureMerchantPaymentConfigReady(ctx context.Context, merchantID int64) error {
+	paymentConfig, err := server.store.GetMerchantPaymentConfig(ctx, merchantID)
+	if err != nil {
+		if isNotFoundError(err) {
+			return errMerchantPaymentConfigInactive
+		}
+		return err
+	}
+	if paymentConfig.Status != db.MerchantPaymentConfigStatusActive || paymentConfig.SubMchID == "" {
+		return errMerchantPaymentConfigInactive
+	}
+	return nil
 }
 
 func (server *Server) getMerchantBaofuSettlementReadiness(ctx context.Context, merchant db.Merchant) (logic.BaofuAccountReadiness, error) {

@@ -101,6 +101,7 @@ type Querier interface {
 	ClearAbnormalStatsDailyForBackfill(ctx context.Context, arg ClearAbnormalStatsDailyForBackfillParams) error
 	ClearBrowseHistory(ctx context.Context, userID int64) error
 	ClearCart(ctx context.Context, cartID int64) error
+	ClearExpiredMerchantManualOpenStatusOverrides(ctx context.Context) (int64, error)
 	ClearGroupApplicationBusinessLicense(ctx context.Context, id int64) (MerchantGroupApplication, error)
 	ClearGroupApplicationIDCardBack(ctx context.Context, id int64) (MerchantGroupApplication, error)
 	ClearGroupApplicationIDCardFront(ctx context.Context, id int64) (MerchantGroupApplication, error)
@@ -732,6 +733,7 @@ type Querier interface {
 	GetCustomizationDetailsByIDs(ctx context.Context, dollar_1 []int64) ([]GetCustomizationDetailsByIDsRow, error)
 	GetDailyInventory(ctx context.Context, arg GetDailyInventoryParams) (DailyInventory, error)
 	GetDailyInventoryForUpdate(ctx context.Context, arg GetDailyInventoryForUpdateParams) (DailyInventory, error)
+	GetDatabaseLocalClock(ctx context.Context) (GetDatabaseLocalClockRow, error)
 	GetDefaultBillingGroupBySession(ctx context.Context, diningSessionID int64) (BillingGroup, error)
 	GetDelivery(ctx context.Context, id int64) (Delivery, error)
 	GetDeliveryByOrderID(ctx context.Context, orderID int64) (Delivery, error)

@@ -1102,6 +1102,21 @@ func (mr *MockStoreMockRecorder) ClearCart(ctx, cartID any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearCart", reflect.TypeOf((*MockStore)(nil).ClearCart), ctx, cartID)
 }
 
+// ClearExpiredMerchantManualOpenStatusOverrides mocks base method.
+func (m *MockStore) ClearExpiredMerchantManualOpenStatusOverrides(ctx context.Context) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClearExpiredMerchantManualOpenStatusOverrides", ctx)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ClearExpiredMerchantManualOpenStatusOverrides indicates an expected call of ClearExpiredMerchantManualOpenStatusOverrides.
+func (mr *MockStoreMockRecorder) ClearExpiredMerchantManualOpenStatusOverrides(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearExpiredMerchantManualOpenStatusOverrides", reflect.TypeOf((*MockStore)(nil).ClearExpiredMerchantManualOpenStatusOverrides), ctx)
+}
+
 // ClearGroupApplicationBusinessLicense mocks base method.
 func (m *MockStore) ClearGroupApplicationBusinessLicense(ctx context.Context, id int64) (db.MerchantGroupApplication, error) {
 	m.ctrl.T.Helper()
@@ -7990,6 +8005,21 @@ func (m *MockStore) GetDailyInventoryForUpdate(ctx context.Context, arg db.GetDa
 func (mr *MockStoreMockRecorder) GetDailyInventoryForUpdate(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDailyInventoryForUpdate", reflect.TypeOf((*MockStore)(nil).GetDailyInventoryForUpdate), ctx, arg)
+}
+
+// GetDatabaseLocalClock mocks base method.
+func (m *MockStore) GetDatabaseLocalClock(ctx context.Context) (db.GetDatabaseLocalClockRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDatabaseLocalClock", ctx)
+	ret0, _ := ret[0].(db.GetDatabaseLocalClockRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetDatabaseLocalClock indicates an expected call of GetDatabaseLocalClock.
+func (mr *MockStoreMockRecorder) GetDatabaseLocalClock(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDatabaseLocalClock", reflect.TypeOf((*MockStore)(nil).GetDatabaseLocalClock), ctx)
 }
 
 // GetDefaultBillingGroupBySession mocks base method.

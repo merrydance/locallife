@@ -20,7 +20,7 @@ SET
 WHERE id = $1
   AND status = 'approved'
   AND deleted_at IS NULL
-RETURNING id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images
+RETURNING id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images, manual_open_status_until
 `
 
 func (q *Queries) ActivateApprovedMerchant(ctx context.Context, id int64) (Merchant, error) {
@@ -53,6 +53,7 @@ func (q *Queries) ActivateApprovedMerchant(ctx context.Context, id int64) (Merch
 		&i.AutoOpenByBusinessHours,
 		&i.StorefrontImages,
 		&i.EnvironmentImages,
+		&i.ManualOpenStatusUntil,
 	)
 	return i, err
 }
@@ -151,6 +152,24 @@ func (q *Queries) CheckLegalPersonIDExists(ctx context.Context, arg CheckLegalPe
 	return count, err
 }
 
+const clearExpiredMerchantManualOpenStatusOverrides = `-- name: ClearExpiredMerchantManualOpenStatusOverrides :execrows
+UPDATE merchants
+SET
+  manual_open_status_until = NULL,
+  updated_at = now()
+WHERE auto_open_by_business_hours = true
+  AND manual_open_status_until IS NOT NULL
+  AND manual_open_status_until <= now()
+`
+
+func (q *Queries) ClearExpiredMerchantManualOpenStatusOverrides(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, clearExpiredMerchantManualOpenStatusOverrides)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const clearMerchantLogo = `-- name: ClearMerchantLogo :one
 UPDATE merchants
 SET
@@ -160,7 +179,7 @@ SET
 WHERE id = $1
   AND version = $2
   AND deleted_at IS NULL
-RETURNING id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images
+RETURNING id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images, manual_open_status_until
 `
 
 type ClearMerchantLogoParams struct {
@@ -198,6 +217,7 @@ func (q *Queries) ClearMerchantLogo(ctx context.Context, arg ClearMerchantLogoPa
 		&i.AutoOpenByBusinessHours,
 		&i.StorefrontImages,
 		&i.EnvironmentImages,
+		&i.ManualOpenStatusUntil,
 	)
 	return i, err
 }
@@ -359,7 +379,7 @@ INSERT INTO merchants (
 ) VALUES (
   $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
 )
-RETURNING id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images
+RETURNING id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images, manual_open_status_until
 `
 
 type CreateMerchantParams struct {
@@ -421,6 +441,7 @@ func (q *Queries) CreateMerchant(ctx context.Context, arg CreateMerchantParams) 
 		&i.AutoOpenByBusinessHours,
 		&i.StorefrontImages,
 		&i.EnvironmentImages,
+		&i.ManualOpenStatusUntil,
 	)
 	return i, err
 }
@@ -620,6 +641,40 @@ func (q *Queries) GetBusinessHourByDayOfWeek(ctx context.Context, arg GetBusines
 	return i, err
 }
 
+const getDatabaseLocalClock = `-- name: GetDatabaseLocalClock :one
+SELECT
+  EXTRACT(YEAR FROM CURRENT_DATE)::int AS current_year,
+  EXTRACT(MONTH FROM CURRENT_DATE)::int AS current_month,
+  EXTRACT(DAY FROM CURRENT_DATE)::int AS current_day,
+  (
+    EXTRACT(HOUR FROM LOCALTIME)::bigint * 3600 * 1000000 +
+    EXTRACT(MINUTE FROM LOCALTIME)::bigint * 60 * 1000000 +
+    FLOOR(EXTRACT(SECOND FROM LOCALTIME) * 1000000)::bigint
+  )::bigint AS local_time_micros,
+  current_setting('TIMEZONE')::text AS time_zone
+`
+
+type GetDatabaseLocalClockRow struct {
+	CurrentYear     int32  `json:"current_year"`
+	CurrentMonth    int32  `json:"current_month"`
+	CurrentDay      int32  `json:"current_day"`
+	LocalTimeMicros int64  `json:"local_time_micros"`
+	TimeZone        string `json:"time_zone"`
+}
+
+func (q *Queries) GetDatabaseLocalClock(ctx context.Context) (GetDatabaseLocalClockRow, error) {
+	row := q.db.QueryRow(ctx, getDatabaseLocalClock)
+	var i GetDatabaseLocalClockRow
+	err := row.Scan(
+		&i.CurrentYear,
+		&i.CurrentMonth,
+		&i.CurrentDay,
+		&i.LocalTimeMicros,
+		&i.TimeZone,
+	)
+	return i, err
+}
+
 const getLatestApprovedMerchantApplicationByUser = `-- name: GetLatestApprovedMerchantApplicationByUser :one
 SELECT id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id, review_summary FROM merchant_applications
 WHERE user_id = $1
@@ -672,7 +727,7 @@ func (q *Queries) GetLatestApprovedMerchantApplicationByUser(ctx context.Context
 }
 
 const getMerchant = `-- name: GetMerchant :one
-SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images FROM merchants
+SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images, manual_open_status_until FROM merchants
 WHERE id = $1 AND deleted_at IS NULL LIMIT 1
 `
 
@@ -706,6 +761,7 @@ func (q *Queries) GetMerchant(ctx context.Context, id int64) (Merchant, error) {
 		&i.AutoOpenByBusinessHours,
 		&i.StorefrontImages,
 		&i.EnvironmentImages,
+		&i.ManualOpenStatusUntil,
 	)
 	return i, err
 }
@@ -796,7 +852,7 @@ func (q *Queries) GetMerchantApplicationByLicenseNumber(ctx context.Context, bus
 }
 
 const getMerchantByBindCode = `-- name: GetMerchantByBindCode :one
-SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images FROM merchants
+SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images, manual_open_status_until FROM merchants
 WHERE bind_code = $1 AND deleted_at IS NULL
 LIMIT 1
 `
@@ -832,12 +888,13 @@ func (q *Queries) GetMerchantByBindCode(ctx context.Context, bindCode pgtype.Tex
 		&i.AutoOpenByBusinessHours,
 		&i.StorefrontImages,
 		&i.EnvironmentImages,
+		&i.ManualOpenStatusUntil,
 	)
 	return i, err
 }
 
 const getMerchantByOwner = `-- name: GetMerchantByOwner :one
-SELECT m.id, m.owner_user_id, m.name, m.description, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.group_id, m.brand_id, m.logo_media_asset_id, m.auto_open_by_business_hours, m.storefront_images, m.environment_images FROM merchants m
+SELECT m.id, m.owner_user_id, m.name, m.description, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.group_id, m.brand_id, m.logo_media_asset_id, m.auto_open_by_business_hours, m.storefront_images, m.environment_images, m.manual_open_status_until FROM merchants m
 LEFT JOIN merchant_staff ms ON m.id = ms.merchant_id AND ms.status = 'active' AND ms.role <> 'pending'
 WHERE (m.owner_user_id = $1 OR ms.user_id = $1) AND m.deleted_at IS NULL
 ORDER BY CASE WHEN m.owner_user_id = $1 THEN 0 ELSE 1 END
@@ -876,12 +933,13 @@ func (q *Queries) GetMerchantByOwner(ctx context.Context, ownerUserID int64) (Me
 		&i.AutoOpenByBusinessHours,
 		&i.StorefrontImages,
 		&i.EnvironmentImages,
+		&i.ManualOpenStatusUntil,
 	)
 	return i, err
 }
 
 const getMerchantIsOpen = `-- name: GetMerchantIsOpen :one
-SELECT id, is_open, auto_close_at, auto_open_by_business_hours FROM merchants
+SELECT id, is_open, auto_close_at, manual_open_status_until, auto_open_by_business_hours FROM merchants
 WHERE id = $1
 `
 
@@ -889,6 +947,7 @@ type GetMerchantIsOpenRow struct {
 	ID                      int64              `json:"id"`
 	IsOpen                  bool               `json:"is_open"`
 	AutoCloseAt             pgtype.Timestamptz `json:"auto_close_at"`
+	ManualOpenStatusUntil   pgtype.Timestamptz `json:"manual_open_status_until"`
 	AutoOpenByBusinessHours bool               `json:"auto_open_by_business_hours"`
 }
 
@@ -900,13 +959,14 @@ func (q *Queries) GetMerchantIsOpen(ctx context.Context, id int64) (GetMerchantI
 		&i.ID,
 		&i.IsOpen,
 		&i.AutoCloseAt,
+		&i.ManualOpenStatusUntil,
 		&i.AutoOpenByBusinessHours,
 	)
 	return i, err
 }
 
 const getMerchantOwnedByUser = `-- name: GetMerchantOwnedByUser :one
-SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images FROM merchants
+SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images, manual_open_status_until FROM merchants
 WHERE owner_user_id = $1 AND deleted_at IS NULL
 ORDER BY created_at ASC, id ASC
 LIMIT 1
@@ -942,6 +1002,7 @@ func (q *Queries) GetMerchantOwnedByUser(ctx context.Context, ownerUserID int64)
 		&i.AutoOpenByBusinessHours,
 		&i.StorefrontImages,
 		&i.EnvironmentImages,
+		&i.ManualOpenStatusUntil,
 	)
 	return i, err
 }
@@ -949,7 +1010,7 @@ func (q *Queries) GetMerchantOwnedByUser(ctx context.Context, ownerUserID int64)
 const getMerchantWithTags = `-- name: GetMerchantWithTags :one
 
 SELECT 
-  merchants.id, merchants.owner_user_id, merchants.name, merchants.description, merchants.phone, merchants.address, merchants.latitude, merchants.longitude, merchants.status, merchants.application_data, merchants.created_at, merchants.updated_at, merchants.version, merchants.region_id, merchants.is_open, merchants.auto_close_at, merchants.deleted_at, merchants.pending_owner_bind, merchants.bind_code, merchants.bind_code_expires_at, merchants.group_id, merchants.brand_id, merchants.logo_media_asset_id, merchants.auto_open_by_business_hours, merchants.storefront_images, merchants.environment_images,
+  merchants.id, merchants.owner_user_id, merchants.name, merchants.description, merchants.phone, merchants.address, merchants.latitude, merchants.longitude, merchants.status, merchants.application_data, merchants.created_at, merchants.updated_at, merchants.version, merchants.region_id, merchants.is_open, merchants.auto_close_at, merchants.deleted_at, merchants.pending_owner_bind, merchants.bind_code, merchants.bind_code_expires_at, merchants.group_id, merchants.brand_id, merchants.logo_media_asset_id, merchants.auto_open_by_business_hours, merchants.storefront_images, merchants.environment_images, merchants.manual_open_status_until,
   COALESCE(
     (
       SELECT json_agg(
@@ -1009,6 +1070,7 @@ func (q *Queries) GetMerchantWithTags(ctx context.Context, id int64) (GetMerchan
 		&i.Merchant.AutoOpenByBusinessHours,
 		&i.Merchant.StorefrontImages,
 		&i.Merchant.EnvironmentImages,
+		&i.Merchant.ManualOpenStatusUntil,
 		&i.Tags,
 	)
 	return i, err
@@ -1327,7 +1389,7 @@ func (q *Queries) ListAllMerchantApplications(ctx context.Context, arg ListAllMe
 }
 
 const listAllMerchants = `-- name: ListAllMerchants :many
-SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images FROM merchants
+SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images, manual_open_status_until FROM merchants
 WHERE deleted_at IS NULL
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2
@@ -1374,6 +1436,7 @@ func (q *Queries) ListAllMerchants(ctx context.Context, arg ListAllMerchantsPara
 			&i.AutoOpenByBusinessHours,
 			&i.StorefrontImages,
 			&i.EnvironmentImages,
+			&i.ManualOpenStatusUntil,
 		); err != nil {
 			return nil, err
 		}
@@ -1594,7 +1657,7 @@ func (q *Queries) ListMerchantTags(ctx context.Context, merchantID int64) ([]Tag
 }
 
 const listMerchants = `-- name: ListMerchants :many
-SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images FROM merchants
+SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images, manual_open_status_until FROM merchants
 WHERE status = $1 AND deleted_at IS NULL
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
@@ -1642,6 +1705,7 @@ func (q *Queries) ListMerchants(ctx context.Context, arg ListMerchantsParams) ([
 			&i.AutoOpenByBusinessHours,
 			&i.StorefrontImages,
 			&i.EnvironmentImages,
+			&i.ManualOpenStatusUntil,
 		); err != nil {
 			return nil, err
 		}
@@ -1654,7 +1718,7 @@ func (q *Queries) ListMerchants(ctx context.Context, arg ListMerchantsParams) ([
 }
 
 const listMerchantsByOwner = `-- name: ListMerchantsByOwner :many
-SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images FROM merchants
+SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images, manual_open_status_until FROM merchants
 WHERE owner_user_id = $1 AND deleted_at IS NULL
 ORDER BY created_at ASC
 `
@@ -1696,6 +1760,7 @@ func (q *Queries) ListMerchantsByOwner(ctx context.Context, ownerUserID int64) (
 			&i.AutoOpenByBusinessHours,
 			&i.StorefrontImages,
 			&i.EnvironmentImages,
+			&i.ManualOpenStatusUntil,
 		); err != nil {
 			return nil, err
 		}
@@ -1709,7 +1774,7 @@ func (q *Queries) ListMerchantsByOwner(ctx context.Context, ownerUserID int64) (
 
 const listMerchantsByRegion = `-- name: ListMerchantsByRegion :many
 
-SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images FROM merchants
+SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images, manual_open_status_until FROM merchants
 WHERE region_id = $1
   AND deleted_at IS NULL
 ORDER BY created_at DESC
@@ -1760,6 +1825,7 @@ func (q *Queries) ListMerchantsByRegion(ctx context.Context, arg ListMerchantsBy
 			&i.AutoOpenByBusinessHours,
 			&i.StorefrontImages,
 			&i.EnvironmentImages,
+			&i.ManualOpenStatusUntil,
 		); err != nil {
 			return nil, err
 		}
@@ -1772,7 +1838,7 @@ func (q *Queries) ListMerchantsByRegion(ctx context.Context, arg ListMerchantsBy
 }
 
 const listMerchantsByRegionWithStatus = `-- name: ListMerchantsByRegionWithStatus :many
-SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images FROM merchants
+SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images, manual_open_status_until FROM merchants
 WHERE region_id = $1
   AND ($2::varchar IS NULL OR status = $2)
   AND deleted_at IS NULL
@@ -1829,6 +1895,7 @@ func (q *Queries) ListMerchantsByRegionWithStatus(ctx context.Context, arg ListM
 			&i.AutoOpenByBusinessHours,
 			&i.StorefrontImages,
 			&i.EnvironmentImages,
+			&i.ManualOpenStatusUntil,
 		); err != nil {
 			return nil, err
 		}
@@ -1841,7 +1908,7 @@ func (q *Queries) ListMerchantsByRegionWithStatus(ctx context.Context, arg ListM
 }
 
 const listMerchantsByTag = `-- name: ListMerchantsByTag :many
-SELECT m.id, m.owner_user_id, m.name, m.description, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.group_id, m.brand_id, m.logo_media_asset_id, m.auto_open_by_business_hours, m.storefront_images, m.environment_images FROM merchants m
+SELECT m.id, m.owner_user_id, m.name, m.description, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.group_id, m.brand_id, m.logo_media_asset_id, m.auto_open_by_business_hours, m.storefront_images, m.environment_images, m.manual_open_status_until FROM merchants m
 INNER JOIN merchant_tags mt ON m.id = mt.merchant_id
 WHERE mt.tag_id = $1
   AND m.status = 'active'
@@ -1891,6 +1958,7 @@ func (q *Queries) ListMerchantsByTag(ctx context.Context, arg ListMerchantsByTag
 			&i.AutoOpenByBusinessHours,
 			&i.StorefrontImages,
 			&i.EnvironmentImages,
+			&i.ManualOpenStatusUntil,
 		); err != nil {
 			return nil, err
 		}
@@ -1904,7 +1972,7 @@ func (q *Queries) ListMerchantsByTag(ctx context.Context, arg ListMerchantsByTag
 
 const listMerchantsWithTagCount = `-- name: ListMerchantsWithTagCount :many
 SELECT 
-  m.id, m.owner_user_id, m.name, m.description, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.group_id, m.brand_id, m.logo_media_asset_id, m.auto_open_by_business_hours, m.storefront_images, m.environment_images,
+  m.id, m.owner_user_id, m.name, m.description, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.group_id, m.brand_id, m.logo_media_asset_id, m.auto_open_by_business_hours, m.storefront_images, m.environment_images, m.manual_open_status_until,
   COUNT(mt.tag_id) as tag_count
 FROM merchants m
 LEFT JOIN merchant_tags mt ON m.id = mt.merchant_id
@@ -1947,6 +2015,7 @@ type ListMerchantsWithTagCountRow struct {
 	AutoOpenByBusinessHours bool               `json:"auto_open_by_business_hours"`
 	StorefrontImages        []byte             `json:"storefront_images"`
 	EnvironmentImages       []byte             `json:"environment_images"`
+	ManualOpenStatusUntil   pgtype.Timestamptz `json:"manual_open_status_until"`
 	TagCount                int64              `json:"tag_count"`
 }
 
@@ -1986,6 +2055,7 @@ func (q *Queries) ListMerchantsWithTagCount(ctx context.Context, arg ListMerchan
 			&i.AutoOpenByBusinessHours,
 			&i.StorefrontImages,
 			&i.EnvironmentImages,
+			&i.ManualOpenStatusUntil,
 			&i.TagCount,
 		); err != nil {
 			return nil, err
@@ -1999,7 +2069,7 @@ func (q *Queries) ListMerchantsWithTagCount(ctx context.Context, arg ListMerchan
 }
 
 const listOpenMerchants = `-- name: ListOpenMerchants :many
-SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images FROM merchants
+SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images, manual_open_status_until FROM merchants
 WHERE status = 'active'
   AND is_open = true
 ORDER BY created_at DESC
@@ -2048,6 +2118,7 @@ func (q *Queries) ListOpenMerchants(ctx context.Context, arg ListOpenMerchantsPa
 			&i.AutoOpenByBusinessHours,
 			&i.StorefrontImages,
 			&i.EnvironmentImages,
+			&i.ManualOpenStatusUntil,
 		); err != nil {
 			return nil, err
 		}
@@ -2491,12 +2562,19 @@ updated AS (
       ELSE false
     END,
     auto_close_at = NULL,
+    manual_open_status_until = NULL,
     updated_at = now()
   FROM desired_state ds
   LEFT JOIN merchant_payment_configs mpc ON mpc.merchant_id = ds.merchant_id
   WHERE m.id = ds.merchant_id
     AND m.status = 'active'
     AND m.auto_open_by_business_hours = true
+    AND (
+      m.manual_open_status_until IS NULL
+      OR m.manual_open_status_until <= now()
+      OR COALESCE(mpc.sub_mch_id, '') = ''
+      OR mpc.status IS DISTINCT FROM 'active'
+    )
     AND m.is_open IS DISTINCT FROM CASE
       WHEN ds.should_open
         AND COALESCE(mpc.sub_mch_id, '') <> ''
@@ -2586,7 +2664,7 @@ SET
 WHERE id = $9
   AND version = $10
   AND deleted_at IS NULL
-RETURNING id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images
+RETURNING id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images, manual_open_status_until
 `
 
 type UpdateMerchantParams struct {
@@ -2644,6 +2722,7 @@ func (q *Queries) UpdateMerchant(ctx context.Context, arg UpdateMerchantParams) 
 		&i.AutoOpenByBusinessHours,
 		&i.StorefrontImages,
 		&i.EnvironmentImages,
+		&i.ManualOpenStatusUntil,
 	)
 	return i, err
 }
@@ -2716,6 +2795,7 @@ UPDATE merchants
 SET
   auto_open_by_business_hours = $2,
   auto_close_at = CASE WHEN $2 THEN NULL ELSE auto_close_at END,
+  manual_open_status_until = NULL,
   updated_at = now()
 WHERE id = $1
 `
@@ -2737,7 +2817,7 @@ SET
   bind_code_expires_at = $3,
   updated_at = now()
 WHERE id = $1 AND deleted_at IS NULL
-RETURNING id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images
+RETURNING id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images, manual_open_status_until
 `
 
 type UpdateMerchantBindCodeParams struct {
@@ -2777,6 +2857,7 @@ func (q *Queries) UpdateMerchantBindCode(ctx context.Context, arg UpdateMerchant
 		&i.AutoOpenByBusinessHours,
 		&i.StorefrontImages,
 		&i.EnvironmentImages,
+		&i.ManualOpenStatusUntil,
 	)
 	return i, err
 }
@@ -2787,21 +2868,28 @@ UPDATE merchants
 SET
   is_open = $2,
   auto_close_at = $3,
+  manual_open_status_until = $4,
   updated_at = now()
 WHERE id = $1
-RETURNING id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images
+RETURNING id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images, manual_open_status_until
 `
 
 type UpdateMerchantIsOpenParams struct {
-	ID          int64              `json:"id"`
-	IsOpen      bool               `json:"is_open"`
-	AutoCloseAt pgtype.Timestamptz `json:"auto_close_at"`
+	ID                    int64              `json:"id"`
+	IsOpen                bool               `json:"is_open"`
+	AutoCloseAt           pgtype.Timestamptz `json:"auto_close_at"`
+	ManualOpenStatusUntil pgtype.Timestamptz `json:"manual_open_status_until"`
 }
 
 // ==================== 商户营业状态管理 ====================
 // 更新商户营业状态（手动开店/打烊）
 func (q *Queries) UpdateMerchantIsOpen(ctx context.Context, arg UpdateMerchantIsOpenParams) (Merchant, error) {
-	row := q.db.QueryRow(ctx, updateMerchantIsOpen, arg.ID, arg.IsOpen, arg.AutoCloseAt)
+	row := q.db.QueryRow(ctx, updateMerchantIsOpen,
+		arg.ID,
+		arg.IsOpen,
+		arg.AutoCloseAt,
+		arg.ManualOpenStatusUntil,
+	)
 	var i Merchant
 	err := row.Scan(
 		&i.ID,
@@ -2830,6 +2918,7 @@ func (q *Queries) UpdateMerchantIsOpen(ctx context.Context, arg UpdateMerchantIs
 		&i.AutoOpenByBusinessHours,
 		&i.StorefrontImages,
 		&i.EnvironmentImages,
+		&i.ManualOpenStatusUntil,
 	)
 	return i, err
 }
@@ -2841,7 +2930,7 @@ SET
   environment_images = COALESCE($3, environment_images),
   updated_at = now()
 WHERE id = $1 AND deleted_at IS NULL
-RETURNING id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images
+RETURNING id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images, manual_open_status_until
 `
 
 type UpdateMerchantShopImagesParams struct {
@@ -2881,6 +2970,7 @@ func (q *Queries) UpdateMerchantShopImages(ctx context.Context, arg UpdateMercha
 		&i.AutoOpenByBusinessHours,
 		&i.StorefrontImages,
 		&i.EnvironmentImages,
+		&i.ManualOpenStatusUntil,
 	)
 	return i, err
 }
@@ -2891,7 +2981,7 @@ SET
   status = $2,
   updated_at = now()
 WHERE id = $1 AND deleted_at IS NULL
-RETURNING id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images
+RETURNING id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images, manual_open_status_until
 `
 
 type UpdateMerchantStatusParams struct {
@@ -2929,6 +3019,7 @@ func (q *Queries) UpdateMerchantStatus(ctx context.Context, arg UpdateMerchantSt
 		&i.AutoOpenByBusinessHours,
 		&i.StorefrontImages,
 		&i.EnvironmentImages,
+		&i.ManualOpenStatusUntil,
 	)
 	return i, err
 }

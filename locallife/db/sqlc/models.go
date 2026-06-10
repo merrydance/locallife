@@ -1116,6 +1116,8 @@ type Merchant struct {
 	StorefrontImages []byte `json:"storefront_images"`
 	// Live merchant environment image URL array JSON,最多5张
 	EnvironmentImages []byte `json:"environment_images"`
+	// 手动开关店临时覆盖自动营业时间的截止点
+	ManualOpenStatusUntil pgtype.Timestamptz `json:"manual_open_status_until"`
 }
 
 // Android merchant app native push device registry

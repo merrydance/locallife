@@ -73,13 +73,19 @@ func (s *MerchantOpenStatusScheduler) syncMerchantOpenStatus() {
 
 	s.publishMerchantStatusChanges(ctx, updatedMerchantIDs, "business_hours")
 
-	if len(autoClosedMerchantIDs) == 0 && len(updatedMerchantIDs) == 0 {
+	clearedManualOverrideCount, err := s.store.ClearExpiredMerchantManualOpenStatusOverrides(ctx)
+	if err != nil {
+		log.Error().Err(err).Msg("failed to clear expired merchant manual open status overrides")
+	}
+
+	if len(autoClosedMerchantIDs) == 0 && len(updatedMerchantIDs) == 0 && clearedManualOverrideCount == 0 {
 		return
 	}
 
 	log.Info().
 		Int("auto_closed_count", len(autoClosedMerchantIDs)).
 		Int("business_hours_updated_count", len(updatedMerchantIDs)).
+		Int64("manual_override_cleared_count", clearedManualOverrideCount).
 		Msg("synced merchant open status")
 }
 

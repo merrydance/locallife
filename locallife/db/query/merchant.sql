@@ -90,11 +90,11 @@ INSERT INTO merchants (
 RETURNING *;
 
 -- name: GetMerchant :one
-SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images FROM merchants
+SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images, manual_open_status_until FROM merchants
 WHERE id = $1 AND deleted_at IS NULL LIMIT 1;
 
 -- name: GetMerchantOwnedByUser :one
-SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images FROM merchants
+SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images, manual_open_status_until FROM merchants
 WHERE owner_user_id = $1 AND deleted_at IS NULL
 ORDER BY created_at ASC, id ASC
 LIMIT 1;
@@ -107,7 +107,7 @@ FOR UPDATE;
 -- name: GetMerchantByOwner :one
 -- 获取用户关联的商户（支持店主和员工）
 -- 优先返回 owner_user_id 匹配的商户，其次返回 merchant_staff 关联的商户
-SELECT m.id, m.owner_user_id, m.name, m.description, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.group_id, m.brand_id, m.logo_media_asset_id, m.auto_open_by_business_hours, m.storefront_images, m.environment_images FROM merchants m
+SELECT m.id, m.owner_user_id, m.name, m.description, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.group_id, m.brand_id, m.logo_media_asset_id, m.auto_open_by_business_hours, m.storefront_images, m.environment_images, m.manual_open_status_until FROM merchants m
 LEFT JOIN merchant_staff ms ON m.id = ms.merchant_id AND ms.status = 'active' AND ms.role <> 'pending'
 WHERE (m.owner_user_id = $1 OR ms.user_id = $1) AND m.deleted_at IS NULL
 ORDER BY CASE WHEN m.owner_user_id = $1 THEN 0 ELSE 1 END
@@ -115,24 +115,24 @@ LIMIT 1;
 
 -- name: ListMerchantsByOwner :many
 -- 获取用户拥有的所有商户（用于多店铺切换）
-SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images FROM merchants
+SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images, manual_open_status_until FROM merchants
 WHERE owner_user_id = $1 AND deleted_at IS NULL
 ORDER BY created_at ASC;
 
 -- name: GetMerchantByBindCode :one
 -- 通过邀请码获取商户
-SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images FROM merchants
+SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images, manual_open_status_until FROM merchants
 WHERE bind_code = $1 AND deleted_at IS NULL
 LIMIT 1;
 
 -- name: ListMerchants :many
-SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images FROM merchants
+SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images, manual_open_status_until FROM merchants
 WHERE status = $1 AND deleted_at IS NULL
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListAllMerchants :many
-SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images FROM merchants
+SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images, manual_open_status_until FROM merchants
 WHERE deleted_at IS NULL
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2;
@@ -309,7 +309,7 @@ WHERE mt.merchant_id = $1
 ORDER BY t.name;
 
 -- name: ListMerchantsByTag :many
-SELECT m.id, m.owner_user_id, m.name, m.description, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.group_id, m.brand_id, m.logo_media_asset_id, m.auto_open_by_business_hours, m.storefront_images, m.environment_images FROM merchants m
+SELECT m.id, m.owner_user_id, m.name, m.description, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.group_id, m.brand_id, m.logo_media_asset_id, m.auto_open_by_business_hours, m.storefront_images, m.environment_images, m.manual_open_status_until FROM merchants m
 INNER JOIN merchant_tags mt ON m.id = mt.merchant_id
 WHERE mt.tag_id = $1
   AND m.status = 'active'
@@ -392,6 +392,7 @@ UPDATE merchants
 SET
   auto_open_by_business_hours = $2,
   auto_close_at = CASE WHEN $2 THEN NULL ELSE auto_close_at END,
+  manual_open_status_until = NULL,
   updated_at = now()
 WHERE id = $1;
 
@@ -424,7 +425,7 @@ LIMIT 1;
 
 -- name: ListMerchantsWithTagCount :many
 SELECT 
-  m.id, m.owner_user_id, m.name, m.description, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.group_id, m.brand_id, m.logo_media_asset_id, m.auto_open_by_business_hours, m.storefront_images, m.environment_images,
+  m.id, m.owner_user_id, m.name, m.description, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.group_id, m.brand_id, m.logo_media_asset_id, m.auto_open_by_business_hours, m.storefront_images, m.environment_images, m.manual_open_status_until,
   COUNT(mt.tag_id) as tag_count
 FROM merchants m
 LEFT JOIN merchant_tags mt ON m.id = mt.merchant_id
@@ -511,22 +512,35 @@ UPDATE merchants
 SET
   is_open = $2,
   auto_close_at = $3,
+  manual_open_status_until = $4,
   updated_at = now()
 WHERE id = $1
 RETURNING *;
 
 -- name: GetMerchantIsOpen :one
 -- 获取商户营业状态
-SELECT id, is_open, auto_close_at, auto_open_by_business_hours FROM merchants
+SELECT id, is_open, auto_close_at, manual_open_status_until, auto_open_by_business_hours FROM merchants
 WHERE id = $1;
 
 -- name: ListOpenMerchants :many
 -- 获取营业中的商户列表
-SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images FROM merchants
+SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images, manual_open_status_until FROM merchants
 WHERE status = 'active'
   AND is_open = true
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2;
+
+-- name: GetDatabaseLocalClock :one
+SELECT
+  EXTRACT(YEAR FROM CURRENT_DATE)::int AS current_year,
+  EXTRACT(MONTH FROM CURRENT_DATE)::int AS current_month,
+  EXTRACT(DAY FROM CURRENT_DATE)::int AS current_day,
+  (
+    EXTRACT(HOUR FROM LOCALTIME)::bigint * 3600 * 1000000 +
+    EXTRACT(MINUTE FROM LOCALTIME)::bigint * 60 * 1000000 +
+    FLOOR(EXTRACT(SECOND FROM LOCALTIME) * 1000000)::bigint
+  )::bigint AS local_time_micros,
+  current_setting('TIMEZONE')::text AS time_zone;
 
 -- name: AutoCloseMerchants :many
 -- 自动打烊（用于定时任务）
@@ -599,12 +613,19 @@ updated AS (
       ELSE false
     END,
     auto_close_at = NULL,
+    manual_open_status_until = NULL,
     updated_at = now()
   FROM desired_state ds
   LEFT JOIN merchant_payment_configs mpc ON mpc.merchant_id = ds.merchant_id
   WHERE m.id = ds.merchant_id
     AND m.status = 'active'
     AND m.auto_open_by_business_hours = true
+    AND (
+      m.manual_open_status_until IS NULL
+      OR m.manual_open_status_until <= now()
+      OR COALESCE(mpc.sub_mch_id, '') = ''
+      OR mpc.status IS DISTINCT FROM 'active'
+    )
     AND m.is_open IS DISTINCT FROM CASE
       WHEN ds.should_open
         AND COALESCE(mpc.sub_mch_id, '') <> ''
@@ -617,11 +638,20 @@ SELECT id
 FROM updated
 ORDER BY id;
 
+-- name: ClearExpiredMerchantManualOpenStatusOverrides :execrows
+UPDATE merchants
+SET
+  manual_open_status_until = NULL,
+  updated_at = now()
+WHERE auto_open_by_business_hours = true
+  AND manual_open_status_until IS NOT NULL
+  AND manual_open_status_until <= now();
+
 -- ==================== 运营商管理商户 ====================
 
 -- name: ListMerchantsByRegion :many
 -- 按区域列出商户（供运营商管理使用）
-SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images FROM merchants
+SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images, manual_open_status_until FROM merchants
 WHERE region_id = $1
   AND deleted_at IS NULL
 ORDER BY created_at DESC
@@ -635,7 +665,7 @@ WHERE region_id = $1
 
 -- name: ListMerchantsByRegionWithStatus :many
 -- 按区域和状态列出商户
-SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images FROM merchants
+SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images, manual_open_status_until FROM merchants
 WHERE region_id = $1
   AND ($2::varchar IS NULL OR status = $2)
   AND deleted_at IS NULL
