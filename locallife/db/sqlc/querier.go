@@ -539,7 +539,6 @@ type Querier interface {
 	DeactivateMerchantActiveCredentialLedger(ctx context.Context, arg DeactivateMerchantActiveCredentialLedgerParams) (int64, error)
 	DeactivateMerchantAppDevicesByPushToken(ctx context.Context, arg DeactivateMerchantAppDevicesByPushTokenParams) error
 	DeactivateRiderActiveCredentialLedger(ctx context.Context, arg DeactivateRiderActiveCredentialLedgerParams) (int64, error)
-	DecrementMembershipBalance(ctx context.Context, arg DecrementMembershipBalanceParams) (MerchantMembership, error)
 	DecrementVoucherUsedQuantity(ctx context.Context, id int64) (Voucher, error)
 	// 从骑手押金扣款（原子操作：检查余额 + 扣款）
 	DeductRiderDeposit(ctx context.Context, arg DeductRiderDepositParams) (Rider, error)
@@ -1204,7 +1203,6 @@ type Querier interface {
 	HasBlockingClaimRecoveryForRider(ctx context.Context, riderID pgtype.Int8) (bool, error)
 	HasRole(ctx context.Context, arg HasRoleParams) (bool, error)
 	HasUserOrderedFromMerchant(ctx context.Context, arg HasUserOrderedFromMerchantParams) (bool, error)
-	IncrementMembershipBalance(ctx context.Context, arg IncrementMembershipBalanceParams) (MerchantMembership, error)
 	IncrementMerchantForeignObjectClaim(ctx context.Context, merchantID int64) error
 	IncrementPopularKeyword(ctx context.Context, arg IncrementPopularKeywordParams) error
 	IncrementRiderDamageIncident(ctx context.Context, riderID int64) error

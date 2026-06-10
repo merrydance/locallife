@@ -46,26 +46,6 @@ SET
 WHERE id = $1
 RETURNING *;
 
--- name: IncrementMembershipBalance :one
-UPDATE merchant_memberships
-SET 
-    balance = balance + $2,
-    principal_balance = principal_balance + $2,
-    total_recharged = total_recharged + $2,
-    updated_at = NOW()
-WHERE id = $1
-RETURNING *;
-
--- name: DecrementMembershipBalance :one
-UPDATE merchant_memberships
-SET 
-    balance = balance - $2,
-    principal_balance = principal_balance - $2,
-    total_consumed = total_consumed + $2,
-    updated_at = NOW()
-WHERE id = $1 AND balance >= $2
-RETURNING *;
-
 -- name: GetMembershipForUpdate :one
 SELECT id, merchant_id, user_id, balance, total_recharged, total_consumed, created_at, updated_at, principal_balance, bonus_balance FROM merchant_memberships
 WHERE id = $1 LIMIT 1

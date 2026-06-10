@@ -290,40 +290,6 @@ func (q *Queries) CreateRechargeRule(ctx context.Context, arg CreateRechargeRule
 	return i, err
 }
 
-const decrementMembershipBalance = `-- name: DecrementMembershipBalance :one
-UPDATE merchant_memberships
-SET 
-    balance = balance - $2,
-    principal_balance = principal_balance - $2,
-    total_consumed = total_consumed + $2,
-    updated_at = NOW()
-WHERE id = $1 AND balance >= $2
-RETURNING id, merchant_id, user_id, balance, total_recharged, total_consumed, created_at, updated_at, principal_balance, bonus_balance
-`
-
-type DecrementMembershipBalanceParams struct {
-	ID      int64 `json:"id"`
-	Balance int64 `json:"balance"`
-}
-
-func (q *Queries) DecrementMembershipBalance(ctx context.Context, arg DecrementMembershipBalanceParams) (MerchantMembership, error) {
-	row := q.db.QueryRow(ctx, decrementMembershipBalance, arg.ID, arg.Balance)
-	var i MerchantMembership
-	err := row.Scan(
-		&i.ID,
-		&i.MerchantID,
-		&i.UserID,
-		&i.Balance,
-		&i.TotalRecharged,
-		&i.TotalConsumed,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.PrincipalBalance,
-		&i.BonusBalance,
-	)
-	return i, err
-}
-
 const deleteRechargeRule = `-- name: DeleteRechargeRule :exec
 UPDATE recharge_rules
 SET is_active = FALSE,
@@ -669,40 +635,6 @@ func (q *Queries) GetRechargeRule(ctx context.Context, id int64) (RechargeRule, 
 		&i.ValidUntil,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const incrementMembershipBalance = `-- name: IncrementMembershipBalance :one
-UPDATE merchant_memberships
-SET 
-    balance = balance + $2,
-    principal_balance = principal_balance + $2,
-    total_recharged = total_recharged + $2,
-    updated_at = NOW()
-WHERE id = $1
-RETURNING id, merchant_id, user_id, balance, total_recharged, total_consumed, created_at, updated_at, principal_balance, bonus_balance
-`
-
-type IncrementMembershipBalanceParams struct {
-	ID      int64 `json:"id"`
-	Balance int64 `json:"balance"`
-}
-
-func (q *Queries) IncrementMembershipBalance(ctx context.Context, arg IncrementMembershipBalanceParams) (MerchantMembership, error) {
-	row := q.db.QueryRow(ctx, incrementMembershipBalance, arg.ID, arg.Balance)
-	var i MerchantMembership
-	err := row.Scan(
-		&i.ID,
-		&i.MerchantID,
-		&i.UserID,
-		&i.Balance,
-		&i.TotalRecharged,
-		&i.TotalConsumed,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.PrincipalBalance,
-		&i.BonusBalance,
 	)
 	return i, err
 }

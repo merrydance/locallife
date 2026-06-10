@@ -271,18 +271,11 @@
       "line": 131
     },
     {
-      "id": "zombie.incrementMembershipBalance",
-      "kind": "zombie_candidate",
-      "label": "IncrementMembershipBalance generated SQL",
-      "file": "locallife/db/query/membership.sql",
-      "line": 45
-    },
-    {
-      "id": "zombie.decrementMembershipBalance",
-      "kind": "zombie_candidate",
-      "label": "DecrementMembershipBalance generated SQL",
-      "file": "locallife/db/query/membership.sql",
-      "line": 55
+      "id": "test.retiredDirectBalanceWriters",
+      "kind": "contract_test",
+      "label": "Retired direct membership balance writer guard",
+      "file": "locallife/db/sqlc/membership_contract_test.go",
+      "line": 11
     }
   ],
   "edges": [
@@ -522,14 +515,9 @@
       "kind": "type_mapping_drift"
     },
     {
-      "from": "zombie.incrementMembershipBalance",
+      "from": "test.retiredDirectBalanceWriters",
       "to": "table.merchantMemberships",
-      "kind": "unused_direct_writer_candidate"
-    },
-    {
-      "from": "zombie.decrementMembershipBalance",
-      "to": "table.merchantMemberships",
-      "kind": "unused_direct_writer_candidate"
+      "kind": "guards_no_direct_writer_surface"
     }
   ]
 }

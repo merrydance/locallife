@@ -1,6 +1,6 @@
 # Merchant Member Balance Adjustment Slice
 
-Status: merchant-state flow slice created; idempotency, labels, pagination, and cancellation split-balance repaired 2026-05-31
+Status: tested; idempotency, labels, pagination, cancellation split-balance, manager adjustment permission, and retired direct balance writers repaired through 2026-06-10
 Risk class: G3 - merchant staff can mutate customer stored-value balance, durable ledgers, and checkout eligibility
 Scope: merchant member list/detail page -> member balance adjustment API -> membership balance transaction -> customer checkout readers and adjacent recharge/order/refund writers
 
@@ -31,7 +31,7 @@ Manual balance changes must leave one auditable truth:
 - Customer checkout preview and final order creation must read the same current balance and principal/bonus split.
 - Merchant-visible transaction labels must understand every transaction type the backend writes.
 
-Fixed 2026-05-31 in `62839932`: manual adjustment now has a durable idempotency contract, Mini Program transaction labels cover adjustment transaction types, member list pagination uses backend full count, and order cancellation preserves principal/bonus split fields. Product decision 2026-06-10: managers may manually adjust customer stored-value balance. Fixed 2026-06-10: `TestAdjustMemberBalanceAPIManagerCanAdjust` proves that product decision through the registered backend route and real merchant staff middleware, while `TestAdjustMemberBalanceAPICashierDenied` proves lower-privilege staff are blocked before balance mutation.
+Fixed 2026-05-31 in `62839932`: manual adjustment now has a durable idempotency contract, Mini Program transaction labels cover adjustment transaction types, member list pagination uses backend full count, and order cancellation preserves principal/bonus split fields. Product decision 2026-06-10: managers may manually adjust customer stored-value balance. Fixed 2026-06-10: `TestAdjustMemberBalanceAPIManagerCanAdjust` proves that product decision through the registered backend route and real merchant staff middleware, while `TestAdjustMemberBalanceAPICashierDenied` proves lower-privilege staff are blocked before balance mutation. Fixed 2026-06-10: unused direct sqlc balance writers `IncrementMembershipBalance` and `DecrementMembershipBalance` were retired from SQL, generated querier, and mocks; `TestMembershipBalanceDirectWritersRetired` guards against reintroducing those ledger-bypassing entrypoints.
 
 ## Primary Forward Chain
 
@@ -99,7 +99,7 @@ Fixed 2026-05-31 in `62839932`: manual adjustment now has a durable idempotency 
 - Only the merchant member page directly calls the manual adjustment wrapper.
 - The backend also exposes merchant offline recharge on the same route group, but no Mini Program caller was found in the current search.
 - Runtime writers of `merchant_memberships` include membership join/create, merchant recharge, order balance deduction, order cancellation rollback, refund helpers, and manual adjustment.
-- Generated SQL `IncrementMembershipBalance` and `DecrementMembershipBalance` exist but were not found in runtime call sites; they are zombie candidates because they bypass the richer transaction-specific ledger semantics used by current transactions.
+- Retired 2026-06-10: generated SQL `IncrementMembershipBalance` and `DecrementMembershipBalance` had no runtime call sites and bypassed the richer transaction-specific ledger semantics used by current transactions; they are now absent from `db/query`, generated sqlc, querier, and mock surfaces.
 - The transaction-history DTO hides `principal_amount`, `bonus_amount`, `payment_order_id`, and `idempotency_key`, so the merchant member detail page cannot show split provenance or idempotency evidence.
 
 ## SQL And Durable State Boundaries
@@ -107,6 +107,7 @@ Fixed 2026-05-31 in `62839932`: manual adjustment now has a durable idempotency 
 - `merchant_memberships`: durable membership balance row keyed by merchant and user; stores aggregate balance, principal balance, bonus balance, total recharged, and total consumed.
 - `membership_transactions`: durable ledger rows; stores type, signed amount, split amounts, balance after, related order, recharge rule, payment order, notes, and optional idempotency key.
 - Manual adjustment uses `UpdateMembershipBalance` plus `CreateMembershipTransaction` in one transaction.
+- `UpdateMembershipBalance` remains a low-level transaction-internal write step used by rich balance transactions; direct increment/decrement sqlc writers are retired so new balance writers must preserve ledger and idempotency semantics through transaction helpers.
 - Merchant recharge uses `RechargeTx` and can use `CreateMembershipRechargeTransaction` with an idempotency key.
 - Order creation uses `CreateOrderTx` to deduct balance and create the `consume` ledger row in the same transaction.
 - Order cancellation uses `CancelOrderTx` to roll back balance and create a refund ledger row.
@@ -149,6 +150,7 @@ Observed tests:
 - `api/membership_test.go` covers membership APIs plus merchant recharge, manual adjustment idempotency request behavior, registered-route manager permission for manual stored-value adjustment, and lower-privilege cashier denial before balance mutation.
 - `logic/membership_balance_adjust_test.go` and `db/sqlc/tx_membership_test.go` cover manual adjustment idempotency/conflict and insufficient-balance branches added on 2026-05-31.
 - `db/sqlc/tx_order_status_test.go` covers cancellation rollback preserving membership split-balance invariants.
+- `db/sqlc/membership_contract_test.go` covers retirement of the former direct generated balance writer surface in SQL source, generated sqlc, querier, and store mocks.
 - `weapp/scripts/check-merchant-member-balance-adjust-contract.test.js` covers Mini Program adjustment idempotency header, draft-key reuse, labels, and pagination total usage.
 - `db/sqlc/tx_create_order_test.go` covers balance payment during order creation.
 
@@ -164,16 +166,17 @@ Missing high-value tests:
 - Fixed 2026-05-31 in `62839932`: member list `total` now uses full matched count.
 - Fixed 2026-05-31 in `62839932`: order cancellation rollback preserves principal/bonus split fields.
 - Fixed 2026-06-10: manager manual stored-value mutation is explicitly covered by `TestAdjustMemberBalanceAPIManagerCanAdjust`, and cashier denial is covered by `TestAdjustMemberBalanceAPICashierDenied`; a temporary owner-only route regression failed with 403 before the production route was restored.
+- Fixed 2026-06-10: unused direct sqlc writers `IncrementMembershipBalance` and `DecrementMembershipBalance` were removed, and list tests now seed balances through `RechargeTx`/`ConsumeTx` instead of the retired direct writer surface.
 - Consider returning `transaction_id` from manual adjustment so the Mini Program can show a durable audit anchor after success.
 
 ## Branch Exhaustion
 
 - Entry branches checked: Mini Program merchant member list, member detail drawer, manual balance adjustment popup, adjacent offline recharge route group, transaction label helper, customer checkout readers, and order cancellation rollback readers/writers. Flutter App has no member, stored-value, recharge, or balance-adjustment entry in `merchant_app/lib/features/**`. Web is intentionally out of scope.
 - Request branches checked: `GET /v1/merchants/:id/members`, `GET /v1/merchants/:id/members/:user_id`, `POST /v1/merchants/:id/members/:user_id/balance`, adjacent `POST /recharge`, transaction history readers, order creation balance deduction, order cancellation rollback, and preview/payment eligibility reads.
-- Backend state branches checked: membership lookup by merchant/user, manual positive and negative adjustment, aggregate/principal/bonus balance invariant, negative-balance rejection, transaction ledger insert, merchant recharge with rule bonus and idempotency key, order consume split deduction, cancellation refund ledger, and generated direct balance SQL methods.
+- Backend state branches checked: membership lookup by merchant/user, manual positive and negative adjustment, aggregate/principal/bonus balance invariant, negative-balance rejection, transaction ledger insert, merchant recharge with rule bonus and idempotency key, order consume split deduction, cancellation refund ledger, and retired direct balance SQL writer guard.
 - Async branches checked: manual adjustment is synchronous only; no worker, scheduler, websocket, or outbox repair was found. Adjacent order/payment/refund flows can later mutate the same membership balance through their own transaction paths.
 - Failure/retry branches checked: frontend `adjustSubmitting` guard, manual adjustment durable idempotency key, negative insufficient-balance branch, detail reload failure after committed adjustment, recharge duplicate-key recovery, and order cancellation rollback split-field preservation.
 - Reader/consumer branches checked: merchant member list/detail, merchant transaction labels, customer membership views, checkout preview, direct order creation, promotion engine membership scene checks, and order cancellation/refund history.
 - Authorization/tenant branches checked: route owner/manager middleware, logic merchant-id equality recheck, membership lookup by `(merchant_id,user_id)`, manager permission to mutate stored value, and lower-privilege denial before mutation. Product decision 2026-06-10 explicitly approves manager adjustment permission, and `TestAdjustMemberBalanceAPIManagerCanAdjust` now proves it through the registered route.
-- Zombie/unreachable branches checked: generated `IncrementMembershipBalance` and `DecrementMembershipBalance` were not found in runtime call sites and bypass richer ledger semantics if reused; Mini Program has no caller for merchant offline recharge in the current searched paths.
-- Test-proof gaps checked: existing tests now cover manual adjustment API/logic/DB behavior, split-balance invariant after cancellation, transaction-type display contract, pagination total semantics, idempotency replay/conflict behavior, explicit manager-write permission, and cashier denial before balance mutation for the 2026-06-10 product decision.
+- Zombie/unreachable branches checked: generated `IncrementMembershipBalance` and `DecrementMembershipBalance` were not found in runtime call sites and are now retired from SQL/sqlc/mock surfaces with a static contract test; Mini Program has no caller for merchant offline recharge in the current searched paths.
+- Test-proof gaps checked: existing tests now cover manual adjustment API/logic/DB behavior, split-balance invariant after cancellation, transaction-type display contract, pagination total semantics, idempotency replay/conflict behavior, explicit manager-write permission, cashier denial before balance mutation for the 2026-06-10 product decision, and no reintroduced direct generated balance writer surface.

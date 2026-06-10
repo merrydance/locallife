@@ -47,6 +47,28 @@ func createRandomRechargeRule(t *testing.T, merchantID int64, rechargeAmount, bo
 	return rule
 }
 
+func rechargeMembershipBalanceForTest(t *testing.T, membershipID, amount int64) MerchantMembership {
+	result, err := testStore.RechargeTx(context.Background(), RechargeTxParams{
+		MembershipID:   membershipID,
+		RechargeAmount: amount,
+		BonusAmount:    0,
+		Notes:          "test recharge",
+	})
+	require.NoError(t, err)
+	return result.Membership
+}
+
+func consumeMembershipBalanceForTest(t *testing.T, membershipID, amount int64) MerchantMembership {
+	result, err := testStore.ConsumeTx(context.Background(), ConsumeTxParams{
+		MembershipID:   membershipID,
+		Amount:         amount,
+		RelatedOrderID: membershipID,
+		Notes:          "test consume",
+	})
+	require.NoError(t, err)
+	return result.Membership
+}
+
 // ==================== CreateMerchantMembership Tests ====================
 
 func TestCreateMerchantMembership(t *testing.T) {
@@ -118,80 +140,6 @@ func TestGetMembershipByMerchantAndUser(t *testing.T) {
 
 // ==================== Balance Operations Tests ====================
 
-func TestIncrementMembershipBalance(t *testing.T) {
-	owner := createRandomUser(t)
-	merchant := createRandomMerchantWithOwner(t, owner.ID)
-	user := createRandomUser(t)
-
-	membership := createRandomMembership(t, merchant.ID, user.ID)
-
-	// 充值 10000 分
-	updated, err := testStore.IncrementMembershipBalance(context.Background(), IncrementMembershipBalanceParams{
-		ID:      membership.ID,
-		Balance: 10000,
-	})
-	require.NoError(t, err)
-	require.Equal(t, int64(10000), updated.Balance)
-	require.Equal(t, int64(10000), updated.TotalRecharged)
-	require.Equal(t, int64(0), updated.TotalConsumed)
-
-	// 再充值 5000 分
-	updated, err = testStore.IncrementMembershipBalance(context.Background(), IncrementMembershipBalanceParams{
-		ID:      membership.ID,
-		Balance: 5000,
-	})
-	require.NoError(t, err)
-	require.Equal(t, int64(15000), updated.Balance)
-	require.Equal(t, int64(15000), updated.TotalRecharged)
-}
-
-func TestDecrementMembershipBalance(t *testing.T) {
-	owner := createRandomUser(t)
-	merchant := createRandomMerchantWithOwner(t, owner.ID)
-	user := createRandomUser(t)
-
-	membership := createRandomMembership(t, merchant.ID, user.ID)
-
-	// 先充值
-	_, err := testStore.IncrementMembershipBalance(context.Background(), IncrementMembershipBalanceParams{
-		ID:      membership.ID,
-		Balance: 10000,
-	})
-	require.NoError(t, err)
-
-	// 消费 3000 分
-	updated, err := testStore.DecrementMembershipBalance(context.Background(), DecrementMembershipBalanceParams{
-		ID:      membership.ID,
-		Balance: 3000,
-	})
-	require.NoError(t, err)
-	require.Equal(t, int64(7000), updated.Balance)
-	require.Equal(t, int64(10000), updated.TotalRecharged)
-	require.Equal(t, int64(3000), updated.TotalConsumed)
-}
-
-func TestDecrementMembershipBalance_InsufficientFunds(t *testing.T) {
-	owner := createRandomUser(t)
-	merchant := createRandomMerchantWithOwner(t, owner.ID)
-	user := createRandomUser(t)
-
-	membership := createRandomMembership(t, merchant.ID, user.ID)
-
-	// 先充值 5000
-	_, err := testStore.IncrementMembershipBalance(context.Background(), IncrementMembershipBalanceParams{
-		ID:      membership.ID,
-		Balance: 5000,
-	})
-	require.NoError(t, err)
-
-	// 尝试消费 10000（余额不足）
-	_, err = testStore.DecrementMembershipBalance(context.Background(), DecrementMembershipBalanceParams{
-		ID:      membership.ID,
-		Balance: 10000,
-	})
-	require.Error(t, err) // 应该失败
-}
-
 func TestUpdateMembershipBalance(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
@@ -201,13 +149,16 @@ func TestUpdateMembershipBalance(t *testing.T) {
 
 	// 直接设置余额
 	updated, err := testStore.UpdateMembershipBalance(context.Background(), UpdateMembershipBalanceParams{
-		ID:             membership.ID,
-		Balance:        8000,
-		TotalRecharged: 10000,
-		TotalConsumed:  2000,
+		ID:               membership.ID,
+		Balance:          8000,
+		PrincipalBalance: 8000,
+		BonusBalance:     0,
+		TotalRecharged:   10000,
+		TotalConsumed:    2000,
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(8000), updated.Balance)
+	require.Equal(t, updated.Balance, updated.PrincipalBalance+updated.BonusBalance)
 	require.Equal(t, int64(10000), updated.TotalRecharged)
 	require.Equal(t, int64(2000), updated.TotalConsumed)
 }
@@ -224,11 +175,7 @@ func TestListUserMemberships(t *testing.T) {
 		membership := createRandomMembership(t, merchant.ID, user.ID)
 
 		// 充值不同金额
-		_, err := testStore.IncrementMembershipBalance(context.Background(), IncrementMembershipBalanceParams{
-			ID:      membership.ID,
-			Balance: int64((i + 1) * 10000),
-		})
-		require.NoError(t, err)
+		rechargeMembershipBalanceForTest(t, membership.ID, int64((i+1)*10000))
 	}
 
 	// 查询用户的会员列表
@@ -255,17 +202,8 @@ func TestListMerchantMembers(t *testing.T) {
 		membership := createRandomMembership(t, merchant.ID, user.ID)
 
 		// 消费不同金额
-		_, err := testStore.IncrementMembershipBalance(context.Background(), IncrementMembershipBalanceParams{
-			ID:      membership.ID,
-			Balance: int64((i + 1) * 30000),
-		})
-		require.NoError(t, err)
-
-		_, err = testStore.DecrementMembershipBalance(context.Background(), DecrementMembershipBalanceParams{
-			ID:      membership.ID,
-			Balance: int64((i + 1) * 10000),
-		})
-		require.NoError(t, err)
+		rechargeMembershipBalanceForTest(t, membership.ID, int64((i+1)*30000))
+		consumeMembershipBalanceForTest(t, membership.ID, int64((i+1)*10000))
 	}
 
 	// 查询商户的会员列表

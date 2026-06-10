@@ -5641,21 +5641,6 @@ func (mr *MockStoreMockRecorder) DeactivateRiderActiveCredentialLedger(ctx, arg 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeactivateRiderActiveCredentialLedger", reflect.TypeOf((*MockStore)(nil).DeactivateRiderActiveCredentialLedger), ctx, arg)
 }
 
-// DecrementMembershipBalance mocks base method.
-func (m *MockStore) DecrementMembershipBalance(ctx context.Context, arg db.DecrementMembershipBalanceParams) (db.MerchantMembership, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DecrementMembershipBalance", ctx, arg)
-	ret0, _ := ret[0].(db.MerchantMembership)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// DecrementMembershipBalance indicates an expected call of DecrementMembershipBalance.
-func (mr *MockStoreMockRecorder) DecrementMembershipBalance(ctx, arg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DecrementMembershipBalance", reflect.TypeOf((*MockStore)(nil).DecrementMembershipBalance), ctx, arg)
-}
-
 // DecrementVoucherUsedQuantity mocks base method.
 func (m *MockStore) DecrementVoucherUsedQuantity(ctx context.Context, id int64) (db.Voucher, error) {
 	m.ctrl.T.Helper()
@@ -13000,21 +12985,6 @@ func (m *MockStore) HasUserOrderedFromMerchant(ctx context.Context, arg db.HasUs
 func (mr *MockStoreMockRecorder) HasUserOrderedFromMerchant(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasUserOrderedFromMerchant", reflect.TypeOf((*MockStore)(nil).HasUserOrderedFromMerchant), ctx, arg)
-}
-
-// IncrementMembershipBalance mocks base method.
-func (m *MockStore) IncrementMembershipBalance(ctx context.Context, arg db.IncrementMembershipBalanceParams) (db.MerchantMembership, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IncrementMembershipBalance", ctx, arg)
-	ret0, _ := ret[0].(db.MerchantMembership)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// IncrementMembershipBalance indicates an expected call of IncrementMembershipBalance.
-func (mr *MockStoreMockRecorder) IncrementMembershipBalance(ctx, arg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncrementMembershipBalance", reflect.TypeOf((*MockStore)(nil).IncrementMembershipBalance), ctx, arg)
 }
 
 // IncrementMerchantForeignObjectClaim mocks base method.
