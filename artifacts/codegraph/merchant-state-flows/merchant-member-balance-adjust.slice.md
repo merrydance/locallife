@@ -31,7 +31,7 @@ Manual balance changes must leave one auditable truth:
 - Customer checkout preview and final order creation must read the same current balance and principal/bonus split.
 - Merchant-visible transaction labels must understand every transaction type the backend writes.
 
-Fixed 2026-05-31 in `62839932`: manual adjustment now has a durable idempotency contract, Mini Program transaction labels cover adjustment transaction types, member list pagination uses backend full count, and order cancellation preserves principal/bonus split fields. Product decision 2026-06-10: managers may manually adjust customer stored-value balance.
+Fixed 2026-05-31 in `62839932`: manual adjustment now has a durable idempotency contract, Mini Program transaction labels cover adjustment transaction types, member list pagination uses backend full count, and order cancellation preserves principal/bonus split fields. Product decision 2026-06-10: managers may manually adjust customer stored-value balance. Fixed 2026-06-10: `TestAdjustMemberBalanceAPIManagerCanAdjust` proves that product decision through the registered backend route and real merchant staff middleware, while `TestAdjustMemberBalanceAPICashierDenied` proves lower-privilege staff are blocked before balance mutation.
 
 ## Primary Forward Chain
 
@@ -58,6 +58,8 @@ Fixed 2026-05-31 in `62839932`: manual adjustment now has a durable idempotency 
 
 8. The backend member route group allows owner and manager for list, detail, recharge, and balance adjustment.
    Evidence: `locallife/api/server.go:1640`, `locallife/api/server.go:1641`, `locallife/api/server.go:1650`, `locallife/api/server.go:1653`.
+
+   Fixed 2026-06-10: `TestAdjustMemberBalanceAPIManagerCanAdjust` exercises `POST /v1/merchants/:id/members/:user_id/balance` with a manager staff identity and proves the request reaches `AdjustMemberBalanceTx` with the target membership, signed amount, notes, and durable adjustment idempotency key. `TestAdjustMemberBalanceAPICashierDenied` exercises the same route with cashier staff and proves membership lookup and balance transaction calls are not reached.
 
 9. `adjustMemberBalance` binds signed `amount` and required notes, resolves the merchant from middleware context, and calls `logic.AdjustMemberBalance`.
    Evidence: `locallife/api/membership.go:1131`, `locallife/api/membership.go:1178`, `locallife/api/membership.go:1191`, `locallife/api/membership.go:1197`.
@@ -144,7 +146,7 @@ Observed tests:
 - `logic/membership_merchant_test.go` covers forbidden list/detail and detail success/not found.
 - `logic/membership_recharge_test.go` covers merchant recharge validation, authz, success, duplicate idempotency key, and unique-conflict recovery.
 - `db/sqlc/tx_membership_test.go` covers recharge, consume, refund, and concurrency for recharge/consume.
-- `api/membership_test.go` covers membership APIs plus merchant recharge and manual adjustment idempotency request behavior.
+- `api/membership_test.go` covers membership APIs plus merchant recharge, manual adjustment idempotency request behavior, registered-route manager permission for manual stored-value adjustment, and lower-privilege cashier denial before balance mutation.
 - `logic/membership_balance_adjust_test.go` and `db/sqlc/tx_membership_test.go` cover manual adjustment idempotency/conflict and insufficient-balance branches added on 2026-05-31.
 - `db/sqlc/tx_order_status_test.go` covers cancellation rollback preserving membership split-balance invariants.
 - `weapp/scripts/check-merchant-member-balance-adjust-contract.test.js` covers Mini Program adjustment idempotency header, draft-key reuse, labels, and pagination total usage.
@@ -152,7 +154,6 @@ Observed tests:
 
 Missing high-value tests:
 
-- Manager permission regression tests proving managers may manually adjust stored-value balance and unauthorized roles remain blocked.
 - Optional explicit response contract for returning `transaction_id` from manual adjustment.
 - Ongoing contract test coverage when future backend transaction types are added.
 
@@ -162,6 +163,7 @@ Missing high-value tests:
 - Fixed 2026-05-31 in `62839932`: frontend maps backend `adjustment_credit` and `adjustment_debit`.
 - Fixed 2026-05-31 in `62839932`: member list `total` now uses full matched count.
 - Fixed 2026-05-31 in `62839932`: order cancellation rollback preserves principal/bonus split fields.
+- Fixed 2026-06-10: manager manual stored-value mutation is explicitly covered by `TestAdjustMemberBalanceAPIManagerCanAdjust`, and cashier denial is covered by `TestAdjustMemberBalanceAPICashierDenied`; a temporary owner-only route regression failed with 403 before the production route was restored.
 - Consider returning `transaction_id` from manual adjustment so the Mini Program can show a durable audit anchor after success.
 
 ## Branch Exhaustion
@@ -172,6 +174,6 @@ Missing high-value tests:
 - Async branches checked: manual adjustment is synchronous only; no worker, scheduler, websocket, or outbox repair was found. Adjacent order/payment/refund flows can later mutate the same membership balance through their own transaction paths.
 - Failure/retry branches checked: frontend `adjustSubmitting` guard, manual adjustment durable idempotency key, negative insufficient-balance branch, detail reload failure after committed adjustment, recharge duplicate-key recovery, and order cancellation rollback split-field preservation.
 - Reader/consumer branches checked: merchant member list/detail, merchant transaction labels, customer membership views, checkout preview, direct order creation, promotion engine membership scene checks, and order cancellation/refund history.
-- Authorization/tenant branches checked: route owner/manager middleware, logic merchant-id equality recheck, membership lookup by `(merchant_id,user_id)`, and manager permission to mutate stored value. Product decision 2026-06-10 explicitly approves manager adjustment permission.
+- Authorization/tenant branches checked: route owner/manager middleware, logic merchant-id equality recheck, membership lookup by `(merchant_id,user_id)`, manager permission to mutate stored value, and lower-privilege denial before mutation. Product decision 2026-06-10 explicitly approves manager adjustment permission, and `TestAdjustMemberBalanceAPIManagerCanAdjust` now proves it through the registered route.
 - Zombie/unreachable branches checked: generated `IncrementMembershipBalance` and `DecrementMembershipBalance` were not found in runtime call sites and bypass richer ledger semantics if reused; Mini Program has no caller for merchant offline recharge in the current searched paths.
-- Test-proof gaps checked: existing tests now cover manual adjustment API/logic/DB behavior, split-balance invariant after cancellation, transaction-type display contract, pagination total semantics, and idempotency replay/conflict behavior. Remaining proof should include an explicit manager-write permission regression for the 2026-06-10 product decision if current coverage is not already direct.
+- Test-proof gaps checked: existing tests now cover manual adjustment API/logic/DB behavior, split-balance invariant after cancellation, transaction-type display contract, pagination total semantics, idempotency replay/conflict behavior, explicit manager-write permission, and cashier denial before balance mutation for the 2026-06-10 product decision.
