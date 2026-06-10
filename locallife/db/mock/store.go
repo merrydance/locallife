@@ -7212,6 +7212,21 @@ func (mr *MockStoreMockRecorder) GetBaofuWithdrawalOrder(ctx, id any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaofuWithdrawalOrder", reflect.TypeOf((*MockStore)(nil).GetBaofuWithdrawalOrder), ctx, id)
 }
 
+// GetBaofuWithdrawalOrderByIdempotency mocks base method.
+func (m *MockStore) GetBaofuWithdrawalOrderByIdempotency(ctx context.Context, arg db.GetBaofuWithdrawalOrderByIdempotencyParams) (db.BaofuWithdrawalOrder, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBaofuWithdrawalOrderByIdempotency", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuWithdrawalOrder)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetBaofuWithdrawalOrderByIdempotency indicates an expected call of GetBaofuWithdrawalOrderByIdempotency.
+func (mr *MockStoreMockRecorder) GetBaofuWithdrawalOrderByIdempotency(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaofuWithdrawalOrderByIdempotency", reflect.TypeOf((*MockStore)(nil).GetBaofuWithdrawalOrderByIdempotency), ctx, arg)
+}
+
 // GetBaofuWithdrawalOrderByOutRequestNo mocks base method.
 func (m *MockStore) GetBaofuWithdrawalOrderByOutRequestNo(ctx context.Context, outRequestNo string) (db.BaofuWithdrawalOrder, error) {
 	m.ctrl.T.Helper()

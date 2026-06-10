@@ -2,13 +2,16 @@ package logic
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/merrydance/locallife/baofu"
 	baofucontracts "github.com/merrydance/locallife/baofu/account/contracts"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/rs/zerolog/log"
@@ -27,6 +30,7 @@ var (
 
 type baofuWithdrawStore interface {
 	GetBaofuAccountBindingByOwner(ctx context.Context, arg db.GetBaofuAccountBindingByOwnerParams) (db.BaofuAccountBinding, error)
+	GetBaofuWithdrawalOrderByIdempotency(ctx context.Context, arg db.GetBaofuWithdrawalOrderByIdempotencyParams) (db.BaofuWithdrawalOrder, error)
 	CreateBaofuWithdrawalOrder(ctx context.Context, arg db.CreateBaofuWithdrawalOrderParams) (db.BaofuWithdrawalOrder, error)
 	UpdateBaofuWithdrawalOrderToProcessing(ctx context.Context, arg db.UpdateBaofuWithdrawalOrderToProcessingParams) (db.BaofuWithdrawalOrder, error)
 	UpdateBaofuWithdrawalOrderStatus(ctx context.Context, arg db.UpdateBaofuWithdrawalOrderStatusParams) (db.BaofuWithdrawalOrder, error)
@@ -77,16 +81,18 @@ type BaofuBalanceQueryResult struct {
 }
 
 type BaofuCreateWithdrawalInput struct {
-	OwnerType    string
-	OwnerID      int64
-	AmountFen    int64
-	OutRequestNo string
+	OwnerType      string
+	OwnerID        int64
+	AmountFen      int64
+	OutRequestNo   string
+	IdempotencyKey string
 }
 
 type BaofuCreateWithdrawalResult struct {
-	WithdrawalOrder db.BaofuWithdrawalOrder
-	SyncState       string
-	UserMessage     string
+	WithdrawalOrder     db.BaofuWithdrawalOrder
+	SyncState           string
+	UserMessage         string
+	IdempotencyReplayed bool
 }
 
 func (s *BaofuWithdrawService) QueryBalance(ctx context.Context, input BaofuBalanceQueryInput) (BaofuBalanceQueryResult, error) {
@@ -135,6 +141,18 @@ func (s *BaofuWithdrawService) CreateWithdrawal(ctx context.Context, input Baofu
 	if input.AmountFen <= 0 {
 		return result, errors.New("提现金额必须大于0")
 	}
+	idempotencyKey := strings.TrimSpace(input.IdempotencyKey)
+	if idempotencyKey == "" {
+		return result, NewRequestError(http.StatusBadRequest, errors.New("idempotency key is required"))
+	}
+	requestHash := baofuWithdrawalCreateRequestHash(input.OwnerType, input.OwnerID, input.AmountFen)
+	replay, replayed, err := s.replayBaofuWithdrawalByIdempotency(ctx, input, idempotencyKey, requestHash)
+	if err != nil {
+		return result, err
+	}
+	if replayed {
+		return replay, nil
+	}
 	outRequestNo := strings.TrimSpace(input.OutRequestNo)
 	if outRequestNo == "" {
 		return result, errors.New("宝付提现单号不能为空")
@@ -171,8 +189,19 @@ func (s *BaofuWithdrawService) CreateWithdrawal(ctx context.Context, input Baofu
 		Amount:           input.AmountFen,
 		Status:           db.BaofuWithdrawalStatusProcessing,
 		RawSnapshot:      submittedSnapshot,
+		IdempotencyKey: pgtype.Text{
+			String: idempotencyKey,
+			Valid:  true,
+		},
+		IdempotencyRequestHash: pgtype.Text{
+			String: requestHash,
+			Valid:  true,
+		},
 	})
 	if err != nil {
+		if db.ErrorCode(err) == db.UniqueViolation {
+			return s.replayBaofuWithdrawalByUniqueConflict(ctx, input, idempotencyKey, requestHash, err)
+		}
 		return result, err
 	}
 	result.WithdrawalOrder = withdrawalOrder
@@ -189,7 +218,7 @@ func (s *BaofuWithdrawService) CreateWithdrawal(ctx context.Context, input Baofu
 		result.SyncState = "unknown"
 		result.UserMessage = "提现申请已提交，结果正在确认，请勿重复提交"
 		s.logBaofuWithdrawCreateUnknown(err, input, withdrawalOrder)
-		s.recordBaofuWithdrawCommand(ctx, input.OwnerType, withdrawalOrder, nil, db.ExternalPaymentCommandStatusUnknown, "create_withdraw_unknown", "provider create result unknown; recovery will query by out_request_no")
+		s.recordBaofuWithdrawCommand(ctx, input.OwnerType, withdrawalOrder, nil, db.ExternalPaymentCommandStatusUnknown, "create_withdraw_unknown", "provider create result unknown; recovery will query by out_request_no", err)
 		return result, fmt.Errorf("%w: %w", ErrBaofuWithdrawCreateResultUnknown, err)
 	}
 	if upstream == nil {
@@ -197,7 +226,7 @@ func (s *BaofuWithdrawService) CreateWithdrawal(ctx context.Context, input Baofu
 		result.UserMessage = "提现申请已提交，结果正在确认，请勿重复提交"
 		emptyErr := errors.New("baofu withdraw returned empty result")
 		s.logBaofuWithdrawCreateUnknown(emptyErr, input, withdrawalOrder)
-		s.recordBaofuWithdrawCommand(ctx, input.OwnerType, withdrawalOrder, nil, db.ExternalPaymentCommandStatusUnknown, "create_withdraw_unknown", "provider create result unknown; recovery will query by out_request_no")
+		s.recordBaofuWithdrawCommand(ctx, input.OwnerType, withdrawalOrder, nil, db.ExternalPaymentCommandStatusUnknown, "create_withdraw_unknown", "provider create result unknown; recovery will query by out_request_no", emptyErr)
 		return result, fmt.Errorf("%w: empty provider result", ErrBaofuWithdrawCreateResultUnknown)
 	}
 	raw := []byte(upstream.Raw)
@@ -240,7 +269,7 @@ func (s *BaofuWithdrawService) CreateWithdrawal(ctx context.Context, input Baofu
 			Str("provider_error_code", "baofu_acceptance_rejected").
 			Str("provider_error_message", strings.TrimSpace(upstream.Remark)).
 			Msg("baofu withdrawal create rejected by provider")
-		s.recordBaofuWithdrawCommand(ctx, input.OwnerType, updated, upstream, db.ExternalPaymentCommandStatusRejected, "baofu_acceptance_rejected", strings.TrimSpace(upstream.Remark))
+		s.recordBaofuWithdrawCommand(ctx, input.OwnerType, updated, upstream, db.ExternalPaymentCommandStatusRejected, "baofu_acceptance_rejected", strings.TrimSpace(upstream.Remark), nil)
 		return result, ErrBaofuWithdrawCreateRejected
 	}
 	if upstream.Status != db.BaofuWithdrawalStatusProcessing {
@@ -259,8 +288,48 @@ func (s *BaofuWithdrawService) CreateWithdrawal(ctx context.Context, input Baofu
 	}
 	result.WithdrawalOrder = updated
 	result.SyncState = "accepted"
-	s.recordBaofuWithdrawCommand(ctx, input.OwnerType, updated, upstream, db.ExternalPaymentCommandStatusAccepted, "", "")
+	s.recordBaofuWithdrawCommand(ctx, input.OwnerType, updated, upstream, db.ExternalPaymentCommandStatusAccepted, "", "", nil)
 	return result, nil
+}
+
+func (s *BaofuWithdrawService) replayBaofuWithdrawalByIdempotency(ctx context.Context, input BaofuCreateWithdrawalInput, idempotencyKey string, requestHash string) (BaofuCreateWithdrawalResult, bool, error) {
+	var result BaofuCreateWithdrawalResult
+	existing, err := s.store.GetBaofuWithdrawalOrderByIdempotency(ctx, db.GetBaofuWithdrawalOrderByIdempotencyParams{
+		OwnerType: strings.TrimSpace(input.OwnerType),
+		OwnerID:   input.OwnerID,
+		IdempotencyKey: pgtype.Text{
+			String: idempotencyKey,
+			Valid:  true,
+		},
+	})
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return result, false, nil
+		}
+		return result, false, fmt.Errorf("get baofu withdrawal idempotency: %w", err)
+	}
+	if strings.TrimSpace(existing.IdempotencyRequestHash.String) != requestHash {
+		return result, false, NewRequestError(http.StatusConflict, errors.New("idempotency key already used by a different withdrawal request"))
+	}
+	result.WithdrawalOrder = existing
+	result.IdempotencyReplayed = true
+	return result, true, nil
+}
+
+func (s *BaofuWithdrawService) replayBaofuWithdrawalByUniqueConflict(ctx context.Context, input BaofuCreateWithdrawalInput, idempotencyKey string, requestHash string, createErr error) (BaofuCreateWithdrawalResult, error) {
+	result, replayed, err := s.replayBaofuWithdrawalByIdempotency(ctx, input, idempotencyKey, requestHash)
+	if err != nil {
+		return result, err
+	}
+	if replayed {
+		return result, nil
+	}
+	return result, fmt.Errorf("create baofu withdrawal order: %w", createErr)
+}
+
+func baofuWithdrawalCreateRequestHash(ownerType string, ownerID int64, amountFen int64) string {
+	sum := sha256.Sum256([]byte(fmt.Sprintf("owner_type=%s\nowner_id=%d\namount_fen=%d", strings.TrimSpace(ownerType), ownerID, amountFen)))
+	return fmt.Sprintf("sha256:%x", sum)
 }
 
 func businessOwnerForBaofuWithdrawal(ownerType string) string {
@@ -304,13 +373,57 @@ func (c BaofuWithdrawServiceConfig) normalized() BaofuWithdrawServiceConfig {
 	return c
 }
 
-func baofuWithdrawCommandSnapshot(order db.BaofuWithdrawalOrder) []byte {
+func baofuWithdrawCommandSnapshot(order db.BaofuWithdrawalOrder, upstream *baofucontracts.WithdrawResult, cause error) []byte {
 	payload := map[string]any{
 		"baofu_withdrawal_order_id": order.ID,
+		"provider":                  db.ExternalPaymentProviderBaofu,
+		"operation":                 "create_baofu_withdraw",
 		"owner_type":                order.OwnerType,
 		"owner_id":                  order.OwnerID,
+		"out_request_no":            strings.TrimSpace(order.OutRequestNo),
 		"amount":                    order.Amount,
 		"status":                    order.Status,
+	}
+	if upstream != nil {
+		if v := strings.TrimSpace(upstream.BaofuWithdrawNo); v != "" {
+			payload["baofu_withdraw_no"] = v
+		}
+		if v := strings.TrimSpace(upstream.UpstreamState); v != "" {
+			payload["upstream_state"] = v
+		}
+		if v := strings.TrimSpace(upstream.Status); v != "" {
+			payload["acceptance_status"] = v
+		}
+		if v := baofu.SanitizeUpstreamMessageForRecord(upstream.Remark); v != "" {
+			payload["remark_sanitized"] = v
+		}
+	}
+	var providerErr *baofu.ProviderError
+	if errors.As(cause, &providerErr) && providerErr != nil {
+		payload["error_present"] = true
+		if v := strings.TrimSpace(providerErr.Operation); v != "" {
+			payload["provider_operation"] = v
+		}
+		if v := strings.TrimSpace(providerErr.Capability); v != "" {
+			payload["provider_capability"] = v
+		}
+		if providerErr.StatusCode != 0 {
+			payload["http_status"] = providerErr.StatusCode
+		}
+		if v := strings.TrimSpace(providerErr.RequestID); v != "" {
+			payload["request_id"] = v
+		}
+		if v := strings.TrimSpace(providerErr.UpstreamCode); v != "" {
+			payload["upstream_code"] = v
+		}
+		if v := baofu.SanitizeUpstreamMessageForRecord(providerErr.UpstreamMessage); v != "" {
+			payload["upstream_message_sanitized"] = v
+		}
+		if len(providerErr.DiagnosticSnapshot) > 0 && json.Valid(providerErr.DiagnosticSnapshot) {
+			payload["provider_error_snapshot"] = json.RawMessage(providerErr.DiagnosticSnapshot)
+		}
+	} else if cause != nil {
+		payload["error_present"] = true
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {
@@ -319,7 +432,7 @@ func baofuWithdrawCommandSnapshot(order db.BaofuWithdrawalOrder) []byte {
 	return data
 }
 
-func (s *BaofuWithdrawService) recordBaofuWithdrawCommand(ctx context.Context, ownerType string, order db.BaofuWithdrawalOrder, upstream *baofucontracts.WithdrawResult, status string, errorCode string, errorMessage string) {
+func (s *BaofuWithdrawService) recordBaofuWithdrawCommand(ctx context.Context, ownerType string, order db.BaofuWithdrawalOrder, upstream *baofucontracts.WithdrawResult, status string, errorCode string, errorMessage string, cause error) {
 	now := s.now().UTC()
 	var secondary pgtype.Text
 	if upstream != nil {
@@ -340,7 +453,7 @@ func (s *BaofuWithdrawService) recordBaofuWithdrawCommand(ctx context.Context, o
 		ExternalSecondaryKey: secondary,
 		CommandStatus:        status,
 		SubmittedAt:          now,
-		ResponseSnapshot:     baofuWithdrawCommandSnapshot(order),
+		ResponseSnapshot:     baofuWithdrawCommandSnapshot(order, upstream, cause),
 	}
 	if status == db.ExternalPaymentCommandStatusAccepted {
 		arg.AcceptedAt = pgtype.Timestamptz{Time: now, Valid: true}
@@ -348,10 +461,10 @@ func (s *BaofuWithdrawService) recordBaofuWithdrawCommand(ctx context.Context, o
 	if status == db.ExternalPaymentCommandStatusRejected {
 		arg.RejectedAt = pgtype.Timestamptz{Time: now, Valid: true}
 	}
-	if trimmed := strings.TrimSpace(errorCode); trimmed != "" {
+	if trimmed := baofuWithdrawCommandErrorCode(errorCode, cause); trimmed != "" {
 		arg.LastErrorCode = pgtype.Text{String: trimmed, Valid: true}
 	}
-	if trimmed := strings.TrimSpace(errorMessage); trimmed != "" {
+	if trimmed := baofuWithdrawCommandErrorMessage(errorMessage, cause); trimmed != "" {
 		arg.LastErrorMessage = pgtype.Text{String: trimmed, Valid: true}
 	}
 	if _, err := s.store.CreateExternalPaymentCommand(ctx, arg); err != nil {
@@ -362,6 +475,32 @@ func (s *BaofuWithdrawService) recordBaofuWithdrawCommand(ctx context.Context, o
 			Str("command_status", status).
 			Msg("record baofu withdrawal command failed")
 	}
+}
+
+func baofuWithdrawCommandErrorCode(defaultCode string, cause error) string {
+	var providerErr *baofu.ProviderError
+	if errors.As(cause, &providerErr) && providerErr != nil {
+		if code := strings.TrimSpace(providerErr.UpstreamCode); code != "" {
+			return code
+		}
+	}
+	return strings.TrimSpace(defaultCode)
+}
+
+func baofuWithdrawCommandErrorMessage(defaultMessage string, cause error) string {
+	var providerErr *baofu.ProviderError
+	if errors.As(cause, &providerErr) && providerErr != nil {
+		if strings.TrimSpace(providerErr.UpstreamCode) != "" || strings.TrimSpace(providerErr.UpstreamMessage) != "" {
+			return strings.TrimSpace(baofu.BaofuCommandMessage(providerErr.UpstreamCode, providerErr.UpstreamMessage))
+		}
+	}
+	if message := strings.TrimSpace(defaultMessage); message != "" {
+		return baofu.SanitizeUpstreamMessageForRecord(message)
+	}
+	if cause != nil {
+		return baofu.SanitizeUpstreamMessageForRecord(cause.Error())
+	}
+	return ""
 }
 
 func (s *BaofuWithdrawService) logBaofuWithdrawCreateUnknown(err error, input BaofuCreateWithdrawalInput, order db.BaofuWithdrawalOrder) {

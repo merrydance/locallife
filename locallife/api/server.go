@@ -1314,12 +1314,7 @@ func (server *Server) setupRouter() {
 		merchantFinanceGroup.GET("/baofu-withdrawal/balance", server.getMerchantBaofuWithdrawalBalance)
 		merchantFinanceGroup.GET("/baofu-withdrawal/withdrawals", server.listMerchantBaofuWithdrawals)
 		merchantFinanceGroup.GET("/baofu-withdrawal/withdrawals/:id", server.getMerchantBaofuWithdrawal)
-	}
-
-	merchantFinanceOwnerGroup := authGroup.Group("/merchant/finance")
-	merchantFinanceOwnerGroup.Use(server.MerchantStaffMiddleware("owner"))
-	{
-		merchantFinanceOwnerGroup.POST("/baofu-withdrawal/withdraw", server.createMerchantBaofuWithdrawal)
+		merchantFinanceGroup.POST("/baofu-withdrawal/withdraw", server.createMerchantBaofuWithdrawal)
 	}
 
 	authGroup.GET("/merchant/devices/access", server.getMerchantDeviceAccess)

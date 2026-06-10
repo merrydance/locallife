@@ -58,7 +58,12 @@ assert.strictEqual(api.baofuWithdrawalEndpoint('rider'), '/v1/rider/income/baofu
 api.getBaofuWithdrawalBalance('merchant')
 api.listBaofuWithdrawals('operator', { page: 2, limit: 20 })
 api.getBaofuWithdrawal('platform', 18)
-api.createBaofuWithdrawal('rider', { amount: 1200, remark: '提现' })
+assert.throws(
+  () => api.createBaofuWithdrawal('rider', { amount: 1200, remark: '提现' }),
+  /缺少提现请求幂等键/,
+  'Create withdrawal wrapper must require a caller-provided idempotency key'
+)
+api.createBaofuWithdrawal('rider', { amount: 1200, remark: '提现' }, { idempotencyKey: 'withdraw-draft-key-1' })
 
 assert.deepStrictEqual(capturedRequests.map((request) => request.url), [
   '/v1/merchant/finance/baofu-withdrawal/balance',
@@ -67,6 +72,7 @@ assert.deepStrictEqual(capturedRequests.map((request) => request.url), [
   '/v1/rider/income/baofu-withdrawal/withdraw'
 ])
 assert.strictEqual(capturedRequests[3].data.amount, 1200)
+assert.strictEqual(capturedRequests[3].header['Idempotency-Key'], 'withdraw-draft-key-1')
 assert(!('owner_type' in capturedRequests[3].data), 'Create request must not include owner_type')
 assert(!('owner_id' in capturedRequests[3].data), 'Create request must not include owner_id')
 
@@ -173,6 +179,9 @@ for (const [role, group] of Object.entries(rolePageGroups)) {
   const createPage = read(group.createPagePath)
   assert(createPage.includes('result.withdrawal.id'), `${group.label} create page must navigate from returned withdrawal id`)
   assert(createPage.includes('result.message') || createPage.includes('sync_message'), `${group.label} create page must surface accepted/unknown create message`)
+  assert(createPage.includes('buildWithdrawalIdempotencyKey'), `${group.label} create page must create a withdrawal idempotency draft key`)
+  assert(createPage.includes('withdrawalIdempotencyKey'), `${group.label} create page must keep a stable withdrawal idempotency draft key`)
+  assert(createPage.includes('idempotencyKey'), `${group.label} create page must pass the draft idempotency key into createBaofuWithdrawal`)
 }
 
 const userFacingSource = read('miniprogram/utils/user-facing.ts')

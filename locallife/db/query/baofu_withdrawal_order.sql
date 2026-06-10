@@ -6,7 +6,9 @@ INSERT INTO baofu_withdrawal_orders (
     out_request_no,
     amount,
     status,
-    raw_snapshot
+    raw_snapshot,
+    idempotency_key,
+    idempotency_request_hash
 ) VALUES (
     sqlc.arg(owner_type),
     sqlc.arg(owner_id),
@@ -14,23 +16,33 @@ INSERT INTO baofu_withdrawal_orders (
     sqlc.arg(out_request_no),
     sqlc.arg(amount),
     sqlc.arg(status),
-    COALESCE(sqlc.narg(raw_snapshot), '{}'::jsonb)
+    COALESCE(sqlc.narg(raw_snapshot), '{}'::jsonb),
+    sqlc.narg(idempotency_key),
+    sqlc.narg(idempotency_request_hash)
 ) RETURNING *;
 
 -- name: GetBaofuWithdrawalOrder :one
-SELECT id, owner_type, owner_id, account_binding_id, out_request_no, baofu_withdraw_no, amount, status, raw_snapshot, finished_at, created_at, updated_at
+SELECT id, owner_type, owner_id, account_binding_id, out_request_no, baofu_withdraw_no, amount, status, raw_snapshot, finished_at, created_at, updated_at, idempotency_key, idempotency_request_hash
 FROM baofu_withdrawal_orders
 WHERE id = $1
 LIMIT 1;
 
 -- name: GetBaofuWithdrawalOrderByOutRequestNo :one
-SELECT id, owner_type, owner_id, account_binding_id, out_request_no, baofu_withdraw_no, amount, status, raw_snapshot, finished_at, created_at, updated_at
+SELECT id, owner_type, owner_id, account_binding_id, out_request_no, baofu_withdraw_no, amount, status, raw_snapshot, finished_at, created_at, updated_at, idempotency_key, idempotency_request_hash
 FROM baofu_withdrawal_orders
 WHERE out_request_no = $1
 LIMIT 1;
 
+-- name: GetBaofuWithdrawalOrderByIdempotency :one
+SELECT id, owner_type, owner_id, account_binding_id, out_request_no, baofu_withdraw_no, amount, status, raw_snapshot, finished_at, created_at, updated_at, idempotency_key, idempotency_request_hash
+FROM baofu_withdrawal_orders
+WHERE owner_type = sqlc.arg(owner_type)
+  AND owner_id = sqlc.arg(owner_id)
+  AND idempotency_key = sqlc.arg(idempotency_key)
+LIMIT 1;
+
 -- name: ListBaofuWithdrawalOrdersByOwner :many
-SELECT id, owner_type, owner_id, account_binding_id, out_request_no, baofu_withdraw_no, amount, status, raw_snapshot, finished_at, created_at, updated_at
+SELECT id, owner_type, owner_id, account_binding_id, out_request_no, baofu_withdraw_no, amount, status, raw_snapshot, finished_at, created_at, updated_at, idempotency_key, idempotency_request_hash
 FROM baofu_withdrawal_orders
 WHERE owner_type = sqlc.arg(owner_type)
   AND owner_id = sqlc.arg(owner_id)
@@ -45,7 +57,7 @@ WHERE owner_type = sqlc.arg(owner_type)
   AND owner_id = sqlc.arg(owner_id);
 
 -- name: ListProcessingBaofuWithdrawalOrdersForRecovery :many
-SELECT id, owner_type, owner_id, account_binding_id, out_request_no, baofu_withdraw_no, amount, status, raw_snapshot, finished_at, created_at, updated_at
+SELECT id, owner_type, owner_id, account_binding_id, out_request_no, baofu_withdraw_no, amount, status, raw_snapshot, finished_at, created_at, updated_at, idempotency_key, idempotency_request_hash
 FROM baofu_withdrawal_orders
 WHERE status = 'processing'
   AND created_at <= sqlc.arg(created_before)

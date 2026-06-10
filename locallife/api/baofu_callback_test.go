@@ -792,7 +792,7 @@ func TestBaofuAccountOpenCallbackAcceptsOfficialQueryStringGet(t *testing.T) {
 	require.Equal(t, "OK", recorder.Body.String())
 }
 
-func TestBaofuWithdrawCallbackEnqueuesFactApplicationBeforeAck(t *testing.T) {
+func TestBaofuWithdrawCallbackPersistsFactBeforeEnqueueAndAck(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	store := mockdb.NewMockStore(ctrl)
@@ -805,8 +805,31 @@ func TestBaofuWithdrawCallbackEnqueuesFactApplicationBeforeAck(t *testing.T) {
 		ID:           6101,
 		OutRequestNo: "WD202605040001",
 		Status:       db.BaofuWithdrawalStatusProcessing,
+		OwnerType:    db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:      88,
+		Amount:       12345,
 	}
 	store.EXPECT().GetBaofuWithdrawalOrderByOutRequestNo(gomock.Any(), "WD202605040001").Return(withdrawal, nil)
+	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
+			require.Equal(t, db.ExternalPaymentProviderBaofu, arg.Provider)
+			require.Equal(t, db.PaymentChannelBaofuAggregate, arg.Channel)
+			require.Equal(t, db.ExternalPaymentCapabilityBaofuWithdraw, arg.Capability)
+			require.Equal(t, db.ExternalPaymentFactSourceCallback, arg.FactSource)
+			require.Equal(t, db.ExternalPaymentObjectWithdraw, arg.ExternalObjectType)
+			require.Equal(t, "WD202605040001", arg.ExternalObjectKey)
+			require.Equal(t, pgtype.Text{String: "BFWD202605040001", Valid: true}, arg.ExternalSecondaryKey)
+			require.Equal(t, pgtype.Text{String: db.ExternalPaymentBusinessOwnerMerchantFunds, Valid: true}, arg.BusinessOwner)
+			require.Equal(t, pgtype.Text{String: "baofu_withdrawal_order", Valid: true}, arg.BusinessObjectType)
+			require.Equal(t, pgtype.Int8{Int64: withdrawal.ID, Valid: true}, arg.BusinessObjectID)
+			require.Equal(t, "3", arg.UpstreamState)
+			require.Equal(t, db.ExternalPaymentTerminalStatusFailed, arg.TerminalStatus)
+			require.True(t, arg.IsTerminal)
+			require.Equal(t, pgtype.Int8{Int64: 12345, Valid: true}, arg.Amount)
+			require.Equal(t, "baofu:callback:withdraw:WD202605040001:BFWD202605040001", arg.DedupeKey)
+			require.JSONEq(t, `{"transSerialNo":"WD202605040001","orderId":"BFWD202605040001","state":"3"}`, string(arg.RawResource))
+			return db.ExternalPaymentFact{ID: 9101, DedupeKey: arg.DedupeKey}, nil
+		})
 
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/v1/webhooks/baofu/withdraw", bytes.NewBufferString(`{"encrypted":true}`))
@@ -817,6 +840,35 @@ func TestBaofuWithdrawCallbackEnqueuesFactApplicationBeforeAck(t *testing.T) {
 	require.Equal(t, []int64{withdrawal.ID}, taskRecorder.withdrawalOrderIDs)
 	require.Equal(t, []string{"3"}, taskRecorder.upstreamStates)
 	require.Equal(t, []string{"BFWD202605040001"}, taskRecorder.baofuWithdrawNos)
+}
+
+func TestBaofuWithdrawCallbackDoesNotEnqueueWhenFactPersistenceFails(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	server.SetBaofuAccountNotificationParserForTest(fakeBaofuOpenAccountParser{})
+	taskRecorder := &baofuWithdrawalFactApplicationEnqueueRecorder{}
+	server.taskDistributor = taskRecorder
+
+	withdrawal := db.BaofuWithdrawalOrder{
+		ID:           6101,
+		OutRequestNo: "WD202605040001",
+		Status:       db.BaofuWithdrawalStatusProcessing,
+		OwnerType:    db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:      88,
+		Amount:       12345,
+	}
+	store.EXPECT().GetBaofuWithdrawalOrderByOutRequestNo(gomock.Any(), "WD202605040001").Return(withdrawal, nil)
+	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.Any()).Return(db.ExternalPaymentFact{}, errors.New("insert fact failed"))
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/v1/webhooks/baofu/withdraw", bytes.NewBufferString(`{"encrypted":true}`))
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "persist callback failed")
+	require.Empty(t, taskRecorder.withdrawalOrderIDs)
 }
 
 func TestBaofuWithdrawCallbackRejectsPayoutIdentityMismatch(t *testing.T) {

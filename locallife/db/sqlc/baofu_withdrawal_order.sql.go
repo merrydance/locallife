@@ -39,7 +39,9 @@ INSERT INTO baofu_withdrawal_orders (
     out_request_no,
     amount,
     status,
-    raw_snapshot
+    raw_snapshot,
+    idempotency_key,
+    idempotency_request_hash
 ) VALUES (
     $1,
     $2,
@@ -47,18 +49,22 @@ INSERT INTO baofu_withdrawal_orders (
     $4,
     $5,
     $6,
-    COALESCE($7, '{}'::jsonb)
-) RETURNING id, owner_type, owner_id, account_binding_id, out_request_no, baofu_withdraw_no, amount, status, raw_snapshot, finished_at, created_at, updated_at
+    COALESCE($7, '{}'::jsonb),
+    $8,
+    $9
+) RETURNING id, owner_type, owner_id, account_binding_id, out_request_no, baofu_withdraw_no, amount, status, raw_snapshot, finished_at, created_at, updated_at, idempotency_key, idempotency_request_hash
 `
 
 type CreateBaofuWithdrawalOrderParams struct {
-	OwnerType        string      `json:"owner_type"`
-	OwnerID          int64       `json:"owner_id"`
-	AccountBindingID int64       `json:"account_binding_id"`
-	OutRequestNo     string      `json:"out_request_no"`
-	Amount           int64       `json:"amount"`
-	Status           string      `json:"status"`
-	RawSnapshot      interface{} `json:"raw_snapshot"`
+	OwnerType              string      `json:"owner_type"`
+	OwnerID                int64       `json:"owner_id"`
+	AccountBindingID       int64       `json:"account_binding_id"`
+	OutRequestNo           string      `json:"out_request_no"`
+	Amount                 int64       `json:"amount"`
+	Status                 string      `json:"status"`
+	RawSnapshot            interface{} `json:"raw_snapshot"`
+	IdempotencyKey         pgtype.Text `json:"idempotency_key"`
+	IdempotencyRequestHash pgtype.Text `json:"idempotency_request_hash"`
 }
 
 func (q *Queries) CreateBaofuWithdrawalOrder(ctx context.Context, arg CreateBaofuWithdrawalOrderParams) (BaofuWithdrawalOrder, error) {
@@ -70,6 +76,8 @@ func (q *Queries) CreateBaofuWithdrawalOrder(ctx context.Context, arg CreateBaof
 		arg.Amount,
 		arg.Status,
 		arg.RawSnapshot,
+		arg.IdempotencyKey,
+		arg.IdempotencyRequestHash,
 	)
 	var i BaofuWithdrawalOrder
 	err := row.Scan(
@@ -85,12 +93,14 @@ func (q *Queries) CreateBaofuWithdrawalOrder(ctx context.Context, arg CreateBaof
 		&i.FinishedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IdempotencyKey,
+		&i.IdempotencyRequestHash,
 	)
 	return i, err
 }
 
 const getBaofuWithdrawalOrder = `-- name: GetBaofuWithdrawalOrder :one
-SELECT id, owner_type, owner_id, account_binding_id, out_request_no, baofu_withdraw_no, amount, status, raw_snapshot, finished_at, created_at, updated_at
+SELECT id, owner_type, owner_id, account_binding_id, out_request_no, baofu_withdraw_no, amount, status, raw_snapshot, finished_at, created_at, updated_at, idempotency_key, idempotency_request_hash
 FROM baofu_withdrawal_orders
 WHERE id = $1
 LIMIT 1
@@ -112,12 +122,51 @@ func (q *Queries) GetBaofuWithdrawalOrder(ctx context.Context, id int64) (BaofuW
 		&i.FinishedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IdempotencyKey,
+		&i.IdempotencyRequestHash,
+	)
+	return i, err
+}
+
+const getBaofuWithdrawalOrderByIdempotency = `-- name: GetBaofuWithdrawalOrderByIdempotency :one
+SELECT id, owner_type, owner_id, account_binding_id, out_request_no, baofu_withdraw_no, amount, status, raw_snapshot, finished_at, created_at, updated_at, idempotency_key, idempotency_request_hash
+FROM baofu_withdrawal_orders
+WHERE owner_type = $1
+  AND owner_id = $2
+  AND idempotency_key = $3
+LIMIT 1
+`
+
+type GetBaofuWithdrawalOrderByIdempotencyParams struct {
+	OwnerType      string      `json:"owner_type"`
+	OwnerID        int64       `json:"owner_id"`
+	IdempotencyKey pgtype.Text `json:"idempotency_key"`
+}
+
+func (q *Queries) GetBaofuWithdrawalOrderByIdempotency(ctx context.Context, arg GetBaofuWithdrawalOrderByIdempotencyParams) (BaofuWithdrawalOrder, error) {
+	row := q.db.QueryRow(ctx, getBaofuWithdrawalOrderByIdempotency, arg.OwnerType, arg.OwnerID, arg.IdempotencyKey)
+	var i BaofuWithdrawalOrder
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerType,
+		&i.OwnerID,
+		&i.AccountBindingID,
+		&i.OutRequestNo,
+		&i.BaofuWithdrawNo,
+		&i.Amount,
+		&i.Status,
+		&i.RawSnapshot,
+		&i.FinishedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.IdempotencyKey,
+		&i.IdempotencyRequestHash,
 	)
 	return i, err
 }
 
 const getBaofuWithdrawalOrderByOutRequestNo = `-- name: GetBaofuWithdrawalOrderByOutRequestNo :one
-SELECT id, owner_type, owner_id, account_binding_id, out_request_no, baofu_withdraw_no, amount, status, raw_snapshot, finished_at, created_at, updated_at
+SELECT id, owner_type, owner_id, account_binding_id, out_request_no, baofu_withdraw_no, amount, status, raw_snapshot, finished_at, created_at, updated_at, idempotency_key, idempotency_request_hash
 FROM baofu_withdrawal_orders
 WHERE out_request_no = $1
 LIMIT 1
@@ -139,12 +188,14 @@ func (q *Queries) GetBaofuWithdrawalOrderByOutRequestNo(ctx context.Context, out
 		&i.FinishedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IdempotencyKey,
+		&i.IdempotencyRequestHash,
 	)
 	return i, err
 }
 
 const listBaofuWithdrawalOrdersByOwner = `-- name: ListBaofuWithdrawalOrdersByOwner :many
-SELECT id, owner_type, owner_id, account_binding_id, out_request_no, baofu_withdraw_no, amount, status, raw_snapshot, finished_at, created_at, updated_at
+SELECT id, owner_type, owner_id, account_binding_id, out_request_no, baofu_withdraw_no, amount, status, raw_snapshot, finished_at, created_at, updated_at, idempotency_key, idempotency_request_hash
 FROM baofu_withdrawal_orders
 WHERE owner_type = $1
   AND owner_id = $2
@@ -187,6 +238,8 @@ func (q *Queries) ListBaofuWithdrawalOrdersByOwner(ctx context.Context, arg List
 			&i.FinishedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.IdempotencyKey,
+			&i.IdempotencyRequestHash,
 		); err != nil {
 			return nil, err
 		}
@@ -199,7 +252,7 @@ func (q *Queries) ListBaofuWithdrawalOrdersByOwner(ctx context.Context, arg List
 }
 
 const listProcessingBaofuWithdrawalOrdersForRecovery = `-- name: ListProcessingBaofuWithdrawalOrdersForRecovery :many
-SELECT id, owner_type, owner_id, account_binding_id, out_request_no, baofu_withdraw_no, amount, status, raw_snapshot, finished_at, created_at, updated_at
+SELECT id, owner_type, owner_id, account_binding_id, out_request_no, baofu_withdraw_no, amount, status, raw_snapshot, finished_at, created_at, updated_at, idempotency_key, idempotency_request_hash
 FROM baofu_withdrawal_orders
 WHERE status = 'processing'
   AND created_at <= $1
@@ -234,6 +287,8 @@ func (q *Queries) ListProcessingBaofuWithdrawalOrdersForRecovery(ctx context.Con
 			&i.FinishedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.IdempotencyKey,
+			&i.IdempotencyRequestHash,
 		); err != nil {
 			return nil, err
 		}
@@ -255,7 +310,7 @@ SET
     updated_at = now()
 WHERE id = $4
   AND status = 'processing'
-RETURNING id, owner_type, owner_id, account_binding_id, out_request_no, baofu_withdraw_no, amount, status, raw_snapshot, finished_at, created_at, updated_at
+RETURNING id, owner_type, owner_id, account_binding_id, out_request_no, baofu_withdraw_no, amount, status, raw_snapshot, finished_at, created_at, updated_at, idempotency_key, idempotency_request_hash
 `
 
 type UpdateBaofuWithdrawalOrderStatusParams struct {
@@ -286,6 +341,8 @@ func (q *Queries) UpdateBaofuWithdrawalOrderStatus(ctx context.Context, arg Upda
 		&i.FinishedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IdempotencyKey,
+		&i.IdempotencyRequestHash,
 	)
 	return i, err
 }
@@ -299,7 +356,7 @@ SET
     updated_at = now()
 WHERE id = $3
   AND status = 'processing'
-RETURNING id, owner_type, owner_id, account_binding_id, out_request_no, baofu_withdraw_no, amount, status, raw_snapshot, finished_at, created_at, updated_at
+RETURNING id, owner_type, owner_id, account_binding_id, out_request_no, baofu_withdraw_no, amount, status, raw_snapshot, finished_at, created_at, updated_at, idempotency_key, idempotency_request_hash
 `
 
 type UpdateBaofuWithdrawalOrderToProcessingParams struct {
@@ -324,6 +381,8 @@ func (q *Queries) UpdateBaofuWithdrawalOrderToProcessing(ctx context.Context, ar
 		&i.FinishedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IdempotencyKey,
+		&i.IdempotencyRequestHash,
 	)
 	return i, err
 }

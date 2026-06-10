@@ -1,6 +1,6 @@
 # Merchant Finance Withdrawal Slice
 
-Status: merchant-state flow slice created; Baofu provider failure reasons preserved 2026-06-07
+Status: withdrawal idempotency, manager create permission, callback fact durability, provider-error command diagnostics, and applied-schema idempotency hardening implemented 2026-06-10; Baofu account-opening provider failure reasons preserved 2026-06-07
 Risk class: G3 - merchant money movement, Baofu settlement-account onboarding, provider callbacks, recovery schedulers, sensitive profile data, and finance authorization boundaries
 Scope: Mini Program merchant finance pages -> merchant finance read APIs -> Baofu settlement account onboarding -> Baofu withdrawal create/read APIs -> provider callback/recovery fact application -> durable finance truth
 
@@ -27,10 +27,11 @@ Merchant finance state must separate read-only financial reporting from money mo
 
 - Merchant finance summaries are derived from durable settlement facts such as `profit_sharing_orders` and `merchant_settlement_adjustments`; page presentation must not invent totals.
 - Merchant settlement-account onboarding is owner-only and must preserve sensitive profile fields encrypted or masked while keeping provider status recoverable.
-- Product decision 2026-06-10: merchant withdrawal creation must require a client/server `Idempotency-Key`; ambiguous retries of the same withdrawal intent must not create a second local/provider withdrawal.
-- Product decision 2026-06-10: merchant managers may operate withdrawal flows. The current owner-only create route must be aligned with the owner/manager operation contract unless a later finance policy narrows this permission.
+- Implemented 2026-06-10: merchant withdrawal creation requires a client/server `Idempotency-Key`; same owner/key/amount replays the existing withdrawal, while same owner/key/different amount is rejected as a conflict before any provider call.
+- Implemented 2026-06-10: withdrawal idempotency schema is hardened for clean installs and already-applied weak migration environments. `000260` defines key/hash columns, per-owner unique index, and the strong pair CHECK for clean databases; `000261` forward-repairs databases that had already applied a weaker `000260`, cleans partial historical pairs, and rejects future half-written key/hash rows.
+- Implemented 2026-06-10: merchant managers may operate withdrawal create/list/detail/balance flows. Settlement-account submission remains owner-only unless a later finance policy changes it.
 - Merchant withdrawal creation must create durable local withdrawal intent before/alongside provider command tracking.
-- Product decision 2026-06-10: withdrawal provider callbacks must first persist a durable callback/fact record, then asynchronously apply the fact to terminal withdrawal state.
+- Implemented 2026-06-10: withdrawal provider callbacks first persist a durable `external_payment_facts` callback fact, then asynchronously enqueue terminal withdrawal-state application.
 - Provider callback, query recovery, and task application must converge `baofu_withdrawal_orders` from `processing` to a terminal state without regressing already terminal rows.
 - A merchant-visible "withdrawal submitted" result must mean there is a durable local withdrawal row the merchant can later inspect.
 
@@ -87,23 +88,23 @@ Merchant finance state must separate read-only financial reporting from money mo
 17. Withdrawal list page loads balance and withdrawal records in parallel; if only balance fails, records can still render while create is disabled.
     Evidence: `weapp/miniprogram/pages/merchant/finance/withdrawals/index.ts:82`, `weapp/miniprogram/pages/merchant/finance/withdrawals/index.ts:143`, `weapp/miniprogram/pages/merchant/finance/withdrawals/index.ts:145`, `weapp/miniprogram/pages/merchant/finance/withdrawals/index.ts:155`, `weapp/miniprogram/pages/merchant/finance/withdrawals/index.ts:182`, `weapp/miniprogram/pages/merchant/finance/withdrawals/index.ts:190`.
 
-18. Withdrawal create page loads balance, validates local amount against backend balance view, blocks duplicate submit locally, then calls `createBaofuWithdrawal('merchant')` and redirects to durable detail.
-    Evidence: `weapp/miniprogram/pages/merchant/finance/withdrawals/create/index.ts:39`, `weapp/miniprogram/pages/merchant/finance/withdrawals/create/index.ts:52`, `weapp/miniprogram/pages/merchant/finance/withdrawals/create/index.ts:79`, `weapp/miniprogram/pages/merchant/finance/withdrawals/create/index.ts:84`, `weapp/miniprogram/pages/merchant/finance/withdrawals/create/index.ts:90`, `weapp/miniprogram/pages/merchant/finance/withdrawals/create/index.ts:92`, `weapp/miniprogram/pages/merchant/finance/withdrawals/create/index.ts:101`.
+18. Withdrawal create page loads balance, validates local amount against backend balance view, blocks duplicate submit locally, keeps a per-draft withdrawal idempotency key, passes that key on submit, and redirects to durable detail.
+    Evidence: `weapp/miniprogram/pages/merchant/finance/withdrawals/create/index.ts:17`, `weapp/miniprogram/pages/merchant/finance/withdrawals/create/index.ts:30`, `weapp/miniprogram/pages/merchant/finance/withdrawals/create/index.ts:80`, `weapp/miniprogram/pages/merchant/finance/withdrawals/create/index.ts:98`, `weapp/miniprogram/pages/merchant/finance/withdrawals/create/index.ts:101`, `weapp/miniprogram/pages/merchant/finance/withdrawals/create/index.ts:102`.
 
-19. Withdrawal wrappers call `GET /balance`, `GET /withdrawals`, `GET /withdrawals/:id`, and `POST /withdraw`.
-    Evidence: `weapp/miniprogram/pages/merchant/_main_shared/api/baofu-withdrawal.ts:59`, `weapp/miniprogram/pages/merchant/_main_shared/api/baofu-withdrawal.ts:72`, `weapp/miniprogram/pages/merchant/_main_shared/api/baofu-withdrawal.ts:79`, `weapp/miniprogram/pages/merchant/_main_shared/api/baofu-withdrawal.ts:90`, `weapp/miniprogram/pages/merchant/_main_shared/api/baofu-withdrawal.ts:97`.
+19. Withdrawal wrappers call `GET /balance`, `GET /withdrawals`, `GET /withdrawals/:id`, and `POST /withdraw`; create wrappers require `idempotencyKey` and send it as the `Idempotency-Key` header. Shared operator/platform/rider wrapper copies were updated with the same contract to avoid role drift.
+    Evidence: `weapp/miniprogram/pages/merchant/_main_shared/api/baofu-withdrawal.ts:72`, `weapp/miniprogram/pages/merchant/_main_shared/api/baofu-withdrawal.ts:79`, `weapp/miniprogram/pages/merchant/_main_shared/api/baofu-withdrawal.ts:94`, `weapp/miniprogram/pages/merchant/_main_shared/api/baofu-withdrawal.ts:101`, `weapp/miniprogram/pages/merchant/_main_shared/api/baofu-withdrawal.ts:106`, `weapp/miniprogram/pages/merchant/_main_shared/api/baofu-withdrawal.ts:115`, `weapp/scripts/check-baofu-withdrawal-workflow.js:61`, `weapp/scripts/check-baofu-withdrawal-workflow.js:75`.
 
-20. Backend withdrawal read/list routes allow owner/manager; create route is owner-only. All routes derive owner scope from server-side merchant context.
-    Evidence: `locallife/api/server.go:1278`, `locallife/api/server.go:1279`, `locallife/api/server.go:1280`, `locallife/api/server.go:1283`, `locallife/api/server.go:1284`, `locallife/api/server.go:1286`, `locallife/api/baofu_withdrawal.go:200`.
+20. Backend withdrawal read/list/balance/create routes allow owner/manager through the merchant finance group. All routes derive owner scope from server-side merchant context.
+    Evidence: `locallife/api/server.go:1304`, `locallife/api/server.go:1305`, `locallife/api/server.go:1314`, `locallife/api/server.go:1315`, `locallife/api/server.go:1316`, `locallife/api/server.go:1317`, `locallife/api/baofu_withdrawal.go:200`.
 
 21. Withdrawal balance uses active Baofu binding and provider `QueryBalance`. It does not derive available balance from local finance tables.
     Evidence: `locallife/api/baofu_withdrawal.go:249`, `locallife/logic/baofu_withdraw_service.go:92`, `locallife/logic/baofu_withdraw_service.go:101`, `locallife/logic/baofu_withdraw_service.go:107`, `locallife/logic/baofu_withdraw_service.go:119`.
 
-22. Withdrawal create validates amount upper bound, generates server-side out-request number, confirms active binding/fee-member id, queries provider balance, persists a `processing` local withdrawal order, calls provider create, records external payment command, and returns created/accepted/unknown/rejected semantics.
-    Evidence: `locallife/api/baofu_withdrawal.go:275`, `locallife/api/baofu_withdrawal.go:283`, `locallife/api/baofu_withdrawal.go:288`, `locallife/api/baofu_withdrawal.go:292`, `locallife/api/baofu_withdrawal.go:466`, `locallife/logic/baofu_withdraw_service.go:126`, `locallife/logic/baofu_withdraw_service.go:142`, `locallife/logic/baofu_withdraw_service.go:150`, `locallife/logic/baofu_withdraw_service.go:166`, `locallife/logic/baofu_withdraw_service.go:179`, `locallife/logic/baofu_withdraw_service.go:188`, `locallife/logic/baofu_withdraw_service.go:210`, `locallife/logic/baofu_withdraw_service.go:249`, `locallife/logic/baofu_withdraw_service.go:322`.
+22. Withdrawal create validates amount upper bound, requires `Idempotency-Key`, replays same-key/same-request local orders, rejects same-key/different-amount conflicts, generates server-side out-request number, confirms active binding/fee-member id, queries provider balance, persists a `processing` local withdrawal order with idempotency key/hash, calls provider create, records external payment command, preserves provider-specific create-error code/message diagnostics internally, and returns created/accepted/unknown/rejected semantics.
+    Evidence: `locallife/api/baofu_withdrawal.go:294`, `locallife/api/baofu_withdrawal.go:303`, `locallife/api/baofu_withdrawal.go:317`, `locallife/logic/baofu_withdraw_service.go:143`, `locallife/logic/baofu_withdraw_service.go:147`, `locallife/logic/baofu_withdraw_service.go:183`, `locallife/logic/baofu_withdraw_service.go:191`, `locallife/logic/baofu_withdraw_service.go:200`, `locallife/logic/baofu_withdraw_service.go:221`, `locallife/logic/baofu_withdraw_service.go:376`, `locallife/logic/baofu_withdraw_service.go:464`, `locallife/db/query/baofu_withdrawal_order.sql:1`, `locallife/db/query/baofu_withdrawal_order.sql:36`, `locallife/db/migration/000260_add_baofu_withdrawal_idempotency.up.sql:1`, `locallife/db/migration/000260_add_baofu_withdrawal_idempotency.up.sql:16`, `locallife/db/migration/000261_harden_baofu_withdrawal_idempotency_pair.up.sql:1`, `locallife/db/migration/000261_harden_baofu_withdrawal_idempotency_pair.up.sql:16`.
 
-23. Withdrawal callback validates parser and payout identity, looks up the withdrawal by provider serial, and enqueues fact application. The callback does not directly mutate the withdrawal row.
-    Evidence: `locallife/api/server.go:535`, `locallife/api/baofu_callback.go:113`, `locallife/api/baofu_callback.go:131`, `locallife/api/baofu_callback.go:142`, `locallife/api/baofu_callback.go:147`, `locallife/api/baofu_callback.go:153`, `locallife/api/baofu_callback.go:159`.
+23. Withdrawal callback validates parser and payout identity, looks up the withdrawal by provider serial, persists a durable callback fact, and only then enqueues fact application. The callback does not directly mutate the withdrawal row.
+    Evidence: `locallife/api/server.go:535`, `locallife/api/baofu_callback.go:113`, `locallife/api/baofu_callback.go:131`, `locallife/api/baofu_callback.go:142`, `locallife/api/baofu_callback.go:155`, `locallife/api/baofu_callback.go:161`, `locallife/api/baofu_callback.go:170`, `locallife/api/baofu_withdrawal_callback_fact.go:16`, `locallife/api/baofu_withdrawal_callback_fact.go:30`, `locallife/api/baofu_withdrawal_callback_fact.go:34`, `locallife/api/baofu_withdrawal_callback_fact.go:57`.
 
 24. Withdrawal recovery scheduler runs every five minutes, scans processing withdrawals older than five minutes, queries provider by out request number, and enqueues the same fact-application task when provider result is terminal.
     Evidence: `locallife/main.go:276`, `locallife/worker/baofu_withdrawal_recovery_scheduler.go:17`, `locallife/worker/baofu_withdrawal_recovery_scheduler.go:61`, `locallife/worker/baofu_withdrawal_recovery_scheduler.go:109`, `locallife/worker/baofu_withdrawal_recovery_scheduler.go:122`, `locallife/worker/baofu_withdrawal_recovery_scheduler.go:128`, `locallife/worker/baofu_withdrawal_recovery_scheduler.go:142`, `locallife/worker/baofu_withdrawal_recovery_scheduler.go:151`.
@@ -114,15 +115,15 @@ Merchant finance state must separate read-only financial reporting from money mo
 ## Reverse-Reference Findings
 
 - Merchant finance read APIs are not money-movement writers; they are derived readers over `profit_sharing_orders`, promotion expense queries, and `merchant_settlement_adjustments`.
-- Product decision 2026-06-10: managers may operate withdrawal flows. Current finance read routes already allow owner/manager, but settlement-account onboarding and withdrawal creation are still owner-only; implementation must align withdrawal operation routes and UI with the owner/manager product contract while keeping settlement-account submission separately owner-only unless product changes it.
+- Fixed 2026-06-10: managers may operate withdrawal flows. Merchant finance read and withdrawal create/list/detail/balance routes now share owner/manager middleware; settlement-account onboarding remains owner-only unless product changes it.
 - Merchant settlement-account status and submit pages reuse shared role-agnostic Baofu onboarding behaviors. The merchant variant explicitly sets `supportPaymentRecovery=false`.
 - Baofu account opening is multi-stage for merchants: account binding active -> merchant report processing -> applet authorization pending -> payment ready.
 - Fixed 2026-06-07: Baofu account-opening/provider failures now preserve the provider failure code and sanitized provider reason for internal diagnosis. User-facing status can show sanitized provider reasons when they are safe and actionable; otherwise it falls back to classified guidance while internal diagnostics still retain the sanitized provider cause instead of silently replacing it with LocalLife stable copy.
 - Baofu withdrawal uses provider balance as real available balance and does not locally reserve or freeze funds when creating a withdrawal.
-- Product decision 2026-06-10: withdrawal create must require `Idempotency-Key`. Current `baofu_withdrawal_orders.out_request_no` is unique, but clients cannot provide a stable idempotency key and the server generates a new provider request number for every POST.
-- `external_payment_commands` records withdrawal provider commands, but there is no discovered client-visible idempotency table equivalent to refund request idempotency. This is now a required implementation gap under the 2026-06-10 idempotency decision.
+- Fixed 2026-06-10: withdrawal create requires `Idempotency-Key`. `baofu_withdrawal_orders` stores `idempotency_key` plus `idempotency_request_hash`, has a per-owner partial unique index, and now has forward-hardened key/hash pair constraints for both clean and already-applied weak-schema databases; the Mini Program wrapper/page sends a stable draft key so ambiguous same-intent retries replay instead of creating another withdrawal order.
+- Fixed 2026-06-10: `external_payment_commands` records withdrawal provider commands with internal Baofu diagnostics. Provider create errors preserve upstream code, classified/sanitized message, and sanitized diagnostic snapshot in command rows; user-facing create-unknown copy remains stable and non-sensitive. Withdrawal create idempotency now lives on `baofu_withdrawal_orders`, while command rows remain the provider-call audit trail.
 - Withdrawal callback and recovery both converge through the same fact-application task, which is a good single write path for terminal status.
-- Product decision 2026-06-10: withdrawal callbacks must persist a durable callback/fact before asynchronous terminal application. Account-opening callback already records `external_payment_facts`; withdrawal callback currently enqueues fact application without persisting a comparable fact row in the traced path.
+- Fixed 2026-06-10: withdrawal callbacks persist a durable `external_payment_facts` callback fact before asynchronous terminal application; if fact persistence fails, the callback returns failure and does not enqueue the application task.
 
 ## SQL And Durable State Boundaries
 
@@ -132,15 +133,16 @@ Merchant finance state must separate read-only financial reporting from money mo
 - `baofu_account_opening_flows`: onboarding state machine: `profile_pending`, `verify_fee_pending`, `verify_fee_processing`, `opening_processing`, `merchant_report_processing`, `applet_auth_pending`, `ready`, `failed`, `voided`.
 - `baofu_account_bindings`: durable Baofu account binding/open-state source, unique by owner type/id; active binding includes `contract_no` and `sharing_mer_id` needed for withdrawals.
 - `baofu_merchant_reports`: merchant-specific payment readiness/report/app-auth truth after Baofu account activation.
-- `baofu_withdrawal_orders`: local withdrawal order truth with unique `out_request_no`, provider withdrawal number, amount, status, raw snapshot, and finished timestamp.
-- `external_payment_commands`: audit trail for Baofu withdrawal create commands.
+- `baofu_withdrawal_orders`: local withdrawal order truth with unique `out_request_no`, provider withdrawal number, amount, status, raw snapshot, finished timestamp, `idempotency_key`, and `idempotency_request_hash`.
+- `external_payment_commands`: audit trail for Baofu withdrawal create commands, including sanitized provider create-error diagnostics for internal investigation.
+- `external_payment_facts`: durable Baofu withdrawal callback facts before async terminal application.
 - Baofu provider: external truth for account opening, merchant report/app-auth, account balance, withdrawal acceptance, and withdrawal terminal result.
 
 ## Trust, Authorization, And Tenant Checks
 
 - Merchant finance read routes use `MerchantStaffMiddleware("owner", "manager")`; selected merchant can come from context, path/query/header selection, owner association, or active merchant staff association.
 - Settlement-account read/write routes use `MerchantOwnerOnlyMiddleware`, requiring the current user to own the selected merchant but not requiring merchant active status/region, because onboarding may be needed before activation.
-- Withdrawal read/list/balance routes use owner/manager staff middleware; create currently uses owner-only staff middleware. Product decision 2026-06-10 says managers may operate withdrawal flows, so create permission and frontend access must be reviewed against that contract.
+- Withdrawal read/list/balance/create routes use owner/manager staff middleware. Product decision 2026-06-10 says managers may operate withdrawal flows; settlement-account submission remains owner-only.
 - Settlement-account POST controls owner type/id/account type/industry/provider request fields server-side and rejects client-controlled provider fields through `decodeBaofuSettlementAccountRequest`.
 - Baofu account-open callback validates configured parser and collect merchant/terminal identity before applying state.
 - Baofu withdrawal callback validates parser and payout merchant/terminal identity, requires provider serial number, and resolves a local withdrawal by server-generated out-request number.
@@ -152,7 +154,7 @@ Merchant finance state must separate read-only financial reporting from money mo
 - Finance read pages are idempotent GETs.
 - Settlement-account submit has frontend `submitting/syncing` guards. Backend `StartOrRecoverOpening` reuses active binding and active/latest opening flows where possible, and SQL state updates are conditional by state.
 - Account-opening recovery, callback application, duplicate-account reconciliation, and failed-flow recovery all include explicit duplicate or mismatch safeguards.
-- Withdrawal create has frontend `submitting` guard and server-generated unique `out_request_no`, but no client-provided idempotency key or request replay table. Product decision 2026-06-10 requires an `Idempotency-Key`, so ambiguous retry must replay or conflict against the original withdrawal intent instead of creating another local withdrawal order when provider balance still allows it.
+- Withdrawal create has frontend `submitting` guard plus a stable draft `Idempotency-Key`. Backend stores the key/hash on `baofu_withdrawal_orders`, rejects half-written key/hash pairs at the DB boundary, replays same-key/same-amount requests without provider calls, rejects same-key/different-amount conflicts, and handles unique-conflict races by reloading the existing idempotency row.
 - Withdrawal status update is conditionally `WHERE status='processing'`; repeated callback/recovery after terminal status is a no-op.
 - Withdrawal recovery enqueue uses a 30-second unique task TTL, which reduces duplicate task bursts but is not a durable long-term idempotency key.
 
@@ -163,7 +165,7 @@ Merchant finance state must separate read-only financial reporting from money mo
 - Baofu account-open callback records external payment fact and applies state.
 - Account-opening recovery scheduler scans recoverable opening/report/app-auth states every five minutes.
 - Payment fact application can continue account opening after verify-fee payment for roles that require it; merchant onboarding does not depend on verify-fee payment in the current Mini Program path.
-- Withdrawal callback currently enqueues fact application; product decision 2026-06-10 requires the callback to persist a durable callback/fact first, then enqueue/apply asynchronously. Withdrawal recovery scheduler queries provider for old processing rows and enqueues the same terminal-application task.
+- Withdrawal callback persists a durable callback fact first, then enqueue/applies asynchronously. Withdrawal recovery scheduler queries provider for old processing rows and enqueues the same terminal-application task.
 - Withdrawal detail/list pages do not appear to subscribe to realtime updates; user recovery is refresh/re-entry.
 - There is no discovered local wallet/freeze reconciliation path for merchant withdrawals because available balance is provider-owned.
 
@@ -173,7 +175,7 @@ Merchant finance state must separate read-only financial reporting from money mo
 - Settlement-account status page always uses backend response as truth and can auto-redirect to submit when profile is pending.
 - Settlement-account submit page drafts enterprise/profile fields from backend defaults/masks, validates locally, then relies on `startBaofuAccountOnboarding` and subsequent polling for backend truth.
 - Withdrawal list page uses provider balance response to decide whether create is allowed; when balance is unavailable, it still shows records but blocks create.
-- Withdrawal create page does not keep a persisted draft. After successful/accepted/unknown response with a durable ID, it redirects to detail.
+- Withdrawal create page keeps a local per-draft idempotency key, refreshes it when the amount changes, and reuses it for retry while the draft is unchanged. After successful/accepted/unknown response with a durable ID, it redirects to detail.
 - Withdrawal detail page reloads the durable row by id; terminal convergence depends on refresh/re-entry.
 
 ## Test Coverage Signals
@@ -184,25 +186,26 @@ Observed tests:
 - `locallife/api/baofu_settlement_account_test.go` covers merchant owner read/write, manager denial, safe masks/defaults, provider failures, sanitized provider failure-reason display, active binding readiness, applet auth, and many request-validation branches.
 - `locallife/logic/baofu_account_onboarding_service_test.go` covers onboarding profile validation, provider errors, duplicate/recovery branches, merchant report continuation, failed-flow recovery, provider failure-reason persistence, and sensitive snapshot behavior.
 - `locallife/worker/baofu_account_opening_recovery_scheduler_test.go` covers account-opening recovery, merchant-report recovery, failed/processing/noop branches, and safe logging.
-- `locallife/api/baofu_withdrawal_contract_test.go` covers withdrawal balance owner scope, pagination/status text, cross-owner detail denial, manager forbidden create, invalid amount/provider errors, missing fee member, insufficient balance, accepted/rejected/unknown create branches, and provider request fields.
-- `locallife/logic/baofu_withdraw_service_test.go` covers provider balance gating, active binding/fee-member checks, command logging, merchant-funds owner mapping, rejected acceptance, and unknown result handling.
-- `locallife/api/baofu_callback_test.go` covers Baofu withdrawal callback parse/identity/enqueue behavior.
+- `locallife/api/baofu_withdrawal_contract_test.go` covers withdrawal balance owner scope, pagination/status text, cross-owner detail denial, required idempotency header, same-key replay, conflicting same-key rejection, manager create permission, invalid amount/provider errors, missing fee member, insufficient balance, accepted/rejected/unknown create branches, and provider request fields.
+- `locallife/logic/baofu_withdraw_service_test.go` covers provider balance gating, active binding/fee-member checks, idempotent replay/conflict behavior, command logging, merchant-funds owner mapping, rejected acceptance, unknown result handling, and provider create-error diagnostics preserved in the command ledger.
+- `locallife/db/sqlc/baofu_withdrawal_order_test.go` covers withdrawal idempotency uniqueness per owner, terminal-status non-regression, and DB rejection of partial idempotency key/hash pairs.
+- `locallife/api/baofu_callback_test.go` covers Baofu withdrawal callback parse/identity, durable fact persistence before enqueue/ACK, and no enqueue when fact persistence fails.
 - `locallife/worker/baofu_withdrawal_recovery_scheduler_test.go` and `task_baofu_withdrawal_fact_application_test.go` cover provider query enqueue and terminal fact application.
 
 Missing high-value tests:
 
 - Manager finance read test across all finance list/detail/balance routes, including selected-merchant header behavior.
-- Mini Program wrapper/page test proving withdrawal unknown-result `202` with durable id redirects to detail and blocks duplicate tap.
-- Contract test for required withdrawal create idempotency: `Idempotency-Key` is mandatory, same-key retry reuses the original intent, and conflicting replay is rejected.
+- Mini Program page-level runtime test proving withdrawal unknown-result `202` with durable id redirects to detail and blocks duplicate tap.
 - End-to-end withdrawal ambiguity test from POST timeout/provider unknown -> recovery query -> terminal detail/list update.
-- Test proving withdrawal callback facts are durably recorded before async application.
 - Cross-check finance overview/timeline totals against settlement adjustments and Baofu v2 fee fields after refunds/returns.
 
 ## Gaps And Refactor Notes
 
-- Product decision 2026-06-10: add a real client/server `Idempotency-Key` for merchant withdrawal create; duplicate POSTs for the same intent are not acceptable money-movement behavior.
-- Product decision 2026-06-10: managers may operate withdrawal flows. Align withdrawal create/list/detail/balance authorization and Mini Program access with that contract while preserving owner-only settlement-account onboarding unless explicitly changed.
-- Product decision 2026-06-10: persist withdrawal callback facts durably before asynchronous fact application, matching the account-open/payment/refund callback audit model.
+- Fixed 2026-06-10: merchant withdrawal create has a real client/server `Idempotency-Key`; duplicate POSTs for the same unchanged intent replay and conflicting reuse is rejected.
+- Fixed 2026-06-10: already-applied weak withdrawal idempotency CHECK constraints are forward-hardened by `000261`, so new partial key/hash rows are rejected even in databases that had already run the earlier migration version.
+- Fixed 2026-06-10: Baofu withdrawal provider create errors now keep provider code and sanitized diagnostic detail in `external_payment_commands`; frontend create-unknown guidance remains stable and non-sensitive.
+- Fixed 2026-06-10: managers may operate withdrawal create/list/detail/balance while settlement-account onboarding stays owner-only.
+- Fixed 2026-06-10: withdrawal callbacks persist durable callback facts before asynchronous fact application, matching the account-open/payment/refund callback audit model.
 - Clarify product copy and backend behavior for provider `returned`: whether it should trigger any merchant-facing balance refresh hint, alert, or manual handling.
 - If local finance reporting is expected to match provider withdrawable balance, add a reconciliation document/test. Current flow deliberately uses provider balance as withdrawable truth while reports use local settlement facts.
 - Add Mini Program state recovery coverage for settlement-account submit/status long-wait flows and withdrawal detail refresh after async terminal updates.
@@ -213,8 +216,8 @@ Missing high-value tests:
 - Request branches checked: read-only merchant finance APIs, settlement-account `GET/POST`, withdrawal `balance/list/detail/create`, Baofu account wrappers, Baofu withdrawal wrappers, and shared role wrapper variants. Operator/platform/rider variants are noted only as shared-code drift risks because the current audit scope is merchant Mini Program plus App.
 - Backend state branches checked: finance reads over `profit_sharing_orders` and `merchant_settlement_adjustments`; settlement onboarding profile defaults, masked fields, encrypted fields, active binding reuse, latest opening flow reuse, provider opening states, merchant report states, applet authorization states, and failed-flow recovery; withdrawal active binding lookup, fee-member validation, provider balance query, provider accepted/rejected/unknown responses, local `processing` row creation, command logging, callback lookup, and terminal fact application.
 - Async branches checked: account-open callback fact persistence, account-opening recovery scheduler, merchant report/app-auth recovery, withdrawal callback enqueue, withdrawal recovery scheduler, fact-application worker, and Mini Program long-poll/refresh recovery. No realtime withdrawal subscription was found.
-- Failure/retry branches checked: frontend duplicate-submit guards, onboarding reuse/recover behavior, Baofu account-opening provider failure-reason persistence/display with sanitization boundaries, provider unavailable balance, withdrawal unknown result with durable id, withdrawal callback after terminal status, 30-second task de-dupe, and ambiguous create retry. The unresolved high-risk branch is withdrawal create without a durable client/server idempotency key.
+- Failure/retry branches checked: frontend duplicate-submit guards, onboarding reuse/recover behavior, Baofu account-opening provider failure-reason persistence/display with sanitization boundaries, provider unavailable balance, withdrawal unknown result with durable id, withdrawal callback after terminal status, 30-second task de-dupe, and ambiguous create retry. Fixed 2026-06-10: withdrawal create now has durable client/server idempotency.
 - Reader/consumer branches checked: finance reports, dashboard settlement readiness, manual open-status readiness, withdrawal list/detail, settlement-account status, and provider balance versus local finance totals. The boundary is intentionally split today: provider balance is withdrawable truth; local finance tables are reporting truth.
-- Authorization/tenant branches checked: owner/manager finance reads, owner-only settlement-account submission, owner/manager withdrawal reads, current owner-only withdrawal create, selected merchant resolution, callback provider identity checks, and cross-owner withdrawal detail denial. Product decision 2026-06-10 requires manager withdrawal operation permission, so create-route authorization remains an implementation gap.
+- Authorization/tenant branches checked: owner/manager finance reads, owner-only settlement-account submission, owner/manager withdrawal reads and creates, selected merchant resolution, callback provider identity checks, and cross-owner withdrawal detail denial.
 - Zombie/unreachable branches checked: shared Baofu verify-fee payment recovery exists but merchant settlement status config disables payment recovery; role-agnostic wrappers exist beyond merchant scope; App finance/withdrawal entries were not found; no local wallet/freeze repair path was found because merchant withdrawal balance is provider-owned.
-- Test-proof gaps checked: backend coverage is broad for settlement onboarding, withdrawal create/callback/recovery, and finance overview; missing proof remains around Mini Program unknown-result recovery, required withdrawal `Idempotency-Key` semantics, withdrawal callback durable fact parity, manager withdrawal operation matrix, and finance/report-vs-provider reconciliation.
+- Test-proof gaps checked: backend coverage is broad for settlement onboarding, withdrawal create/callback/recovery, required withdrawal `Idempotency-Key` semantics, callback durable fact parity, manager create permission, and finance overview; missing proof remains around Mini Program page-level unknown-result recovery and finance/report-vs-provider reconciliation.

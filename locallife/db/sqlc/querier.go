@@ -661,6 +661,7 @@ type Querier interface {
 	GetBaofuPaymentOrderRefundGuardForUpdate(ctx context.Context, id int64) (GetBaofuPaymentOrderRefundGuardForUpdateRow, error)
 	GetBaofuVerifyFeePaymentByAttach(ctx context.Context, attach pgtype.Text) (PaymentOrder, error)
 	GetBaofuWithdrawalOrder(ctx context.Context, id int64) (BaofuWithdrawalOrder, error)
+	GetBaofuWithdrawalOrderByIdempotency(ctx context.Context, arg GetBaofuWithdrawalOrderByIdempotencyParams) (BaofuWithdrawalOrder, error)
 	GetBaofuWithdrawalOrderByOutRequestNo(ctx context.Context, outRequestNo string) (BaofuWithdrawalOrder, error)
 	GetBehaviorAction(ctx context.Context, id int64) (BehaviorAction, error)
 	GetBehaviorDecision(ctx context.Context, id int64) (BehaviorDecision, error)

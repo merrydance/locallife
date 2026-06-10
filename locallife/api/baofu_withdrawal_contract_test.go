@@ -3,8 +3,10 @@ package api
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -69,6 +71,24 @@ func activeBaofuWithdrawalBindingWithoutFeeMember(ownerType string, ownerID int6
 	binding := activeBaofuWithdrawalBinding(ownerType, ownerID)
 	binding.SharingMerID = pgtype.Text{}
 	return binding
+}
+
+func expectNoBaofuWithdrawalIdempotency(store *mockdb.MockStore, ownerType string, ownerID int64, idempotencyKey string) {
+	store.EXPECT().
+		GetBaofuWithdrawalOrderByIdempotency(gomock.Any(), db.GetBaofuWithdrawalOrderByIdempotencyParams{
+			OwnerType: ownerType,
+			OwnerID:   ownerID,
+			IdempotencyKey: pgtype.Text{
+				String: idempotencyKey,
+				Valid:  true,
+			},
+		}).
+		Return(db.BaofuWithdrawalOrder{}, db.ErrRecordNotFound)
+}
+
+func baofuWithdrawalIdempotencyHashForTest(ownerType string, ownerID int64, amountFen int64) string {
+	sum := sha256.Sum256([]byte(fmt.Sprintf("owner_type=%s\nowner_id=%d\namount_fen=%d", strings.TrimSpace(ownerType), ownerID, amountFen)))
+	return fmt.Sprintf("sha256:%x", sum)
 }
 
 func baofuWithdrawalAccountTypeForOwner(ownerType string) string {
@@ -432,10 +452,156 @@ func TestGetBaofuWithdrawalReturnsOwnedOrderWithoutProviderSecrets(t *testing.T)
 	require.NotContains(t, recorder.Body.String(), "SECRET_CONTRACT")
 }
 
-func TestCreateMerchantBaofuWithdrawalManagerForbidden(t *testing.T) {
+func TestCreateMerchantBaofuWithdrawalRequiresIdempotencyKey(t *testing.T) {
+	owner, _ := randomUser(t)
+	merchant := randomMerchant(owner.ID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+
+	client := &fakeAPIBaofuWithdrawClient{}
+	server := newTestServer(t, store)
+	configureBaofuWithdrawServiceForAPITest(server, store, client)
+
+	body := []byte(`{"amount":1200,"remark":"测试提现"}`)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodPost, "/v1/merchant/finance/baofu-withdrawal/withdraw", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "Idempotency-Key header is required")
+	require.Empty(t, client.balanceReqs)
+	require.Empty(t, client.withdrawReqs)
+}
+
+func TestCreateMerchantBaofuWithdrawalReplaysSameIdempotencyKey(t *testing.T) {
+	owner, _ := randomUser(t)
+	merchant := randomMerchant(owner.ID)
+	createdAt := time.Date(2026, 5, 19, 12, 35, 0, 0, time.UTC)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+	store.EXPECT().
+		GetBaofuWithdrawalOrderByIdempotency(gomock.Any(), db.GetBaofuWithdrawalOrderByIdempotencyParams{
+			OwnerType: db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:   merchant.ID,
+			IdempotencyKey: pgtype.Text{
+				String: "withdraw-replay-1",
+				Valid:  true,
+			},
+		}).
+		Return(db.BaofuWithdrawalOrder{
+			ID:                     199,
+			OwnerType:              db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:                merchant.ID,
+			AccountBindingID:       77,
+			OutRequestNo:           "MBW_EXISTING_REPLAY",
+			Amount:                 1200,
+			Status:                 db.BaofuWithdrawalStatusProcessing,
+			IdempotencyKey:         pgtype.Text{String: "withdraw-replay-1", Valid: true},
+			IdempotencyRequestHash: pgtype.Text{String: baofuWithdrawalIdempotencyHashForTest(db.BaofuAccountOwnerTypeMerchant, merchant.ID, 1200), Valid: true},
+			CreatedAt:              createdAt,
+			UpdatedAt:              createdAt,
+		}, nil)
+	store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), gomock.Any()).Times(0)
+	store.EXPECT().CreateBaofuWithdrawalOrder(gomock.Any(), gomock.Any()).Times(0)
+	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).Times(0)
+
+	client := &fakeAPIBaofuWithdrawClient{}
+	server := newTestServer(t, store)
+	configureBaofuWithdrawServiceForAPITest(server, store, client)
+
+	body := []byte(`{"amount":1200,"remark":"测试提现"}`)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodPost, "/v1/merchant/finance/baofu-withdrawal/withdraw", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Idempotency-Key", "withdraw-replay-1")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Empty(t, client.balanceReqs)
+	require.Empty(t, client.withdrawReqs)
+	var resp baofuWithdrawalCreateResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, int64(199), resp.Withdrawal.ID)
+	require.Equal(t, "MBW_EXISTING_REPLAY", resp.Withdrawal.OutRequestNo)
+	require.Equal(t, db.BaofuWithdrawalStatusProcessing, resp.Withdrawal.Status)
+}
+
+func TestCreateMerchantBaofuWithdrawalRejectsConflictingIdempotencyKey(t *testing.T) {
+	owner, _ := randomUser(t)
+	merchant := randomMerchant(owner.ID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+	store.EXPECT().
+		GetBaofuWithdrawalOrderByIdempotency(gomock.Any(), db.GetBaofuWithdrawalOrderByIdempotencyParams{
+			OwnerType: db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:   merchant.ID,
+			IdempotencyKey: pgtype.Text{
+				String: "withdraw-conflict-1",
+				Valid:  true,
+			},
+		}).
+		Return(db.BaofuWithdrawalOrder{
+			ID:                     200,
+			OwnerType:              db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:                merchant.ID,
+			Amount:                 1200,
+			Status:                 db.BaofuWithdrawalStatusProcessing,
+			IdempotencyKey:         pgtype.Text{String: "withdraw-conflict-1", Valid: true},
+			IdempotencyRequestHash: pgtype.Text{String: baofuWithdrawalIdempotencyHashForTest(db.BaofuAccountOwnerTypeMerchant, merchant.ID, 1200), Valid: true},
+		}, nil)
+	store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), gomock.Any()).Times(0)
+	store.EXPECT().CreateBaofuWithdrawalOrder(gomock.Any(), gomock.Any()).Times(0)
+	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).Times(0)
+
+	client := &fakeAPIBaofuWithdrawClient{}
+	server := newTestServer(t, store)
+	configureBaofuWithdrawServiceForAPITest(server, store, client)
+
+	body := []byte(`{"amount":1300,"remark":"测试提现"}`)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodPost, "/v1/merchant/finance/baofu-withdrawal/withdraw", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Idempotency-Key", "withdraw-conflict-1")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusConflict, recorder.Code)
+	require.Empty(t, client.balanceReqs)
+	require.Empty(t, client.withdrawReqs)
+	var resp APIResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, CodeConflict, resp.Code)
+	require.Equal(t, "当前状态已变化，请刷新页面确认后重试", resp.Message)
+}
+
+func TestCreateMerchantBaofuWithdrawalManagerCanCreate(t *testing.T) {
 	owner, _ := randomUser(t)
 	manager, _ := randomUser(t)
 	merchant := randomMerchant(owner.ID)
+	binding := activeBaofuWithdrawalBinding(db.BaofuAccountOwnerTypeMerchant, merchant.ID)
+	createdAt := time.Date(2026, 5, 19, 12, 30, 0, 0, time.UTC)
+	var capturedOutRequestNo string
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -448,20 +614,74 @@ func TestCreateMerchantBaofuWithdrawalManagerForbidden(t *testing.T) {
 			UserID:     manager.ID,
 		}).
 		Return("manager", nil)
+	store.EXPECT().
+		GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:   merchant.ID,
+		}).
+		Return(binding, nil)
+	expectNoBaofuWithdrawalIdempotency(store, db.BaofuAccountOwnerTypeMerchant, merchant.ID, "manager-withdraw-1")
+	store.EXPECT().
+		CreateBaofuWithdrawalOrder(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.CreateBaofuWithdrawalOrderParams) (db.BaofuWithdrawalOrder, error) {
+			require.Equal(t, db.BaofuAccountOwnerTypeMerchant, arg.OwnerType)
+			require.Equal(t, merchant.ID, arg.OwnerID)
+			require.Equal(t, int64(1200), arg.Amount)
+			require.Equal(t, pgtype.Text{String: "manager-withdraw-1", Valid: true}, arg.IdempotencyKey)
+			require.True(t, arg.IdempotencyRequestHash.Valid)
+			capturedOutRequestNo = arg.OutRequestNo
+			return db.BaofuWithdrawalOrder{
+				ID:                     191,
+				OwnerType:              arg.OwnerType,
+				OwnerID:                arg.OwnerID,
+				AccountBindingID:       arg.AccountBindingID,
+				OutRequestNo:           arg.OutRequestNo,
+				Amount:                 arg.Amount,
+				Status:                 arg.Status,
+				IdempotencyKey:         arg.IdempotencyKey,
+				IdempotencyRequestHash: arg.IdempotencyRequestHash,
+				CreatedAt:              createdAt,
+				UpdatedAt:              createdAt,
+			}, nil
+		})
+	store.EXPECT().
+		CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).
+		Return(db.ExternalPaymentCommand{ID: 1901}, nil)
+	store.EXPECT().
+		UpdateBaofuWithdrawalOrderToProcessing(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.UpdateBaofuWithdrawalOrderToProcessingParams) (db.BaofuWithdrawalOrder, error) {
+			return db.BaofuWithdrawalOrder{
+				ID:                     191,
+				OwnerType:              db.BaofuAccountOwnerTypeMerchant,
+				OwnerID:                merchant.ID,
+				OutRequestNo:           capturedOutRequestNo,
+				BaofuWithdrawNo:        arg.BaofuWithdrawNo,
+				Amount:                 1200,
+				Status:                 db.BaofuWithdrawalStatusProcessing,
+				IdempotencyKey:         pgtype.Text{String: "manager-withdraw-1", Valid: true},
+				IdempotencyRequestHash: pgtype.Text{String: "hash", Valid: true},
+				CreatedAt:              createdAt,
+				UpdatedAt:              createdAt,
+			}, nil
+		})
 
 	server := newTestServer(t, store)
-	configureBaofuWithdrawServiceForAPITest(server, store, &fakeAPIBaofuWithdrawClient{})
+	configureBaofuWithdrawServiceForAPITest(server, store, &fakeAPIBaofuWithdrawClient{
+		balanceRes:  &baofucontracts.BalanceResult{ContractNo: binding.ContractNo.String, AvailableAmountFen: 5000},
+		withdrawRes: &baofucontracts.WithdrawResult{BaofuWithdrawNo: "BF_WITHDRAW_MANAGER", Raw: []byte(`{"state":"1"}`)},
+	})
 
 	body := []byte(`{"amount":1200,"remark":"测试提现"}`)
 	recorder := httptest.NewRecorder()
 	request, err := http.NewRequest(http.MethodPost, "/v1/merchant/finance/baofu-withdrawal/withdraw", bytes.NewReader(body))
 	require.NoError(t, err)
 	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Idempotency-Key", "manager-withdraw-1")
 	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, manager.ID, time.Minute)
 
 	server.router.ServeHTTP(recorder, request)
 
-	require.Equal(t, http.StatusForbidden, recorder.Code)
+	require.Equal(t, http.StatusCreated, recorder.Code)
 }
 
 func TestCreateBaofuWithdrawalRejectsInvalidAmountBeforeProviderCall(t *testing.T) {
@@ -482,6 +702,7 @@ func TestCreateBaofuWithdrawalRejectsInvalidAmountBeforeProviderCall(t *testing.
 	request, err := http.NewRequest(http.MethodPost, "/v1/merchant/finance/baofu-withdrawal/withdraw", bytes.NewReader(body))
 	require.NoError(t, err)
 	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Idempotency-Key", "invalid-amount-1")
 	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
 
 	server.router.ServeHTTP(recorder, request)
@@ -501,6 +722,7 @@ func TestCreateBaofuWithdrawalMapsBalanceQueryFailureToBadGateway(t *testing.T) 
 
 	store := mockdb.NewMockStore(ctrl)
 	expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+	expectNoBaofuWithdrawalIdempotency(store, db.BaofuAccountOwnerTypeMerchant, merchant.ID, "balance-failure-1")
 	store.EXPECT().
 		GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
 			OwnerType: db.BaofuAccountOwnerTypeMerchant,
@@ -517,6 +739,7 @@ func TestCreateBaofuWithdrawalMapsBalanceQueryFailureToBadGateway(t *testing.T) 
 	request, err := http.NewRequest(http.MethodPost, "/v1/merchant/finance/baofu-withdrawal/withdraw", bytes.NewReader(body))
 	require.NoError(t, err)
 	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Idempotency-Key", "balance-failure-1")
 	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
 
 	server.router.ServeHTTP(recorder, request)
@@ -539,6 +762,7 @@ func TestCreateBaofuWithdrawalRejectsMissingFeeMemberBeforeProviderCall(t *testi
 
 	store := mockdb.NewMockStore(ctrl)
 	expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+	expectNoBaofuWithdrawalIdempotency(store, db.BaofuAccountOwnerTypeMerchant, merchant.ID, "missing-fee-member-1")
 	store.EXPECT().
 		GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
 			OwnerType: db.BaofuAccountOwnerTypeMerchant,
@@ -557,6 +781,7 @@ func TestCreateBaofuWithdrawalRejectsMissingFeeMemberBeforeProviderCall(t *testi
 	request, err := http.NewRequest(http.MethodPost, "/v1/merchant/finance/baofu-withdrawal/withdraw", bytes.NewReader(body))
 	require.NoError(t, err)
 	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Idempotency-Key", "missing-fee-member-1")
 	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
 
 	server.router.ServeHTTP(recorder, request)
@@ -580,6 +805,7 @@ func TestCreateBaofuWithdrawalRejectsAmountAboveAvailableBalance(t *testing.T) {
 
 	store := mockdb.NewMockStore(ctrl)
 	expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+	expectNoBaofuWithdrawalIdempotency(store, db.BaofuAccountOwnerTypeMerchant, merchant.ID, "insufficient-balance-1")
 	store.EXPECT().
 		GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
 			OwnerType: db.BaofuAccountOwnerTypeMerchant,
@@ -598,6 +824,7 @@ func TestCreateBaofuWithdrawalRejectsAmountAboveAvailableBalance(t *testing.T) {
 	request, err := http.NewRequest(http.MethodPost, "/v1/merchant/finance/baofu-withdrawal/withdraw", bytes.NewReader(body))
 	require.NoError(t, err)
 	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Idempotency-Key", "insufficient-balance-1")
 	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
 
 	server.router.ServeHTTP(recorder, request)
@@ -629,6 +856,7 @@ func TestCreateBaofuWithdrawalSubmitsProviderRequestAndReturnsProcessingOrder(t 
 		}).
 		Times(1).
 		Return(binding, nil)
+	expectNoBaofuWithdrawalIdempotency(store, db.BaofuAccountOwnerTypeMerchant, merchant.ID, "withdraw-success-1")
 	store.EXPECT().
 		CreateBaofuWithdrawalOrder(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, arg db.CreateBaofuWithdrawalOrderParams) (db.BaofuWithdrawalOrder, error) {
@@ -638,17 +866,21 @@ func TestCreateBaofuWithdrawalSubmitsProviderRequestAndReturnsProcessingOrder(t 
 			require.Equal(t, int64(1200), arg.Amount)
 			require.Equal(t, db.BaofuWithdrawalStatusProcessing, arg.Status)
 			require.True(t, strings.HasPrefix(arg.OutRequestNo, "MBW"), arg.OutRequestNo)
+			require.Equal(t, pgtype.Text{String: "withdraw-success-1", Valid: true}, arg.IdempotencyKey)
+			require.True(t, arg.IdempotencyRequestHash.Valid)
 			capturedOutRequestNo = arg.OutRequestNo
 			return db.BaofuWithdrawalOrder{
-				ID:               91,
-				OwnerType:        arg.OwnerType,
-				OwnerID:          arg.OwnerID,
-				AccountBindingID: arg.AccountBindingID,
-				OutRequestNo:     arg.OutRequestNo,
-				Amount:           arg.Amount,
-				Status:           arg.Status,
-				CreatedAt:        createdAt,
-				UpdatedAt:        createdAt,
+				ID:                     91,
+				OwnerType:              arg.OwnerType,
+				OwnerID:                arg.OwnerID,
+				AccountBindingID:       arg.AccountBindingID,
+				OutRequestNo:           arg.OutRequestNo,
+				Amount:                 arg.Amount,
+				Status:                 arg.Status,
+				IdempotencyKey:         arg.IdempotencyKey,
+				IdempotencyRequestHash: arg.IdempotencyRequestHash,
+				CreatedAt:              createdAt,
+				UpdatedAt:              createdAt,
 			}, nil
 		})
 	store.EXPECT().
@@ -689,6 +921,7 @@ func TestCreateBaofuWithdrawalSubmitsProviderRequestAndReturnsProcessingOrder(t 
 	request, err := http.NewRequest(http.MethodPost, "/v1/merchant/finance/baofu-withdrawal/withdraw", bytes.NewReader(body))
 	require.NoError(t, err)
 	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Idempotency-Key", "withdraw-success-1")
 	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
 
 	server.router.ServeHTTP(recorder, request)
@@ -730,20 +963,23 @@ func TestCreateBaofuWithdrawalRejectedAcceptanceReturnsConflict(t *testing.T) {
 			OwnerID:   merchant.ID,
 		}).
 		Return(binding, nil)
+	expectNoBaofuWithdrawalIdempotency(store, db.BaofuAccountOwnerTypeMerchant, merchant.ID, "withdraw-rejected-1")
 	store.EXPECT().
 		CreateBaofuWithdrawalOrder(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, arg db.CreateBaofuWithdrawalOrderParams) (db.BaofuWithdrawalOrder, error) {
 			capturedOutRequestNo = arg.OutRequestNo
 			return db.BaofuWithdrawalOrder{
-				ID:               91,
-				OwnerType:        arg.OwnerType,
-				OwnerID:          arg.OwnerID,
-				AccountBindingID: arg.AccountBindingID,
-				OutRequestNo:     arg.OutRequestNo,
-				Amount:           arg.Amount,
-				Status:           arg.Status,
-				CreatedAt:        createdAt,
-				UpdatedAt:        createdAt,
+				ID:                     91,
+				OwnerType:              arg.OwnerType,
+				OwnerID:                arg.OwnerID,
+				AccountBindingID:       arg.AccountBindingID,
+				OutRequestNo:           arg.OutRequestNo,
+				Amount:                 arg.Amount,
+				Status:                 arg.Status,
+				IdempotencyKey:         arg.IdempotencyKey,
+				IdempotencyRequestHash: arg.IdempotencyRequestHash,
+				CreatedAt:              createdAt,
+				UpdatedAt:              createdAt,
 			}, nil
 		})
 	store.EXPECT().
@@ -790,6 +1026,7 @@ func TestCreateBaofuWithdrawalRejectedAcceptanceReturnsConflict(t *testing.T) {
 	request, err := http.NewRequest(http.MethodPost, "/v1/merchant/finance/baofu-withdrawal/withdraw", bytes.NewReader(body))
 	require.NoError(t, err)
 	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Idempotency-Key", "withdraw-rejected-1")
 	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
 
 	server.router.ServeHTTP(recorder, request)
@@ -822,20 +1059,23 @@ func TestCreateBaofuWithdrawalUnknownProviderResultReturnsAcceptedWithProcessing
 			OwnerID:   merchant.ID,
 		}).
 		Return(binding, nil)
+	expectNoBaofuWithdrawalIdempotency(store, db.BaofuAccountOwnerTypeMerchant, merchant.ID, "withdraw-unknown-1")
 	store.EXPECT().
 		CreateBaofuWithdrawalOrder(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, arg db.CreateBaofuWithdrawalOrderParams) (db.BaofuWithdrawalOrder, error) {
 			capturedOutRequestNo = arg.OutRequestNo
 			return db.BaofuWithdrawalOrder{
-				ID:               91,
-				OwnerType:        arg.OwnerType,
-				OwnerID:          arg.OwnerID,
-				AccountBindingID: arg.AccountBindingID,
-				OutRequestNo:     arg.OutRequestNo,
-				Amount:           arg.Amount,
-				Status:           arg.Status,
-				CreatedAt:        createdAt,
-				UpdatedAt:        createdAt,
+				ID:                     91,
+				OwnerType:              arg.OwnerType,
+				OwnerID:                arg.OwnerID,
+				AccountBindingID:       arg.AccountBindingID,
+				OutRequestNo:           arg.OutRequestNo,
+				Amount:                 arg.Amount,
+				Status:                 arg.Status,
+				IdempotencyKey:         arg.IdempotencyKey,
+				IdempotencyRequestHash: arg.IdempotencyRequestHash,
+				CreatedAt:              createdAt,
+				UpdatedAt:              createdAt,
 			}, nil
 		})
 	store.EXPECT().
@@ -860,6 +1100,7 @@ func TestCreateBaofuWithdrawalUnknownProviderResultReturnsAcceptedWithProcessing
 	request, err := http.NewRequest(http.MethodPost, "/v1/merchant/finance/baofu-withdrawal/withdraw", bytes.NewReader(body))
 	require.NoError(t, err)
 	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Idempotency-Key", "withdraw-unknown-1")
 	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
 
 	server.router.ServeHTTP(recorder, request)

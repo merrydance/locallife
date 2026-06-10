@@ -14,8 +14,10 @@ import (
 )
 
 const (
-	baofuWithdrawalMinAmountFen = int64(100)
-	baofuWithdrawalMaxAmountFen = int64(500000000)
+	baofuWithdrawalMinAmountFen            = int64(100)
+	baofuWithdrawalMaxAmountFen            = int64(500000000)
+	baofuWithdrawalIdempotencyHeader       = "Idempotency-Key"
+	baofuWithdrawalMaxIdempotencyKeyLength = 256
 )
 
 type baofuWithdrawalOwnerScope struct {
@@ -289,11 +291,21 @@ func (server *Server) handleCreateBaofuWithdrawal(ctx *gin.Context, scope baofuW
 		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("提现金额超过单笔上限")))
 		return
 	}
+	idempotencyKey := strings.TrimSpace(ctx.GetHeader(baofuWithdrawalIdempotencyHeader))
+	if idempotencyKey == "" {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("Idempotency-Key header is required")))
+		return
+	}
+	if len(idempotencyKey) > baofuWithdrawalMaxIdempotencyKeyLength {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("Idempotency-Key header is too long")))
+		return
+	}
 	result, err := server.baofuWithdrawService.CreateWithdrawal(ctx.Request.Context(), logic.BaofuCreateWithdrawalInput{
-		OwnerType:    scope.OwnerType,
-		OwnerID:      scope.OwnerID,
-		AmountFen:    req.Amount,
-		OutRequestNo: newBaofuWithdrawalOutRequestNo(ctx, scope),
+		OwnerType:      scope.OwnerType,
+		OwnerID:        scope.OwnerID,
+		AmountFen:      req.Amount,
+		OutRequestNo:   newBaofuWithdrawalOutRequestNo(ctx, scope),
+		IdempotencyKey: idempotencyKey,
 	})
 	if err != nil {
 		if server.respondBaofuWithdrawalCreateResultError(ctx, result, err) {
@@ -302,7 +314,11 @@ func (server *Server) handleCreateBaofuWithdrawal(ctx *gin.Context, scope baofuW
 		server.respondBaofuWithdrawalCreateError(ctx, err)
 		return
 	}
-	ctx.JSON(http.StatusCreated, baofuWithdrawalCreateResponse{
+	status := http.StatusCreated
+	if result.IdempotencyReplayed {
+		status = http.StatusOK
+	}
+	ctx.JSON(status, baofuWithdrawalCreateResponse{
 		Withdrawal: newBaofuWithdrawalItem(result.WithdrawalOrder),
 	})
 }
@@ -404,6 +420,9 @@ func (server *Server) respondBaofuWithdrawalError(ctx *gin.Context, err error) {
 }
 
 func (server *Server) respondBaofuWithdrawalCreateError(ctx *gin.Context, err error) {
+	if writeLogicRequestError(ctx, err) {
+		return
+	}
 	switch {
 	case errors.Is(err, logic.ErrBaofuWithdrawServiceNotConfigured):
 		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "提现服务暂不可用，请稍后再试", "baofu withdrawal service not configured"))

@@ -51,6 +51,10 @@ export interface CreateBaofuWithdrawalResponse {
   message?: string
 }
 
+export interface CreateBaofuWithdrawalOptions {
+  idempotencyKey: string
+}
+
 export interface ListBaofuWithdrawalsParams {
   page?: number
   limit?: number
@@ -96,11 +100,19 @@ export function getBaofuWithdrawal(role: BaofuAccountOwnerRole, id: number): Pro
 
 export function createBaofuWithdrawal(
   role: BaofuAccountOwnerRole,
-  payload: CreateBaofuWithdrawalRequest
+  payload: CreateBaofuWithdrawalRequest,
+  options: CreateBaofuWithdrawalOptions
 ): Promise<CreateBaofuWithdrawalResponse> {
+  if (!options?.idempotencyKey) {
+    throw new Error('缺少提现请求幂等键')
+  }
+
   return request({
     url: `${baofuWithdrawalEndpoint(role)}/withdraw`,
     method: 'POST',
-    data: payload
+    data: payload,
+    header: {
+      'Idempotency-Key': options.idempotencyKey
+    }
   })
 }

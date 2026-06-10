@@ -158,6 +158,15 @@ func (server *Server) handleBaofuWithdrawNotify(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, baofuCallbackResponse{Code: "FAIL", Message: "persist callback failed"})
 		return
 	}
+	fact, err := server.recordBaofuWithdrawCallbackFact(ctx.Request.Context(), notification, withdrawalOrder)
+	if err != nil {
+		log.Error().Err(err).
+			Int64("baofu_withdrawal_order_id", withdrawalOrder.ID).
+			Str("out_request_no", outRequestNo).
+			Msg("persist baofu withdrawal callback fact failed")
+		ctx.JSON(http.StatusInternalServerError, baofuCallbackResponse{Code: "FAIL", Message: "persist callback failed"})
+		return
+	}
 	if err := server.taskDistributor.DistributeTaskProcessBaofuWithdrawalFactApplication(ctx.Request.Context(), &worker.BaofuWithdrawalFactApplicationPayload{
 		WithdrawalOrderID: withdrawalOrder.ID,
 		UpstreamState:     strings.TrimSpace(notification.UpstreamState),
@@ -169,10 +178,11 @@ func (server *Server) handleBaofuWithdrawNotify(ctx *gin.Context) {
 		return
 	}
 	log.Info().
+		Int64("payment_fact_id", fact.ID).
 		Int64("baofu_withdrawal_order_id", withdrawalOrder.ID).
 		Str("out_request_no", outRequestNo).
 		Str("baofu_withdraw_state", strings.TrimSpace(notification.UpstreamState)).
-		Msg("baofu withdraw callback fact application enqueued")
+		Msg("baofu withdraw callback fact persisted and application enqueued")
 	ctx.Data(http.StatusOK, "text/plain; charset=utf-8", []byte(baofunotification.AccountNotificationACK()))
 }
 

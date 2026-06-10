@@ -204,18 +204,20 @@ type BaofuMerchantReport struct {
 }
 
 type BaofuWithdrawalOrder struct {
-	ID               int64              `json:"id"`
-	OwnerType        string             `json:"owner_type"`
-	OwnerID          int64              `json:"owner_id"`
-	AccountBindingID int64              `json:"account_binding_id"`
-	OutRequestNo     string             `json:"out_request_no"`
-	BaofuWithdrawNo  pgtype.Text        `json:"baofu_withdraw_no"`
-	Amount           int64              `json:"amount"`
-	Status           string             `json:"status"`
-	RawSnapshot      []byte             `json:"raw_snapshot"`
-	FinishedAt       pgtype.Timestamptz `json:"finished_at"`
-	CreatedAt        time.Time          `json:"created_at"`
-	UpdatedAt        time.Time          `json:"updated_at"`
+	ID                     int64              `json:"id"`
+	OwnerType              string             `json:"owner_type"`
+	OwnerID                int64              `json:"owner_id"`
+	AccountBindingID       int64              `json:"account_binding_id"`
+	OutRequestNo           string             `json:"out_request_no"`
+	BaofuWithdrawNo        pgtype.Text        `json:"baofu_withdraw_no"`
+	Amount                 int64              `json:"amount"`
+	Status                 string             `json:"status"`
+	RawSnapshot            []byte             `json:"raw_snapshot"`
+	FinishedAt             pgtype.Timestamptz `json:"finished_at"`
+	CreatedAt              time.Time          `json:"created_at"`
+	UpdatedAt              time.Time          `json:"updated_at"`
+	IdempotencyKey         pgtype.Text        `json:"idempotency_key"`
+	IdempotencyRequestHash pgtype.Text        `json:"idempotency_request_hash"`
 }
 
 type BehaviorAction struct {

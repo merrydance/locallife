@@ -14,6 +14,10 @@ import { getErrorUserMessage } from '../../../../../utils/user-facing'
 const DETAIL_PAGE_PATH = '/pages/platform/finance/withdrawals/detail/index'
 const EMPTY_BALANCE_VIEW = buildBaofuWithdrawalBalanceView(null)
 
+function buildWithdrawalIdempotencyKey() {
+  return `platform-withdrawal:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`
+}
+
 Page({
   data: {
     navBarHeight: 88,
@@ -23,6 +27,7 @@ Page({
     loadingBalance: false,
     submitting: false,
     amountInput: '',
+    withdrawalIdempotencyKey: buildWithdrawalIdempotencyKey(),
     balanceView: EMPTY_BALANCE_VIEW as BaofuWithdrawalBalanceView
   },
 
@@ -73,7 +78,10 @@ Page({
   },
 
   onAmountChange(e: WechatMiniprogram.CustomEvent<{ value?: string }>) {
-    this.setData({ amountInput: String(e.detail.value || '') })
+    this.setData({
+      amountInput: String(e.detail.value || ''),
+      withdrawalIdempotencyKey: buildWithdrawalIdempotencyKey()
+    })
   },
 
   async onSubmit() {
@@ -87,9 +95,10 @@ Page({
       return
     }
 
-    this.setData({ submitting: true })
+    const idempotencyKey = this.data.withdrawalIdempotencyKey || buildWithdrawalIdempotencyKey()
+    this.setData({ submitting: true, withdrawalIdempotencyKey: idempotencyKey })
     try {
-      const result = await createBaofuWithdrawal('platform', { amount: check.amount })
+      const result = await createBaofuWithdrawal('platform', { amount: check.amount }, { idempotencyKey })
       const withdrawalID = Number(result.withdrawal.id || 0)
       if (!withdrawalID) {
         throw new Error('提现申请结果确认中，请稍后查看提现记录')
