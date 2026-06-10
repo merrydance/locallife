@@ -129,7 +129,9 @@ WHERE id = sqlc.arg('id')
 RETURNING *;
 
 -- name: DeleteRechargeRule :exec
-DELETE FROM recharge_rules
+UPDATE recharge_rules
+SET is_active = FALSE,
+    updated_at = NOW()
 WHERE id = $1;
 
 -- Membership Transactions

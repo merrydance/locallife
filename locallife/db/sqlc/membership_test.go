@@ -391,15 +391,44 @@ func TestUpdateRechargeRule(t *testing.T) {
 func TestDeleteRechargeRule(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	user := createRandomUser(t)
 
 	rule := createRandomRechargeRule(t, merchant.ID, 10000, 1000)
-
-	err := testStore.DeleteRechargeRule(context.Background(), rule.ID)
+	membership := createRandomMembership(t, merchant.ID, user.ID)
+	tx, err := testStore.CreateMembershipTransaction(context.Background(), CreateMembershipTransactionParams{
+		MembershipID:   membership.ID,
+		Type:           "recharge",
+		Amount:         rule.RechargeAmount,
+		BalanceAfter:   rule.RechargeAmount + rule.BonusAmount,
+		RelatedOrderID: pgtype.Int8{Valid: false},
+		RechargeRuleID: pgtype.Int8{Int64: rule.ID, Valid: true},
+		Notes:          pgtype.Text{String: "rule provenance", Valid: true},
+	})
 	require.NoError(t, err)
 
-	// 验证已删除
-	_, err = testStore.GetRechargeRule(context.Background(), rule.ID)
-	require.Error(t, err)
+	err = testStore.DeleteRechargeRule(context.Background(), rule.ID)
+	require.NoError(t, err)
+
+	// Delete is a business deactivation, not a physical delete, so recharge
+	// transaction provenance remains auditable.
+	deactivated, err := testStore.GetRechargeRule(context.Background(), rule.ID)
+	require.NoError(t, err)
+	require.False(t, deactivated.IsActive)
+
+	reloadedTx, err := testStore.GetMembershipTransaction(context.Background(), tx.ID)
+	require.NoError(t, err)
+	require.True(t, reloadedTx.RechargeRuleID.Valid)
+	require.Equal(t, rule.ID, reloadedTx.RechargeRuleID.Int64)
+
+	activeRules, err := testStore.ListActiveRechargeRules(context.Background(), merchant.ID)
+	require.NoError(t, err)
+	require.Empty(t, activeRules)
+
+	_, err = testStore.GetMatchingRechargeRule(context.Background(), GetMatchingRechargeRuleParams{
+		MerchantID:     merchant.ID,
+		RechargeAmount: rule.RechargeAmount,
+	})
+	require.ErrorIs(t, err, ErrRecordNotFound)
 }
 
 // ==================== Membership Transaction Tests ====================

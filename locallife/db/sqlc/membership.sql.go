@@ -325,7 +325,9 @@ func (q *Queries) DecrementMembershipBalance(ctx context.Context, arg DecrementM
 }
 
 const deleteRechargeRule = `-- name: DeleteRechargeRule :exec
-DELETE FROM recharge_rules
+UPDATE recharge_rules
+SET is_active = FALSE,
+    updated_at = NOW()
 WHERE id = $1
 `
 
