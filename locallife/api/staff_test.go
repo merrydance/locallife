@@ -77,6 +77,128 @@ func TestBindMerchantDoesNotGrantMerchantStaffRoleWhenPending(t *testing.T) {
 	require.Equal(t, merchant.ID, resp.MerchantID)
 }
 
+func TestBindMerchantReappliesDisabledStaffAsPending(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID + 100)
+	merchant.BindCode = pgtype.Text{String: "1234567890abcdef1234567890abcdef", Valid: true}
+	merchant.BindCodeExpiresAt = pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true}
+	disabledStaff := db.MerchantStaff{
+		ID:         12,
+		MerchantID: merchant.ID,
+		UserID:     user.ID,
+		Role:       db.MerchantStaffRoleCashier,
+		Status:     db.MerchantStaffStatusDisabled,
+		InvitedBy:  pgtype.Int8{Int64: merchant.OwnerUserID, Valid: true},
+		CreatedAt:  time.Now(),
+		UpdatedAt:  pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	}
+	reactivatedStaff := disabledStaff
+	reactivatedStaff.Role = db.MerchantStaffRolePending
+	reactivatedStaff.Status = db.MerchantStaffStatusActive
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetMerchantByBindCode(gomock.Any(), gomock.Eq(pgtype.Text{String: merchant.BindCode.String, Valid: true})).
+		Times(1).
+		Return(merchant, nil)
+	store.EXPECT().
+		GetMerchantStaff(gomock.Any(), gomock.Eq(db.GetMerchantStaffParams{MerchantID: merchant.ID, UserID: user.ID})).
+		Times(1).
+		Return(disabledStaff, nil)
+	store.EXPECT().
+		AddMerchantStaffTx(gomock.Any(), gomock.Eq(db.AddMerchantStaffTxParams{
+			MerchantID: merchant.ID,
+			UserID:     user.ID,
+			Role:       db.MerchantStaffRolePending,
+			InvitedBy:  pgtype.Int8{Int64: merchant.OwnerUserID, Valid: true},
+		})).
+		Times(1).
+		Return(db.AddMerchantStaffTxResult{Staff: reactivatedStaff}, nil)
+	store.EXPECT().
+		CreateUserRole(gomock.Any(), gomock.Any()).
+		Times(0)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	body, err := json.Marshal(map[string]string{"invite_code": merchant.BindCode.String})
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/bind-merchant", bytes.NewReader(body))
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var resp staffBindResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, db.MerchantStaffRolePending, resp.Role)
+	require.Equal(t, merchant.ID, resp.MerchantID)
+}
+
+func TestBindMerchantRejectsExistingActiveOrPendingStaff(t *testing.T) {
+	tests := []struct {
+		name string
+		role string
+	}{
+		{name: "active assigned", role: db.MerchantStaffRoleCashier},
+		{name: "active pending", role: db.MerchantStaffRolePending},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			user, _ := randomUser(t)
+			merchant := randomMerchant(user.ID + 100)
+			merchant.BindCode = pgtype.Text{String: "1234567890abcdef1234567890abcdef", Valid: true}
+			merchant.BindCodeExpiresAt = pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true}
+			existingStaff := db.MerchantStaff{
+				ID:         13,
+				MerchantID: merchant.ID,
+				UserID:     user.ID,
+				Role:       tc.role,
+				Status:     db.MerchantStaffStatusActive,
+				InvitedBy:  pgtype.Int8{Int64: merchant.OwnerUserID, Valid: true},
+				CreatedAt:  time.Now(),
+				UpdatedAt:  pgtype.Timestamptz{Time: time.Now(), Valid: true},
+			}
+
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			store.EXPECT().
+				GetMerchantByBindCode(gomock.Any(), gomock.Eq(pgtype.Text{String: merchant.BindCode.String, Valid: true})).
+				Times(1).
+				Return(merchant, nil)
+			store.EXPECT().
+				GetMerchantStaff(gomock.Any(), gomock.Eq(db.GetMerchantStaffParams{MerchantID: merchant.ID, UserID: user.ID})).
+				Times(1).
+				Return(existingStaff, nil)
+			store.EXPECT().
+				AddMerchantStaffTx(gomock.Any(), gomock.Any()).
+				Times(0)
+
+			server := newTestServer(t, store)
+			recorder := httptest.NewRecorder()
+
+			body, err := json.Marshal(map[string]string{"invite_code": merchant.BindCode.String})
+			require.NoError(t, err)
+
+			request, err := http.NewRequest(http.MethodPost, "/v1/bind-merchant", bytes.NewReader(body))
+			require.NoError(t, err)
+			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+			server.router.ServeHTTP(recorder, request)
+
+			require.Equal(t, http.StatusConflict, recorder.Code)
+		})
+	}
+}
+
 func TestIsDuplicateKeyErrorUsesTypedPostgresCode(t *testing.T) {
 	require.False(t, isDuplicateKeyError(nil))
 	require.False(t, isDuplicateKeyError(db.ErrRecordNotFound))
@@ -150,6 +272,124 @@ func TestAddMerchantStaffAPIUsesAtomicStaffRoleTx(t *testing.T) {
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 	require.Equal(t, createdStaff.ID, resp.ID)
 	require.Equal(t, "cashier", resp.Role)
+}
+
+func TestAddMerchantStaffAPIReactivatesDisabledStaffWithOwnerConfirmedRole(t *testing.T) {
+	user, _ := randomUser(t)
+	owner, _ := randomUser(t)
+	merchant := randomMerchant(owner.ID)
+	disabledStaff := db.MerchantStaff{
+		ID:         22,
+		MerchantID: merchant.ID,
+		UserID:     user.ID,
+		Role:       db.MerchantStaffRoleCashier,
+		Status:     db.MerchantStaffStatusDisabled,
+		InvitedBy:  pgtype.Int8{Int64: owner.ID, Valid: true},
+		CreatedAt:  time.Now(),
+		UpdatedAt:  pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	}
+	reactivatedStaff := disabledStaff
+	reactivatedStaff.Role = db.MerchantStaffRoleManager
+	reactivatedStaff.Status = db.MerchantStaffStatusActive
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+	store.EXPECT().
+		GetMerchantStaff(gomock.Any(), gomock.Eq(db.GetMerchantStaffParams{MerchantID: merchant.ID, UserID: user.ID})).
+		Times(1).
+		Return(disabledStaff, nil)
+	store.EXPECT().
+		AddMerchantStaffTx(gomock.Any(), gomock.Eq(db.AddMerchantStaffTxParams{
+			MerchantID: merchant.ID,
+			UserID:     user.ID,
+			Role:       db.MerchantStaffRoleManager,
+			InvitedBy:  pgtype.Int8{Int64: owner.ID, Valid: true},
+		})).
+		Times(1).
+		Return(db.AddMerchantStaffTxResult{Staff: reactivatedStaff}, nil)
+	store.EXPECT().
+		CreateMerchantStaff(gomock.Any(), gomock.Any()).
+		Times(0)
+	store.EXPECT().
+		CreateUserRole(gomock.Any(), gomock.Any()).
+		Times(0)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	body, err := json.Marshal(map[string]any{"user_id": user.ID, "role": db.MerchantStaffRoleManager})
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/merchant/staff", bytes.NewReader(body))
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusCreated, recorder.Code)
+	var resp staffResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, disabledStaff.ID, resp.ID)
+	require.Equal(t, db.MerchantStaffRoleManager, resp.Role)
+	require.Equal(t, db.MerchantStaffStatusActive, resp.Status)
+}
+
+func TestAddMerchantStaffAPIRejectsExistingActiveOrPendingStaff(t *testing.T) {
+	tests := []struct {
+		name string
+		role string
+	}{
+		{name: "active assigned", role: db.MerchantStaffRoleCashier},
+		{name: "active pending", role: db.MerchantStaffRolePending},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			user, _ := randomUser(t)
+			owner, _ := randomUser(t)
+			merchant := randomMerchant(owner.ID)
+			existingStaff := db.MerchantStaff{
+				ID:         23,
+				MerchantID: merchant.ID,
+				UserID:     user.ID,
+				Role:       tc.role,
+				Status:     db.MerchantStaffStatusActive,
+				InvitedBy:  pgtype.Int8{Int64: owner.ID, Valid: true},
+				CreatedAt:  time.Now(),
+				UpdatedAt:  pgtype.Timestamptz{Time: time.Now(), Valid: true},
+			}
+
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+			store.EXPECT().
+				GetMerchantStaff(gomock.Any(), gomock.Eq(db.GetMerchantStaffParams{MerchantID: merchant.ID, UserID: user.ID})).
+				Times(1).
+				Return(existingStaff, nil)
+			store.EXPECT().
+				AddMerchantStaffTx(gomock.Any(), gomock.Any()).
+				Times(0)
+
+			server := newTestServer(t, store)
+			recorder := httptest.NewRecorder()
+
+			body, err := json.Marshal(map[string]any{"user_id": user.ID, "role": db.MerchantStaffRoleManager})
+			require.NoError(t, err)
+
+			request, err := http.NewRequest(http.MethodPost, "/v1/merchant/staff", bytes.NewReader(body))
+			require.NoError(t, err)
+			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
+
+			server.router.ServeHTTP(recorder, request)
+
+			require.Equal(t, http.StatusConflict, recorder.Code)
+		})
+	}
 }
 
 func TestUpdateMerchantStaffRoleAPIUsesAtomicStaffRoleTx(t *testing.T) {

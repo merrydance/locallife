@@ -9912,6 +9912,21 @@ func (mr *MockStoreMockRecorder) GetMerchantStaffByID(ctx, id any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMerchantStaffByID", reflect.TypeOf((*MockStore)(nil).GetMerchantStaffByID), ctx, id)
 }
 
+// GetMerchantStaffByMerchantUserForUpdate mocks base method.
+func (m *MockStore) GetMerchantStaffByMerchantUserForUpdate(ctx context.Context, arg db.GetMerchantStaffByMerchantUserForUpdateParams) (db.MerchantStaff, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMerchantStaffByMerchantUserForUpdate", ctx, arg)
+	ret0, _ := ret[0].(db.MerchantStaff)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMerchantStaffByMerchantUserForUpdate indicates an expected call of GetMerchantStaffByMerchantUserForUpdate.
+func (mr *MockStoreMockRecorder) GetMerchantStaffByMerchantUserForUpdate(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMerchantStaffByMerchantUserForUpdate", reflect.TypeOf((*MockStore)(nil).GetMerchantStaffByMerchantUserForUpdate), ctx, arg)
+}
+
 // GetMerchantStaffForUpdate mocks base method.
 func (m *MockStore) GetMerchantStaffForUpdate(ctx context.Context, id int64) (db.MerchantStaff, error) {
 	m.ctrl.T.Helper()
@@ -18747,6 +18762,21 @@ func (m *MockStore) ProcessPaymentSuccessTx(ctx context.Context, arg db.ProcessP
 func (mr *MockStoreMockRecorder) ProcessPaymentSuccessTx(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessPaymentSuccessTx", reflect.TypeOf((*MockStore)(nil).ProcessPaymentSuccessTx), ctx, arg)
+}
+
+// ReactivateDisabledMerchantStaff mocks base method.
+func (m *MockStore) ReactivateDisabledMerchantStaff(ctx context.Context, arg db.ReactivateDisabledMerchantStaffParams) (db.MerchantStaff, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReactivateDisabledMerchantStaff", ctx, arg)
+	ret0, _ := ret[0].(db.MerchantStaff)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReactivateDisabledMerchantStaff indicates an expected call of ReactivateDisabledMerchantStaff.
+func (mr *MockStoreMockRecorder) ReactivateDisabledMerchantStaff(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReactivateDisabledMerchantStaff", reflect.TypeOf((*MockStore)(nil).ReactivateDisabledMerchantStaff), ctx, arg)
 }
 
 // RechargeTx mocks base method.

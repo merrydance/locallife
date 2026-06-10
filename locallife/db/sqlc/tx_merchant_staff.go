@@ -10,6 +10,7 @@ import (
 var (
 	ErrMerchantStaffMerchantMismatch = errors.New("merchant staff does not belong to merchant")
 	ErrMerchantStaffOwnerMutation    = errors.New("cannot mutate merchant owner staff")
+	ErrMerchantStaffAlreadyExists    = errors.New("merchant staff already exists")
 )
 
 type AddMerchantStaffTxParams struct {
@@ -46,6 +47,39 @@ func (store *SQLStore) AddMerchantStaffTx(ctx context.Context, arg AddMerchantSt
 	var result AddMerchantStaffTxResult
 
 	err := store.execTx(ctx, func(q *Queries) error {
+		existingStaff, err := q.GetMerchantStaffByMerchantUserForUpdate(ctx, GetMerchantStaffByMerchantUserForUpdateParams{
+			MerchantID: arg.MerchantID,
+			UserID:     arg.UserID,
+		})
+		if err != nil && !errors.Is(err, ErrRecordNotFound) {
+			return err
+		}
+		if err == nil {
+			if existingStaff.Status != MerchantStaffStatusDisabled {
+				return ErrMerchantStaffAlreadyExists
+			}
+
+			reactivatedStaff, err := q.ReactivateDisabledMerchantStaff(ctx, ReactivateDisabledMerchantStaffParams{
+				ID:        existingStaff.ID,
+				Role:      arg.Role,
+				InvitedBy: arg.InvitedBy,
+			})
+			if err != nil {
+				return err
+			}
+
+			if reactivatedStaff.Role != MerchantStaffRolePending {
+				if err := q.ensureMerchantStaffUserRoleActive(ctx, reactivatedStaff.UserID, reactivatedStaff.MerchantID); err != nil {
+					return err
+				}
+			} else if err := q.disableMerchantStaffUserRoleIfNoAssignedActiveStaff(ctx, reactivatedStaff.UserID); err != nil {
+				return err
+			}
+
+			result.Staff = reactivatedStaff
+			return nil
+		}
+
 		staff, err := q.CreateMerchantStaff(ctx, CreateMerchantStaffParams{
 			MerchantID: arg.MerchantID,
 			UserID:     arg.UserID,
@@ -54,6 +88,9 @@ func (store *SQLStore) AddMerchantStaffTx(ctx context.Context, arg AddMerchantSt
 			InvitedBy:  arg.InvitedBy,
 		})
 		if err != nil {
+			if ErrorCode(err) == UniqueViolation {
+				return ErrMerchantStaffAlreadyExists
+			}
 			return err
 		}
 

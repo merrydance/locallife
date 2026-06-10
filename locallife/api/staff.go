@@ -117,16 +117,16 @@ func (server *Server) addMerchantStaff(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	// 检查员工是否已存在
-	_, err := server.store.GetMerchantStaff(ctx, db.GetMerchantStaffParams{
+	// 检查员工是否已存在；disabled 记录允许老板重新确认角色并恢复。
+	existingStaff, err := server.store.GetMerchantStaff(ctx, db.GetMerchantStaffParams{
 		MerchantID: merchant.ID,
 		UserID:     req.UserID,
 	})
-	if err == nil {
+	if err == nil && existingStaff.Status != db.MerchantStaffStatusDisabled {
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("staff already exists")))
 		return
 	}
-	if !isNotFoundError(err) {
+	if err != nil && !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -139,6 +139,10 @@ func (server *Server) addMerchantStaff(ctx *gin.Context) {
 		InvitedBy:  pgtype.Int8{Int64: authPayload.UserID, Valid: true},
 	})
 	if err != nil {
+		if errors.Is(err, db.ErrMerchantStaffAlreadyExists) {
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("staff already exists")))
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -390,16 +394,16 @@ func (server *Server) bindMerchant(ctx *gin.Context) {
 		return
 	}
 
-	// 检查用户是否已绑定该商户
-	_, err = server.store.GetMerchantStaff(ctx, db.GetMerchantStaffParams{
+	// 检查用户是否已绑定该商户；disabled 记录允许通过有效邀请码重新进入 pending。
+	existingStaff, err := server.store.GetMerchantStaff(ctx, db.GetMerchantStaffParams{
 		MerchantID: merchant.ID,
 		UserID:     authPayload.UserID,
 	})
-	if err == nil {
+	if err == nil && existingStaff.Status != db.MerchantStaffStatusDisabled {
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("you are already a staff of this merchant")))
 		return
 	}
-	if !isNotFoundError(err) {
+	if err != nil && !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -412,6 +416,10 @@ func (server *Server) bindMerchant(ctx *gin.Context) {
 		InvitedBy:  pgtype.Int8{Int64: merchant.OwnerUserID, Valid: true},
 	})
 	if err != nil {
+		if errors.Is(err, db.ErrMerchantStaffAlreadyExists) {
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("you are already a staff of this merchant")))
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}

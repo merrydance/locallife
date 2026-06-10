@@ -158,6 +158,33 @@ func (q *Queries) GetMerchantStaffByID(ctx context.Context, id int64) (MerchantS
 	return i, err
 }
 
+const getMerchantStaffByMerchantUserForUpdate = `-- name: GetMerchantStaffByMerchantUserForUpdate :one
+SELECT id, merchant_id, user_id, role, status, invited_by, created_at, updated_at FROM merchant_staff
+WHERE merchant_id = $1 AND user_id = $2
+FOR UPDATE
+`
+
+type GetMerchantStaffByMerchantUserForUpdateParams struct {
+	MerchantID int64 `json:"merchant_id"`
+	UserID     int64 `json:"user_id"`
+}
+
+func (q *Queries) GetMerchantStaffByMerchantUserForUpdate(ctx context.Context, arg GetMerchantStaffByMerchantUserForUpdateParams) (MerchantStaff, error) {
+	row := q.db.QueryRow(ctx, getMerchantStaffByMerchantUserForUpdate, arg.MerchantID, arg.UserID)
+	var i MerchantStaff
+	err := row.Scan(
+		&i.ID,
+		&i.MerchantID,
+		&i.UserID,
+		&i.Role,
+		&i.Status,
+		&i.InvitedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getMerchantStaffForUpdate = `-- name: GetMerchantStaffForUpdate :one
 SELECT id, merchant_id, user_id, role, status, invited_by, created_at, updated_at FROM merchant_staff
 WHERE id = $1
@@ -320,6 +347,35 @@ func (q *Queries) ListMerchantsByStaff(ctx context.Context, userID int64) ([]Mer
 		return nil, err
 	}
 	return items, nil
+}
+
+const reactivateDisabledMerchantStaff = `-- name: ReactivateDisabledMerchantStaff :one
+UPDATE merchant_staff
+SET role = $2, status = 'active', invited_by = $3, updated_at = now()
+WHERE id = $1 AND status = 'disabled'
+RETURNING id, merchant_id, user_id, role, status, invited_by, created_at, updated_at
+`
+
+type ReactivateDisabledMerchantStaffParams struct {
+	ID        int64       `json:"id"`
+	Role      string      `json:"role"`
+	InvitedBy pgtype.Int8 `json:"invited_by"`
+}
+
+func (q *Queries) ReactivateDisabledMerchantStaff(ctx context.Context, arg ReactivateDisabledMerchantStaffParams) (MerchantStaff, error) {
+	row := q.db.QueryRow(ctx, reactivateDisabledMerchantStaff, arg.ID, arg.Role, arg.InvitedBy)
+	var i MerchantStaff
+	err := row.Scan(
+		&i.ID,
+		&i.MerchantID,
+		&i.UserID,
+		&i.Role,
+		&i.Status,
+		&i.InvitedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const softDeleteMerchantStaff = `-- name: SoftDeleteMerchantStaff :one

@@ -124,6 +124,46 @@ func TestAddMerchantStaffTxDoesNotGrantCoarseRoleForPendingStaff(t *testing.T) {
 	require.ErrorIs(t, err, ErrRecordNotFound)
 }
 
+func TestAddMerchantStaffTxReactivatesDisabledStaffAsPendingWithoutCoarseRole(t *testing.T) {
+	ctx := context.Background()
+	merchant := createRandomMerchantForTest(t)
+	user := createRandomUser(t)
+
+	disabledStaff, err := testStore.CreateMerchantStaff(ctx, CreateMerchantStaffParams{
+		MerchantID: merchant.ID,
+		UserID:     user.ID,
+		Role:       MerchantStaffRoleCashier,
+		Status:     MerchantStaffStatusDisabled,
+		InvitedBy:  pgtype.Int8{Int64: merchant.OwnerUserID, Valid: true},
+	})
+	require.NoError(t, err)
+	_, err = testStore.CreateUserRole(ctx, CreateUserRoleParams{
+		UserID:          user.ID,
+		Role:            UserRoleMerchantStaff,
+		Status:          UserRoleStatusDisabled,
+		RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	result, err := testStore.AddMerchantStaffTx(ctx, AddMerchantStaffTxParams{
+		MerchantID: merchant.ID,
+		UserID:     user.ID,
+		Role:       MerchantStaffRolePending,
+		InvitedBy:  pgtype.Int8{Int64: merchant.OwnerUserID, Valid: true},
+	})
+	require.NoError(t, err)
+	require.Equal(t, disabledStaff.ID, result.Staff.ID)
+	require.Equal(t, MerchantStaffRolePending, result.Staff.Role)
+	require.Equal(t, MerchantStaffStatusActive, result.Staff.Status)
+
+	userRole, err := testStore.GetUserRoleByType(ctx, GetUserRoleByTypeParams{
+		UserID: user.ID,
+		Role:   UserRoleMerchantStaff,
+	})
+	require.NoError(t, err)
+	require.Equal(t, UserRoleStatusDisabled, userRole.Status)
+}
+
 func TestAddMerchantStaffTxGrantsCoarseRoleForAssignedStaff(t *testing.T) {
 	ctx := context.Background()
 	merchant := createRandomMerchantForTest(t)
@@ -146,6 +186,92 @@ func TestAddMerchantStaffTxGrantsCoarseRoleForAssignedStaff(t *testing.T) {
 	require.Equal(t, UserRoleStatusActive, userRole.Status)
 	require.True(t, userRole.RelatedEntityID.Valid)
 	require.Equal(t, merchant.ID, userRole.RelatedEntityID.Int64)
+}
+
+func TestAddMerchantStaffTxReactivatesDisabledStaffWithAssignedRole(t *testing.T) {
+	ctx := context.Background()
+	merchant := createRandomMerchantForTest(t)
+	user := createRandomUser(t)
+
+	disabledStaff, err := testStore.CreateMerchantStaff(ctx, CreateMerchantStaffParams{
+		MerchantID: merchant.ID,
+		UserID:     user.ID,
+		Role:       MerchantStaffRoleCashier,
+		Status:     MerchantStaffStatusDisabled,
+		InvitedBy:  pgtype.Int8{Int64: merchant.OwnerUserID, Valid: true},
+	})
+	require.NoError(t, err)
+	_, err = testStore.CreateUserRole(ctx, CreateUserRoleParams{
+		UserID:          user.ID,
+		Role:            UserRoleMerchantStaff,
+		Status:          UserRoleStatusDisabled,
+		RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	result, err := testStore.AddMerchantStaffTx(ctx, AddMerchantStaffTxParams{
+		MerchantID: merchant.ID,
+		UserID:     user.ID,
+		Role:       MerchantStaffRoleManager,
+		InvitedBy:  pgtype.Int8{Int64: merchant.OwnerUserID, Valid: true},
+	})
+	require.NoError(t, err)
+	require.Equal(t, disabledStaff.ID, result.Staff.ID)
+	require.Equal(t, MerchantStaffRoleManager, result.Staff.Role)
+	require.Equal(t, MerchantStaffStatusActive, result.Staff.Status)
+
+	userRole, err := testStore.GetUserRoleByType(ctx, GetUserRoleByTypeParams{
+		UserID: user.ID,
+		Role:   UserRoleMerchantStaff,
+	})
+	require.NoError(t, err)
+	require.Equal(t, UserRoleStatusActive, userRole.Status)
+	require.True(t, userRole.RelatedEntityID.Valid)
+	require.Equal(t, merchant.ID, userRole.RelatedEntityID.Int64)
+}
+
+func TestAddMerchantStaffTxRejectsExistingActiveOrPendingStaff(t *testing.T) {
+	tests := []struct {
+		name string
+		role string
+	}{
+		{name: "active assigned", role: MerchantStaffRoleCashier},
+		{name: "active pending", role: MerchantStaffRolePending},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			merchant := createRandomMerchantForTest(t)
+			user := createRandomUser(t)
+
+			existingStaff, err := testStore.CreateMerchantStaff(ctx, CreateMerchantStaffParams{
+				MerchantID: merchant.ID,
+				UserID:     user.ID,
+				Role:       tc.role,
+				Status:     MerchantStaffStatusActive,
+				InvitedBy:  pgtype.Int8{Int64: merchant.OwnerUserID, Valid: true},
+			})
+			require.NoError(t, err)
+
+			_, err = testStore.AddMerchantStaffTx(ctx, AddMerchantStaffTxParams{
+				MerchantID: merchant.ID,
+				UserID:     user.ID,
+				Role:       MerchantStaffRoleManager,
+				InvitedBy:  pgtype.Int8{Int64: merchant.OwnerUserID, Valid: true},
+			})
+			require.ErrorIs(t, err, ErrMerchantStaffAlreadyExists)
+
+			staff, err := testStore.GetMerchantStaff(ctx, GetMerchantStaffParams{
+				MerchantID: merchant.ID,
+				UserID:     user.ID,
+			})
+			require.NoError(t, err)
+			require.Equal(t, existingStaff.ID, staff.ID)
+			require.Equal(t, tc.role, staff.Role)
+			require.Equal(t, MerchantStaffStatusActive, staff.Status)
+		})
+	}
 }
 
 func TestAddMerchantStaffTxReactivatesDisabledCoarseRole(t *testing.T) {

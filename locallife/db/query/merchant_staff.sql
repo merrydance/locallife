@@ -8,6 +8,11 @@ VALUES ($1, $2, $3, $4, $5) RETURNING *;
 SELECT id, merchant_id, user_id, role, status, invited_by, created_at, updated_at FROM merchant_staff
 WHERE merchant_id = $1 AND user_id = $2;
 
+-- name: GetMerchantStaffByMerchantUserForUpdate :one
+SELECT id, merchant_id, user_id, role, status, invited_by, created_at, updated_at FROM merchant_staff
+WHERE merchant_id = $1 AND user_id = $2
+FOR UPDATE;
+
 -- name: GetMerchantStaffByID :one
 SELECT id, merchant_id, user_id, role, status, invited_by, created_at, updated_at FROM merchant_staff
 WHERE id = $1;
@@ -59,6 +64,12 @@ WHERE user_id = $1 AND status = 'active' AND role <> 'pending';
 UPDATE merchant_staff 
 SET role = $2, status = 'active', updated_at = now()
 WHERE id = $1
+RETURNING *;
+
+-- name: ReactivateDisabledMerchantStaff :one
+UPDATE merchant_staff
+SET role = $2, status = 'active', invited_by = $3, updated_at = now()
+WHERE id = $1 AND status = 'disabled'
 RETURNING *;
 
 -- name: UpdateMerchantStaffStatus :one

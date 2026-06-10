@@ -908,6 +908,7 @@ type Querier interface {
 	GetMerchantSettlementAdjustmentByRelatedAndType(ctx context.Context, arg GetMerchantSettlementAdjustmentByRelatedAndTypeParams) (MerchantSettlementAdjustment, error)
 	GetMerchantStaff(ctx context.Context, arg GetMerchantStaffParams) (MerchantStaff, error)
 	GetMerchantStaffByID(ctx context.Context, id int64) (MerchantStaff, error)
+	GetMerchantStaffByMerchantUserForUpdate(ctx context.Context, arg GetMerchantStaffByMerchantUserForUpdateParams) (MerchantStaff, error)
 	GetMerchantStaffForUpdate(ctx context.Context, id int64) (MerchantStaff, error)
 	// ==================== 高级查询（使用JOIN和聚合）====================
 	GetMerchantWithTags(ctx context.Context, id int64) (GetMerchantWithTagsRow, error)
@@ -1660,6 +1661,7 @@ type Querier interface {
 	MarkUserVoucherAsExpiredOnRollback(ctx context.Context, arg MarkUserVoucherAsExpiredOnRollbackParams) (UserVoucher, error)
 	MarkUserVoucherAsUnused(ctx context.Context, arg MarkUserVoucherAsUnusedParams) (UserVoucher, error)
 	MarkUserVoucherAsUsed(ctx context.Context, arg MarkUserVoucherAsUsedParams) (UserVoucher, error)
+	ReactivateDisabledMerchantStaff(ctx context.Context, arg ReactivateDisabledMerchantStaffParams) (MerchantStaff, error)
 	// 浏览历史查询
 	RecordBrowseHistory(ctx context.Context, arg RecordBrowseHistoryParams) (BrowseHistory, error)
 	RecordProviderStatusPollError(ctx context.Context, arg RecordProviderStatusPollErrorParams) (PrintLog, error)
