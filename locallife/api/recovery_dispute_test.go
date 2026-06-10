@@ -692,6 +692,83 @@ func TestCreateMerchantRecoveryDisputeAPI(t *testing.T) {
 	}
 }
 
+func TestCreateMerchantRecoveryDisputeAPIManagerCanCreate(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := staffAuthzMerchant(user.ID)
+	claimID := int64(88)
+	orderID := int64(188)
+	reason := "门店已核验餐品完整，申请复核本次追偿责任"
+	recoveryContext := db.GetClaimRecoveryContextByClaimIDAndTargetRow{
+		ClaimID:        claimID,
+		OrderID:        orderID,
+		MerchantID:     merchant.ID,
+		RegionID:       merchant.RegionID,
+		ClaimCreatedAt: time.Now(),
+	}
+	recoveryDispute := db.RecoveryDispute{
+		ID:            998,
+		ClaimID:       claimID,
+		AppellantType: "merchant",
+		AppellantID:   merchant.ID,
+		Reason:        reason,
+		Status:        "approved",
+		RegionID:      merchant.RegionID,
+		CreatedAt:     time.Now(),
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectStaffRole(store, user.ID, merchant, "manager")
+	store.EXPECT().
+		GetClaimRecoveryContextByClaimIDAndTarget(gomock.Any(), recoveryDisputeContextQuery(claimID, "merchant")).
+		Times(1).
+		Return(recoveryContext, nil)
+	store.EXPECT().
+		CheckRecoveryDisputeExists(gomock.Any(), db.CheckRecoveryDisputeExistsParams{
+			ClaimID:       claimID,
+			AppellantType: "merchant",
+		}).
+		Times(1).
+		Return(false, nil)
+	store.EXPECT().
+		CreateRecoveryDisputeWithRecoveryTx(gomock.Any(), gomock.Any()).
+		Times(1).
+		DoAndReturn(func(_ context.Context, arg db.CreateRecoveryDisputeWithRecoveryTxParams) (db.CreateRecoveryDisputeWithRecoveryTxResult, error) {
+			require.Equal(t, db.CreateRecoveryDisputeWithRecoveryTxParams{
+				ClaimID:        claimID,
+				RecoveryTarget: "merchant",
+				AppellantType:  "merchant",
+				AppellantID:    merchant.ID,
+				Reason:         reason,
+				RegionID:       merchant.RegionID,
+			}, arg)
+			return db.CreateRecoveryDisputeWithRecoveryTxResult{RecoveryDispute: recoveryDispute}, nil
+		})
+
+	server := newTestServer(t, store)
+	body, err := json.Marshal(gin.H{
+		"claim_id": claimID,
+		"reason":   reason,
+	})
+	require.NoError(t, err)
+	request, err := http.NewRequest(http.MethodPost, "/v1/merchant/recovery-disputes", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusCreated, recorder.Code)
+	var response recoveryDisputeResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.Equal(t, recoveryDispute.ID, response.ID)
+	require.Equal(t, "approved", response.Status)
+	require.Equal(t, merchant.ID, response.AppellantID)
+}
+
 // ====================== List Merchant Recovery Disputes Tests ======================
 
 func TestListMerchantRecoveryDisputesAPI(t *testing.T) {
