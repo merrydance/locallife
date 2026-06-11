@@ -9,12 +9,13 @@ import (
 
 // OpenDiningSessionTxParams bundles inputs for opening a dining session transactionally.
 type OpenDiningSessionTxParams struct {
-	TableID                int64
-	MerchantID             int64
-	UserID                 int64
-	ReservationID          pgtype.Int8
-	ImportReservationItems bool
-	ActivateOrder          *ActivateOrderInput
+	TableID                       int64
+	MerchantID                    int64
+	UserID                        int64
+	ReservationID                 pgtype.Int8
+	ImportReservationItems        bool
+	SkipDefaultBillingGroupMember bool
+	ActivateOrder                 *ActivateOrderInput
 }
 
 // CloseDiningSessionTxParams bundles inputs for closing a dining session transactionally.
@@ -66,7 +67,7 @@ func (store *SQLStore) OpenDiningSessionTx(ctx context.Context, arg OpenDiningSe
 			return fmt.Errorf("create dining session: %w", err)
 		}
 
-		// 1.1) Create default billing group and owner membership
+		// 1.1) Create default billing group and optional owner membership
 		result.BillingGroup, err = q.CreateBillingGroup(ctx, CreateBillingGroupParams{
 			DiningSessionID: result.Session.ID,
 			Status:          "open",
@@ -78,12 +79,14 @@ func (store *SQLStore) OpenDiningSessionTx(ctx context.Context, arg OpenDiningSe
 			return fmt.Errorf("create default billing group: %w", err)
 		}
 
-		if _, err := q.CreateBillingGroupMember(ctx, CreateBillingGroupMemberParams{
-			BillingGroupID: result.BillingGroup.ID,
-			UserID:         arg.UserID,
-			Role:           "owner",
-		}); err != nil {
-			return fmt.Errorf("create billing group member: %w", err)
+		if !arg.SkipDefaultBillingGroupMember {
+			if _, err := q.CreateBillingGroupMember(ctx, CreateBillingGroupMemberParams{
+				BillingGroupID: result.BillingGroup.ID,
+				UserID:         arg.UserID,
+				Role:           "owner",
+			}); err != nil {
+				return fmt.Errorf("create billing group member: %w", err)
+			}
 		}
 
 		// 2) Import reservation items into a dine-in cart if needed

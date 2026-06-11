@@ -61,6 +61,39 @@ func isOfflineReservationCreatedByUser(reservation db.TableReservation, userID i
 		reservation.CreatedByUserID.Int64 == userID
 }
 
+func isOfflineReservationOperatorWithoutCustomerOwnership(session db.DiningSession, reservation db.TableReservation, userID int64) bool {
+	if isOnlineReservationSource(reservation.Source) {
+		return false
+	}
+	return session.UserID == userID ||
+		reservation.UserID == userID ||
+		isOfflineReservationCreatedByUser(reservation, userID)
+}
+
+func isMerchantActorForReservation(ctx context.Context, store db.Store, reservation db.TableReservation, userID int64) (bool, error) {
+	merchant, err := store.GetMerchant(ctx, reservation.MerchantID)
+	if err != nil {
+		return false, err
+	}
+	if merchant.OwnerUserID == userID {
+		return true, nil
+	}
+	return store.CheckUserHasMerchantAccess(ctx, db.CheckUserHasMerchantAccessParams{
+		MerchantID: reservation.MerchantID,
+		UserID:     userID,
+	})
+}
+
+func isReservationCustomerAccessDisallowedActor(ctx context.Context, store db.Store, session db.DiningSession, reservation db.TableReservation, userID int64) (bool, error) {
+	if isOnlineReservationSource(reservation.Source) {
+		return false, nil
+	}
+	if isOfflineReservationOperatorWithoutCustomerOwnership(session, reservation, userID) {
+		return true, nil
+	}
+	return isMerchantActorForReservation(ctx, store, reservation, userID)
+}
+
 // ReservationItemInput describes a dish or combo in a reservation request.
 type ReservationItemInput struct {
 	DishID   *int64

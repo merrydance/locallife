@@ -144,9 +144,14 @@ func ResolveDiningSessionMenu(ctx context.Context, store db.Store, sessionID int
 	}
 
 	if !isCustomerOwner {
-		if session.ReservationID.Valid && (session.UserID == userID ||
-			(linkedReservation != nil && isOfflineReservationCreatedByUser(*linkedReservation, userID))) {
-			return result, NewRequestError(http.StatusForbidden, errors.New("dining session does not belong to you"))
+		if linkedReservation != nil {
+			isDisallowedActor, err := isReservationCustomerAccessDisallowedActor(ctx, store, session, *linkedReservation, userID)
+			if err != nil {
+				return result, err
+			}
+			if isDisallowedActor {
+				return result, NewRequestError(http.StatusForbidden, errors.New("dining session does not belong to you"))
+			}
 		}
 		if _, err := store.GetActiveBillingGroupMember(ctx, db.GetActiveBillingGroupMemberParams{
 			BillingGroupID: billingGroup.ID,
@@ -328,9 +333,14 @@ func resolveSessionAccessibility(ctx context.Context, store db.Store, session db
 	if isCustomerOwner {
 		return &billingGroup, true, nil
 	}
-	if session.ReservationID.Valid && (session.UserID == userID ||
-		(linkedReservation != nil && isOfflineReservationCreatedByUser(*linkedReservation, userID))) {
-		return &billingGroup, false, nil
+	if linkedReservation != nil {
+		isDisallowedActor, err := isReservationCustomerAccessDisallowedActor(ctx, store, session, *linkedReservation, userID)
+		if err != nil {
+			return nil, false, err
+		}
+		if isDisallowedActor {
+			return &billingGroup, false, nil
+		}
 	}
 	if _, err := store.GetActiveBillingGroupMember(ctx, db.GetActiveBillingGroupMemberParams{
 		BillingGroupID: billingGroup.ID,

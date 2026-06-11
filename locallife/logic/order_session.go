@@ -118,9 +118,14 @@ func ValidateOrderSessionAndBilling(ctx context.Context, store db.Store, input O
 				return result, NewRequestError(http.StatusBadRequest, errors.New("table does not match reservation"))
 			}
 			sessionReservationCustomerOwned = isCustomerOwnedReservation(reservation, input.UserID)
-			if !sessionReservationCustomerOwned &&
-				(session.UserID == input.UserID || isOfflineReservationCreatedByUser(reservation, input.UserID)) {
-				return result, NewRequestError(http.StatusForbidden, errors.New("reservation does not belong to you"))
+			if !sessionReservationCustomerOwned {
+				isDisallowedActor, err := isReservationCustomerAccessDisallowedActor(ctx, store, session, reservation, input.UserID)
+				if err != nil {
+					return result, err
+				}
+				if isDisallowedActor {
+					return result, NewRequestError(http.StatusForbidden, errors.New("reservation does not belong to you"))
+				}
 			}
 			sessionReservation = &reservation
 		}

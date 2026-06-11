@@ -238,6 +238,10 @@ func TestOpenDiningSessionAPI_UsesAggregatedBillingGroupAmounts(t *testing.T) {
 		Times(1).
 		Return(billingGroup, nil)
 	store.EXPECT().
+		GetTableReservation(gomock.Any(), reservation.ID).
+		Times(1).
+		Return(reservation, nil)
+	store.EXPECT().
 		GetActiveBillingGroupMember(gomock.Any(), db.GetActiveBillingGroupMemberParams{BillingGroupID: billingGroup.ID, UserID: user.ID}).
 		Times(1).
 		Return(db.BillingGroupMember{BillingGroupID: billingGroup.ID, UserID: user.ID, Role: "owner"}, nil)

@@ -9,11 +9,26 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
+
+func offlineReservationForBillingGroupTest(tableID, operatorUserID, merchantID int64) db.TableReservation {
+	return db.TableReservation{
+		ID:                time.Now().UnixNano(),
+		TableID:           tableID,
+		UserID:            operatorUserID,
+		MerchantID:        merchantID,
+		Status:            ReservationStatusCheckedIn,
+		Source:            pgtype.Text{String: db.ReservationSourcePhone, Valid: true},
+		OfflineCustomerID: pgtype.Int8{Int64: 7001, Valid: true},
+		CreatedByUserID:   pgtype.Int8{Int64: operatorUserID, Valid: true},
+		CreatedAt:         time.Now(),
+	}
+}
 
 func TestCreateBillingGroupAPI_UsesAggregatedAmounts(t *testing.T) {
 	user, _ := randomUser(t)
@@ -91,6 +106,40 @@ func TestCreateBillingGroupAPI_UsesAggregatedAmounts(t *testing.T) {
 	}
 }
 
+func TestCreateBillingGroupAPI_OfflineReservationOperatorDenied(t *testing.T) {
+	operator, _ := randomUser(t)
+	merchant := randomMerchant(operator.ID)
+	table := randomTable(merchant.ID)
+	reservation := offlineReservationForBillingGroupTest(table.ID, operator.ID, merchant.ID)
+	session := randomDiningSession(merchant.ID, table.ID, operator.ID)
+	session.ReservationID = pgtype.Int8{Int64: reservation.ID, Valid: true}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetDiningSession(gomock.Any(), session.ID).
+		Times(1).
+		Return(session, nil)
+	store.EXPECT().
+		GetTableReservation(gomock.Any(), reservation.ID).
+		Times(1).
+		Return(reservation, nil)
+
+	server := newTestServer(t, store)
+	body, err := json.Marshal(map[string]int64{"dining_session_id": session.ID})
+	require.NoError(t, err)
+	request, err := http.NewRequest(http.MethodPost, "/v1/billing-groups", bytes.NewReader(body))
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, operator.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusForbidden, recorder.Code)
+}
+
 func TestListBillingGroupsAPI_UsesAggregatedAmounts(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
@@ -140,6 +189,177 @@ func TestListBillingGroupsAPI_UsesAggregatedAmounts(t *testing.T) {
 	require.Equal(t, int64(800), resp.Data.BillingGroups[0].PaidAmount)
 	require.Equal(t, int64(500), resp.Data.BillingGroups[1].TotalAmount)
 	require.Equal(t, int64(0), resp.Data.BillingGroups[1].PaidAmount)
+}
+
+func TestListBillingGroupsAPI_OfflineReservationOperatorDenied(t *testing.T) {
+	operator, _ := randomUser(t)
+	merchant := randomMerchant(operator.ID)
+	table := randomTable(merchant.ID)
+	reservation := offlineReservationForBillingGroupTest(table.ID, operator.ID, merchant.ID)
+	session := randomDiningSession(merchant.ID, table.ID, operator.ID)
+	session.ReservationID = pgtype.Int8{Int64: reservation.ID, Valid: true}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetDiningSession(gomock.Any(), session.ID).
+		Times(1).
+		Return(session, nil)
+	store.EXPECT().
+		GetTableReservation(gomock.Any(), reservation.ID).
+		Times(1).
+		Return(reservation, nil)
+
+	server := newTestServer(t, store)
+	url := fmt.Sprintf("/v1/billing-groups?dining_session_id=%d", session.ID)
+	request, err := http.NewRequest(http.MethodGet, url, nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, operator.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusForbidden, recorder.Code)
+}
+
+func TestListBillingGroupsAPI_OfflineReservationJoinedMemberAllowed(t *testing.T) {
+	operator, _ := randomUser(t)
+	member, _ := randomUser(t)
+	merchant := randomMerchant(operator.ID)
+	table := randomTable(merchant.ID)
+	reservation := offlineReservationForBillingGroupTest(table.ID, operator.ID, merchant.ID)
+	session := randomDiningSession(merchant.ID, table.ID, operator.ID)
+	session.ReservationID = pgtype.Int8{Int64: reservation.ID, Valid: true}
+	defaultGroup := db.BillingGroup{ID: 1302, DiningSessionID: session.ID, Status: "open", IsDefault: true, CreatedAt: time.Now()}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetDiningSession(gomock.Any(), session.ID).
+		Times(1).
+		Return(session, nil)
+	store.EXPECT().
+		GetTableReservation(gomock.Any(), reservation.ID).
+		Times(1).
+		Return(reservation, nil)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(merchant, nil)
+	store.EXPECT().
+		CheckUserHasMerchantAccess(gomock.Any(), db.CheckUserHasMerchantAccessParams{
+			MerchantID: merchant.ID,
+			UserID:     member.ID,
+		}).
+		Times(1).
+		Return(false, nil)
+	store.EXPECT().
+		GetDefaultBillingGroupBySession(gomock.Any(), session.ID).
+		Times(1).
+		Return(defaultGroup, nil)
+	store.EXPECT().
+		GetActiveBillingGroupMember(gomock.Any(), db.GetActiveBillingGroupMemberParams{
+			BillingGroupID: defaultGroup.ID,
+			UserID:         member.ID,
+		}).
+		Times(1).
+		Return(db.BillingGroupMember{BillingGroupID: defaultGroup.ID, UserID: member.ID, Role: "member"}, nil)
+	store.EXPECT().
+		ListBillingGroupsBySession(gomock.Any(), session.ID).
+		Times(1).
+		Return([]db.BillingGroup{defaultGroup}, nil)
+	store.EXPECT().
+		GetBillingGroupAmounts(gomock.Any(), defaultGroup.ID).
+		Times(1).
+		Return(db.GetBillingGroupAmountsRow{}, nil)
+
+	server := newTestServer(t, store)
+	url := fmt.Sprintf("/v1/billing-groups?dining_session_id=%d", session.ID)
+	request, err := http.NewRequest(http.MethodGet, url, nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, member.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+}
+
+func TestListBillingGroupsAPI_OfflineReservationMerchantOwnerDeniedEvenWithMembership(t *testing.T) {
+	customer, _ := randomUser(t)
+	owner, _ := randomUser(t)
+	merchant := randomMerchant(owner.ID)
+	table := randomTable(merchant.ID)
+	reservation := offlineReservationForBillingGroupTest(table.ID, customer.ID, merchant.ID)
+	session := randomDiningSession(merchant.ID, table.ID, customer.ID)
+	session.ReservationID = pgtype.Int8{Int64: reservation.ID, Valid: true}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetDiningSession(gomock.Any(), session.ID).
+		Times(1).
+		Return(session, nil)
+	store.EXPECT().
+		GetTableReservation(gomock.Any(), reservation.ID).
+		Times(1).
+		Return(reservation, nil)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(merchant, nil)
+
+	server := newTestServer(t, store)
+	url := fmt.Sprintf("/v1/billing-groups?dining_session_id=%d", session.ID)
+	request, err := http.NewRequest(http.MethodGet, url, nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusForbidden, recorder.Code)
+}
+
+func TestListBillingGroupsAPI_LegacyOfflineReservationUserDeniedEvenWhenSessionUserDiffers(t *testing.T) {
+	operator, _ := randomUser(t)
+	otherStaff, _ := randomUser(t)
+	merchant := randomMerchant(operator.ID)
+	table := randomTable(merchant.ID)
+	reservation := offlineReservationForBillingGroupTest(table.ID, operator.ID, merchant.ID)
+	reservation.CreatedByUserID = pgtype.Int8{Valid: false}
+	session := randomDiningSession(merchant.ID, table.ID, otherStaff.ID)
+	session.ReservationID = pgtype.Int8{Int64: reservation.ID, Valid: true}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetDiningSession(gomock.Any(), session.ID).
+		Times(1).
+		Return(session, nil)
+	store.EXPECT().
+		GetTableReservation(gomock.Any(), reservation.ID).
+		Times(1).
+		Return(reservation, nil)
+
+	server := newTestServer(t, store)
+	url := fmt.Sprintf("/v1/billing-groups?dining_session_id=%d", session.ID)
+	request, err := http.NewRequest(http.MethodGet, url, nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, operator.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusForbidden, recorder.Code)
 }
 
 func TestJoinBillingGroupAPI_UsesAggregatedAmounts(t *testing.T) {
@@ -214,4 +434,80 @@ func TestJoinBillingGroupAPI_UsesAggregatedAmounts(t *testing.T) {
 	require.Equal(t, targetGroup.ID, resp.Data.ID)
 	require.Equal(t, int64(1680), resp.Data.TotalAmount)
 	require.Equal(t, int64(920), resp.Data.PaidAmount)
+}
+
+func TestJoinBillingGroupAPI_OfflineReservationOperatorDenied(t *testing.T) {
+	operator, _ := randomUser(t)
+	merchant := randomMerchant(operator.ID)
+	table := randomTable(merchant.ID)
+	reservation := offlineReservationForBillingGroupTest(table.ID, operator.ID, merchant.ID)
+	session := randomDiningSession(merchant.ID, table.ID, operator.ID)
+	session.ReservationID = pgtype.Int8{Int64: reservation.ID, Valid: true}
+	targetGroup := db.BillingGroup{ID: 1401, DiningSessionID: session.ID, Status: "open", IsDefault: false, CreatedAt: time.Now()}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetBillingGroup(gomock.Any(), targetGroup.ID).
+		Times(1).
+		Return(targetGroup, nil)
+	store.EXPECT().
+		GetDiningSession(gomock.Any(), session.ID).
+		Times(1).
+		Return(session, nil)
+	store.EXPECT().
+		GetTableReservation(gomock.Any(), reservation.ID).
+		Times(1).
+		Return(reservation, nil)
+
+	server := newTestServer(t, store)
+	url := fmt.Sprintf("/v1/billing-groups/%d/join", targetGroup.ID)
+	request, err := http.NewRequest(http.MethodPost, url, nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, operator.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusForbidden, recorder.Code)
+}
+
+func TestListBillingGroupOrdersAPI_OfflineReservationOperatorDenied(t *testing.T) {
+	operator, _ := randomUser(t)
+	merchant := randomMerchant(operator.ID)
+	table := randomTable(merchant.ID)
+	reservation := offlineReservationForBillingGroupTest(table.ID, operator.ID, merchant.ID)
+	session := randomDiningSession(merchant.ID, table.ID, operator.ID)
+	session.ReservationID = pgtype.Int8{Int64: reservation.ID, Valid: true}
+	targetGroup := db.BillingGroup{ID: 1501, DiningSessionID: session.ID, Status: "open", IsDefault: false, CreatedAt: time.Now()}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetBillingGroup(gomock.Any(), targetGroup.ID).
+		Times(1).
+		Return(targetGroup, nil)
+	store.EXPECT().
+		GetDiningSession(gomock.Any(), session.ID).
+		Times(1).
+		Return(session, nil)
+	store.EXPECT().
+		GetTableReservation(gomock.Any(), reservation.ID).
+		Times(1).
+		Return(reservation, nil)
+
+	server := newTestServer(t, store)
+	url := fmt.Sprintf("/v1/billing-groups/%d/orders", targetGroup.ID)
+	request, err := http.NewRequest(http.MethodGet, url, nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, operator.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusForbidden, recorder.Code)
 }

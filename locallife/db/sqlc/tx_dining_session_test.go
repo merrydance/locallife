@@ -40,6 +40,32 @@ func TestOpenDiningSessionTxCreatesBillingGroup(t *testing.T) {
 	require.Equal(t, "owner", member.Role)
 }
 
+func TestOpenDiningSessionTxSkipsDefaultBillingGroupMember(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	table := createRandomTable(t, merchant.ID)
+	user := createRandomUser(t)
+
+	result, err := testStore.OpenDiningSessionTx(context.Background(), OpenDiningSessionTxParams{
+		TableID:                       table.ID,
+		MerchantID:                    merchant.ID,
+		UserID:                        user.ID,
+		ReservationID:                 pgtype.Int8{Valid: false},
+		ImportReservationItems:        false,
+		SkipDefaultBillingGroupMember: true,
+	})
+	require.NoError(t, err)
+	require.NotZero(t, result.Session.ID)
+	require.NotZero(t, result.BillingGroup.ID)
+	require.True(t, result.BillingGroup.IsDefault)
+
+	_, err = testStore.GetActiveBillingGroupMember(context.Background(), GetActiveBillingGroupMemberParams{
+		BillingGroupID: result.BillingGroup.ID,
+		UserID:         user.ID,
+	})
+	require.ErrorIs(t, err, ErrRecordNotFound)
+}
+
 func TestBillingGroupMemberUnique(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)

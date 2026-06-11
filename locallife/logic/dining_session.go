@@ -108,6 +108,31 @@ func GetOrCreateDefaultBillingGroup(ctx context.Context, store db.Store, session
 	if session.UserID == userID {
 		role = "owner"
 	}
+	shouldEnsureMembership := true
+	if session.ReservationID.Valid {
+		isCustomerOwner, linkedReservation, err := resolveDiningSessionCustomerOwnership(ctx, store, session, userID)
+		if err != nil {
+			return db.BillingGroup{}, err
+		}
+		if isCustomerOwner {
+			role = "owner"
+		} else if linkedReservation != nil {
+			isDisallowedActor, err := isReservationCustomerAccessDisallowedActor(ctx, store, session, *linkedReservation, userID)
+			if err != nil {
+				return db.BillingGroup{}, err
+			}
+			if isDisallowedActor {
+				shouldEnsureMembership = false
+			} else {
+				role = "member"
+			}
+		} else {
+			role = "member"
+		}
+	}
+	if !shouldEnsureMembership {
+		return billingGroup, nil
+	}
 	if _, err := store.GetActiveBillingGroupMember(ctx, db.GetActiveBillingGroupMemberParams{
 		BillingGroupID: billingGroup.ID,
 		UserID:         userID,
@@ -324,12 +349,13 @@ func OpenDiningSession(ctx context.Context, store db.Store, input OpenDiningSess
 	}
 
 	txResult, err := store.OpenDiningSessionTx(ctx, db.OpenDiningSessionTxParams{
-		TableID:                table.ID,
-		MerchantID:             table.MerchantID,
-		UserID:                 input.UserID,
-		ReservationID:          resID,
-		ImportReservationItems: reservation != nil,
-		ActivateOrder:          activateOrder,
+		TableID:                       table.ID,
+		MerchantID:                    table.MerchantID,
+		UserID:                        input.UserID,
+		ReservationID:                 resID,
+		ImportReservationItems:        reservation != nil,
+		SkipDefaultBillingGroupMember: reservation != nil && !isCustomerOwnedReservation(*reservation, input.UserID),
+		ActivateOrder:                 activateOrder,
 	})
 	if err != nil {
 		return result, err
