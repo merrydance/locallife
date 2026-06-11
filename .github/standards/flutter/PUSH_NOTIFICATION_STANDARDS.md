@@ -105,6 +105,7 @@ JPush 已废弃。商户端不得再引入 JPush SDK、JPush registration_id、J
 - 调用 `POST /v1/merchant/device/register` 上报给后端
 - Token 变化时由原生回调通知 Flutter，并立即重新上报
 - 上报 payload 应包含 `device_id`、`push_token`、`provider`、`platform`、`app_version`、`device_model`、`os_version`
+- 当前后端 `merchant_app_devices.platform` 契约是 Android-only，Flutter 设备注册和心跳 payload 的 `platform` 必须上报为 `android`；本地 `device_model` / `os_version` 可继续反映实际运行设备信息。
 
 ### 5.2 消息处理
 

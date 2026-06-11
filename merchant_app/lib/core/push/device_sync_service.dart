@@ -105,10 +105,12 @@ class DeviceSyncService {
     Future<String> Function()? deviceIdProvider,
     Future<String?> Function()? registeredTokenReader,
     Future<void> Function(String token)? registeredTokenWriter,
+    String Function()? runtimePlatformResolver,
     DateTime Function()? now,
   }) : _deviceIdProvider = deviceIdProvider,
        _registeredTokenReader = registeredTokenReader,
        _registeredTokenWriter = registeredTokenWriter,
+       _runtimePlatformResolver = runtimePlatformResolver,
        _now = now ?? DateTime.now {
     _pushManager.onTokenRegistered = (token, provider) => ensureRegistered();
     _pushManager.onInitializationFailed = (provider, message) async {
@@ -134,6 +136,7 @@ class DeviceSyncService {
   final Future<String> Function()? _deviceIdProvider;
   final Future<String?> Function()? _registeredTokenReader;
   final Future<void> Function(String token)? _registeredTokenWriter;
+  final String Function()? _runtimePlatformResolver;
   final DateTime Function() _now;
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
@@ -379,8 +382,28 @@ class DeviceSyncService {
       'device_model': deviceModel,
       'os_version': osVersion,
       'app_version': appVersion,
-      'platform': kIsWeb ? 'web' : (Platform.isIOS ? 'ios' : 'android'),
+      'platform': _backendDevicePlatform(),
     };
+  }
+
+  String _backendDevicePlatform() {
+    final runtimePlatform = (_runtimePlatformResolver ?? _runtimePlatform)();
+    if (runtimePlatform != 'android' && kDebugMode) {
+      debugPrint(
+        'Merchant device registry is Android-only; reporting android for $runtimePlatform runtime.',
+      );
+    }
+    return 'android';
+  }
+
+  String _runtimePlatform() {
+    if (kIsWeb) {
+      return 'web';
+    }
+    if (Platform.isIOS) {
+      return 'ios';
+    }
+    return 'android';
   }
 
   Future<void> _reportOperatorDiagnostic({

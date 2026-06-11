@@ -25,12 +25,35 @@ void main() {
     expect(apiClient.lastPostData, containsPair('device_id', 'device-1'));
     expect(apiClient.lastPostData, containsPair('push_token', 'push-token-1'));
     expect(apiClient.lastPostData, containsPair('provider', 'xiaomi'));
+    expect(apiClient.lastPostData, containsPair('platform', 'android'));
     expect(service.state.nativePushStatus, NativePushStatus.registered);
     expect(
       service.state.deviceRegistrationStatus,
       DeviceRegistrationStatus.success,
     );
     expect(service.state.degradationMessages, isEmpty);
+  });
+
+  test('device payload keeps backend Android-only platform contract', () async {
+    final apiClient = _FakeApiClient();
+    final pushManager = _FakeNativePushManager(
+      registrationId: 'push-token-1',
+      provider: 'huawei',
+    );
+    final service = DeviceSyncService(
+      apiClient,
+      pushManager,
+      deviceIdProvider: () async => 'device-1',
+      registeredTokenReader: () async => null,
+      registeredTokenWriter: (_) async {},
+      runtimePlatformResolver: () => 'ios',
+    );
+
+    await service.ensureRegistered();
+    await service.sendHeartbeat();
+
+    expect(apiClient.lastPostData, containsPair('platform', 'android'));
+    expect(apiClient.lastPutData, containsPair('platform', 'android'));
   });
 
   test('missing push token is reported as operator diagnostic only', () async {
@@ -204,6 +227,7 @@ class _FakeApiClient implements ApiClient {
   final List<String> postPaths = <String>[];
   String? lastPostPath;
   Map<String, dynamic>? lastPostData;
+  Map<String, dynamic>? lastPutData;
 
   @override
   Future<Response<dynamic>> post(
@@ -255,6 +279,7 @@ class _FakeApiClient implements ApiClient {
     dynamic data,
     bool requiresAuth = true,
   }) {
+    lastPutData = Map<String, dynamic>.from(data as Map);
     if (failPut) {
       throw DioException(
         requestOptions: RequestOptions(path: path),
