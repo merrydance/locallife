@@ -224,8 +224,8 @@ type ResetMerchantApplicationTxResult struct {
 	CancelledReviewRuns []OnboardingReviewRun
 }
 
-// ResetMerchantApplicationTx resets a merchant application to draft status
-// and sets the associated merchant status to pending (if exists).
+// ResetMerchantApplicationTx resets a merchant application to draft status.
+// Existing active/approved merchant truth stays live while the new draft awaits reapproval.
 func (store *SQLStore) ResetMerchantApplicationTx(ctx context.Context, arg ResetMerchantApplicationTxParams) (ResetMerchantApplicationTxResult, error) {
 	var result ResetMerchantApplicationTxResult
 
@@ -236,6 +236,9 @@ func (store *SQLStore) ResetMerchantApplicationTx(ctx context.Context, arg Reset
 		result.Application, err = q.ResetMerchantApplicationToDraft(ctx, arg.ApplicationID)
 		if err != nil {
 			return fmt.Errorf("reset application: %w", err)
+		}
+		if result.Application.UserID != arg.UserID {
+			return fmt.Errorf("reset application owner mismatch: application %d belongs to user %d, not user %d", result.Application.ID, result.Application.UserID, arg.UserID)
 		}
 
 		// Step 2: 明确编辑/重置会使当前排队审核过期，避免旧 worker 之后重试漂移。
@@ -264,9 +267,11 @@ func (store *SQLStore) ResetMerchantApplicationTx(ctx context.Context, arg Reset
 		}
 
 		// Step 3: 如果商户记录已存在，仅在非 active/approved 状态下改为 pending
-		merchant, err := q.GetMerchantByOwner(ctx, arg.UserID)
+		merchant, err := q.GetMerchantOwnedByUser(ctx, arg.UserID)
 		if err == nil {
-			if merchant.Status != "active" && merchant.Status != "approved" {
+			if merchant.Status == MerchantStatusActive || merchant.Status == MerchantStatusApproved {
+				result.Merchant = merchant
+			} else {
 				result.Merchant, err = q.UpdateMerchantStatus(ctx, UpdateMerchantStatusParams{
 					ID:     merchant.ID,
 					Status: "pending",

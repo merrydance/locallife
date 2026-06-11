@@ -320,7 +320,7 @@ export function buildMerchantApplicationStatusView(status?: ApplicationStatus | 
         tagTheme: 'success',
         badgeText: '通过',
         guideText: '主体已通过，可继续完成宝付结算账户开户和签约。',
-        editTip: '已通过申请如需修改，保存或上传后会自动回到草稿状态',
+        editTip: '修改后会进入重新认证草稿，线上店铺继续使用当前资料，重新审核通过后更新。',
         canEdit: true,
         canSubmit: true,
         canReset: false

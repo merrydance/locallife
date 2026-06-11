@@ -250,3 +250,143 @@ func TestResetMerchantApplicationTxCancelsActiveReviewRuns(t *testing.T) {
 	require.Equal(t, "superseded_by_edit", summary["reason_code"])
 	require.Contains(t, summary["reason_message"], "重新提交")
 }
+
+func TestResetMerchantApplicationTxPreservesApprovedMerchantTruth(t *testing.T) {
+	testCases := []struct {
+		name           string
+		merchantStatus string
+	}{
+		{
+			name:           "active merchant",
+			merchantStatus: MerchantStatusActive,
+		},
+		{
+			name:           "approved merchant",
+			merchantStatus: MerchantStatusApproved,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			user := createRandomUser(t)
+			app := prepareSubmittedMerchantApplication(t, user.ID)
+			merchant := createRandomMerchantWithOwner(t, user.ID)
+			merchant, err := testStore.UpdateMerchantStatus(context.Background(), UpdateMerchantStatusParams{
+				ID:     merchant.ID,
+				Status: tc.merchantStatus,
+			})
+			require.NoError(t, err)
+
+			storefrontImages := []byte(`["uploads/merchant/live-storefront.jpg"]`)
+			environmentImages := []byte(`["uploads/merchant/live-environment.jpg"]`)
+			merchant, err = testStore.UpdateMerchantShopImages(context.Background(), UpdateMerchantShopImagesParams{
+				ID:                merchant.ID,
+				StorefrontImages:  storefrontImages,
+				EnvironmentImages: environmentImages,
+			})
+			require.NoError(t, err)
+
+			approvedApp, err := testStore.UpdateMerchantApplicationStatus(context.Background(), UpdateMerchantApplicationStatusParams{
+				ID:         app.ID,
+				Status:     MerchantApplicationStatusApproved,
+				ReviewedBy: pgtype.Int8{Int64: user.ID, Valid: true},
+			})
+			require.NoError(t, err)
+
+			result, err := testStore.(*SQLStore).ResetMerchantApplicationTx(context.Background(), ResetMerchantApplicationTxParams{
+				ApplicationID: approvedApp.ID,
+				UserID:        user.ID,
+			})
+			require.NoError(t, err)
+			require.Equal(t, MerchantApplicationStatusDraft, result.Application.Status)
+			require.Equal(t, merchant.ID, result.Merchant.ID)
+			require.Equal(t, tc.merchantStatus, result.Merchant.Status)
+			require.JSONEq(t, string(storefrontImages), string(result.Merchant.StorefrontImages))
+			require.JSONEq(t, string(environmentImages), string(result.Merchant.EnvironmentImages))
+
+			unchangedMerchant, err := testStore.GetMerchant(context.Background(), merchant.ID)
+			require.NoError(t, err)
+			require.Equal(t, tc.merchantStatus, unchangedMerchant.Status)
+			require.Equal(t, merchant.Name, unchangedMerchant.Name)
+			require.Equal(t, merchant.Phone, unchangedMerchant.Phone)
+			require.Equal(t, merchant.Address, unchangedMerchant.Address)
+			require.JSONEq(t, string(storefrontImages), string(unchangedMerchant.StorefrontImages))
+			require.JSONEq(t, string(environmentImages), string(unchangedMerchant.EnvironmentImages))
+		})
+	}
+}
+
+func TestResetMerchantApplicationTxIgnoresStaffAssociatedMerchant(t *testing.T) {
+	merchantOwner := createRandomUser(t)
+	applicant := createRandomUser(t)
+	staffMerchant := createRandomMerchantWithOwner(t, merchantOwner.ID)
+	staffMerchant, err := testStore.UpdateMerchantStatus(context.Background(), UpdateMerchantStatusParams{
+		ID:     staffMerchant.ID,
+		Status: MerchantStatusSuspended,
+	})
+	require.NoError(t, err)
+	_, err = testStore.CreateMerchantStaff(context.Background(), CreateMerchantStaffParams{
+		MerchantID: staffMerchant.ID,
+		UserID:     applicant.ID,
+		Role:       MerchantStaffRoleManager,
+		Status:     MerchantStaffStatusActive,
+		InvitedBy:  pgtype.Int8{Int64: merchantOwner.ID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	app := prepareSubmittedMerchantApplication(t, applicant.ID)
+	approvedApp, err := testStore.UpdateMerchantApplicationStatus(context.Background(), UpdateMerchantApplicationStatusParams{
+		ID:         app.ID,
+		Status:     MerchantApplicationStatusApproved,
+		ReviewedBy: pgtype.Int8{Int64: applicant.ID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	result, err := testStore.(*SQLStore).ResetMerchantApplicationTx(context.Background(), ResetMerchantApplicationTxParams{
+		ApplicationID: approvedApp.ID,
+		UserID:        applicant.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, MerchantApplicationStatusDraft, result.Application.Status)
+	require.Zero(t, result.Merchant.ID)
+
+	unchangedStaffMerchant, err := testStore.GetMerchant(context.Background(), staffMerchant.ID)
+	require.NoError(t, err)
+	require.Equal(t, MerchantStatusSuspended, unchangedStaffMerchant.Status)
+	require.Equal(t, merchantOwner.ID, unchangedStaffMerchant.OwnerUserID)
+}
+
+func TestResetMerchantApplicationTxRejectsMismatchedApplicationOwner(t *testing.T) {
+	applicationOwner := createRandomUser(t)
+	otherUser := createRandomUser(t)
+	app := prepareSubmittedMerchantApplication(t, applicationOwner.ID)
+	approvedApp, err := testStore.UpdateMerchantApplicationStatus(context.Background(), UpdateMerchantApplicationStatusParams{
+		ID:         app.ID,
+		Status:     MerchantApplicationStatusApproved,
+		ReviewedBy: pgtype.Int8{Int64: applicationOwner.ID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	otherMerchant := createRandomMerchantWithOwner(t, otherUser.ID)
+	otherMerchant, err = testStore.UpdateMerchantStatus(context.Background(), UpdateMerchantStatusParams{
+		ID:     otherMerchant.ID,
+		Status: MerchantStatusSuspended,
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.(*SQLStore).ResetMerchantApplicationTx(context.Background(), ResetMerchantApplicationTxParams{
+		ApplicationID: approvedApp.ID,
+		UserID:        otherUser.ID,
+	})
+	require.Error(t, err)
+
+	unchangedApp, err := testStore.GetMerchantApplication(context.Background(), approvedApp.ID)
+	require.NoError(t, err)
+	require.Equal(t, MerchantApplicationStatusApproved, unchangedApp.Status)
+	require.Equal(t, applicationOwner.ID, unchangedApp.UserID)
+
+	unchangedMerchant, err := testStore.GetMerchant(context.Background(), otherMerchant.ID)
+	require.NoError(t, err)
+	require.Equal(t, MerchantStatusSuspended, unchangedMerchant.Status)
+	require.Equal(t, otherUser.ID, unchangedMerchant.OwnerUserID)
+}

@@ -53,6 +53,12 @@
               <t-cell title="法人姓名" note="{{form.legalPersonName}}" />
               <t-cell title="法人证件号" note="{{form.legalPersonIdNumber}}" />
               <t-cell title="经营范围" description="{{form.businessScope}}" align="top" />
+              <t-cell
+                wx:if="{{statusView.isApproved}}"
+                title="重新认证"
+                description="{{statusView.editTip}}"
+                align="top"
+              />
             </t-cell-group>
           </view>
         </t-badge>

@@ -17,7 +17,7 @@ function assertContains(source, expected, message) {
 }
 
 const backendServer = read('locallife/api/server.go')
-const backendMerchant = read('locallife/api/merchant.go')
+const backendMerchantStatus = read('locallife/api/merchant_status.go')
 const miniProgramApi = read('weapp/miniprogram/api/merchant.ts')
 const miniProgramService = read('weapp/miniprogram/pages/merchant/_services/merchant-open-status.ts')
 const miniProgramDashboard = read('weapp/miniprogram/pages/merchant/dashboard/index.ts')
@@ -39,22 +39,22 @@ assertContains(
   'backend must expose the merchant open-status write route under the protected profile write group'
 )
 assertContains(
-  backendMerchant,
+  backendMerchantStatus,
   'IsOpen      *bool  `json:"is_open" binding:"required"`',
   'backend PATCH request must require the is_open truth field'
 )
 assertContains(
-  backendMerchant,
+  backendMerchantStatus,
   'IsOpen            bool                              `json:"is_open"`',
   'backend status response must return is_open for clients to rehydrate from server truth'
 )
 assertContains(
-  backendMerchant,
+  backendMerchantStatus,
   '@Router /v1/merchants/me/status [patch]',
   'backend Swagger contract must document the PATCH status route'
 )
 assertContains(
-  backendMerchant,
+  backendMerchantStatus,
   '@Router /v1/merchants/me/status [get]',
   'backend Swagger contract must document the GET status route'
 )
