@@ -14,6 +14,7 @@ Boundary note: this directory judges rider-side closure only: what the rider can
 - `rider-income-and-baofu-withdrawal.slice.md`: income ledger, Baofu settlement account onboarding, Baofu rider income withdrawal and provider callbacks/recovery.
 - `rider-claims-and-recovery.slice.md`: rider claim list/detail/decision, recovery disputes, claim recovery payment, overdue sanctions, compensation/release.
 - `flow-variant-index.md`: compact branch/dead-code index across all rider-side slices.
+- `rider-related-completeness-audit.md`: explicit verdict for rider-side closure versus all rider-related cross-role/background touchpoints.
 
 Each `*.edges.json` uses the same compact edge schema as the existing merchant slices: only core page/API/logic/transaction/table/provider edges are modeled, while branch detail stays in the Markdown slices.
 
@@ -70,6 +71,7 @@ Provider callbacks used by rider money/settlement flows are registered at `local
 
 ## Dead And Orphan Summary
 
+- Stale/dead: copied shared Mini Program onboarding wrappers still preserve `submitRiderApplication -> /onboarding/rider` under register/user-center/merchant/operator shared API copies, but the current rider registration page imports the live `/v1/rider/application/submit` wrapper and the backend has no `/onboarding/rider` route.
 - Resolved: older delivery-task-management detail wrapper is now backed by `GET /v1/delivery/:delivery_id` with order-owner/assigned-rider authorization.
 - Resolved: worker fallback rider new-order push emits `delivery_pool_new`, matching Mini Program listeners.
 - Resolved: stale pending-delivery cancellation removes the matching `delivery_pool` row through `CancelOrderTx`.
@@ -80,6 +82,7 @@ Provider callbacks used by rider money/settlement flows are registered at `local
 
 ## Rider-Side Closure Notes
 
+- As of the 2026-06-09 recheck, no additional rider-facing branch was found missing from the six rider slices. The stricter "all rider-related" scope includes cross-role/platform/operator/merchant/user/background touchpoints; those are indexed in `rider-related-completeness-audit.md` and are not all platform-operationally closed.
 - Rider delivery pool truth now converges through SQL after scheduler auto-cancel, and the scheduler publishes `delivery_pool_gone` as a best-effort realtime invalidation for already-open rider clients inside the recommendation-visible radius.
 - Platform/operator/merchant action-loop questions are not counted as rider-side closure gaps here; they are tracked separately in `artifacts/codegraph/platform-operations-closed-loop/`.
 

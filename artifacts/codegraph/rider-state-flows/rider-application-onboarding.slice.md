@@ -162,6 +162,7 @@ Missing high-value tests:
 - Add a stale OCR cleanup policy for rider application pending/processing payloads if not already covered by a shared OCR cleanup path.
 - Make the product copy explicit that submitted rider applications can be reset only by a deliberate user action.
 - Rider-facing credential reminder/suspension/restore branches are covered here; platform-visible audit/report ownership is tracked in `artifacts/codegraph/platform-operations-closed-loop/`.
+- Stale copied shared Mini Program onboarding wrappers still preserve `submitRiderApplication -> /onboarding/rider` in register/user-center/merchant/operator shared API copies. The live rider registration page uses `weapp/miniprogram/pages/register/rider/_api/rider-application.ts` and submits to `/v1/rider/application/submit`; backend has no `/onboarding/rider` route.
 
 ## Branch Exhaustion
 
@@ -169,4 +170,4 @@ Missing high-value tests:
 - Request branches checked: `GET/PUT/PATCH/DELETE/POST /v1/rider/application/**`, `/v1/media/upload-sessions`, `/v1/media/complete`, `/v1/media/private-access`, OCR job creation/polling, and async review enqueue/fallback.
 - Backend state branches checked: no application, draft, submitted, approved, reject-to-draft, reset-to-draft, invalid document type, delete while non-draft, missing media, private media not owner/admin, soft-delete failure, pending/processing/failed/done OCR, ID-card expiry, health-certificate expiry/too-short validity, health-vs-ID name mismatch, approve transaction, rider role creation, credential ledger activation, credential expiry reminder, expired credential suspension, suspension slot occupied by another flow, and credential restore.
 - Async branches checked: OCR success/failure/stale writeback, review run queued/worker path, sync fallback, credential reminder/suspension notification fallback, credential restore notification.
-- Dead/orphan branches checked: no stale rider-application route was found in this slice.
+- Dead/orphan branches checked: current rider registration route is live; stale copied `/onboarding/rider` shared wrappers are dead code and recorded in `rider-related-completeness-audit.md`.

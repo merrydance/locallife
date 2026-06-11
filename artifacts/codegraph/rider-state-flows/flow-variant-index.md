@@ -4,6 +4,12 @@ Status: created 2026-06-08
 Purpose: branch checklist for the full rider-side codegraph. Detailed evidence is in the individual slice files.
 Boundary note: this index is scoped to rider-visible state, rider actions, and rider recovery paths. Platform/operator/merchant closure backlog is parked under `artifacts/codegraph/platform-operations-closed-loop/`.
 
+## Completeness Verdict
+
+- Rider-facing and rider-actionable closure is exhausted by the six slice files as of the 2026-06-09 recheck.
+- The broader "all rider-related" scope also includes platform/admin rider writes, operator rider/dispatch reads, merchant/customer order inputs, customer completion/claims, provider callbacks, and background schedulers. Those touchpoints are indexed in `rider-related-completeness-audit.md`.
+- Remaining non-closure is platform/operator/merchant/user operational closure, not a missing rider-facing page/API branch.
+
 ## Application And Identity
 
 - `GET /v1/rider/application`: existing application returns as-is; no application creates a new draft.
@@ -77,6 +83,7 @@ Boundary note: this index is scoped to rider-visible state, rider actions, and r
 
 ## Dead/Orphan Branches
 
+- Stale copied shared wrappers still POST `/onboarding/rider` in multiple `_main_shared/api/onboarding.ts` copies; current rider registration uses `/v1/rider/application/submit`, and no backend `/onboarding/rider` route is registered.
 - Resolved: old rider delivery detail API wrapper is backed by `GET /v1/delivery/:delivery_id`.
 - Resolved: worker fallback new-order push emits `delivery_pool_new`.
 - Resolved: stale pending-delivery auto-cancel removes the `delivery_pool` row through `CancelOrderTx` and publishes `delivery_pool_gone` for already-open rider clients.
