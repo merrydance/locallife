@@ -432,30 +432,27 @@ func TestGetOrCreateMerchantApplicationDraft(t *testing.T) {
 			},
 		},
 		{
-			name: "GetExisting_SubmittedAutoResetToDraft",
+			name: "GetExisting_SubmittedDoesNotReset",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				existingApp := randomMerchantAppDraft(user.ID)
 				existingApp.Status = "submitted"
-				resetApp := existingApp
-				resetApp.Status = "draft"
 
 				store.EXPECT().
 					GetMerchantApplicationDraft(gomock.Any(), user.ID).
 					Times(1).
 					Return(existingApp, nil)
 				store.EXPECT().
-					ResetMerchantApplicationTx(gomock.Any(), db.ResetMerchantApplicationTxParams{
-						ApplicationID: existingApp.ID,
-						UserID:        user.ID,
-					}).
-					Times(1).
-					Return(db.ResetMerchantApplicationTxResult{Application: resetApp}, nil)
+					ResetMerchantApplicationTx(gomock.Any(), gomock.Any()).
+					Times(0)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp merchantApplicationDraftResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, "submitted", resp.Status)
 			},
 		},
 		{

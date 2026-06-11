@@ -378,7 +378,7 @@ func (server *Server) getMyMerchantApplication(ctx *gin.Context) {
 
 // getOrCreateMerchantApplicationDraft godoc
 // @Summary 获取或创建商户入驻申请草稿
-// @Description 获取当前用户的商户入驻申请草稿，如果没有则创建一个空草稿。已通过的申请不会返回。
+// @Description 获取当前用户的商户入驻申请草稿，如果没有则创建一个空草稿。待审核申请只读返回，不会在页面加载时重置为草稿。
 // @Tags 商户申请
 // @Accept json
 // @Produce json
@@ -392,7 +392,8 @@ func (server *Server) getMyMerchantApplication(ctx *gin.Context) {
 func (server *Server) getOrCreateMerchantApplicationDraft(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	// 尝试获取草稿、待审核、被拒绝或已通过的申请（以便随时编辑）
+	// 尝试获取草稿、待审核、被拒绝或已通过的申请。读路径不改变审核状态；
+	// 后续写接口会在确认编辑意图后通过 checkApplicationEditable 重置为草稿。
 	app, err := server.store.GetMerchantApplicationDraft(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
@@ -407,18 +408,6 @@ func (server *Server) getOrCreateMerchantApplicationDraft(ctx *gin.Context) {
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
-	}
-
-	if app.Status == "submitted" {
-		resetResult, resetErr := server.store.ResetMerchantApplicationTx(ctx, db.ResetMerchantApplicationTxParams{
-			ApplicationID: app.ID,
-			UserID:        authPayload.UserID,
-		})
-		if resetErr != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, resetErr))
-			return
-		}
-		app = resetResult.Application
 	}
 
 	server.writeMerchantApplicationDraftResponse(ctx, http.StatusOK, app)
