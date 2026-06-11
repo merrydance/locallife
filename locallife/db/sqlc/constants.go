@@ -40,6 +40,19 @@ const (
 	MerchantApplicationStatusApproved  = "approved"
 	MerchantApplicationStatusRejected  = "rejected"
 
+	OnboardingReviewRunStatusQueued     = "queued"
+	OnboardingReviewRunStatusProcessing = "processing"
+	OnboardingReviewRunStatusCompleted  = "completed"
+	OnboardingReviewRunStatusCancelled  = "cancelled"
+
+	OnboardingReviewOutcomeApproved      = "approved"
+	OnboardingReviewOutcomeRejected      = "rejected"
+	OnboardingReviewOutcomeNeedsResubmit = "needs_resubmit"
+	OnboardingReviewOutcomeNeedsManual   = "needs_manual"
+
+	OnboardingReviewReasonSupersededByEdit        = "superseded_by_edit"
+	OnboardingReviewReasonMessageSupersededByEdit = "申请已重新编辑，请保存后重新提交审核"
+
 	MerchantPaymentConfigStatusActive               = "active"
 	MerchantPaymentConfigStatusPendingAuthorization = "pending_authorization"
 

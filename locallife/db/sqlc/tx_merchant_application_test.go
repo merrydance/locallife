@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -194,4 +195,58 @@ func TestApproveMerchantApplicationTxRejectsMismatchedApplicationOwner(t *testin
 
 	_, merchantErr := testStore.GetMerchantOwnedByUser(context.Background(), wrongOwner.ID)
 	require.ErrorIs(t, merchantErr, ErrRecordNotFound)
+}
+
+func TestResetMerchantApplicationTxCancelsActiveReviewRuns(t *testing.T) {
+	user := createRandomUser(t)
+	app := prepareSubmittedMerchantApplication(t, user.ID)
+
+	run, err := testStore.CreateMerchantOnboardingReviewRun(context.Background(), CreateMerchantOnboardingReviewRunParams{
+		MerchantApplicationID: pgtype.Int8{Int64: app.ID, Valid: true},
+		RunStatus:             "queued",
+		Stage:                 "review",
+		Evidence:              []byte(`{}`),
+		RuleHits:              []string{},
+		OcrJobRefs:            []int64{101},
+		Snapshot:              []byte(`{"status":"submitted"}`),
+		RequestedBy:           pgtype.Int8{Int64: user.ID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	queuedSummary, err := json.Marshal(map[string]any{
+		"run_id":       run.ID,
+		"stage":        "review",
+		"outcome":      "",
+		"reason_code":  "",
+		"ocr_job_refs": []int64{101},
+		"created_at":   "2026-06-11T00:00:00Z",
+	})
+	require.NoError(t, err)
+	_, err = testStore.UpdateMerchantApplicationReviewSummary(context.Background(), UpdateMerchantApplicationReviewSummaryParams{
+		ID:            app.ID,
+		ReviewSummary: queuedSummary,
+	})
+	require.NoError(t, err)
+
+	result, err := testStore.(*SQLStore).ResetMerchantApplicationTx(context.Background(), ResetMerchantApplicationTxParams{
+		ApplicationID: app.ID,
+		UserID:        user.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "draft", result.Application.Status)
+
+	cancelledRun, err := testStore.GetOnboardingReviewRun(context.Background(), run.ID)
+	require.NoError(t, err)
+	require.Equal(t, "cancelled", cancelledRun.RunStatus)
+	require.Equal(t, "needs_resubmit", cancelledRun.Outcome.String)
+	require.Equal(t, "superseded_by_edit", cancelledRun.ReasonCode.String)
+	require.Contains(t, cancelledRun.ReasonMessage.String, "重新编辑")
+	require.True(t, cancelledRun.FinishedAt.Valid)
+
+	var summary map[string]any
+	require.NoError(t, json.Unmarshal(result.Application.ReviewSummary, &summary))
+	require.Equal(t, float64(run.ID), summary["run_id"])
+	require.Equal(t, "needs_resubmit", summary["outcome"])
+	require.Equal(t, "superseded_by_edit", summary["reason_code"])
+	require.Contains(t, summary["reason_message"], "重新提交")
 }

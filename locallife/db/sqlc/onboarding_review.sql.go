@@ -11,9 +11,77 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const cancelActiveMerchantOnboardingReviewRunsForApplication = `-- name: CancelActiveMerchantOnboardingReviewRunsForApplication :many
+UPDATE onboarding_review_runs
+SET run_status = 'cancelled',
+    outcome = $1,
+    reason_code = $2,
+    reason_message = COALESCE($3, reason_message),
+    finished_at = NOW(),
+    updated_at = NOW()
+WHERE application_type = 'merchant'
+  AND merchant_application_id = $4
+  AND run_status IN ('queued', 'processing')
+RETURNING id, application_type, merchant_application_id, rider_application_id, run_status, stage, outcome, reason_code, reason_message, evidence, rule_hits, ocr_job_refs, snapshot, requested_by, reviewed_by, queued_at, started_at, finished_at, created_at, updated_at
+`
+
+type CancelActiveMerchantOnboardingReviewRunsForApplicationParams struct {
+	Outcome               pgtype.Text `json:"outcome"`
+	ReasonCode            pgtype.Text `json:"reason_code"`
+	ReasonMessage         pgtype.Text `json:"reason_message"`
+	MerchantApplicationID pgtype.Int8 `json:"merchant_application_id"`
+}
+
+func (q *Queries) CancelActiveMerchantOnboardingReviewRunsForApplication(ctx context.Context, arg CancelActiveMerchantOnboardingReviewRunsForApplicationParams) ([]OnboardingReviewRun, error) {
+	rows, err := q.db.Query(ctx, cancelActiveMerchantOnboardingReviewRunsForApplication,
+		arg.Outcome,
+		arg.ReasonCode,
+		arg.ReasonMessage,
+		arg.MerchantApplicationID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []OnboardingReviewRun{}
+	for rows.Next() {
+		var i OnboardingReviewRun
+		if err := rows.Scan(
+			&i.ID,
+			&i.ApplicationType,
+			&i.MerchantApplicationID,
+			&i.RiderApplicationID,
+			&i.RunStatus,
+			&i.Stage,
+			&i.Outcome,
+			&i.ReasonCode,
+			&i.ReasonMessage,
+			&i.Evidence,
+			&i.RuleHits,
+			&i.OcrJobRefs,
+			&i.Snapshot,
+			&i.RequestedBy,
+			&i.ReviewedBy,
+			&i.QueuedAt,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const cancelOnboardingReviewRun = `-- name: CancelOnboardingReviewRun :one
 UPDATE onboarding_review_runs
 SET run_status = 'cancelled',
+    outcome = 'needs_resubmit',
     reason_code = $1,
     reason_message = COALESCE($2, reason_message),
     finished_at = NOW(),

@@ -103,10 +103,24 @@ RETURNING id, application_type, merchant_application_id, rider_application_id, r
 -- name: CancelOnboardingReviewRun :one
 UPDATE onboarding_review_runs
 SET run_status = 'cancelled',
+    outcome = 'needs_resubmit',
     reason_code = sqlc.arg(reason_code),
     reason_message = COALESCE(sqlc.narg(reason_message), reason_message),
     finished_at = NOW(),
     updated_at = NOW()
 WHERE id = sqlc.arg(id)
+  AND run_status IN ('queued', 'processing')
+RETURNING id, application_type, merchant_application_id, rider_application_id, run_status, stage, outcome, reason_code, reason_message, evidence, rule_hits, ocr_job_refs, snapshot, requested_by, reviewed_by, queued_at, started_at, finished_at, created_at, updated_at;
+
+-- name: CancelActiveMerchantOnboardingReviewRunsForApplication :many
+UPDATE onboarding_review_runs
+SET run_status = 'cancelled',
+    outcome = sqlc.arg(outcome),
+    reason_code = sqlc.arg(reason_code),
+    reason_message = COALESCE(sqlc.narg(reason_message), reason_message),
+    finished_at = NOW(),
+    updated_at = NOW()
+WHERE application_type = 'merchant'
+  AND merchant_application_id = sqlc.arg(merchant_application_id)
   AND run_status IN ('queued', 'processing')
 RETURNING id, application_type, merchant_application_id, rider_application_id, run_status, stage, outcome, reason_code, reason_message, evidence, rule_hits, ocr_job_refs, snapshot, requested_by, reviewed_by, queued_at, started_at, finished_at, created_at, updated_at;

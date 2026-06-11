@@ -218,6 +218,77 @@ func TestProcessTaskOnboardingReview_MerchantApproved(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestProcessTaskOnboardingReview_CancelsMerchantRunWhenApplicationSupersededByEdit(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	application := db.MerchantApplication{
+		ID:     53,
+		UserID: 21,
+		Status: db.MerchantApplicationStatusDraft,
+	}
+
+	store.EXPECT().
+		GetOnboardingReviewRun(gomock.Any(), int64(903)).
+		Return(db.OnboardingReviewRun{
+			ID:                    903,
+			ApplicationType:       onboardingReviewApplicationTypeMerchant,
+			MerchantApplicationID: pgtype.Int8{Int64: application.ID, Valid: true},
+			RunStatus:             db.OnboardingReviewRunStatusQueued,
+		}, nil)
+
+	store.EXPECT().
+		GetMerchantApplication(gomock.Any(), application.ID).
+		Return(application, nil)
+
+	store.EXPECT().
+		CancelOnboardingReviewRun(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.CancelOnboardingReviewRunParams) (db.OnboardingReviewRun, error) {
+			require.Equal(t, int64(903), arg.ID)
+			require.Equal(t, db.OnboardingReviewReasonSupersededByEdit, arg.ReasonCode.String)
+			require.Contains(t, arg.ReasonMessage.String, "重新编辑")
+			return db.OnboardingReviewRun{
+				ID:                    arg.ID,
+				ApplicationType:       onboardingReviewApplicationTypeMerchant,
+				MerchantApplicationID: pgtype.Int8{Int64: application.ID, Valid: true},
+				RunStatus:             db.OnboardingReviewRunStatusCancelled,
+				Stage:                 "review",
+				Outcome:               pgtype.Text{String: db.OnboardingReviewOutcomeNeedsResubmit, Valid: true},
+				ReasonCode:            arg.ReasonCode,
+				ReasonMessage:         arg.ReasonMessage,
+				CreatedAt:             time.Date(2026, 6, 11, 9, 30, 0, 0, time.UTC),
+			}, nil
+		})
+
+	store.EXPECT().
+		UpdateMerchantApplicationReviewSummary(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.UpdateMerchantApplicationReviewSummaryParams) (db.MerchantApplication, error) {
+			require.Equal(t, application.ID, arg.ID)
+			var summary map[string]any
+			require.NoError(t, json.Unmarshal(arg.ReviewSummary, &summary))
+			require.Equal(t, db.OnboardingReviewOutcomeNeedsResubmit, summary["outcome"])
+			require.Equal(t, db.OnboardingReviewReasonSupersededByEdit, summary["reason_code"])
+			return db.MerchantApplication{ID: application.ID, ReviewSummary: arg.ReviewSummary}, nil
+		})
+
+	processor := NewTestTaskProcessor(store, nil, nil, nil)
+	processor.onboardingReviewSvc = logic.NewOnboardingReviewService(store)
+	processor.merchantReviewSvc = logic.NewMerchantOnboardingReviewService(store, processor.onboardingReviewSvc, nil)
+
+	payloadBytes, err := json.Marshal(OnboardingReviewPayload{
+		ReviewRunID:     903,
+		ApplicationID:   application.ID,
+		ApplicationType: onboardingReviewApplicationTypeMerchant,
+		RequestedBy:     application.UserID,
+	})
+	require.NoError(t, err)
+
+	task := asynq.NewTask(TaskOnboardingReview, payloadBytes, asynq.ProcessIn(1*time.Second))
+	err = processor.ProcessTaskOnboardingReview(context.Background(), task)
+	require.NoError(t, err)
+}
+
 func TestProcessTaskOnboardingReview_MerchantApprovedActivatesCredentials(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

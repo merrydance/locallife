@@ -3,6 +3,7 @@ package logic
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -104,7 +105,10 @@ func (service *MerchantOnboardingReviewService) ProcessSubmittedApplication(ctx 
 	if service == nil || service.store == nil {
 		return MerchantOnboardingReviewResult{}, nil
 	}
-	if application.Status != "submitted" {
+	if application.Status != db.MerchantApplicationStatusSubmitted {
+		if existingRunID != nil && service.onboardingReviewService != nil {
+			return service.cancelSupersededMerchantReviewRun(ctx, application, *existingRunID)
+		}
 		return MerchantOnboardingReviewResult{}, fmt.Errorf("merchant application %d status %s is not submitted", application.ID, application.Status)
 	}
 
@@ -166,6 +170,35 @@ func (service *MerchantOnboardingReviewService) ProcessSubmittedApplication(ctx 
 		}
 	}
 
+	return result, nil
+}
+
+func (service *MerchantOnboardingReviewService) cancelSupersededMerchantReviewRun(ctx context.Context, application db.MerchantApplication, runID int64) (MerchantOnboardingReviewResult, error) {
+	result := MerchantOnboardingReviewResult{Application: application}
+	if runID <= 0 {
+		return result, fmt.Errorf("merchant application %d status %s is not submitted", application.ID, application.Status)
+	}
+	reviewRun, err := service.onboardingReviewService.CancelReviewRun(
+		ctx,
+		runID,
+		db.OnboardingReviewReasonSupersededByEdit,
+		db.OnboardingReviewReasonMessageSupersededByEdit,
+	)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return result, nil
+		}
+		return MerchantOnboardingReviewResult{}, fmt.Errorf("cancel superseded merchant onboarding review run: %w", err)
+	}
+	if err := service.onboardingReviewService.updateMerchantApplicationReviewSummary(ctx, application.ID, reviewRun); err != nil {
+		return MerchantOnboardingReviewResult{}, fmt.Errorf("update superseded merchant onboarding review summary: %w", err)
+	}
+	summaryJSON, err := buildOnboardingReviewSummaryJSON(reviewRun)
+	if err != nil {
+		return MerchantOnboardingReviewResult{}, fmt.Errorf("build superseded merchant onboarding review summary: %w", err)
+	}
+	result.Application.ReviewSummary = summaryJSON
+	result.ReviewRun = &reviewRun
 	return result, nil
 }
 

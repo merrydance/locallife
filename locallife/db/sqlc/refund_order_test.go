@@ -370,14 +370,18 @@ func TestListPendingOrderRefundOrdersForRecovery(t *testing.T) {
 	require.NoError(t, err)
 
 	refundOrder := createRandomRefundOrder(t, paymentOrder.ID, paymentOrder.Amount)
+	// The recovery query intentionally returns the oldest pending rows first. Keep this
+	// fixture ahead of dirty rows left by earlier local test runs.
+	recoveryCreatedAt := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC).Add(-time.Duration(refundOrder.ID) * time.Second)
 	_, err = testStore.(*SQLStore).connPool.Exec(ctx,
-		`UPDATE refund_orders SET created_at = now() - interval '2 minutes' WHERE id = $1`,
+		`UPDATE refund_orders SET created_at = $2 WHERE id = $1`,
 		refundOrder.ID,
+		recoveryCreatedAt,
 	)
 	require.NoError(t, err)
 
 	rows, err := testStore.ListPendingOrderRefundOrdersForRecovery(ctx, ListPendingOrderRefundOrdersForRecoveryParams{
-		CreatedBefore: time.Now().Add(-1 * time.Minute),
+		CreatedBefore: recoveryCreatedAt.Add(time.Minute),
 		Limit:         50,
 	})
 	require.NoError(t, err)

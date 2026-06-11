@@ -701,6 +701,21 @@ func (mr *MockStoreMockRecorder) BatchUpdateDishOnlineStatus(ctx, arg any) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BatchUpdateDishOnlineStatus", reflect.TypeOf((*MockStore)(nil).BatchUpdateDishOnlineStatus), ctx, arg)
 }
 
+// CancelActiveMerchantOnboardingReviewRunsForApplication mocks base method.
+func (m *MockStore) CancelActiveMerchantOnboardingReviewRunsForApplication(ctx context.Context, arg db.CancelActiveMerchantOnboardingReviewRunsForApplicationParams) ([]db.OnboardingReviewRun, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CancelActiveMerchantOnboardingReviewRunsForApplication", ctx, arg)
+	ret0, _ := ret[0].([]db.OnboardingReviewRun)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CancelActiveMerchantOnboardingReviewRunsForApplication indicates an expected call of CancelActiveMerchantOnboardingReviewRunsForApplication.
+func (mr *MockStoreMockRecorder) CancelActiveMerchantOnboardingReviewRunsForApplication(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CancelActiveMerchantOnboardingReviewRunsForApplication", reflect.TypeOf((*MockStore)(nil).CancelActiveMerchantOnboardingReviewRunsForApplication), ctx, arg)
+}
+
 // CancelGroupJoinRequestTx mocks base method.
 func (m *MockStore) CancelGroupJoinRequestTx(ctx context.Context, arg db.CancelGroupJoinRequestTxParams) (db.CancelGroupJoinRequestTxResult, error) {
 	m.ctrl.T.Helper()

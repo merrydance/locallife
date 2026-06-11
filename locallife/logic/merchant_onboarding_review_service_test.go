@@ -432,6 +432,58 @@ func TestMerchantOnboardingReviewServiceProcessSubmittedApplication_CompletesExi
 	require.Equal(t, "auto_approved", summary["reason_code"])
 }
 
+func TestMerchantOnboardingReviewServiceProcessSubmittedApplication_CancelSupersededRunUpdatesSummary(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	service := NewMerchantOnboardingReviewService(store, NewOnboardingReviewService(store), nil)
+	application := merchantReviewTestApplication()
+	application.Status = db.MerchantApplicationStatusDraft
+	existingRunID := int64(904)
+	cancelledAt := time.Date(2026, 6, 11, 9, 30, 0, 0, time.UTC)
+
+	store.EXPECT().
+		CancelOnboardingReviewRun(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.CancelOnboardingReviewRunParams) (db.OnboardingReviewRun, error) {
+			require.Equal(t, existingRunID, arg.ID)
+			require.Equal(t, db.OnboardingReviewReasonSupersededByEdit, arg.ReasonCode.String)
+			require.Contains(t, arg.ReasonMessage.String, "重新编辑")
+			return db.OnboardingReviewRun{
+				ID:                    existingRunID,
+				ApplicationType:       "merchant",
+				MerchantApplicationID: pgtype.Int8{Int64: application.ID, Valid: true},
+				RunStatus:             db.OnboardingReviewRunStatusCancelled,
+				Stage:                 "review",
+				Outcome:               pgtype.Text{String: db.OnboardingReviewOutcomeNeedsResubmit, Valid: true},
+				ReasonCode:            arg.ReasonCode,
+				ReasonMessage:         arg.ReasonMessage,
+				CreatedAt:             cancelledAt,
+				UpdatedAt:             cancelledAt,
+			}, nil
+		})
+
+	store.EXPECT().
+		UpdateMerchantApplicationReviewSummary(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.UpdateMerchantApplicationReviewSummaryParams) (db.MerchantApplication, error) {
+			require.Equal(t, application.ID, arg.ID)
+			var summary map[string]any
+			require.NoError(t, json.Unmarshal(arg.ReviewSummary, &summary))
+			require.Equal(t, float64(existingRunID), summary["run_id"])
+			require.Equal(t, db.OnboardingReviewOutcomeNeedsResubmit, summary["outcome"])
+			require.Equal(t, db.OnboardingReviewReasonSupersededByEdit, summary["reason_code"])
+			require.Contains(t, summary["reason_message"], "重新提交")
+			application.ReviewSummary = arg.ReviewSummary
+			return application, nil
+		})
+
+	result, err := service.ProcessSubmittedApplication(context.Background(), application, application.UserID, &existingRunID)
+	require.NoError(t, err)
+	require.NotNil(t, result.ReviewRun)
+	require.Equal(t, db.OnboardingReviewRunStatusCancelled, result.ReviewRun.RunStatus)
+	require.NotEmpty(t, result.Application.ReviewSummary)
+}
+
 func TestBuildMerchantApprovalTxParams_IncludesImagePayloads(t *testing.T) {
 	application := merchantReviewTestApplication()
 

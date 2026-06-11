@@ -68,6 +68,7 @@ type Querier interface {
 	BatchCreateRiderLocations(ctx context.Context, arg []BatchCreateRiderLocationsParams) (int64, error)
 	// 批量更新菜品上下架状态（只更新属于指定商户的菜品）
 	BatchUpdateDishOnlineStatus(ctx context.Context, arg BatchUpdateDishOnlineStatusParams) ([]int64, error)
+	CancelActiveMerchantOnboardingReviewRunsForApplication(ctx context.Context, arg CancelActiveMerchantOnboardingReviewRunsForApplicationParams) ([]OnboardingReviewRun, error)
 	// 商户熔断时自动取消所有未来的预订
 	CancelMerchantFutureReservations(ctx context.Context, arg CancelMerchantFutureReservationsParams) (int64, error)
 	CancelOnboardingReviewRun(ctx context.Context, arg CancelOnboardingReviewRunParams) (OnboardingReviewRun, error)

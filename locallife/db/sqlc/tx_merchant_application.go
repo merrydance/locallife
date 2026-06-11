@@ -2,11 +2,24 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+type onboardingReviewRunSummary struct {
+	RunID         int64    `json:"run_id"`
+	Stage         string   `json:"stage"`
+	Outcome       string   `json:"outcome"`
+	ReasonCode    string   `json:"reason_code"`
+	ReasonMessage string   `json:"reason_message,omitempty"`
+	RuleHits      []string `json:"rule_hits,omitempty"`
+	OCRJobRefs    []int64  `json:"ocr_job_refs,omitempty"`
+	CreatedAt     string   `json:"created_at"`
+}
 
 // ApproveMerchantApplicationTxParams contains input parameters for approving merchant application
 type ApproveMerchantApplicationTxParams struct {
@@ -206,8 +219,9 @@ type ResetMerchantApplicationTxParams struct {
 
 // ResetMerchantApplicationTxResult contains the result of reset transaction
 type ResetMerchantApplicationTxResult struct {
-	Application MerchantApplication
-	Merchant    Merchant
+	Application         MerchantApplication
+	Merchant            Merchant
+	CancelledReviewRuns []OnboardingReviewRun
 }
 
 // ResetMerchantApplicationTx resets a merchant application to draft status
@@ -224,7 +238,32 @@ func (store *SQLStore) ResetMerchantApplicationTx(ctx context.Context, arg Reset
 			return fmt.Errorf("reset application: %w", err)
 		}
 
-		// Step 2: 如果商户记录已存在，仅在非 active/approved 状态下改为 pending
+		// Step 2: 明确编辑/重置会使当前排队审核过期，避免旧 worker 之后重试漂移。
+		result.CancelledReviewRuns, err = q.CancelActiveMerchantOnboardingReviewRunsForApplication(ctx, CancelActiveMerchantOnboardingReviewRunsForApplicationParams{
+			Outcome:               pgtype.Text{String: OnboardingReviewOutcomeNeedsResubmit, Valid: true},
+			ReasonCode:            pgtype.Text{String: OnboardingReviewReasonSupersededByEdit, Valid: true},
+			ReasonMessage:         pgtype.Text{String: OnboardingReviewReasonMessageSupersededByEdit, Valid: true},
+			MerchantApplicationID: pgtype.Int8{Int64: arg.ApplicationID, Valid: true},
+		})
+		if err != nil {
+			return fmt.Errorf("cancel active merchant onboarding review runs: %w", err)
+		}
+		if len(result.CancelledReviewRuns) > 0 {
+			latestRun := latestOnboardingReviewRun(result.CancelledReviewRuns)
+			summaryJSON, err := onboardingReviewRunSummaryJSON(latestRun)
+			if err != nil {
+				return fmt.Errorf("build superseded onboarding review summary: %w", err)
+			}
+			result.Application, err = q.UpdateMerchantApplicationReviewSummary(ctx, UpdateMerchantApplicationReviewSummaryParams{
+				ID:            result.Application.ID,
+				ReviewSummary: summaryJSON,
+			})
+			if err != nil {
+				return fmt.Errorf("update merchant application review summary: %w", err)
+			}
+		}
+
+		// Step 3: 如果商户记录已存在，仅在非 active/approved 状态下改为 pending
 		merchant, err := q.GetMerchantByOwner(ctx, arg.UserID)
 		if err == nil {
 			if merchant.Status != "active" && merchant.Status != "approved" {
@@ -244,4 +283,28 @@ func (store *SQLStore) ResetMerchantApplicationTx(ctx context.Context, arg Reset
 	})
 
 	return result, err
+}
+
+func latestOnboardingReviewRun(runs []OnboardingReviewRun) OnboardingReviewRun {
+	latest := runs[0]
+	for _, run := range runs[1:] {
+		if run.CreatedAt.After(latest.CreatedAt) || (run.CreatedAt.Equal(latest.CreatedAt) && run.ID > latest.ID) {
+			latest = run
+		}
+	}
+	return latest
+}
+
+func onboardingReviewRunSummaryJSON(run OnboardingReviewRun) ([]byte, error) {
+	summary := onboardingReviewRunSummary{
+		RunID:         run.ID,
+		Stage:         run.Stage,
+		Outcome:       run.Outcome.String,
+		ReasonCode:    run.ReasonCode.String,
+		ReasonMessage: run.ReasonMessage.String,
+		RuleHits:      append([]string(nil), run.RuleHits...),
+		OCRJobRefs:    append([]int64(nil), run.OcrJobRefs...),
+		CreatedAt:     run.CreatedAt.UTC().Format(time.RFC3339),
+	}
+	return json.Marshal(summary)
 }
