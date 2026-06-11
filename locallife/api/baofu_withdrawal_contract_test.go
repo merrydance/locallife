@@ -619,7 +619,7 @@ func TestCreateMerchantBaofuWithdrawalReplaysSameIdempotencyKey(t *testing.T) {
 			UpdatedAt:              createdAt,
 		}, nil)
 	store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), gomock.Any()).Times(0)
-	store.EXPECT().CreateBaofuWithdrawalOrder(gomock.Any(), gomock.Any()).Times(0)
+	store.EXPECT().CreateBaofuWithdrawalOrderWithSubmittedCommandTx(gomock.Any(), gomock.Any()).Times(0)
 	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).Times(0)
 
 	client := &fakeAPIBaofuWithdrawClient{}
@@ -674,7 +674,7 @@ func TestCreateMerchantBaofuWithdrawalRejectsConflictingIdempotencyKey(t *testin
 			IdempotencyRequestHash: pgtype.Text{String: baofuWithdrawalIdempotencyHashForTest(db.BaofuAccountOwnerTypeMerchant, merchant.ID, 1200), Valid: true},
 		}, nil)
 	store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), gomock.Any()).Times(0)
-	store.EXPECT().CreateBaofuWithdrawalOrder(gomock.Any(), gomock.Any()).Times(0)
+	store.EXPECT().CreateBaofuWithdrawalOrderWithSubmittedCommandTx(gomock.Any(), gomock.Any()).Times(0)
 	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).Times(0)
 
 	client := &fakeAPIBaofuWithdrawClient{}
@@ -727,26 +727,29 @@ func TestCreateMerchantBaofuWithdrawalManagerCanCreate(t *testing.T) {
 		Return(binding, nil)
 	expectNoBaofuWithdrawalIdempotency(store, db.BaofuAccountOwnerTypeMerchant, merchant.ID, "manager-withdraw-1")
 	store.EXPECT().
-		CreateBaofuWithdrawalOrder(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, arg db.CreateBaofuWithdrawalOrderParams) (db.BaofuWithdrawalOrder, error) {
-			require.Equal(t, db.BaofuAccountOwnerTypeMerchant, arg.OwnerType)
-			require.Equal(t, merchant.ID, arg.OwnerID)
-			require.Equal(t, int64(1200), arg.Amount)
-			require.Equal(t, pgtype.Text{String: "manager-withdraw-1", Valid: true}, arg.IdempotencyKey)
-			require.True(t, arg.IdempotencyRequestHash.Valid)
-			capturedOutRequestNo = arg.OutRequestNo
-			return db.BaofuWithdrawalOrder{
-				ID:                     191,
-				OwnerType:              arg.OwnerType,
-				OwnerID:                arg.OwnerID,
-				AccountBindingID:       arg.AccountBindingID,
-				OutRequestNo:           arg.OutRequestNo,
-				Amount:                 arg.Amount,
-				Status:                 arg.Status,
-				IdempotencyKey:         arg.IdempotencyKey,
-				IdempotencyRequestHash: arg.IdempotencyRequestHash,
-				CreatedAt:              createdAt,
-				UpdatedAt:              createdAt,
+		CreateBaofuWithdrawalOrderWithSubmittedCommandTx(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.CreateBaofuWithdrawalOrderWithSubmittedCommandTxParams) (db.CreateBaofuWithdrawalOrderWithSubmittedCommandTxResult, error) {
+			require.Equal(t, db.BaofuAccountOwnerTypeMerchant, arg.WithdrawalOrder.OwnerType)
+			require.Equal(t, merchant.ID, arg.WithdrawalOrder.OwnerID)
+			require.Equal(t, int64(1200), arg.WithdrawalOrder.Amount)
+			require.Equal(t, pgtype.Text{String: "manager-withdraw-1", Valid: true}, arg.WithdrawalOrder.IdempotencyKey)
+			require.True(t, arg.WithdrawalOrder.IdempotencyRequestHash.Valid)
+			capturedOutRequestNo = arg.WithdrawalOrder.OutRequestNo
+			return db.CreateBaofuWithdrawalOrderWithSubmittedCommandTxResult{
+				WithdrawalOrder: db.BaofuWithdrawalOrder{
+					ID:                     191,
+					OwnerType:              arg.WithdrawalOrder.OwnerType,
+					OwnerID:                arg.WithdrawalOrder.OwnerID,
+					AccountBindingID:       arg.WithdrawalOrder.AccountBindingID,
+					OutRequestNo:           arg.WithdrawalOrder.OutRequestNo,
+					Amount:                 arg.WithdrawalOrder.Amount,
+					Status:                 arg.WithdrawalOrder.Status,
+					IdempotencyKey:         arg.WithdrawalOrder.IdempotencyKey,
+					IdempotencyRequestHash: arg.WithdrawalOrder.IdempotencyRequestHash,
+					CreatedAt:              createdAt,
+					UpdatedAt:              createdAt,
+				},
+				SubmittedCommand: db.ExternalPaymentCommand{ID: 1901},
 			}, nil
 		})
 	store.EXPECT().
@@ -963,29 +966,32 @@ func TestCreateBaofuWithdrawalSubmitsProviderRequestAndReturnsProcessingOrder(t 
 		Return(binding, nil)
 	expectNoBaofuWithdrawalIdempotency(store, db.BaofuAccountOwnerTypeMerchant, merchant.ID, "withdraw-success-1")
 	store.EXPECT().
-		CreateBaofuWithdrawalOrder(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, arg db.CreateBaofuWithdrawalOrderParams) (db.BaofuWithdrawalOrder, error) {
-			require.Equal(t, db.BaofuAccountOwnerTypeMerchant, arg.OwnerType)
-			require.Equal(t, merchant.ID, arg.OwnerID)
-			require.Equal(t, binding.ID, arg.AccountBindingID)
-			require.Equal(t, int64(1200), arg.Amount)
-			require.Equal(t, db.BaofuWithdrawalStatusProcessing, arg.Status)
-			require.True(t, strings.HasPrefix(arg.OutRequestNo, "MBW"), arg.OutRequestNo)
-			require.Equal(t, pgtype.Text{String: "withdraw-success-1", Valid: true}, arg.IdempotencyKey)
-			require.True(t, arg.IdempotencyRequestHash.Valid)
-			capturedOutRequestNo = arg.OutRequestNo
-			return db.BaofuWithdrawalOrder{
-				ID:                     91,
-				OwnerType:              arg.OwnerType,
-				OwnerID:                arg.OwnerID,
-				AccountBindingID:       arg.AccountBindingID,
-				OutRequestNo:           arg.OutRequestNo,
-				Amount:                 arg.Amount,
-				Status:                 arg.Status,
-				IdempotencyKey:         arg.IdempotencyKey,
-				IdempotencyRequestHash: arg.IdempotencyRequestHash,
-				CreatedAt:              createdAt,
-				UpdatedAt:              createdAt,
+		CreateBaofuWithdrawalOrderWithSubmittedCommandTx(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.CreateBaofuWithdrawalOrderWithSubmittedCommandTxParams) (db.CreateBaofuWithdrawalOrderWithSubmittedCommandTxResult, error) {
+			require.Equal(t, db.BaofuAccountOwnerTypeMerchant, arg.WithdrawalOrder.OwnerType)
+			require.Equal(t, merchant.ID, arg.WithdrawalOrder.OwnerID)
+			require.Equal(t, binding.ID, arg.WithdrawalOrder.AccountBindingID)
+			require.Equal(t, int64(1200), arg.WithdrawalOrder.Amount)
+			require.Equal(t, db.BaofuWithdrawalStatusProcessing, arg.WithdrawalOrder.Status)
+			require.True(t, strings.HasPrefix(arg.WithdrawalOrder.OutRequestNo, "MBW"), arg.WithdrawalOrder.OutRequestNo)
+			require.Equal(t, pgtype.Text{String: "withdraw-success-1", Valid: true}, arg.WithdrawalOrder.IdempotencyKey)
+			require.True(t, arg.WithdrawalOrder.IdempotencyRequestHash.Valid)
+			capturedOutRequestNo = arg.WithdrawalOrder.OutRequestNo
+			return db.CreateBaofuWithdrawalOrderWithSubmittedCommandTxResult{
+				WithdrawalOrder: db.BaofuWithdrawalOrder{
+					ID:                     91,
+					OwnerType:              arg.WithdrawalOrder.OwnerType,
+					OwnerID:                arg.WithdrawalOrder.OwnerID,
+					AccountBindingID:       arg.WithdrawalOrder.AccountBindingID,
+					OutRequestNo:           arg.WithdrawalOrder.OutRequestNo,
+					Amount:                 arg.WithdrawalOrder.Amount,
+					Status:                 arg.WithdrawalOrder.Status,
+					IdempotencyKey:         arg.WithdrawalOrder.IdempotencyKey,
+					IdempotencyRequestHash: arg.WithdrawalOrder.IdempotencyRequestHash,
+					CreatedAt:              createdAt,
+					UpdatedAt:              createdAt,
+				},
+				SubmittedCommand: db.ExternalPaymentCommand{ID: 901},
 			}, nil
 		})
 	store.EXPECT().
@@ -1070,21 +1076,24 @@ func TestCreateBaofuWithdrawalRejectedAcceptanceReturnsConflict(t *testing.T) {
 		Return(binding, nil)
 	expectNoBaofuWithdrawalIdempotency(store, db.BaofuAccountOwnerTypeMerchant, merchant.ID, "withdraw-rejected-1")
 	store.EXPECT().
-		CreateBaofuWithdrawalOrder(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, arg db.CreateBaofuWithdrawalOrderParams) (db.BaofuWithdrawalOrder, error) {
-			capturedOutRequestNo = arg.OutRequestNo
-			return db.BaofuWithdrawalOrder{
-				ID:                     91,
-				OwnerType:              arg.OwnerType,
-				OwnerID:                arg.OwnerID,
-				AccountBindingID:       arg.AccountBindingID,
-				OutRequestNo:           arg.OutRequestNo,
-				Amount:                 arg.Amount,
-				Status:                 arg.Status,
-				IdempotencyKey:         arg.IdempotencyKey,
-				IdempotencyRequestHash: arg.IdempotencyRequestHash,
-				CreatedAt:              createdAt,
-				UpdatedAt:              createdAt,
+		CreateBaofuWithdrawalOrderWithSubmittedCommandTx(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.CreateBaofuWithdrawalOrderWithSubmittedCommandTxParams) (db.CreateBaofuWithdrawalOrderWithSubmittedCommandTxResult, error) {
+			capturedOutRequestNo = arg.WithdrawalOrder.OutRequestNo
+			return db.CreateBaofuWithdrawalOrderWithSubmittedCommandTxResult{
+				WithdrawalOrder: db.BaofuWithdrawalOrder{
+					ID:                     91,
+					OwnerType:              arg.WithdrawalOrder.OwnerType,
+					OwnerID:                arg.WithdrawalOrder.OwnerID,
+					AccountBindingID:       arg.WithdrawalOrder.AccountBindingID,
+					OutRequestNo:           arg.WithdrawalOrder.OutRequestNo,
+					Amount:                 arg.WithdrawalOrder.Amount,
+					Status:                 arg.WithdrawalOrder.Status,
+					IdempotencyKey:         arg.WithdrawalOrder.IdempotencyKey,
+					IdempotencyRequestHash: arg.WithdrawalOrder.IdempotencyRequestHash,
+					CreatedAt:              createdAt,
+					UpdatedAt:              createdAt,
+				},
+				SubmittedCommand: db.ExternalPaymentCommand{ID: 902},
 			}, nil
 		})
 	store.EXPECT().
@@ -1166,21 +1175,24 @@ func TestCreateBaofuWithdrawalUnknownProviderResultReturnsAcceptedWithProcessing
 		Return(binding, nil)
 	expectNoBaofuWithdrawalIdempotency(store, db.BaofuAccountOwnerTypeMerchant, merchant.ID, "withdraw-unknown-1")
 	store.EXPECT().
-		CreateBaofuWithdrawalOrder(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, arg db.CreateBaofuWithdrawalOrderParams) (db.BaofuWithdrawalOrder, error) {
-			capturedOutRequestNo = arg.OutRequestNo
-			return db.BaofuWithdrawalOrder{
-				ID:                     91,
-				OwnerType:              arg.OwnerType,
-				OwnerID:                arg.OwnerID,
-				AccountBindingID:       arg.AccountBindingID,
-				OutRequestNo:           arg.OutRequestNo,
-				Amount:                 arg.Amount,
-				Status:                 arg.Status,
-				IdempotencyKey:         arg.IdempotencyKey,
-				IdempotencyRequestHash: arg.IdempotencyRequestHash,
-				CreatedAt:              createdAt,
-				UpdatedAt:              createdAt,
+		CreateBaofuWithdrawalOrderWithSubmittedCommandTx(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.CreateBaofuWithdrawalOrderWithSubmittedCommandTxParams) (db.CreateBaofuWithdrawalOrderWithSubmittedCommandTxResult, error) {
+			capturedOutRequestNo = arg.WithdrawalOrder.OutRequestNo
+			return db.CreateBaofuWithdrawalOrderWithSubmittedCommandTxResult{
+				WithdrawalOrder: db.BaofuWithdrawalOrder{
+					ID:                     91,
+					OwnerType:              arg.WithdrawalOrder.OwnerType,
+					OwnerID:                arg.WithdrawalOrder.OwnerID,
+					AccountBindingID:       arg.WithdrawalOrder.AccountBindingID,
+					OutRequestNo:           arg.WithdrawalOrder.OutRequestNo,
+					Amount:                 arg.WithdrawalOrder.Amount,
+					Status:                 arg.WithdrawalOrder.Status,
+					IdempotencyKey:         arg.WithdrawalOrder.IdempotencyKey,
+					IdempotencyRequestHash: arg.WithdrawalOrder.IdempotencyRequestHash,
+					CreatedAt:              createdAt,
+					UpdatedAt:              createdAt,
+				},
+				SubmittedCommand: db.ExternalPaymentCommand{ID: 903},
 			}, nil
 		})
 	store.EXPECT().

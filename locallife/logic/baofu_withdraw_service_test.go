@@ -16,11 +16,12 @@ import (
 )
 
 type baofuWithdrawClientRecorder struct {
-	balanceReq  baofucontracts.BalanceQueryRequest
-	withdrawReq baofucontracts.WithdrawRequest
-	withdrawRes *baofucontracts.WithdrawResult
-	withdrawErr error
-	balanceRes  *baofucontracts.BalanceResult
+	balanceReq           baofucontracts.BalanceQueryRequest
+	withdrawReq          baofucontracts.WithdrawRequest
+	withdrawRes          *baofucontracts.WithdrawResult
+	withdrawErr          error
+	balanceRes           *baofucontracts.BalanceResult
+	beforeCreateWithdraw func()
 }
 
 func (c *baofuWithdrawClientRecorder) OpenAccount(context.Context, baofucontracts.OpenAccountRequest) (*baofucontracts.AccountResult, error) {
@@ -37,6 +38,9 @@ func (c *baofuWithdrawClientRecorder) QueryBalance(_ context.Context, req baofuc
 }
 
 func (c *baofuWithdrawClientRecorder) CreateWithdraw(_ context.Context, req baofucontracts.WithdrawRequest) (*baofucontracts.WithdrawResult, error) {
+	if c.beforeCreateWithdraw != nil {
+		c.beforeCreateWithdraw()
+	}
 	c.withdrawReq = req
 	return c.withdrawRes, c.withdrawErr
 }
@@ -145,24 +149,32 @@ func TestBaofuWithdrawServiceCreateWithdrawalUsesPayoutMerchantAndRecordsCommand
 		OwnerID:   binding.OwnerID,
 	}).Return(binding, nil)
 	expectNoBaofuWithdrawalIdempotencyInLogic(store, binding.OwnerType, binding.OwnerID, "withdraw-service-1")
-	store.EXPECT().CreateBaofuWithdrawalOrder(gomock.Any(), db.CreateBaofuWithdrawalOrderParams{
-		OwnerType:        binding.OwnerType,
-		OwnerID:          binding.OwnerID,
-		AccountBindingID: binding.ID,
-		OutRequestNo:     "WD_OUT_001",
-		Amount:           1200,
-		Status:           db.BaofuWithdrawalStatusProcessing,
-		RawSnapshot:      []byte(`{"state":"submitted"}`),
-		IdempotencyKey: pgtype.Text{
-			String: "withdraw-service-1",
-			Valid:  true,
+	store.EXPECT().CreateBaofuWithdrawalOrderWithSubmittedCommandTx(gomock.Any(), db.CreateBaofuWithdrawalOrderWithSubmittedCommandTxParams{
+		WithdrawalOrder: db.CreateBaofuWithdrawalOrderParams{
+			OwnerType:        binding.OwnerType,
+			OwnerID:          binding.OwnerID,
+			AccountBindingID: binding.ID,
+			OutRequestNo:     "WD_OUT_001",
+			Amount:           1200,
+			Status:           db.BaofuWithdrawalStatusProcessing,
+			RawSnapshot:      []byte(`{"state":"submitted"}`),
+			IdempotencyKey: pgtype.Text{
+				String: "withdraw-service-1",
+				Valid:  true,
+			},
+			IdempotencyRequestHash: pgtype.Text{
+				String: baofuWithdrawalCreateRequestHash(binding.OwnerType, binding.OwnerID, 1200),
+				Valid:  true,
+			},
 		},
-		IdempotencyRequestHash: pgtype.Text{
-			String: baofuWithdrawalCreateRequestHash(binding.OwnerType, binding.OwnerID, 1200),
-			Valid:  true,
-		},
-	}).Return(withdrawal, nil)
+		BusinessOwner: db.ExternalPaymentBusinessOwnerRiderIncome,
+		SubmittedAt:   time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC),
+	}).Return(db.CreateBaofuWithdrawalOrderWithSubmittedCommandTxResult{
+		WithdrawalOrder:  withdrawal,
+		SubmittedCommand: db.ExternalPaymentCommand{ID: 101},
+	}, nil)
 	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
+		require.Equal(t, db.ExternalPaymentCommandStatusAccepted, arg.CommandStatus)
 		require.Equal(t, db.ExternalPaymentProviderBaofu, arg.Provider)
 		require.Equal(t, db.PaymentChannelBaofuAggregate, arg.Channel)
 		require.Equal(t, db.ExternalPaymentCapabilityBaofuWithdraw, arg.Capability)
@@ -197,6 +209,94 @@ func TestBaofuWithdrawServiceCreateWithdrawalUsesPayoutMerchantAndRecordsCommand
 	require.Equal(t, "https://api.example.com/v1/webhooks/baofu/withdraw", client.withdrawReq.NotifyURL)
 }
 
+func TestBaofuWithdrawServiceCreateWithdrawalRecordsSubmittedCommandBeforeProviderCall(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	submittedCommandRecorded := false
+	client := &baofuWithdrawClientRecorder{
+		balanceRes: &baofucontracts.BalanceResult{ContractNo: "CM_BINDING", AvailableAmountFen: 5000},
+		withdrawRes: &baofucontracts.WithdrawResult{
+			TransSerialNo:   "WD_OUT_SUBMITTED_FIRST",
+			BaofuWithdrawNo: "BF_WITHDRAW_SUBMITTED_FIRST",
+			ContractNo:      "CM_BINDING",
+			UpstreamState:   "1",
+			Status:          db.BaofuWithdrawalStatusProcessing,
+			Raw:             []byte(`{"state":"1"}`),
+		},
+		beforeCreateWithdraw: func() {
+			require.True(t, submittedCommandRecorded, "submitted command must be durable before provider create")
+		},
+	}
+	service := NewBaofuWithdrawService(store, client, BaofuWithdrawServiceConfig{
+		CollectMerchantID: "COLLECT_MER",
+		CollectTerminalID: "COLLECT_TER",
+		PayoutMerchantID:  "PAYOUT_MER",
+		PayoutTerminalID:  "PAYOUT_TER",
+		WithdrawNotifyURL: "https://api.example.com/v1/webhooks/baofu/withdraw",
+	})
+	service.now = func() time.Time { return time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC) }
+
+	binding := db.BaofuAccountBinding{
+		ID:           81,
+		OwnerType:    db.BaofuAccountOwnerTypeRider,
+		OwnerID:      9,
+		AccountType:  db.BaofuAccountTypePersonal,
+		OpenState:    db.BaofuAccountOpenStateActive,
+		ContractNo:   pgtype.Text{String: "CM_BINDING", Valid: true},
+		SharingMerID: pgtype.Text{String: "RIDER_SHARE_001", Valid: true},
+	}
+	withdrawal := db.BaofuWithdrawalOrder{
+		ID:               91,
+		OwnerType:        binding.OwnerType,
+		OwnerID:          binding.OwnerID,
+		AccountBindingID: binding.ID,
+		OutRequestNo:     "WD_OUT_SUBMITTED_FIRST",
+		Amount:           1200,
+		Status:           db.BaofuWithdrawalStatusProcessing,
+	}
+
+	store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
+		OwnerType: binding.OwnerType,
+		OwnerID:   binding.OwnerID,
+	}).Return(binding, nil)
+	expectNoBaofuWithdrawalIdempotencyInLogic(store, binding.OwnerType, binding.OwnerID, "withdraw-submitted-first")
+	store.EXPECT().CreateBaofuWithdrawalOrderWithSubmittedCommandTx(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateBaofuWithdrawalOrderWithSubmittedCommandTxParams) (db.CreateBaofuWithdrawalOrderWithSubmittedCommandTxResult, error) {
+		submittedCommandRecorded = true
+		require.Equal(t, db.ExternalPaymentBusinessOwnerRiderIncome, arg.BusinessOwner)
+		require.Equal(t, time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC), arg.SubmittedAt)
+		require.Equal(t, withdrawal.OutRequestNo, arg.WithdrawalOrder.OutRequestNo)
+		return db.CreateBaofuWithdrawalOrderWithSubmittedCommandTxResult{
+			WithdrawalOrder:  withdrawal,
+			SubmittedCommand: db.ExternalPaymentCommand{ID: 101},
+		}, nil
+	})
+	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
+		if arg.CommandStatus == db.ExternalPaymentCommandStatusSubmitted {
+			require.True(t, submittedCommandRecorded, "submitted tx must commit before provider create")
+		}
+		require.Equal(t, db.ExternalPaymentCommandStatusAccepted, arg.CommandStatus)
+		return db.ExternalPaymentCommand{ID: 101}, nil
+	})
+	store.EXPECT().UpdateBaofuWithdrawalOrderToProcessing(gomock.Any(), db.UpdateBaofuWithdrawalOrderToProcessingParams{
+		ID:              withdrawal.ID,
+		BaofuWithdrawNo: pgtype.Text{String: "BF_WITHDRAW_SUBMITTED_FIRST", Valid: true},
+		RawSnapshot:     []byte(`{"state":"1"}`),
+	}).Return(withdrawal, nil)
+
+	result, err := service.CreateWithdrawal(context.Background(), BaofuCreateWithdrawalInput{
+		OwnerType:      binding.OwnerType,
+		OwnerID:        binding.OwnerID,
+		AmountFen:      1200,
+		OutRequestNo:   "WD_OUT_SUBMITTED_FIRST",
+		IdempotencyKey: "withdraw-submitted-first",
+	})
+	require.NoError(t, err)
+	require.Equal(t, withdrawal.ID, result.WithdrawalOrder.ID)
+	require.True(t, submittedCommandRecorded)
+}
+
 func TestBaofuWithdrawServiceCreateWithdrawalRejectsInsufficientBalanceBeforeOrder(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -226,7 +326,7 @@ func TestBaofuWithdrawServiceCreateWithdrawalRejectsInsufficientBalanceBeforeOrd
 		SharingMerID: pgtype.Text{String: "RIDER_SHARE_001", Valid: true},
 	}, nil)
 	expectNoBaofuWithdrawalIdempotencyInLogic(store, db.BaofuAccountOwnerTypeRider, 9, "withdraw-insufficient-1")
-	store.EXPECT().CreateBaofuWithdrawalOrder(gomock.Any(), gomock.Any()).Times(0)
+	store.EXPECT().CreateBaofuWithdrawalOrderWithSubmittedCommandTx(gomock.Any(), gomock.Any()).Times(0)
 
 	_, err := service.CreateWithdrawal(context.Background(), BaofuCreateWithdrawalInput{
 		OwnerType:      db.BaofuAccountOwnerTypeRider,
@@ -267,7 +367,7 @@ func TestBaofuWithdrawServiceCreateWithdrawalRequiresFeeMemberIDBeforeOrder(t *t
 		ContractNo:  pgtype.Text{String: "CM_BINDING", Valid: true},
 	}, nil)
 	expectNoBaofuWithdrawalIdempotencyInLogic(store, db.BaofuAccountOwnerTypeRider, 9, "withdraw-missing-fee-1")
-	store.EXPECT().CreateBaofuWithdrawalOrder(gomock.Any(), gomock.Any()).Times(0)
+	store.EXPECT().CreateBaofuWithdrawalOrderWithSubmittedCommandTx(gomock.Any(), gomock.Any()).Times(0)
 
 	_, err := service.CreateWithdrawal(context.Background(), BaofuCreateWithdrawalInput{
 		OwnerType:      db.BaofuAccountOwnerTypeRider,
@@ -312,7 +412,7 @@ func TestBaofuWithdrawServiceCreateWithdrawalReplaysSameIdempotencyKeyWithoutPro
 		IdempotencyKey: pgtype.Text{String: "withdraw-replay-1", Valid: true},
 	}).Return(existing, nil)
 	store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), gomock.Any()).Times(0)
-	store.EXPECT().CreateBaofuWithdrawalOrder(gomock.Any(), gomock.Any()).Times(0)
+	store.EXPECT().CreateBaofuWithdrawalOrderWithSubmittedCommandTx(gomock.Any(), gomock.Any()).Times(0)
 	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).Times(0)
 
 	result, err := service.CreateWithdrawal(context.Background(), BaofuCreateWithdrawalInput{
@@ -358,7 +458,7 @@ func TestBaofuWithdrawServiceCreateWithdrawalRejectsConflictingIdempotencyKey(t 
 		IdempotencyKey: pgtype.Text{String: "withdraw-conflict-1", Valid: true},
 	}).Return(existing, nil)
 	store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), gomock.Any()).Times(0)
-	store.EXPECT().CreateBaofuWithdrawalOrder(gomock.Any(), gomock.Any()).Times(0)
+	store.EXPECT().CreateBaofuWithdrawalOrderWithSubmittedCommandTx(gomock.Any(), gomock.Any()).Times(0)
 
 	_, err := service.CreateWithdrawal(context.Background(), BaofuCreateWithdrawalInput{
 		OwnerType:      db.BaofuAccountOwnerTypeMerchant,
@@ -424,7 +524,10 @@ func TestBaofuWithdrawServiceCreateMerchantWithdrawalRecordsMerchantFundsOwner(t
 		OwnerID:   binding.OwnerID,
 	}).Return(binding, nil)
 	expectNoBaofuWithdrawalIdempotencyInLogic(store, binding.OwnerType, binding.OwnerID, "withdraw-merchant-funds-1")
-	store.EXPECT().CreateBaofuWithdrawalOrder(gomock.Any(), gomock.Any()).Return(withdrawal, nil)
+	store.EXPECT().CreateBaofuWithdrawalOrderWithSubmittedCommandTx(gomock.Any(), gomock.Any()).Return(db.CreateBaofuWithdrawalOrderWithSubmittedCommandTxResult{
+		WithdrawalOrder:  withdrawal,
+		SubmittedCommand: db.ExternalPaymentCommand{ID: 102},
+	}, nil)
 	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
 		require.Equal(t, db.ExternalPaymentBusinessOwnerMerchantFunds, arg.BusinessOwner)
 		require.Equal(t, db.ExternalPaymentCapabilityBaofuWithdraw, arg.Capability)
@@ -496,23 +599,30 @@ func TestBaofuWithdrawServiceCreateWithdrawalMarksRejectedAcceptanceFailed(t *te
 		OwnerID:   binding.OwnerID,
 	}).Return(binding, nil)
 	expectNoBaofuWithdrawalIdempotencyInLogic(store, binding.OwnerType, binding.OwnerID, "withdraw-rejected-1")
-	store.EXPECT().CreateBaofuWithdrawalOrder(gomock.Any(), db.CreateBaofuWithdrawalOrderParams{
-		OwnerType:        binding.OwnerType,
-		OwnerID:          binding.OwnerID,
-		AccountBindingID: binding.ID,
-		OutRequestNo:     "WD_REJECTED_001",
-		Amount:           1200,
-		Status:           db.BaofuWithdrawalStatusProcessing,
-		RawSnapshot:      []byte(`{"state":"submitted"}`),
-		IdempotencyKey: pgtype.Text{
-			String: "withdraw-rejected-1",
-			Valid:  true,
+	store.EXPECT().CreateBaofuWithdrawalOrderWithSubmittedCommandTx(gomock.Any(), db.CreateBaofuWithdrawalOrderWithSubmittedCommandTxParams{
+		WithdrawalOrder: db.CreateBaofuWithdrawalOrderParams{
+			OwnerType:        binding.OwnerType,
+			OwnerID:          binding.OwnerID,
+			AccountBindingID: binding.ID,
+			OutRequestNo:     "WD_REJECTED_001",
+			Amount:           1200,
+			Status:           db.BaofuWithdrawalStatusProcessing,
+			RawSnapshot:      []byte(`{"state":"submitted"}`),
+			IdempotencyKey: pgtype.Text{
+				String: "withdraw-rejected-1",
+				Valid:  true,
+			},
+			IdempotencyRequestHash: pgtype.Text{
+				String: baofuWithdrawalCreateRequestHash(binding.OwnerType, binding.OwnerID, 1200),
+				Valid:  true,
+			},
 		},
-		IdempotencyRequestHash: pgtype.Text{
-			String: baofuWithdrawalCreateRequestHash(binding.OwnerType, binding.OwnerID, 1200),
-			Valid:  true,
-		},
-	}).Return(withdrawal, nil)
+		BusinessOwner: db.ExternalPaymentBusinessOwnerRiderIncome,
+		SubmittedAt:   time.Date(2026, 5, 19, 12, 0, 0, 0, time.UTC),
+	}).Return(db.CreateBaofuWithdrawalOrderWithSubmittedCommandTxResult{
+		WithdrawalOrder:  withdrawal,
+		SubmittedCommand: db.ExternalPaymentCommand{ID: 103},
+	}, nil)
 	store.EXPECT().UpdateBaofuWithdrawalOrderStatus(gomock.Any(), db.UpdateBaofuWithdrawalOrderStatusParams{
 		ID:              withdrawal.ID,
 		Status:          db.BaofuWithdrawalStatusFailed,
@@ -599,7 +709,10 @@ func TestBaofuWithdrawServiceCreateWithdrawalReturnsUnknownAfterProviderError(t 
 		OwnerID:   binding.OwnerID,
 	}).Return(binding, nil)
 	expectNoBaofuWithdrawalIdempotencyInLogic(store, binding.OwnerType, binding.OwnerID, "withdraw-unknown-1")
-	store.EXPECT().CreateBaofuWithdrawalOrder(gomock.Any(), gomock.Any()).Return(withdrawal, nil)
+	store.EXPECT().CreateBaofuWithdrawalOrderWithSubmittedCommandTx(gomock.Any(), gomock.Any()).Return(db.CreateBaofuWithdrawalOrderWithSubmittedCommandTxResult{
+		WithdrawalOrder:  withdrawal,
+		SubmittedCommand: db.ExternalPaymentCommand{ID: 104},
+	}, nil)
 	store.EXPECT().UpdateBaofuWithdrawalOrderToProcessing(gomock.Any(), gomock.Any()).Times(0)
 	store.EXPECT().UpdateBaofuWithdrawalOrderStatus(gomock.Any(), gomock.Any()).Times(0)
 	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {

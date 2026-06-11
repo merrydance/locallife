@@ -31,7 +31,7 @@ var (
 type baofuWithdrawStore interface {
 	GetBaofuAccountBindingByOwner(ctx context.Context, arg db.GetBaofuAccountBindingByOwnerParams) (db.BaofuAccountBinding, error)
 	GetBaofuWithdrawalOrderByIdempotency(ctx context.Context, arg db.GetBaofuWithdrawalOrderByIdempotencyParams) (db.BaofuWithdrawalOrder, error)
-	CreateBaofuWithdrawalOrder(ctx context.Context, arg db.CreateBaofuWithdrawalOrderParams) (db.BaofuWithdrawalOrder, error)
+	CreateBaofuWithdrawalOrderWithSubmittedCommandTx(ctx context.Context, arg db.CreateBaofuWithdrawalOrderWithSubmittedCommandTxParams) (db.CreateBaofuWithdrawalOrderWithSubmittedCommandTxResult, error)
 	UpdateBaofuWithdrawalOrderToProcessing(ctx context.Context, arg db.UpdateBaofuWithdrawalOrderToProcessingParams) (db.BaofuWithdrawalOrder, error)
 	UpdateBaofuWithdrawalOrderStatus(ctx context.Context, arg db.UpdateBaofuWithdrawalOrderStatusParams) (db.BaofuWithdrawalOrder, error)
 	CreateExternalPaymentCommand(ctx context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error)
@@ -180,23 +180,27 @@ func (s *BaofuWithdrawService) CreateWithdrawal(ctx context.Context, input Baofu
 	if input.AmountFen > balance.AvailableAmountFen {
 		return result, ErrBaofuWithdrawInsufficientBalance
 	}
-	submittedSnapshot := []byte(`{"state":"submitted"}`)
-	withdrawalOrder, err := s.store.CreateBaofuWithdrawalOrder(ctx, db.CreateBaofuWithdrawalOrderParams{
-		OwnerType:        strings.TrimSpace(input.OwnerType),
-		OwnerID:          input.OwnerID,
-		AccountBindingID: binding.ID,
-		OutRequestNo:     outRequestNo,
-		Amount:           input.AmountFen,
-		Status:           db.BaofuWithdrawalStatusProcessing,
-		RawSnapshot:      submittedSnapshot,
-		IdempotencyKey: pgtype.Text{
-			String: idempotencyKey,
-			Valid:  true,
+	submittedAt := s.now().UTC()
+	submittedTxResult, err := s.store.CreateBaofuWithdrawalOrderWithSubmittedCommandTx(ctx, db.CreateBaofuWithdrawalOrderWithSubmittedCommandTxParams{
+		WithdrawalOrder: db.CreateBaofuWithdrawalOrderParams{
+			OwnerType:        strings.TrimSpace(input.OwnerType),
+			OwnerID:          input.OwnerID,
+			AccountBindingID: binding.ID,
+			OutRequestNo:     outRequestNo,
+			Amount:           input.AmountFen,
+			Status:           db.BaofuWithdrawalStatusProcessing,
+			RawSnapshot:      []byte(`{"state":"submitted"}`),
+			IdempotencyKey: pgtype.Text{
+				String: idempotencyKey,
+				Valid:  true,
+			},
+			IdempotencyRequestHash: pgtype.Text{
+				String: requestHash,
+				Valid:  true,
+			},
 		},
-		IdempotencyRequestHash: pgtype.Text{
-			String: requestHash,
-			Valid:  true,
-		},
+		BusinessOwner: businessOwnerForBaofuWithdrawal(input.OwnerType),
+		SubmittedAt:   submittedAt,
 	})
 	if err != nil {
 		if db.ErrorCode(err) == db.UniqueViolation {
@@ -204,7 +208,7 @@ func (s *BaofuWithdrawService) CreateWithdrawal(ctx context.Context, input Baofu
 		}
 		return result, err
 	}
-	result.WithdrawalOrder = withdrawalOrder
+	result.WithdrawalOrder = submittedTxResult.WithdrawalOrder
 	upstream, err := s.client.CreateWithdraw(ctx, baofucontracts.WithdrawRequest{
 		MerchantID:    cfg.PayoutMerchantID,
 		TerminalID:    cfg.PayoutTerminalID,
@@ -217,16 +221,16 @@ func (s *BaofuWithdrawService) CreateWithdrawal(ctx context.Context, input Baofu
 	if err != nil {
 		result.SyncState = "unknown"
 		result.UserMessage = "提现申请已提交，结果正在确认，请勿重复提交"
-		s.logBaofuWithdrawCreateUnknown(err, input, withdrawalOrder)
-		s.recordBaofuWithdrawCommand(ctx, input.OwnerType, withdrawalOrder, nil, db.ExternalPaymentCommandStatusUnknown, "create_withdraw_unknown", "provider create result unknown; recovery will query by out_request_no", err)
+		s.logBaofuWithdrawCreateUnknown(err, input, result.WithdrawalOrder)
+		s.recordBaofuWithdrawCommand(ctx, input.OwnerType, result.WithdrawalOrder, nil, db.ExternalPaymentCommandStatusUnknown, "create_withdraw_unknown", "provider create result unknown; recovery will query by out_request_no", err)
 		return result, fmt.Errorf("%w: %w", ErrBaofuWithdrawCreateResultUnknown, err)
 	}
 	if upstream == nil {
 		result.SyncState = "unknown"
 		result.UserMessage = "提现申请已提交，结果正在确认，请勿重复提交"
 		emptyErr := errors.New("baofu withdraw returned empty result")
-		s.logBaofuWithdrawCreateUnknown(emptyErr, input, withdrawalOrder)
-		s.recordBaofuWithdrawCommand(ctx, input.OwnerType, withdrawalOrder, nil, db.ExternalPaymentCommandStatusUnknown, "create_withdraw_unknown", "provider create result unknown; recovery will query by out_request_no", emptyErr)
+		s.logBaofuWithdrawCreateUnknown(emptyErr, input, result.WithdrawalOrder)
+		s.recordBaofuWithdrawCommand(ctx, input.OwnerType, result.WithdrawalOrder, nil, db.ExternalPaymentCommandStatusUnknown, "create_withdraw_unknown", "provider create result unknown; recovery will query by out_request_no", emptyErr)
 		return result, fmt.Errorf("%w: empty provider result", ErrBaofuWithdrawCreateResultUnknown)
 	}
 	raw := []byte(upstream.Raw)
@@ -238,7 +242,7 @@ func (s *BaofuWithdrawService) CreateWithdrawal(ctx context.Context, input Baofu
 	}
 	if upstream.Status == db.BaofuWithdrawalStatusFailed {
 		updated, updateErr := s.store.UpdateBaofuWithdrawalOrderStatus(ctx, db.UpdateBaofuWithdrawalOrderStatusParams{
-			ID:     withdrawalOrder.ID,
+			ID:     result.WithdrawalOrder.ID,
 			Status: db.BaofuWithdrawalStatusFailed,
 			BaofuWithdrawNo: pgtype.Text{
 				String: strings.TrimSpace(upstream.BaofuWithdrawNo),
@@ -251,7 +255,7 @@ func (s *BaofuWithdrawService) CreateWithdrawal(ctx context.Context, input Baofu
 				Err(updateErr).
 				Str("owner_type", strings.TrimSpace(input.OwnerType)).
 				Int64("owner_id", input.OwnerID).
-				Int64("baofu_withdrawal_order_id", withdrawalOrder.ID).
+				Int64("baofu_withdrawal_order_id", result.WithdrawalOrder.ID).
 				Str("out_request_no", outRequestNo).
 				Str("upstream_state", strings.TrimSpace(upstream.UpstreamState)).
 				Msg("mark baofu withdrawal create rejected failed")
@@ -263,7 +267,7 @@ func (s *BaofuWithdrawService) CreateWithdrawal(ctx context.Context, input Baofu
 		log.Warn().
 			Str("owner_type", strings.TrimSpace(input.OwnerType)).
 			Int64("owner_id", input.OwnerID).
-			Int64("baofu_withdrawal_order_id", withdrawalOrder.ID).
+			Int64("baofu_withdrawal_order_id", result.WithdrawalOrder.ID).
 			Str("out_request_no", outRequestNo).
 			Str("upstream_state", strings.TrimSpace(upstream.UpstreamState)).
 			Str("provider_error_code", "baofu_acceptance_rejected").
@@ -276,7 +280,7 @@ func (s *BaofuWithdrawService) CreateWithdrawal(ctx context.Context, input Baofu
 		return result, fmt.Errorf("unsupported baofu withdraw acceptance status %q", upstream.Status)
 	}
 	updated, err := s.store.UpdateBaofuWithdrawalOrderToProcessing(ctx, db.UpdateBaofuWithdrawalOrderToProcessingParams{
-		ID: withdrawalOrder.ID,
+		ID: result.WithdrawalOrder.ID,
 		BaofuWithdrawNo: pgtype.Text{
 			String: strings.TrimSpace(upstream.BaofuWithdrawNo),
 			Valid:  strings.TrimSpace(upstream.BaofuWithdrawNo) != "",

@@ -3467,6 +3467,21 @@ func (mr *MockStoreMockRecorder) CreateBaofuWithdrawalOrder(ctx, arg any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateBaofuWithdrawalOrder", reflect.TypeOf((*MockStore)(nil).CreateBaofuWithdrawalOrder), ctx, arg)
 }
 
+// CreateBaofuWithdrawalOrderWithSubmittedCommandTx mocks base method.
+func (m *MockStore) CreateBaofuWithdrawalOrderWithSubmittedCommandTx(ctx context.Context, arg db.CreateBaofuWithdrawalOrderWithSubmittedCommandTxParams) (db.CreateBaofuWithdrawalOrderWithSubmittedCommandTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateBaofuWithdrawalOrderWithSubmittedCommandTx", ctx, arg)
+	ret0, _ := ret[0].(db.CreateBaofuWithdrawalOrderWithSubmittedCommandTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateBaofuWithdrawalOrderWithSubmittedCommandTx indicates an expected call of CreateBaofuWithdrawalOrderWithSubmittedCommandTx.
+func (mr *MockStoreMockRecorder) CreateBaofuWithdrawalOrderWithSubmittedCommandTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateBaofuWithdrawalOrderWithSubmittedCommandTx", reflect.TypeOf((*MockStore)(nil).CreateBaofuWithdrawalOrderWithSubmittedCommandTx), ctx, arg)
+}
+
 // CreateBehaviorAction mocks base method.
 func (m *MockStore) CreateBehaviorAction(ctx context.Context, arg db.CreateBehaviorActionParams) (db.BehaviorAction, error) {
 	m.ctrl.T.Helper()
