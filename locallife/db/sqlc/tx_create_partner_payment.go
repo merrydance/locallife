@@ -98,7 +98,7 @@ func (store *SQLStore) CreatePartnerPaymentTx(ctx context.Context, arg CreatePar
 				}
 				return fmt.Errorf("get reservation %d: %w", arg.ReservationID, err)
 			}
-			if reservation.UserID != arg.UserID {
+			if !isCustomerOwnedReservation(reservation, arg.UserID) {
 				return &requestError{statusCode: http.StatusForbidden, err: fmt.Errorf("reservation %d does not belong to user", arg.ReservationID)}
 			}
 			if reservation.Status != "pending" {
@@ -137,7 +137,7 @@ func (store *SQLStore) CreatePartnerPaymentTx(ctx context.Context, arg CreatePar
 				}
 				return fmt.Errorf("get reservation %d: %w", arg.ReservationID, err)
 			}
-			if reservation.UserID != arg.UserID {
+			if !isCustomerOwnedReservation(reservation, arg.UserID) {
 				return &requestError{statusCode: http.StatusForbidden, err: fmt.Errorf("reservation %d does not belong to user", arg.ReservationID)}
 			}
 			if reservation.Status != "paid" && reservation.Status != "confirmed" && reservation.Status != "checked_in" {

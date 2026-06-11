@@ -1,7 +1,7 @@
 <custom-navbar title="外卖" location="{{address}}" bind:locationchange="onLocationChange" />
 
 <template name="provider-onboarding-empty">
-  <t-empty description="附近暂无可代取商户" />
+  <t-empty description="附近暂无商户" />
   <view class="empty-actions">
     <t-button theme="primary" size="large" block bind:tap="onManualLocation" shape="round">切换位置</t-button>
   </view>

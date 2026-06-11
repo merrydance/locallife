@@ -54,7 +54,7 @@ func AddReservationDishes(ctx context.Context, store db.Store, input AddReservat
 		return result, err
 	}
 
-	if reservation.UserID != input.UserID {
+	if !isCustomerOwnedReservation(reservation, input.UserID) {
 		return result, NewRequestError(http.StatusForbidden, errors.New("you can only add dishes to your own reservation"))
 	}
 	if reservation.Status != reservationStatusPaid && reservation.Status != reservationStatusConfirmed {
@@ -218,7 +218,7 @@ func ModifyReservationDishes(
 		return result, err
 	}
 
-	if reservation.UserID != input.UserID {
+	if !isCustomerOwnedReservation(reservation, input.UserID) {
 		return result, NewRequestError(http.StatusForbidden, errors.New("you can only modify your own reservation"))
 	}
 	if reservation.Status != reservationStatusPaid && reservation.Status != reservationStatusConfirmed && reservation.Status != reservationStatusCheckedIn {

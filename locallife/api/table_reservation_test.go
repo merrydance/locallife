@@ -70,6 +70,51 @@ func randomReservation(tableID, userID, merchantID int64) db.TableReservation {
 	}
 }
 
+func reservationWithTableRowFromReservation(r db.TableReservation, table db.Table) db.GetTableReservationWithTableRow {
+	return db.GetTableReservationWithTableRow{
+		ID:                r.ID,
+		TableID:           r.TableID,
+		UserID:            r.UserID,
+		MerchantID:        r.MerchantID,
+		ReservationDate:   r.ReservationDate,
+		ReservationTime:   r.ReservationTime,
+		GuestCount:        r.GuestCount,
+		ContactName:       r.ContactName,
+		ContactPhone:      r.ContactPhone,
+		PaymentMode:       r.PaymentMode,
+		DepositAmount:     r.DepositAmount,
+		PrepaidAmount:     r.PrepaidAmount,
+		RefundDeadline:    r.RefundDeadline,
+		PaymentDeadline:   r.PaymentDeadline,
+		Notes:             r.Notes,
+		Status:            r.Status,
+		PaidAt:            r.PaidAt,
+		ConfirmedAt:       r.ConfirmedAt,
+		CompletedAt:       r.CompletedAt,
+		CancelledAt:       r.CancelledAt,
+		CancelReason:      r.CancelReason,
+		CreatedAt:         r.CreatedAt,
+		UpdatedAt:         r.UpdatedAt,
+		CheckedInAt:       r.CheckedInAt,
+		CookingStartedAt:  r.CookingStartedAt,
+		Source:            r.Source,
+		OfflineCustomerID: r.OfflineCustomerID,
+		CreatedByUserID:   r.CreatedByUserID,
+		TableNo:           table.TableNo,
+		TableType:         table.TableType,
+		Capacity:          table.Capacity,
+	}
+}
+
+func offlineReservationForOperator(tableID, operatorUserID, merchantID int64) db.TableReservation {
+	reservation := randomReservation(tableID, operatorUserID, merchantID)
+	reservation.Status = ReservationStatusConfirmed
+	reservation.Source = pgtype.Text{String: ReservationSourcePhone, Valid: true}
+	reservation.OfflineCustomerID = pgtype.Int8{Int64: util.RandomInt(1000, 2000), Valid: true}
+	reservation.CreatedByUserID = pgtype.Int8{Int64: operatorUserID, Valid: true}
+	return reservation
+}
+
 // ==================== 创建预定测试 ====================
 
 func TestCreateReservationAPI(t *testing.T) {
@@ -353,7 +398,7 @@ func TestGetReservationAPI(t *testing.T) {
 	now := time.Now().Local()
 	reservation.ReservationDate = pgtype.Date{Time: time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local), Valid: true}
 	reservation.ReservationTime = pgtype.Time{Microseconds: int64((now.Hour()*3600 + now.Minute()*60) * 1000000), Valid: true}
-	reservation.Source = pgtype.Text{String: ReservationSourceMerchant, Valid: true}
+	reservation.Source = pgtype.Text{String: ReservationSourceOnline, Valid: true}
 	reservationRow := db.GetTableReservationWithTableRow{
 		ID:              reservation.ID,
 		TableID:         reservation.TableID,
@@ -414,6 +459,67 @@ func TestGetReservationAPI(t *testing.T) {
 				var resp reservationResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Nil(t, resp.MerchantActionState)
+			},
+		},
+		{
+			name:          "OKOwnerViewWithWhitespaceOnlineSource",
+			reservationID: reservation.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, reservationOwner.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				legacyReservation := reservation
+				legacyReservation.Source = pgtype.Text{String: " online ", Valid: true}
+				legacyRow := reservationWithTableRowFromReservation(legacyReservation, room)
+
+				expectResolveNoAccessibleMerchants(store, reservationOwner.ID)
+
+				store.EXPECT().
+					GetTableReservationWithTable(gomock.Any(), gomock.Eq(reservation.ID)).
+					Times(1).
+					Return(legacyRow, nil)
+
+				store.EXPECT().
+					GetMerchant(gomock.Any(), gomock.Eq(reservation.MerchantID)).
+					Times(1).
+					Return(merchant, nil)
+
+				store.EXPECT().
+					ListOrdersByUserWithFilters(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return([]db.ListOrdersByUserWithFiltersRow{}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+			},
+		},
+		{
+			name:          "OfflineOperatorCannotViewAsCustomer",
+			reservationID: reservation.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, reservationOwner.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				offlineReservation := reservation
+				offlineReservation.Source = pgtype.Text{String: ReservationSourcePhone, Valid: true}
+				offlineReservation.OfflineCustomerID = pgtype.Int8{Int64: 701, Valid: true}
+				offlineReservation.CreatedByUserID = pgtype.Int8{Int64: reservationOwner.ID, Valid: true}
+				offlineRow := reservationWithTableRowFromReservation(offlineReservation, room)
+
+				store.EXPECT().
+					GetTableReservationWithTable(gomock.Any(), gomock.Eq(reservation.ID)).
+					Times(1).
+					Return(offlineRow, nil)
+
+				store.EXPECT().
+					GetMerchant(gomock.Any(), gomock.Eq(reservation.MerchantID)).
+					Times(1).
+					Return(merchant, nil)
+
+				expectResolveNoAccessibleMerchants(store, reservationOwner.ID)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusForbidden, recorder.Code)
 			},
 		},
 		{
@@ -642,6 +748,35 @@ func TestListUserReservationsAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
+			},
+		},
+		{
+			name:  "TotalExcludesOfflineOperatorReservations",
+			query: "page_id=1&page_size=10&status=confirmed",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					ListReservationsByUserWithStatus(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return([]db.ListReservationsByUserWithStatusRow{}, nil)
+
+				store.EXPECT().
+					CountReservationsByUserAndStatus(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ context.Context, arg db.CountReservationsByUserAndStatusParams) (int64, error) {
+						require.Equal(t, user.ID, arg.UserID)
+						require.Equal(t, ReservationStatusConfirmed, arg.Status)
+						return 0, nil
+					})
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp reservationListResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Empty(t, resp.Reservations)
+				require.Zero(t, resp.Total)
 			},
 		},
 		{
@@ -1849,6 +1984,40 @@ func TestMerchantCreateReservationAPICashierAllowed(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
 }
 
+func TestMerchantCreateReservationAPIRejectsBlankContactPhone(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	table := randomRoom(merchant.ID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	staffMerchant := merchant
+	staffMerchant.OwnerUserID = user.ID + 100
+
+	expectResolveSingleStaffMerchant(store, user.ID, staffMerchant)
+
+	store.EXPECT().
+		GetUserMerchantRole(gomock.Any(), gomock.Eq(db.GetUserMerchantRoleParams{
+			MerchantID: merchant.ID,
+			UserID:     user.ID,
+		})).
+		Times(1).
+		Return("manager", nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	reqBody := []byte(`{"table_id":` + fmt.Sprint(table.ID) + `,"date":"2026-04-02","time":"18:30","guest_count":4,"contact_name":"Alice","contact_phone":"   "}`)
+	req, err := http.NewRequest(http.MethodPost, "/v1/reservations/merchant/create", bytes.NewReader(reqBody))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, req)
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+}
+
 func TestMerchantCreateReservationAPISuccess(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
@@ -2163,6 +2332,33 @@ func TestMerchantUpdateReservationAPISuccessUsesTransaction(t *testing.T) {
 	require.Equal(t, "2026-04-03", resp.ReservationDate)
 	require.Equal(t, "19:15", resp.ReservationTime)
 	require.Equal(t, int16(6), resp.GuestCount)
+}
+
+func TestMerchantUpdateReservationAPIRejectsBlankContactPhone(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	reservation := randomReservation(randomRoom(merchant.ID).ID, user.ID, merchant.ID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).
+		Return(merchant, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("/v1/reservations/%d/update", reservation.ID), bytes.NewReader([]byte(`{"contact_phone":"   "}`)))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, req)
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
 }
 
 func TestMerchantUpdateReservationAPIRejectsDisabledTargetTableAfterLock(t *testing.T) {

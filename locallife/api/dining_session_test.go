@@ -424,6 +424,78 @@ func TestGetDiningSessionEntryAPI_TransferSession(t *testing.T) {
 	require.True(t, resp.Capabilities.TransferRequiresTableCode)
 }
 
+func TestGetDiningSessionEntryAPI_DoesNotOfferOfflineReservationOperatorTransfer(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	merchant.Status = "approved"
+	merchant.IsOpen = true
+	table := randomTable(merchant.ID)
+	table.Status = "available"
+	sourceTable := randomTable(merchant.ID)
+	sourceTable.TableNo = "B02"
+	transferSession := randomDiningSession(merchant.ID, sourceTable.ID, user.ID)
+	transferSession.ReservationID = pgtype.Int8{Int64: util.RandomInt(1000, 2000), Valid: true}
+	offlineReservation := db.TableReservation{
+		ID:                transferSession.ReservationID.Int64,
+		UserID:            user.ID,
+		MerchantID:        merchant.ID,
+		TableID:           sourceTable.ID,
+		Status:            "checked_in",
+		Source:            pgtype.Text{String: db.ReservationSourceMerchant, Valid: true},
+		OfflineCustomerID: pgtype.Int8{Int64: 3002, Valid: true},
+		CreatedByUserID:   pgtype.Int8{Int64: user.ID, Valid: true},
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetTable(gomock.Any(), table.ID).
+		Times(1).
+		Return(table, nil)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(merchant, nil)
+	store.EXPECT().
+		GetTable(gomock.Any(), table.ID).
+		Times(1).
+		Return(table, nil)
+	store.EXPECT().
+		ListReservationsByTableAndDate(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return([]db.TableReservation{}, nil)
+	store.EXPECT().
+		GetActiveDiningSessionByTable(gomock.Any(), table.ID).
+		Times(1).
+		Return(db.DiningSession{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		ListDiningSessionsByUser(gomock.Any(), db.ListDiningSessionsByUserParams{UserID: user.ID, Limit: 20, Offset: 0}).
+		Times(1).
+		Return([]db.DiningSession{transferSession}, nil)
+	store.EXPECT().
+		GetTableReservation(gomock.Any(), transferSession.ReservationID.Int64).
+		Times(1).
+		Return(offlineReservation, nil)
+
+	server := newTestServer(t, store)
+	url := fmt.Sprintf("/v1/dining-sessions/entry?table_id=%d", table.ID)
+	request, err := http.NewRequest(http.MethodGet, url, nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var resp diningSessionEntryResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, logic.DiningSessionEntryActionOpen, resp.Action)
+	require.Nil(t, resp.TransferSession)
+	require.False(t, resp.Capabilities.CanTransfer)
+}
+
 func TestGetDiningSessionEntryAPI_BlockedStillReturnsTableContext(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
@@ -582,6 +654,62 @@ func TestGetDiningSessionMenuAPI_ForbiddenWhenUserNotInSession(t *testing.T) {
 	request, err := http.NewRequest(http.MethodGet, url, nil)
 	require.NoError(t, err)
 	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, viewer.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusForbidden, recorder.Code)
+}
+
+func TestGetDiningSessionMenuAPI_ForbiddenForOfflineReservationOperator(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	table := randomTable(merchant.ID)
+	session := randomDiningSession(merchant.ID, table.ID, user.ID+1)
+	session.ReservationID = pgtype.Int8{Int64: util.RandomInt(1000, 2000), Valid: true}
+	offlineReservation := db.TableReservation{
+		ID:                session.ReservationID.Int64,
+		UserID:            user.ID + 1,
+		MerchantID:        merchant.ID,
+		TableID:           table.ID,
+		Status:            "checked_in",
+		Source:            pgtype.Text{String: db.ReservationSourcePhone, Valid: true},
+		OfflineCustomerID: pgtype.Int8{Int64: 3003, Valid: true},
+		CreatedByUserID:   pgtype.Int8{Int64: user.ID, Valid: true},
+	}
+	billingGroup := db.BillingGroup{
+		ID:              util.RandomInt(1, 1000),
+		DiningSessionID: session.ID,
+		Status:          "open",
+		IsDefault:       true,
+		CreatedAt:       time.Now(),
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetDiningSession(gomock.Any(), session.ID).
+		Times(1).
+		Return(session, nil)
+	store.EXPECT().
+		GetDefaultBillingGroupBySession(gomock.Any(), session.ID).
+		Times(1).
+		Return(billingGroup, nil)
+	store.EXPECT().
+		GetTableReservation(gomock.Any(), session.ReservationID.Int64).
+		Times(1).
+		Return(offlineReservation, nil)
+	store.EXPECT().
+		GetActiveBillingGroupMember(gomock.Any(), gomock.Any()).
+		Times(0)
+
+	server := newTestServer(t, store)
+	url := fmt.Sprintf("/v1/dining-sessions/%d/menu", session.ID)
+	request, err := http.NewRequest(http.MethodGet, url, nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 
 	recorder := httptest.NewRecorder()
 	server.router.ServeHTTP(recorder, request)

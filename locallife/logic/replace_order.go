@@ -84,7 +84,7 @@ func ReplaceReservationOrderWithBaofu(
 		}
 		return ReplaceOrderResult{}, err
 	}
-	if reservation.UserID != input.UserID {
+	if !isCustomerOwnedReservation(reservation, input.UserID) {
 		return ReplaceOrderResult{}, NewRequestError(http.StatusForbidden, errors.New("reservation does not belong to you"))
 	}
 	if reservation.PaymentMode != "full" {

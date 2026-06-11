@@ -163,7 +163,7 @@ func (svc *PaymentOrderService) CreatePaymentOrder(ctx context.Context, input Cr
 			}
 			return result, fmt.Errorf("get reservation: %w", err)
 		}
-		if reservation.UserID != input.UserID {
+		if !isCustomerOwnedReservation(reservation, input.UserID) {
 			return result, NewRequestError(http.StatusForbidden, errors.New("reservation does not belong to you"))
 		}
 		if input.BusinessType == businessTypeReservation && reservation.Status != "pending" {

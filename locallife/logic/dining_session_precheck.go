@@ -61,13 +61,13 @@ func PrecheckDiningSession(ctx context.Context, store db.Store, input DiningSess
 		}
 	}
 
-	if activeReservation.UserID != input.UserID && !isMerchant {
+	if !isCustomerOwnedReservation(*activeReservation, input.UserID) && !isMerchant {
 		return result, NewRequestError(http.StatusConflict, errors.New("桌位已被预约，暂时不可用"))
 	}
 
 	result.Reserved = true
 	result.Reservation = activeReservation
-	result.IsReservationOwner = activeReservation.UserID == input.UserID
+	result.IsReservationOwner = isCustomerOwnedReservation(*activeReservation, input.UserID)
 
 	paymentMode := activeReservation.PaymentMode
 	paidAmount := activeReservation.PrepaidAmount

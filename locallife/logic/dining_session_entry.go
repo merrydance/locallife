@@ -130,6 +130,11 @@ func ResolveDiningSessionMenu(ctx context.Context, store db.Store, sessionID int
 		return result, NewRequestError(http.StatusConflict, errors.New("dining session is not open"))
 	}
 
+	isCustomerOwner, linkedReservation, err := resolveDiningSessionCustomerOwnership(ctx, store, session, userID)
+	if err != nil {
+		return result, err
+	}
+
 	billingGroup, err := store.GetDefaultBillingGroupBySession(ctx, session.ID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
@@ -138,7 +143,11 @@ func ResolveDiningSessionMenu(ctx context.Context, store db.Store, sessionID int
 		return result, err
 	}
 
-	if session.UserID != userID {
+	if !isCustomerOwner {
+		if session.ReservationID.Valid && (session.UserID == userID ||
+			(linkedReservation != nil && isOfflineReservationCreatedByUser(*linkedReservation, userID))) {
+			return result, NewRequestError(http.StatusForbidden, errors.New("dining session does not belong to you"))
+		}
 		if _, err := store.GetActiveBillingGroupMember(ctx, db.GetActiveBillingGroupMemberParams{
 			BillingGroupID: billingGroup.ID,
 			UserID:         userID,
@@ -273,6 +282,11 @@ func resolveTransferCandidate(ctx context.Context, store db.Store, merchantID, c
 		if session.Status != "open" || session.MerchantID != merchantID || session.TableID == currentTableID {
 			continue
 		}
+		if isOwner, _, err := resolveDiningSessionCustomerOwnership(ctx, store, session, userID); err != nil {
+			return nil, nil, nil, err
+		} else if !isOwner {
+			continue
+		}
 		billingGroup, err := GetOrCreateDefaultBillingGroup(ctx, store, session, userID)
 		if err != nil {
 			return nil, nil, nil, err
@@ -291,10 +305,15 @@ func resolveTransferCandidate(ctx context.Context, store db.Store, merchantID, c
 }
 
 func resolveSessionAccessibility(ctx context.Context, store db.Store, session db.DiningSession, userID int64) (*db.BillingGroup, bool, error) {
+	isCustomerOwner, linkedReservation, err := resolveDiningSessionCustomerOwnership(ctx, store, session, userID)
+	if err != nil {
+		return nil, false, err
+	}
+
 	billingGroup, err := store.GetDefaultBillingGroupBySession(ctx, session.ID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
-			if session.UserID == userID {
+			if isCustomerOwner {
 				bg, createErr := GetOrCreateDefaultBillingGroup(ctx, store, session, userID)
 				if createErr != nil {
 					return nil, false, createErr
@@ -306,8 +325,12 @@ func resolveSessionAccessibility(ctx context.Context, store db.Store, session db
 		return nil, false, err
 	}
 
-	if session.UserID == userID {
+	if isCustomerOwner {
 		return &billingGroup, true, nil
+	}
+	if session.ReservationID.Valid && (session.UserID == userID ||
+		(linkedReservation != nil && isOfflineReservationCreatedByUser(*linkedReservation, userID))) {
+		return &billingGroup, false, nil
 	}
 	if _, err := store.GetActiveBillingGroupMember(ctx, db.GetActiveBillingGroupMemberParams{
 		BillingGroupID: billingGroup.ID,

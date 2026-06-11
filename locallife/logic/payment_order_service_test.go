@@ -188,6 +188,40 @@ func TestPaymentOrderServiceCreatePaymentOrder_RequiresMerchantBaofuReadiness(t 
 	require.Equal(t, "商户结算账户未开通，暂不能创建支付订单", reqErr.Err.Error())
 }
 
+func TestPaymentOrderServiceCreateReservationPaymentRejectsOfflineOperatorAsCustomerOwner(t *testing.T) {
+	input := CreatePaymentOrderInput{
+		UserID:       1002,
+		OrderID:      2002,
+		PaymentType:  paymentTypeMiniProgram,
+		BusinessType: businessTypeReservation,
+		ClientIP:     "127.0.0.1",
+	}
+	reservation := db.TableReservation{
+		ID:                input.OrderID,
+		UserID:            input.UserID,
+		MerchantID:        3002,
+		Status:            reservationStatusPending,
+		PaymentMode:       paymentModeDeposit,
+		DepositAmount:     1000,
+		Source:            pgtype.Text{String: db.ReservationSourcePhone, Valid: true},
+		OfflineCustomerID: pgtype.Int8{Int64: 4002, Valid: true},
+		CreatedByUserID:   pgtype.Int8{Int64: input.UserID, Valid: true},
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().GetTableReservation(gomock.Any(), input.OrderID).Return(reservation, nil)
+
+	svc := NewPaymentOrderServiceWithBaofu(store, nil, nil)
+	_, err := svc.CreatePaymentOrder(context.Background(), input)
+
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, http.StatusForbidden, reqErr.Status)
+	require.Equal(t, "reservation does not belong to you", reqErr.Err.Error())
+}
+
 func TestPaymentOrderServiceCreatePaymentOrder_BaofuMissingClientFailsBeforeLocalPayment(t *testing.T) {
 	input := CreatePaymentOrderInput{
 		UserID:       1001,

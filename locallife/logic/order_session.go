@@ -102,6 +102,7 @@ func ValidateOrderSessionAndBilling(ctx context.Context, store db.Store, input O
 		}
 
 		var sessionReservation *db.TableReservation
+		sessionReservationCustomerOwned := false
 		if session.ReservationID.Valid {
 			reservation, err := store.GetTableReservation(ctx, session.ReservationID.Int64)
 			if err != nil {
@@ -116,7 +117,9 @@ func ValidateOrderSessionAndBilling(ctx context.Context, store db.Store, input O
 			if reservation.TableID != *input.TableID {
 				return result, NewRequestError(http.StatusBadRequest, errors.New("table does not match reservation"))
 			}
-			if !isOnlineReservationSource(reservation.Source) {
+			sessionReservationCustomerOwned = isCustomerOwnedReservation(reservation, input.UserID)
+			if !sessionReservationCustomerOwned &&
+				(session.UserID == input.UserID || isOfflineReservationCreatedByUser(reservation, input.UserID)) {
 				return result, NewRequestError(http.StatusForbidden, errors.New("reservation does not belong to you"))
 			}
 			sessionReservation = &reservation
@@ -135,22 +138,25 @@ func ValidateOrderSessionAndBilling(ctx context.Context, store db.Store, input O
 				reservation = &loadedReservation
 			}
 			if !isCustomerOwnedReservation(*reservation, input.UserID) {
-				return result, NewRequestError(http.StatusForbidden, errors.New("reservation does not belong to you"))
-			}
-			if reservation.MerchantID != input.MerchantID {
-				return result, NewRequestError(http.StatusBadRequest, errors.New("reservation does not belong to this merchant"))
-			}
-			if reservation.TableID != *input.TableID {
-				return result, NewRequestError(http.StatusBadRequest, errors.New("table does not match reservation"))
-			}
-			if reservation.PaymentMode != "deposit" {
-				return result, NewRequestError(http.StatusConflict, errors.New("reservation is not in deposit mode"))
-			}
-			if reservation.Status != "paid" && reservation.Status != "confirmed" && reservation.Status != "checked_in" {
-				return result, NewRequestError(http.StatusConflict, errors.New("reservation is not ready for dining"))
-			}
+				if sessionReservation == nil || sessionReservation.ID != reservation.ID {
+					return result, NewRequestError(http.StatusForbidden, errors.New("reservation does not belong to you"))
+				}
+			} else {
+				if reservation.MerchantID != input.MerchantID {
+					return result, NewRequestError(http.StatusBadRequest, errors.New("reservation does not belong to this merchant"))
+				}
+				if reservation.TableID != *input.TableID {
+					return result, NewRequestError(http.StatusBadRequest, errors.New("table does not match reservation"))
+				}
+				if reservation.PaymentMode != "deposit" {
+					return result, NewRequestError(http.StatusConflict, errors.New("reservation is not in deposit mode"))
+				}
+				if reservation.Status != "paid" && reservation.Status != "confirmed" && reservation.Status != "checked_in" {
+					return result, NewRequestError(http.StatusConflict, errors.New("reservation is not ready for dining"))
+				}
 
-			result.Reservation = reservation
+				result.Reservation = reservation
+			}
 		}
 	}
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -277,6 +278,11 @@ func newReservationWithTableResponse(r db.GetTableReservationWithTableRow) reser
 	return resp
 }
 
+func isCustomerOwnedReservationRow(r db.GetTableReservationWithTableRow, userID int64) bool {
+	source := strings.TrimSpace(r.Source.String)
+	return r.UserID == userID && (!r.Source.Valid || source == "" || source == ReservationSourceOnline)
+}
+
 func mapOrderItemsToReservationItems(items []db.ListOrderItemsWithDishByOrderRow) []reservationItemResponse {
 	resp := make([]reservationItemResponse, 0, len(items))
 
@@ -505,7 +511,7 @@ func (server *Server) getReservation(ctx *gin.Context) {
 	}
 
 	// 权限验证：用户查看自己的预定，或商户查看自己商户的预定
-	isOwner := reservation.UserID == authPayload.UserID
+	isOwner := isCustomerOwnedReservationRow(reservation, authPayload.UserID)
 	isMerchant := false
 	merchantStaffRole := ""
 	if cachedMerchant, ok := GetMerchantFromContext(ctx); ok && cachedMerchant.ID == reservation.MerchantID {

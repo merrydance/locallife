@@ -318,6 +318,41 @@ func TestAddReservationDishesPositiveDeltaCreatesPendingAdjustmentWithoutAppendi
 	require.True(t, facade.createPaymentCalled)
 }
 
+func TestAddReservationDishesRejectsOfflineOperatorAsCustomerOwner(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	operatorUserID := int64(12)
+	reservationID := int64(32)
+	reservation := db.TableReservation{
+		ID:                reservationID,
+		UserID:            operatorUserID,
+		MerchantID:        22,
+		Status:            reservationStatusPaid,
+		PaymentMode:       paymentModeFull,
+		Source:            pgtype.Text{String: db.ReservationSourcePhone, Valid: true},
+		OfflineCustomerID: pgtype.Int8{Int64: 42, Valid: true},
+		CreatedByUserID:   pgtype.Int8{Int64: operatorUserID, Valid: true},
+	}
+	dishID := int64(52)
+
+	store.EXPECT().GetTableReservationForUpdate(gomock.Any(), reservationID).Return(reservation, nil)
+
+	_, err := AddReservationDishes(context.Background(), store, AddReservationDishesInput{
+		ReservationID: reservationID,
+		UserID:        operatorUserID,
+		Items: []ReservationItemInput{{
+			DishID:   &dishID,
+			Quantity: 1,
+		}},
+	})
+
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 403, reqErr.Status)
+	require.Contains(t, reqErr.Error(), "own reservation")
+}
+
 func TestModifyReservationDishesNegativeDeltaUsesCombinedRefundTransaction(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -386,6 +421,41 @@ func TestModifyReservationDishesNegativeDeltaUsesCombinedRefundTransaction(t *te
 	require.Equal(t, paymentOrder.ID, scheduler.refundInputs[0].PaymentOrderID)
 	require.Equal(t, reservationID, scheduler.refundInputs[0].ReservationID)
 	require.Equal(t, int64(2000), scheduler.refundInputs[0].RefundAmount)
+}
+
+func TestModifyReservationDishesRejectsOfflineOperatorAsCustomerOwner(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	operatorUserID := int64(13)
+	reservationID := int64(33)
+	reservation := db.TableReservation{
+		ID:                reservationID,
+		UserID:            operatorUserID,
+		MerchantID:        23,
+		Status:            reservationStatusPaid,
+		PaymentMode:       paymentModeFull,
+		Source:            pgtype.Text{String: db.ReservationSourceWalkin, Valid: true},
+		OfflineCustomerID: pgtype.Int8{Int64: 43, Valid: true},
+		CreatedByUserID:   pgtype.Int8{Int64: operatorUserID, Valid: true},
+	}
+	dishID := int64(53)
+
+	store.EXPECT().GetTableReservationForUpdate(gomock.Any(), reservationID).Return(reservation, nil)
+
+	_, err := ModifyReservationDishes(context.Background(), store, ModifyReservationDishesInput{
+		ReservationID: reservationID,
+		UserID:        operatorUserID,
+		Items: []ReservationItemInput{{
+			DishID:   &dishID,
+			Quantity: 1,
+		}},
+	})
+
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 403, reqErr.Status)
+	require.Contains(t, reqErr.Error(), "own reservation")
 }
 
 func TestModifyReservationDishesNegativeDeltaRejectsWhenRefundAllocationIsIncomplete(t *testing.T) {

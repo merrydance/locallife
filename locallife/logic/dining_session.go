@@ -62,6 +62,22 @@ type CheckoutDiningSessionResult struct {
 	Merchant db.Merchant
 }
 
+func resolveDiningSessionCustomerOwnership(ctx context.Context, store db.Store, session db.DiningSession, userID int64) (bool, *db.TableReservation, error) {
+	if !session.ReservationID.Valid {
+		return session.UserID == userID, nil, nil
+	}
+
+	reservation, err := store.GetTableReservation(ctx, session.ReservationID.Int64)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return false, nil, NewRequestError(http.StatusNotFound, errors.New("reservation not found"))
+		}
+		return false, nil, err
+	}
+
+	return isCustomerOwnedReservation(reservation, userID), &reservation, nil
+}
+
 // GetOrCreateDefaultBillingGroup returns the default billing group and ensures membership.
 func GetOrCreateDefaultBillingGroup(ctx context.Context, store db.Store, session db.DiningSession, userID int64) (db.BillingGroup, error) {
 	billingGroup, err := store.GetDefaultBillingGroupBySession(ctx, session.ID)
@@ -184,18 +200,18 @@ func OpenDiningSession(ctx context.Context, store db.Store, input OpenDiningSess
 			return result, err
 		}
 		reservation = &res
-	} else if activeReservation != nil && activeReservation.UserID == input.UserID {
+	} else if activeReservation != nil && isCustomerOwnedReservation(*activeReservation, input.UserID) {
 		reservation = activeReservation
 	}
 
 	if activeReservation != nil && (reservation == nil || activeReservation.ID != reservation.ID) {
-		if activeReservation.UserID != input.UserID && !isMerchant {
+		if !isCustomerOwnedReservation(*activeReservation, input.UserID) && !isMerchant {
 			return result, NewRequestError(http.StatusConflict, errors.New("该桌位已被预订，暂时不可用"))
 		}
 	}
 
 	if reservation != nil {
-		if reservation.UserID != input.UserID && !isMerchant {
+		if !isCustomerOwnedReservation(*reservation, input.UserID) && !isMerchant {
 			return result, NewRequestError(http.StatusForbidden, errors.New("reservation does not belong to you"))
 		}
 		if reservation.TableID != input.TableID {
@@ -345,19 +361,10 @@ func TransferDiningSessionTable(ctx context.Context, store db.Store, input Trans
 		return result, NewRequestError(http.StatusConflict, errors.New("dining session is not open"))
 	}
 
-	if input.ToTableID == session.TableID {
-		fromTable, err := store.GetTable(ctx, session.TableID)
-		if err != nil {
-			return result, err
-		}
-		result.Session = session
-		result.FromTable = fromTable
-		result.ToTable = fromTable
-		result.SameTable = true
-		return result, nil
+	isOwner, linkedReservation, err := resolveDiningSessionCustomerOwnership(ctx, store, session, input.UserID)
+	if err != nil {
+		return result, err
 	}
-
-	isOwner := session.UserID == input.UserID
 	isMerchant := false
 	if m, err := store.GetMerchant(ctx, session.MerchantID); err == nil && m.OwnerUserID == input.UserID {
 		isMerchant = true
@@ -374,6 +381,18 @@ func TransferDiningSessionTable(ctx context.Context, store db.Store, input Trans
 		return result, NewRequestError(http.StatusForbidden, errors.New("not authorized to transfer dining session"))
 	}
 
+	if input.ToTableID == session.TableID {
+		fromTable, err := store.GetTable(ctx, session.TableID)
+		if err != nil {
+			return result, err
+		}
+		result.Session = session
+		result.FromTable = fromTable
+		result.ToTable = fromTable
+		result.SameTable = true
+		return result, nil
+	}
+
 	toTable, err := store.GetTable(ctx, input.ToTableID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
@@ -388,17 +407,8 @@ func TransferDiningSessionTable(ctx context.Context, store db.Store, input Trans
 		return result, NewRequestError(http.StatusConflict, errors.New("target table is disabled"))
 	}
 
-	if session.ReservationID.Valid && !isMerchant {
-		res, err := store.GetTableReservation(ctx, session.ReservationID.Int64)
-		if err != nil {
-			if errors.Is(err, db.ErrRecordNotFound) {
-				return result, NewRequestError(http.StatusNotFound, errors.New("reservation not found"))
-			}
-			return result, err
-		}
-		if res.UserID != input.UserID {
-			return result, NewRequestError(http.StatusForbidden, errors.New("reservation does not belong to you"))
-		}
+	if linkedReservation != nil && !isMerchant && !isCustomerOwnedReservation(*linkedReservation, input.UserID) {
+		return result, NewRequestError(http.StatusForbidden, errors.New("reservation does not belong to you"))
 	}
 
 	activeReservation, err := FindActiveReservationForTable(ctx, store, toTable.ID, input.Now)

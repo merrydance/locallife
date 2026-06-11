@@ -9642,6 +9642,21 @@ func (mr *MockStoreMockRecorder) GetMerchantMembershipSettings(ctx, merchantID a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMerchantMembershipSettings", reflect.TypeOf((*MockStore)(nil).GetMerchantMembershipSettings), ctx, merchantID)
 }
 
+// GetMerchantOfflineCustomer mocks base method.
+func (m *MockStore) GetMerchantOfflineCustomer(ctx context.Context, arg db.GetMerchantOfflineCustomerParams) (db.MerchantOfflineCustomer, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMerchantOfflineCustomer", ctx, arg)
+	ret0, _ := ret[0].(db.MerchantOfflineCustomer)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMerchantOfflineCustomer indicates an expected call of GetMerchantOfflineCustomer.
+func (mr *MockStoreMockRecorder) GetMerchantOfflineCustomer(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMerchantOfflineCustomer", reflect.TypeOf((*MockStore)(nil).GetMerchantOfflineCustomer), ctx, arg)
+}
+
 // GetMerchantOnlineCombos mocks base method.
 func (m *MockStore) GetMerchantOnlineCombos(ctx context.Context, merchantID int64) ([]db.GetMerchantOnlineCombosRow, error) {
 	m.ctrl.T.Helper()
@@ -23505,6 +23520,21 @@ func (m *MockStore) UpsertMerchantMembershipSettings(ctx context.Context, arg db
 func (mr *MockStoreMockRecorder) UpsertMerchantMembershipSettings(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertMerchantMembershipSettings", reflect.TypeOf((*MockStore)(nil).UpsertMerchantMembershipSettings), ctx, arg)
+}
+
+// UpsertMerchantOfflineCustomer mocks base method.
+func (m *MockStore) UpsertMerchantOfflineCustomer(ctx context.Context, arg db.UpsertMerchantOfflineCustomerParams) (db.MerchantOfflineCustomer, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpsertMerchantOfflineCustomer", ctx, arg)
+	ret0, _ := ret[0].(db.MerchantOfflineCustomer)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpsertMerchantOfflineCustomer indicates an expected call of UpsertMerchantOfflineCustomer.
+func (mr *MockStoreMockRecorder) UpsertMerchantOfflineCustomer(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertMerchantOfflineCustomer", reflect.TypeOf((*MockStore)(nil).UpsertMerchantOfflineCustomer), ctx, arg)
 }
 
 // UpsertMerchantPaymentConfig mocks base method.

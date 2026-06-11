@@ -126,3 +126,42 @@ func TestCancelReservationRejectsActiveAdjustment(t *testing.T) {
 	require.Equal(t, 409, requestErr.Status)
 	require.Contains(t, requestErr.Error(), "待支付改菜补差单")
 }
+
+func TestCancelReservationRejectsOfflineOperatorAsCustomerOwner(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+
+	operatorUserID := int64(12)
+	reservationID := int64(22)
+	now := time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC)
+	reservation := db.TableReservation{
+		ID:                reservationID,
+		UserID:            operatorUserID,
+		MerchantID:        32,
+		TableID:           42,
+		Status:            reservationStatusConfirmed,
+		RefundDeadline:    now.Add(time.Hour),
+		Source:            pgtype.Text{String: db.ReservationSourcePhone, Valid: true},
+		OfflineCustomerID: pgtype.Int8{Int64: 52, Valid: true},
+		CreatedByUserID:   pgtype.Int8{Int64: operatorUserID, Valid: true},
+	}
+
+	store.EXPECT().GetTableReservationForUpdate(gomock.Any(), reservationID).Return(reservation, nil)
+	store.EXPECT().GetMerchantByOwner(gomock.Any(), operatorUserID).Return(db.Merchant{}, db.ErrRecordNotFound)
+
+	_, err := CancelReservation(
+		context.Background(),
+		store,
+		operatorUserID,
+		reservationID,
+		"change of plan",
+		ReservationRefundPolicy{UserBeforeDeadlinePercent: 100},
+		now,
+	)
+
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 403, reqErr.Status)
+	require.Contains(t, reqErr.Error(), "not authorized")
+}

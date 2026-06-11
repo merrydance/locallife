@@ -144,6 +144,42 @@ func TestTransferDiningSessionTableAPI(t *testing.T) {
 			},
 		},
 		{
+			name: "SameTableForbiddenNotOwner",
+			body: map[string]any{
+				"to_table_id": fromTable.ID,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID+1, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetDiningSession(gomock.Any(), gomock.Eq(session.ID)).
+					Times(1).
+					Return(session, nil)
+
+				store.EXPECT().
+					GetMerchant(gomock.Any(), gomock.Eq(session.MerchantID)).
+					Times(1).
+					Return(merchant, nil)
+
+				store.EXPECT().
+					CheckUserHasMerchantAccess(gomock.Any(), gomock.Eq(db.CheckUserHasMerchantAccessParams{MerchantID: session.MerchantID, UserID: user.ID + 1})).
+					Times(1).
+					Return(false, nil)
+
+				store.EXPECT().
+					GetTable(gomock.Any(), gomock.Any()).
+					Times(0)
+
+				store.EXPECT().
+					TransferDiningSessionTableTx(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusForbidden, recorder.Code)
+			},
+		},
+		{
 			name: "TableCodeRequired",
 			body: map[string]any{
 				"to_table_id": toTable.ID,
@@ -227,6 +263,60 @@ func TestTransferDiningSessionTableAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusConflict, recorder.Code)
+			},
+		},
+		{
+			name: "OfflineReservationOperatorCannotTransferAsCustomer",
+			body: map[string]any{
+				"to_table_id": toTable.ID,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				offlineSession := session
+				offlineSession.ReservationID = pgtype.Int8{Int64: util.RandomInt(1000, 2000), Valid: true}
+				offlineReservation := db.TableReservation{
+					ID:                offlineSession.ReservationID.Int64,
+					UserID:            user.ID,
+					MerchantID:        merchant.ID,
+					TableID:           fromTable.ID,
+					Status:            "checked_in",
+					Source:            pgtype.Text{String: db.ReservationSourcePhone, Valid: true},
+					OfflineCustomerID: pgtype.Int8{Int64: 3001, Valid: true},
+					CreatedByUserID:   pgtype.Int8{Int64: user.ID, Valid: true},
+				}
+
+				store.EXPECT().
+					GetDiningSession(gomock.Any(), gomock.Eq(session.ID)).
+					Times(1).
+					Return(offlineSession, nil)
+
+				store.EXPECT().
+					GetMerchant(gomock.Any(), gomock.Eq(session.MerchantID)).
+					Times(1).
+					Return(merchant, nil)
+
+				store.EXPECT().
+					CheckUserHasMerchantAccess(gomock.Any(), gomock.Eq(db.CheckUserHasMerchantAccessParams{MerchantID: session.MerchantID, UserID: user.ID})).
+					Times(1).
+					Return(false, nil)
+
+				store.EXPECT().
+					GetTableReservation(gomock.Any(), offlineSession.ReservationID.Int64).
+					Times(1).
+					Return(offlineReservation, nil)
+
+				store.EXPECT().
+					GetTable(gomock.Any(), gomock.Any()).
+					Times(0)
+
+				store.EXPECT().
+					TransferDiningSessionTableTx(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusForbidden, recorder.Code)
 			},
 		},
 	}

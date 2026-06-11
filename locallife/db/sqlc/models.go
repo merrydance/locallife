@@ -1366,6 +1366,20 @@ type MerchantMembershipSetting struct {
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 }
 
+type MerchantOfflineCustomer struct {
+	ID              int64              `json:"id"`
+	MerchantID      int64              `json:"merchant_id"`
+	ContactName     string             `json:"contact_name"`
+	ContactPhone    string             `json:"contact_phone"`
+	Source          string             `json:"source"`
+	CreatedByUserID pgtype.Int8        `json:"created_by_user_id"`
+	UpdatedByUserID pgtype.Int8        `json:"updated_by_user_id"`
+	FirstSeenAt     time.Time          `json:"first_seen_at"`
+	LastSeenAt      time.Time          `json:"last_seen_at"`
+	CreatedAt       time.Time          `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
 // 商户微信支付配置（平台收付通）
 type MerchantPaymentConfig struct {
 	ID         int64 `json:"id"`
@@ -2522,7 +2536,9 @@ type TableReservation struct {
 	// 厨房开始制作时间
 	CookingStartedAt pgtype.Timestamptz `json:"cooking_started_at"`
 	// 预订来源：online(线上)、phone(电话)、walkin(现场)、merchant(商户代订)
-	Source pgtype.Text `json:"source"`
+	Source            pgtype.Text `json:"source"`
+	OfflineCustomerID pgtype.Int8 `json:"offline_customer_id"`
+	CreatedByUserID   pgtype.Int8 `json:"created_by_user_id"`
 }
 
 type TableTag struct {

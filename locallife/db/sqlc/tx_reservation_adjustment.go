@@ -71,7 +71,7 @@ func (store *SQLStore) CreateReservationPositiveAdjustmentPaymentTx(
 		}
 		result.Reservation = reservation
 
-		if reservation.UserID != arg.UserID {
+		if !isCustomerOwnedReservation(reservation, arg.UserID) {
 			return &requestError{statusCode: http.StatusForbidden, err: fmt.Errorf("reservation %d does not belong to user", arg.ReservationID)}
 		}
 		if arg.MerchantID > 0 && reservation.MerchantID != arg.MerchantID {

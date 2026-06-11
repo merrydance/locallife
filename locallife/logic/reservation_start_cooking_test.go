@@ -43,3 +43,30 @@ func TestStartCookingReservationRejectsActiveAdjustment(t *testing.T) {
 	require.Equal(t, 409, requestErr.Status)
 	require.Contains(t, requestErr.Error(), "待支付改菜补差单")
 }
+
+func TestStartCookingReservationRejectsOfflineOperatorAsCustomerOwner(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	operatorUserID := int64(13)
+	reservationID := int64(23)
+	reservation := db.TableReservation{
+		ID:                reservationID,
+		UserID:            operatorUserID,
+		MerchantID:        33,
+		Status:            reservationStatusConfirmed,
+		Source:            pgtype.Text{String: db.ReservationSourceMerchant, Valid: true},
+		OfflineCustomerID: pgtype.Int8{Int64: 43, Valid: true},
+		CreatedByUserID:   pgtype.Int8{Int64: operatorUserID, Valid: true},
+	}
+
+	store.EXPECT().GetTableReservationForUpdate(gomock.Any(), reservationID).Return(reservation, nil)
+	store.EXPECT().GetMerchantByOwner(gomock.Any(), operatorUserID).Return(db.Merchant{}, db.ErrRecordNotFound)
+
+	_, err := StartCookingReservation(context.Background(), store, operatorUserID, reservationID)
+
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 403, reqErr.Status)
+	require.Contains(t, reqErr.Error(), "not authorized")
+}

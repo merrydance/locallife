@@ -2,9 +2,11 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -155,11 +157,17 @@ func (store *SQLStore) MarkNoShowTx(ctx context.Context, arg MarkNoShowTxParams)
 			result.TableUpdated = true
 		}
 
-		// 3. P1-064 记录用户未到店风险行为
+		// 3. P1-064 记录未到店风险行为。线下/电话客户不能归因到录入预约的员工账号。
+		decisionUserID := pgtype.Int8{Int64: result.Reservation.UserID, Valid: true}
+		traceSummary := "User failed to show up for reservation"
+		if isOfflineReservationSource(result.Reservation.Source) {
+			decisionUserID = pgtype.Int8{}
+			traceSummary = "Offline customer failed to show up for reservation"
+		}
 		_, err = q.CreateBehaviorDecision(ctx, CreateBehaviorDecisionParams{
 			OrderID:            pgtype.Int8{}, // null
 			ReservationID:      pgtype.Int8{Int64: arg.ReservationID, Valid: true},
-			UserID:             pgtype.Int8{Int64: result.Reservation.UserID, Valid: true},
+			UserID:             decisionUserID,
 			MerchantID:         pgtype.Int8{Int64: result.Reservation.MerchantID, Valid: true},
 			RiderID:            pgtype.Int8{},
 			DecisionVersion:    "v1",
@@ -167,7 +175,8 @@ func (store *SQLStore) MarkNoShowTx(ctx context.Context, arg MarkNoShowTxParams)
 			ResponsibleParty:   "user",
 			CompensationSource: "unknown",
 			DecisionStatus:     "decided",
-			TraceSummary:       pgtype.Text{String: "User failed to show up for reservation", Valid: true},
+			TraceSummary:       pgtype.Text{String: traceSummary, Valid: true},
+			FactSnapshot:       buildReservationNoShowFactSnapshot(result.Reservation),
 		})
 		if err != nil {
 			return fmt.Errorf("create behavior decision: %w", err)
@@ -626,13 +635,55 @@ type CreateMerchantReservationTxParams struct {
 type UpdateReservationTxParams struct {
 	MerchantID  int64
 	Reservation UpdateReservationParams
+	OperatorID  pgtype.Int8
 }
 
 const (
 	reservationPaymentModeDeposit = "deposit"
 	reservationPaymentModeFull    = "full"
-	reservationSourceOnline       = "online"
 )
+
+func isOfflineReservationSource(source pgtype.Text) bool {
+	normalized := strings.TrimSpace(source.String)
+	return source.Valid && normalized != "" && normalized != ReservationSourceOnline
+}
+
+func normalizedOfflineReservationSource(source pgtype.Text) string {
+	switch strings.TrimSpace(source.String) {
+	case ReservationSourcePhone:
+		return ReservationSourcePhone
+	case ReservationSourceWalkin:
+		return ReservationSourceWalkin
+	default:
+		return ReservationSourceMerchant
+	}
+}
+
+func isCustomerOwnedReservation(reservation TableReservation, userID int64) bool {
+	return reservation.UserID == userID && !isOfflineReservationSource(reservation.Source)
+}
+
+func buildReservationNoShowFactSnapshot(reservation TableReservation) []byte {
+	if !isOfflineReservationSource(reservation.Source) {
+		return nil
+	}
+
+	snapshot := map[string]any{
+		"customer_identity_type": "offline_customer",
+		"reservation_source":     reservation.Source.String,
+	}
+	if reservation.OfflineCustomerID.Valid {
+		snapshot["offline_customer_id"] = reservation.OfflineCustomerID.Int64
+	}
+	if reservation.CreatedByUserID.Valid {
+		snapshot["created_by_user_id"] = reservation.CreatedByUserID.Int64
+	}
+	payload, err := json.Marshal(snapshot)
+	if err != nil {
+		return nil
+	}
+	return payload
+}
 
 func isReservationTerminalForUpdate(status string) bool {
 	return status == ReservationStatusCompleted ||
@@ -678,7 +729,7 @@ func validateLockedTableMinimumSpendForReservation(table Table, reservation Tabl
 	if !table.MinimumSpend.Valid || table.MinimumSpend.Int64 <= 0 {
 		return nil
 	}
-	if reservation.Source.Valid && reservation.Source.String != "" && reservation.Source.String != reservationSourceOnline {
+	if isOfflineReservationSource(reservation.Source) {
 		return nil
 	}
 
@@ -706,6 +757,11 @@ func updateReservationTargetChanged(current TableReservation, update UpdateReser
 		return true
 	}
 	return false
+}
+
+func reservationContactChanged(current TableReservation, update UpdateReservationParams) bool {
+	return update.ContactName.Valid && strings.TrimSpace(update.ContactName.String) != current.ContactName ||
+		update.ContactPhone.Valid && strings.TrimSpace(update.ContactPhone.String) != current.ContactPhone
 }
 
 func reservationTimeSlotConfigFromQueries(ctx context.Context, q *Queries, merchantID int64, date time.Time) util.TimeSlotConfig {
@@ -844,6 +900,38 @@ func (store *SQLStore) UpdateReservationTx(ctx context.Context, arg UpdateReserv
 			}
 		}
 
+		if isOfflineReservationSource(reservation.Source) && reservationContactChanged(reservation, arg.Reservation) {
+			contactName := reservation.ContactName
+			if arg.Reservation.ContactName.Valid {
+				contactName = strings.TrimSpace(arg.Reservation.ContactName.String)
+				arg.Reservation.ContactName = pgtype.Text{String: contactName, Valid: true}
+			}
+			contactPhone := reservation.ContactPhone
+			if arg.Reservation.ContactPhone.Valid {
+				contactPhone = strings.TrimSpace(arg.Reservation.ContactPhone.String)
+				arg.Reservation.ContactPhone = pgtype.Text{String: contactPhone, Valid: true}
+			}
+			if contactName == "" || contactPhone == "" {
+				return ErrReservationInvalidOfflineCustomerContact
+			}
+
+			operatorID := arg.OperatorID
+			if !operatorID.Valid {
+				operatorID = reservation.CreatedByUserID
+			}
+			offlineCustomer, err := q.UpsertMerchantOfflineCustomer(ctx, UpsertMerchantOfflineCustomerParams{
+				MerchantID:      reservation.MerchantID,
+				ContactName:     contactName,
+				ContactPhone:    contactPhone,
+				Source:          normalizedOfflineReservationSource(reservation.Source),
+				CreatedByUserID: operatorID,
+			})
+			if err != nil {
+				return fmt.Errorf("upsert reservation offline customer: %w", err)
+			}
+			arg.Reservation.OfflineCustomerID = pgtype.Int8{Int64: offlineCustomer.ID, Valid: true}
+		}
+
 		result, err = q.UpdateReservation(ctx, arg.Reservation)
 		if err != nil {
 			return fmt.Errorf("update reservation: %w", err)
@@ -940,6 +1028,28 @@ func (store *SQLStore) CreateMerchantReservationTx(ctx context.Context, arg Crea
 				return err
 			}
 		}
+
+		source := arg.Source
+		if !source.Valid || strings.TrimSpace(source.String) == "" {
+			source = pgtype.Text{String: ReservationSourceMerchant, Valid: true}
+		} else {
+			source = pgtype.Text{String: normalizedOfflineReservationSource(source), Valid: true}
+		}
+		arg.Source = source
+		arg.ContactName = strings.TrimSpace(arg.ContactName)
+		arg.ContactPhone = strings.TrimSpace(arg.ContactPhone)
+		offlineCustomer, err := q.UpsertMerchantOfflineCustomer(ctx, UpsertMerchantOfflineCustomerParams{
+			MerchantID:      arg.MerchantID,
+			ContactName:     arg.ContactName,
+			ContactPhone:    arg.ContactPhone,
+			Source:          source.String,
+			CreatedByUserID: pgtype.Int8{Int64: arg.UserID, Valid: true},
+		})
+		if err != nil {
+			return fmt.Errorf("upsert merchant offline customer: %w", err)
+		}
+		arg.OfflineCustomerID = pgtype.Int8{Int64: offlineCustomer.ID, Valid: true}
+		arg.CreatedByUserID = pgtype.Int8{Int64: arg.UserID, Valid: true}
 
 		result, err = q.CreateTableReservationByMerchant(ctx, arg.CreateTableReservationByMerchantParams)
 		if err != nil {

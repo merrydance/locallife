@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -741,6 +742,21 @@ func TestMarkNoShowTx_Success(t *testing.T) {
 	dbTable, err := testStore.GetTable(context.Background(), room.ID)
 	require.NoError(t, err)
 	require.Equal(t, "available", dbTable.Status)
+
+	sqlStore := testStore.(*SQLStore)
+	var decisionUserID pgtype.Int8
+	var factSnapshot []byte
+	err = sqlStore.connPool.QueryRow(context.Background(), `
+		SELECT user_id, fact_snapshot
+		FROM behavior_decisions
+		WHERE reservation_id = $1
+		ORDER BY id DESC
+		LIMIT 1
+	`, reservation.ID).Scan(&decisionUserID, &factSnapshot)
+	require.NoError(t, err)
+	require.True(t, decisionUserID.Valid)
+	require.Equal(t, user.ID, decisionUserID.Int64)
+	require.Empty(t, factSnapshot)
 }
 
 func TestMarkNoShowTxRejectsActiveAdjustment(t *testing.T) {
@@ -767,6 +783,269 @@ func TestMarkNoShowTxRejectsActiveAdjustment(t *testing.T) {
 	current, getErr := testStore.GetTableReservation(context.Background(), reservation.ID)
 	require.NoError(t, getErr)
 	require.Equal(t, "paid", current.Status)
+}
+
+func TestMarkNoShowTxDoesNotAttributeMerchantCreatedReservationToOperator(t *testing.T) {
+	operator := createRandomUser(t)
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	room := createRandomRoom(t, merchant.ID)
+	reservationDate := time.Now().Add(24 * time.Hour)
+
+	reservation, err := testStore.CreateMerchantReservationTx(context.Background(), CreateMerchantReservationTxParams{
+		CreateTableReservationByMerchantParams: CreateTableReservationByMerchantParams{
+			TableID:         room.ID,
+			UserID:          operator.ID,
+			MerchantID:      merchant.ID,
+			ReservationDate: pgtype.Date{Time: reservationDate, Valid: true},
+			ReservationTime: pgtype.Time{Microseconds: 18 * 3600 * 1000000, Valid: true},
+			GuestCount:      4,
+			ContactName:     "线下顾客",
+			ContactPhone:    "13800138000",
+			PaymentMode:     "deposit",
+			DepositAmount:   0,
+			PrepaidAmount:   0,
+			RefundDeadline:  time.Now(),
+			PaymentDeadline: time.Now().Add(365 * 24 * time.Hour),
+			Notes:           pgtype.Text{String: "电话预约", Valid: true},
+			Source:          pgtype.Text{String: "phone", Valid: true},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, operator.ID, reservation.UserID)
+
+	_, err = testStore.MarkNoShowTx(context.Background(), MarkNoShowTxParams{
+		ReservationID:        reservation.ID,
+		TableID:              room.ID,
+		CurrentReservationID: pgtype.Int8{Valid: false},
+	})
+	require.NoError(t, err)
+
+	sqlStore := testStore.(*SQLStore)
+	var decisionUserID pgtype.Int8
+	var factSnapshot []byte
+	err = sqlStore.connPool.QueryRow(context.Background(), `
+		SELECT user_id, fact_snapshot
+		FROM behavior_decisions
+		WHERE reservation_id = $1
+		ORDER BY id DESC
+		LIMIT 1
+	`, reservation.ID).Scan(&decisionUserID, &factSnapshot)
+	require.NoError(t, err)
+	require.False(t, decisionUserID.Valid, "offline/phone no-show must not punish the operator account")
+
+	var snapshot map[string]any
+	require.NoError(t, json.Unmarshal(factSnapshot, &snapshot))
+	require.Equal(t, "offline_customer", snapshot["customer_identity_type"])
+	require.NotEmpty(t, snapshot["offline_customer_id"])
+	require.Equal(t, float64(operator.ID), snapshot["created_by_user_id"])
+	require.Equal(t, "phone", snapshot["reservation_source"])
+}
+
+func TestCountReservationsByUserAndStatusExcludesOfflineOperatorReservations(t *testing.T) {
+	user := createRandomUser(t)
+	operator := createRandomUser(t)
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	room := createRandomRoom(t, merchant.ID)
+	reservationDate := time.Now().Add(24 * time.Hour)
+
+	onlineReservation := createRandomReservation(t, user.ID, merchant.ID, room.ID, ReservationStatusConfirmed)
+	legacyBlankSourceReservation := createRandomReservation(t, user.ID, merchant.ID, room.ID, ReservationStatusConfirmed)
+	legacyWhitespaceOnlineReservation := createRandomReservation(t, user.ID, merchant.ID, room.ID, ReservationStatusConfirmed)
+	sqlStore := testStore.(*SQLStore)
+	_, err := sqlStore.connPool.Exec(context.Background(), `
+		UPDATE table_reservations
+		SET source = $2
+		WHERE id = $1
+	`, legacyBlankSourceReservation.ID, "   ")
+	require.NoError(t, err)
+	_, err = sqlStore.connPool.Exec(context.Background(), `
+		UPDATE table_reservations
+		SET source = $2
+		WHERE id = $1
+	`, legacyWhitespaceOnlineReservation.ID, " online ")
+	require.NoError(t, err)
+
+	_, err = testStore.CreateMerchantReservationTx(context.Background(), CreateMerchantReservationTxParams{
+		CreateTableReservationByMerchantParams: CreateTableReservationByMerchantParams{
+			TableID:         room.ID,
+			UserID:          operator.ID,
+			MerchantID:      merchant.ID,
+			ReservationDate: pgtype.Date{Time: reservationDate, Valid: true},
+			ReservationTime: pgtype.Time{Microseconds: 20 * 3600 * 1000000, Valid: true},
+			GuestCount:      2,
+			ContactName:     "线下顾客",
+			ContactPhone:    "13900139001",
+			PaymentMode:     "deposit",
+			DepositAmount:   0,
+			PrepaidAmount:   0,
+			RefundDeadline:  time.Now(),
+			PaymentDeadline: time.Now().Add(365 * 24 * time.Hour),
+			Source:          pgtype.Text{String: ReservationSourcePhone, Valid: true},
+		},
+	})
+	require.NoError(t, err)
+
+	userCount, err := testStore.CountReservationsByUserAndStatus(context.Background(), CountReservationsByUserAndStatusParams{
+		UserID: user.ID,
+		Status: ReservationStatusConfirmed,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(3), userCount)
+
+	operatorCount, err := testStore.CountReservationsByUserAndStatus(context.Background(), CountReservationsByUserAndStatusParams{
+		UserID: operator.ID,
+		Status: ReservationStatusConfirmed,
+	})
+	require.NoError(t, err)
+	require.Zero(t, operatorCount)
+
+	listed, err := testStore.ListReservationsByUserWithStatus(context.Background(), ListReservationsByUserWithStatusParams{
+		UserID: user.ID,
+		Status: pgtype.Text{String: ReservationStatusConfirmed, Valid: true},
+		Limit:  10,
+		Offset: 0,
+	})
+	require.NoError(t, err)
+	require.Len(t, listed, 3)
+	listedIDs := []int64{listed[0].ID, listed[1].ID, listed[2].ID}
+	require.Contains(t, listedIDs, onlineReservation.ID)
+	require.Contains(t, listedIDs, legacyBlankSourceReservation.ID)
+	require.Contains(t, listedIDs, legacyWhitespaceOnlineReservation.ID)
+}
+
+func TestUpdateReservationTxRepointsOfflineCustomerWhenContactPhoneChanges(t *testing.T) {
+	operator := createRandomUser(t)
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	room := createRandomRoom(t, merchant.ID)
+	reservationDate := time.Now().Add(24 * time.Hour)
+
+	reservation, err := testStore.CreateMerchantReservationTx(context.Background(), CreateMerchantReservationTxParams{
+		CreateTableReservationByMerchantParams: CreateTableReservationByMerchantParams{
+			TableID:         room.ID,
+			UserID:          operator.ID,
+			MerchantID:      merchant.ID,
+			ReservationDate: pgtype.Date{Time: reservationDate, Valid: true},
+			ReservationTime: pgtype.Time{Microseconds: 18 * 3600 * 1000000, Valid: true},
+			GuestCount:      4,
+			ContactName:     "旧客人",
+			ContactPhone:    "13800138000",
+			PaymentMode:     "deposit",
+			DepositAmount:   0,
+			PrepaidAmount:   0,
+			RefundDeadline:  time.Now(),
+			PaymentDeadline: time.Now().Add(365 * 24 * time.Hour),
+			Notes:           pgtype.Text{String: "电话预约", Valid: true},
+			Source:          pgtype.Text{String: "phone", Valid: true},
+		},
+	})
+	require.NoError(t, err)
+	require.True(t, reservation.OfflineCustomerID.Valid)
+	originalOfflineCustomerID := reservation.OfflineCustomerID.Int64
+
+	edited, err := testStore.UpdateReservationTx(context.Background(), UpdateReservationTxParams{
+		MerchantID: merchant.ID,
+		Reservation: UpdateReservationParams{
+			ID:           reservation.ID,
+			ContactName:  pgtype.Text{String: "新客人", Valid: true},
+			ContactPhone: pgtype.Text{String: "13900139000", Valid: true},
+		},
+	})
+	require.NoError(t, err)
+	require.True(t, edited.OfflineCustomerID.Valid)
+	require.NotEqual(t, originalOfflineCustomerID, edited.OfflineCustomerID.Int64)
+
+	offlineCustomer, err := testStore.GetMerchantOfflineCustomer(context.Background(), GetMerchantOfflineCustomerParams{
+		ID:         edited.OfflineCustomerID.Int64,
+		MerchantID: merchant.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, merchant.ID, offlineCustomer.MerchantID)
+	require.Equal(t, "新客人", offlineCustomer.ContactName)
+	require.Equal(t, "13900139000", offlineCustomer.ContactPhone)
+
+	_, err = testStore.MarkNoShowTx(context.Background(), MarkNoShowTxParams{
+		ReservationID:        edited.ID,
+		TableID:              room.ID,
+		CurrentReservationID: pgtype.Int8{},
+	})
+	require.NoError(t, err)
+
+	sqlStore := testStore.(*SQLStore)
+	var factSnapshot []byte
+	err = sqlStore.connPool.QueryRow(context.Background(), `
+		SELECT fact_snapshot
+		FROM behavior_decisions
+		WHERE reservation_id = $1
+		ORDER BY id DESC
+		LIMIT 1
+	`, edited.ID).Scan(&factSnapshot)
+	require.NoError(t, err)
+
+	var snapshot map[string]any
+	require.NoError(t, json.Unmarshal(factSnapshot, &snapshot))
+	require.Equal(t, float64(edited.OfflineCustomerID.Int64), snapshot["offline_customer_id"])
+}
+
+func TestUpdateReservationTxNormalizesLegacyOfflineSourceWhenContactChanges(t *testing.T) {
+	operator := createRandomUser(t)
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	room := createRandomRoom(t, merchant.ID)
+	reservationDate := time.Now().Add(24 * time.Hour)
+
+	reservation, err := testStore.CreateMerchantReservationTx(context.Background(), CreateMerchantReservationTxParams{
+		CreateTableReservationByMerchantParams: CreateTableReservationByMerchantParams{
+			TableID:         room.ID,
+			UserID:          operator.ID,
+			MerchantID:      merchant.ID,
+			ReservationDate: pgtype.Date{Time: reservationDate, Valid: true},
+			ReservationTime: pgtype.Time{Microseconds: 18 * 3600 * 1000000, Valid: true},
+			GuestCount:      4,
+			ContactName:     "旧客人",
+			ContactPhone:    "13800138009",
+			PaymentMode:     "deposit",
+			DepositAmount:   0,
+			PrepaidAmount:   0,
+			RefundDeadline:  time.Now(),
+			PaymentDeadline: time.Now().Add(365 * 24 * time.Hour),
+			Source:          pgtype.Text{String: ReservationSourcePhone, Valid: true},
+		},
+	})
+	require.NoError(t, err)
+
+	sqlStore := testStore.(*SQLStore)
+	_, err = sqlStore.connPool.Exec(context.Background(), `
+		UPDATE table_reservations
+		SET source = $2
+		WHERE id = $1
+	`, reservation.ID, " phone ")
+	require.NoError(t, err)
+
+	edited, err := testStore.UpdateReservationTx(context.Background(), UpdateReservationTxParams{
+		MerchantID: merchant.ID,
+		Reservation: UpdateReservationParams{
+			ID:           reservation.ID,
+			ContactName:  pgtype.Text{String: "新客人", Valid: true},
+			ContactPhone: pgtype.Text{String: "13900139009", Valid: true},
+		},
+	})
+	require.NoError(t, err)
+	require.True(t, edited.OfflineCustomerID.Valid)
+
+	offlineCustomer, err := testStore.GetMerchantOfflineCustomer(context.Background(), GetMerchantOfflineCustomerParams{
+		ID:         edited.OfflineCustomerID.Int64,
+		MerchantID: merchant.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, ReservationSourcePhone, offlineCustomer.Source)
+	require.Equal(t, "13900139009", offlineCustomer.ContactPhone)
+
+	current, err := testStore.GetTableReservation(context.Background(), reservation.ID)
+	require.NoError(t, err)
+	require.Equal(t, " phone ", current.Source.String)
 }
 
 func TestUpdateReservationCookingStartedRejectsActiveAdjustment(t *testing.T) {

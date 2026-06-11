@@ -880,6 +880,7 @@ type Querier interface {
 	GetMerchantMembership(ctx context.Context, id int64) (MerchantMembership, error)
 	// 商户会员设置查询
 	GetMerchantMembershipSettings(ctx context.Context, merchantID int64) (MerchantMembershipSetting, error)
+	GetMerchantOfflineCustomer(ctx context.Context, arg GetMerchantOfflineCustomerParams) (MerchantOfflineCustomer, error)
 	// 获取商户所有在线套餐 - 消费者端使用
 	GetMerchantOnlineCombos(ctx context.Context, merchantID int64) ([]GetMerchantOnlineCombosRow, error)
 	// 订单来源分析
@@ -2010,6 +2011,7 @@ type Querier interface {
 	UpsertMerchantCapabilities(ctx context.Context, arg UpsertMerchantCapabilitiesParams) (MerchantCapability, error)
 	UpsertMerchantCapabilitiesDefaults(ctx context.Context, merchantID int64) error
 	UpsertMerchantMembershipSettings(ctx context.Context, arg UpsertMerchantMembershipSettingsParams) (MerchantMembershipSetting, error)
+	UpsertMerchantOfflineCustomer(ctx context.Context, arg UpsertMerchantOfflineCustomerParams) (MerchantOfflineCustomer, error)
 	UpsertMerchantPaymentConfig(ctx context.Context, arg UpsertMerchantPaymentConfigParams) (MerchantPaymentConfig, error)
 	UpsertMerchantSystemLabel(ctx context.Context, arg UpsertMerchantSystemLabelParams) error
 	UpsertOCRJob(ctx context.Context, arg UpsertOCRJobParams) (OcrJob, error)

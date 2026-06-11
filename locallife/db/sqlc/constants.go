@@ -75,6 +75,11 @@ const (
 	ReservationStatusExpired   = "expired"
 	ReservationStatusNoShow    = "no_show"
 
+	ReservationSourceOnline   = "online"
+	ReservationSourcePhone    = "phone"
+	ReservationSourceWalkin   = "walkin"
+	ReservationSourceMerchant = "merchant"
+
 	AppVersionPlatformAndroid = "android"
 	AppVersionChannelMerchant = "merchant_app"
 

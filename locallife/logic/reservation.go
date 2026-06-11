@@ -46,6 +46,21 @@ const (
 	reservationActionStartCooking = "start_cooking"
 )
 
+func isOnlineReservationSource(source pgtype.Text) bool {
+	normalized := strings.TrimSpace(source.String)
+	return !source.Valid || normalized == "" || normalized == db.ReservationSourceOnline
+}
+
+func isCustomerOwnedReservation(reservation db.TableReservation, userID int64) bool {
+	return reservation.UserID == userID && isOnlineReservationSource(reservation.Source)
+}
+
+func isOfflineReservationCreatedByUser(reservation db.TableReservation, userID int64) bool {
+	return !isOnlineReservationSource(reservation.Source) &&
+		reservation.CreatedByUserID.Valid &&
+		reservation.CreatedByUserID.Int64 == userID
+}
+
 // ReservationItemInput describes a dish or combo in a reservation request.
 type ReservationItemInput struct {
 	DishID   *int64
@@ -319,6 +334,24 @@ func MerchantCreateReservation(ctx context.Context, store db.Store, input Mercha
 		return db.TableReservation{}, NewRequestError(http.StatusBadRequest, errors.New("invalid reservation time"))
 	}
 
+	contactName := strings.TrimSpace(input.ContactName)
+	if contactName == "" {
+		return db.TableReservation{}, NewRequestError(http.StatusBadRequest, errors.New("contact name is required"))
+	}
+	contactPhone := strings.TrimSpace(input.ContactPhone)
+	if contactPhone == "" {
+		return db.TableReservation{}, NewRequestError(http.StatusBadRequest, errors.New("contact phone is required"))
+	}
+	source := strings.TrimSpace(input.Source)
+	if source == "" {
+		source = db.ReservationSourceMerchant
+	}
+	switch source {
+	case db.ReservationSourcePhone, db.ReservationSourceWalkin, db.ReservationSourceMerchant:
+	default:
+		return db.TableReservation{}, NewRequestError(http.StatusBadRequest, errors.New("invalid reservation source"))
+	}
+
 	table, err := store.GetTable(ctx, input.TableID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
@@ -350,11 +383,6 @@ func MerchantCreateReservation(ctx context.Context, store db.Store, input Mercha
 		Valid:        true,
 	}
 
-	source := strings.TrimSpace(input.Source)
-	if source == "" {
-		source = "merchant"
-	}
-
 	txArg := db.CreateMerchantReservationTxParams{
 		CreateTableReservationByMerchantParams: db.CreateTableReservationByMerchantParams{
 			TableID:         input.TableID,
@@ -363,8 +391,8 @@ func MerchantCreateReservation(ctx context.Context, store db.Store, input Mercha
 			ReservationDate: pgDate,
 			ReservationTime: pgTime,
 			GuestCount:      input.GuestCount,
-			ContactName:     input.ContactName,
-			ContactPhone:    input.ContactPhone,
+			ContactName:     contactName,
+			ContactPhone:    contactPhone,
 			PaymentMode:     paymentModeDeposit,
 			DepositAmount:   0,
 			PrepaidAmount:   0,
@@ -527,7 +555,7 @@ func CancelReservation(
 		return ReservationStatusUpdateResult{}, err
 	}
 
-	isOwner := reservation.UserID == userID
+	isOwner := isCustomerOwnedReservation(reservation, userID)
 	isMerchant := false
 	if !isOwner {
 		merchant, err := resolveMerchantForUser(ctx, store, userID)
@@ -708,7 +736,7 @@ func CheckInReservation(ctx context.Context, store db.Store, userID, reservation
 		return ReservationStatusUpdateResult{}, err
 	}
 
-	isOwner := reservation.UserID == userID
+	isOwner := isCustomerOwnedReservation(reservation, userID)
 	isMerchant := false
 	if !isOwner {
 		merchant, err := resolveMerchantForUser(ctx, store, userID)
@@ -772,7 +800,7 @@ func StartCookingReservation(ctx context.Context, store db.Store, userID, reserv
 		return ReservationStatusUpdateResult{}, err
 	}
 
-	isOwner := reservation.UserID == userID
+	isOwner := isCustomerOwnedReservation(reservation, userID)
 	isMerchant := false
 	if !isOwner {
 		merchant, err := resolveMerchantForUser(ctx, store, userID)

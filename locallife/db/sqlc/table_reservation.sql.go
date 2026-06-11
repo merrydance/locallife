@@ -17,7 +17,7 @@ UPDATE table_reservations
 SET prepaid_amount = prepaid_amount + $2,
     updated_at = now()
 WHERE id = $1
-RETURNING id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source
+RETURNING id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source, offline_customer_id, created_by_user_id
 `
 
 type AddReservationPrepaidAmountParams struct {
@@ -56,6 +56,8 @@ func (q *Queries) AddReservationPrepaidAmount(ctx context.Context, arg AddReserv
 		&i.CheckedInAt,
 		&i.CookingStartedAt,
 		&i.Source,
+		&i.OfflineCustomerID,
+		&i.CreatedByUserID,
 	)
 	return i, err
 }
@@ -179,7 +181,9 @@ func (q *Queries) CountReservationsByMerchantAndStatus(ctx context.Context, arg 
 
 const countReservationsByUserAndStatus = `-- name: CountReservationsByUserAndStatus :one
 SELECT COUNT(*) FROM table_reservations
-WHERE user_id = $1 AND status = $2
+WHERE user_id = $1
+  AND (source IS NULL OR btrim(source) = '' OR btrim(source) = 'online')
+  AND status = $2
 `
 
 type CountReservationsByUserAndStatusParams struct {
@@ -213,7 +217,7 @@ INSERT INTO table_reservations (
     status
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
-) RETURNING id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source
+) RETURNING id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source, offline_customer_id, created_by_user_id
 `
 
 type CreateTableReservationParams struct {
@@ -280,6 +284,8 @@ func (q *Queries) CreateTableReservation(ctx context.Context, arg CreateTableRes
 		&i.CheckedInAt,
 		&i.CookingStartedAt,
 		&i.Source,
+		&i.OfflineCustomerID,
+		&i.CreatedByUserID,
 	)
 	return i, err
 }
@@ -302,28 +308,50 @@ INSERT INTO table_reservations (
     notes,
     status,
     source,
+    offline_customer_id,
+    created_by_user_id,
     confirmed_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'confirmed', $15, now()
-) RETURNING id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    btrim($7),
+    btrim($8),
+    $9,
+    $10,
+    $11,
+    $12,
+    $13,
+    $14,
+    'confirmed',
+    $15,
+    $16,
+    $17,
+    now()
+) RETURNING id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source, offline_customer_id, created_by_user_id
 `
 
 type CreateTableReservationByMerchantParams struct {
-	TableID         int64       `json:"table_id"`
-	UserID          int64       `json:"user_id"`
-	MerchantID      int64       `json:"merchant_id"`
-	ReservationDate pgtype.Date `json:"reservation_date"`
-	ReservationTime pgtype.Time `json:"reservation_time"`
-	GuestCount      int16       `json:"guest_count"`
-	ContactName     string      `json:"contact_name"`
-	ContactPhone    string      `json:"contact_phone"`
-	PaymentMode     string      `json:"payment_mode"`
-	DepositAmount   int64       `json:"deposit_amount"`
-	PrepaidAmount   int64       `json:"prepaid_amount"`
-	RefundDeadline  time.Time   `json:"refund_deadline"`
-	PaymentDeadline time.Time   `json:"payment_deadline"`
-	Notes           pgtype.Text `json:"notes"`
-	Source          pgtype.Text `json:"source"`
+	TableID           int64       `json:"table_id"`
+	UserID            int64       `json:"user_id"`
+	MerchantID        int64       `json:"merchant_id"`
+	ReservationDate   pgtype.Date `json:"reservation_date"`
+	ReservationTime   pgtype.Time `json:"reservation_time"`
+	GuestCount        int16       `json:"guest_count"`
+	ContactName       string      `json:"contact_name"`
+	ContactPhone      string      `json:"contact_phone"`
+	PaymentMode       string      `json:"payment_mode"`
+	DepositAmount     int64       `json:"deposit_amount"`
+	PrepaidAmount     int64       `json:"prepaid_amount"`
+	RefundDeadline    time.Time   `json:"refund_deadline"`
+	PaymentDeadline   time.Time   `json:"payment_deadline"`
+	Notes             pgtype.Text `json:"notes"`
+	Source            pgtype.Text `json:"source"`
+	OfflineCustomerID pgtype.Int8 `json:"offline_customer_id"`
+	CreatedByUserID   pgtype.Int8 `json:"created_by_user_id"`
 }
 
 // 商户代客创建预订（无需支付，直接 confirmed 状态）
@@ -344,6 +372,8 @@ func (q *Queries) CreateTableReservationByMerchant(ctx context.Context, arg Crea
 		arg.PaymentDeadline,
 		arg.Notes,
 		arg.Source,
+		arg.OfflineCustomerID,
+		arg.CreatedByUserID,
 	)
 	var i TableReservation
 	err := row.Scan(
@@ -373,6 +403,8 @@ func (q *Queries) CreateTableReservationByMerchant(ctx context.Context, arg Crea
 		&i.CheckedInAt,
 		&i.CookingStartedAt,
 		&i.Source,
+		&i.OfflineCustomerID,
+		&i.CreatedByUserID,
 	)
 	return i, err
 }
@@ -500,7 +532,7 @@ func (q *Queries) GetReservationStatsEnhanced(ctx context.Context, merchantID in
 }
 
 const getTableReservation = `-- name: GetTableReservation :one
-SELECT id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source FROM table_reservations
+SELECT id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source, offline_customer_id, created_by_user_id FROM table_reservations
 WHERE id = $1 LIMIT 1
 `
 
@@ -534,12 +566,14 @@ func (q *Queries) GetTableReservation(ctx context.Context, id int64) (TableReser
 		&i.CheckedInAt,
 		&i.CookingStartedAt,
 		&i.Source,
+		&i.OfflineCustomerID,
+		&i.CreatedByUserID,
 	)
 	return i, err
 }
 
 const getTableReservationForUpdate = `-- name: GetTableReservationForUpdate :one
-SELECT id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source FROM table_reservations
+SELECT id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source, offline_customer_id, created_by_user_id FROM table_reservations
 WHERE id = $1 LIMIT 1
 FOR UPDATE
 `
@@ -574,13 +608,15 @@ func (q *Queries) GetTableReservationForUpdate(ctx context.Context, id int64) (T
 		&i.CheckedInAt,
 		&i.CookingStartedAt,
 		&i.Source,
+		&i.OfflineCustomerID,
+		&i.CreatedByUserID,
 	)
 	return i, err
 }
 
 const getTableReservationWithTable = `-- name: GetTableReservationWithTable :one
 SELECT 
-  tr.id, tr.table_id, tr.user_id, tr.merchant_id, tr.reservation_date, tr.reservation_time, tr.guest_count, tr.contact_name, tr.contact_phone, tr.payment_mode, tr.deposit_amount, tr.prepaid_amount, tr.refund_deadline, tr.status, tr.payment_deadline, tr.notes, tr.paid_at, tr.confirmed_at, tr.completed_at, tr.cancelled_at, tr.cancel_reason, tr.created_at, tr.updated_at, tr.checked_in_at, tr.cooking_started_at, tr.source,
+  tr.id, tr.table_id, tr.user_id, tr.merchant_id, tr.reservation_date, tr.reservation_time, tr.guest_count, tr.contact_name, tr.contact_phone, tr.payment_mode, tr.deposit_amount, tr.prepaid_amount, tr.refund_deadline, tr.status, tr.payment_deadline, tr.notes, tr.paid_at, tr.confirmed_at, tr.completed_at, tr.cancelled_at, tr.cancel_reason, tr.created_at, tr.updated_at, tr.checked_in_at, tr.cooking_started_at, tr.source, tr.offline_customer_id, tr.created_by_user_id,
     t.table_no,
     t.table_type,
     t.capacity
@@ -590,35 +626,37 @@ WHERE tr.id = $1
 `
 
 type GetTableReservationWithTableRow struct {
-	ID               int64              `json:"id"`
-	TableID          int64              `json:"table_id"`
-	UserID           int64              `json:"user_id"`
-	MerchantID       int64              `json:"merchant_id"`
-	ReservationDate  pgtype.Date        `json:"reservation_date"`
-	ReservationTime  pgtype.Time        `json:"reservation_time"`
-	GuestCount       int16              `json:"guest_count"`
-	ContactName      string             `json:"contact_name"`
-	ContactPhone     string             `json:"contact_phone"`
-	PaymentMode      string             `json:"payment_mode"`
-	DepositAmount    int64              `json:"deposit_amount"`
-	PrepaidAmount    int64              `json:"prepaid_amount"`
-	RefundDeadline   time.Time          `json:"refund_deadline"`
-	Status           string             `json:"status"`
-	PaymentDeadline  time.Time          `json:"payment_deadline"`
-	Notes            pgtype.Text        `json:"notes"`
-	PaidAt           pgtype.Timestamptz `json:"paid_at"`
-	ConfirmedAt      pgtype.Timestamptz `json:"confirmed_at"`
-	CompletedAt      pgtype.Timestamptz `json:"completed_at"`
-	CancelledAt      pgtype.Timestamptz `json:"cancelled_at"`
-	CancelReason     pgtype.Text        `json:"cancel_reason"`
-	CreatedAt        time.Time          `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
-	CheckedInAt      pgtype.Timestamptz `json:"checked_in_at"`
-	CookingStartedAt pgtype.Timestamptz `json:"cooking_started_at"`
-	Source           pgtype.Text        `json:"source"`
-	TableNo          string             `json:"table_no"`
-	TableType        string             `json:"table_type"`
-	Capacity         int16              `json:"capacity"`
+	ID                int64              `json:"id"`
+	TableID           int64              `json:"table_id"`
+	UserID            int64              `json:"user_id"`
+	MerchantID        int64              `json:"merchant_id"`
+	ReservationDate   pgtype.Date        `json:"reservation_date"`
+	ReservationTime   pgtype.Time        `json:"reservation_time"`
+	GuestCount        int16              `json:"guest_count"`
+	ContactName       string             `json:"contact_name"`
+	ContactPhone      string             `json:"contact_phone"`
+	PaymentMode       string             `json:"payment_mode"`
+	DepositAmount     int64              `json:"deposit_amount"`
+	PrepaidAmount     int64              `json:"prepaid_amount"`
+	RefundDeadline    time.Time          `json:"refund_deadline"`
+	Status            string             `json:"status"`
+	PaymentDeadline   time.Time          `json:"payment_deadline"`
+	Notes             pgtype.Text        `json:"notes"`
+	PaidAt            pgtype.Timestamptz `json:"paid_at"`
+	ConfirmedAt       pgtype.Timestamptz `json:"confirmed_at"`
+	CompletedAt       pgtype.Timestamptz `json:"completed_at"`
+	CancelledAt       pgtype.Timestamptz `json:"cancelled_at"`
+	CancelReason      pgtype.Text        `json:"cancel_reason"`
+	CreatedAt         time.Time          `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	CheckedInAt       pgtype.Timestamptz `json:"checked_in_at"`
+	CookingStartedAt  pgtype.Timestamptz `json:"cooking_started_at"`
+	Source            pgtype.Text        `json:"source"`
+	OfflineCustomerID pgtype.Int8        `json:"offline_customer_id"`
+	CreatedByUserID   pgtype.Int8        `json:"created_by_user_id"`
+	TableNo           string             `json:"table_no"`
+	TableType         string             `json:"table_type"`
+	Capacity          int16              `json:"capacity"`
 }
 
 func (q *Queries) GetTableReservationWithTable(ctx context.Context, id int64) (GetTableReservationWithTableRow, error) {
@@ -651,6 +689,8 @@ func (q *Queries) GetTableReservationWithTable(ctx context.Context, id int64) (G
 		&i.CheckedInAt,
 		&i.CookingStartedAt,
 		&i.Source,
+		&i.OfflineCustomerID,
+		&i.CreatedByUserID,
 		&i.TableNo,
 		&i.TableType,
 		&i.Capacity,
@@ -659,7 +699,7 @@ func (q *Queries) GetTableReservationWithTable(ctx context.Context, id int64) (G
 }
 
 const listExpiredPendingReservations = `-- name: ListExpiredPendingReservations :many
-SELECT id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source FROM table_reservations
+SELECT id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source, offline_customer_id, created_by_user_id FROM table_reservations
 WHERE status = 'pending'
   AND payment_deadline < now()
 ORDER BY payment_deadline
@@ -702,6 +742,8 @@ func (q *Queries) ListExpiredPendingReservations(ctx context.Context) ([]TableRe
 			&i.CheckedInAt,
 			&i.CookingStartedAt,
 			&i.Source,
+			&i.OfflineCustomerID,
+			&i.CreatedByUserID,
 		); err != nil {
 			return nil, err
 		}
@@ -714,7 +756,7 @@ func (q *Queries) ListExpiredPendingReservations(ctx context.Context) ([]TableRe
 }
 
 const listMerchantFutureReservationsForFoodSafetyAlert = `-- name: ListMerchantFutureReservationsForFoodSafetyAlert :many
-SELECT id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source FROM table_reservations
+SELECT id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source, offline_customer_id, created_by_user_id FROM table_reservations
 WHERE merchant_id = $1
   AND status IN ('pending', 'paid', 'confirmed')
   AND (reservation_date + reservation_time) >= NOW()
@@ -757,6 +799,8 @@ func (q *Queries) ListMerchantFutureReservationsForFoodSafetyAlert(ctx context.C
 			&i.CheckedInAt,
 			&i.CookingStartedAt,
 			&i.Source,
+			&i.OfflineCustomerID,
+			&i.CreatedByUserID,
 		); err != nil {
 			return nil, err
 		}
@@ -769,7 +813,7 @@ func (q *Queries) ListMerchantFutureReservationsForFoodSafetyAlert(ctx context.C
 }
 
 const listMerchantFutureReservationsForRefund = `-- name: ListMerchantFutureReservationsForRefund :many
-SELECT id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source FROM table_reservations
+SELECT id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source, offline_customer_id, created_by_user_id FROM table_reservations
 WHERE merchant_id = $1 
   AND reservation_date >= CURRENT_DATE
   AND status IN ('pending', 'paid', 'confirmed')
@@ -814,6 +858,8 @@ func (q *Queries) ListMerchantFutureReservationsForRefund(ctx context.Context, m
 			&i.CheckedInAt,
 			&i.CookingStartedAt,
 			&i.Source,
+			&i.OfflineCustomerID,
+			&i.CreatedByUserID,
 		); err != nil {
 			return nil, err
 		}
@@ -826,7 +872,7 @@ func (q *Queries) ListMerchantFutureReservationsForRefund(ctx context.Context, m
 }
 
 const listPendingReservationsNearDeadline = `-- name: ListPendingReservationsNearDeadline :many
-SELECT id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source FROM table_reservations
+SELECT id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source, offline_customer_id, created_by_user_id FROM table_reservations
 WHERE status = 'pending'
   AND payment_deadline > now()
   AND payment_deadline < now() + $1::interval
@@ -870,6 +916,8 @@ func (q *Queries) ListPendingReservationsNearDeadline(ctx context.Context, minut
 			&i.CheckedInAt,
 			&i.CookingStartedAt,
 			&i.Source,
+			&i.OfflineCustomerID,
+			&i.CreatedByUserID,
 		); err != nil {
 			return nil, err
 		}
@@ -883,7 +931,7 @@ func (q *Queries) ListPendingReservationsNearDeadline(ctx context.Context, minut
 
 const listReservationsByMerchant = `-- name: ListReservationsByMerchant :many
 SELECT 
-  tr.id, tr.table_id, tr.user_id, tr.merchant_id, tr.reservation_date, tr.reservation_time, tr.guest_count, tr.contact_name, tr.contact_phone, tr.payment_mode, tr.deposit_amount, tr.prepaid_amount, tr.refund_deadline, tr.status, tr.payment_deadline, tr.notes, tr.paid_at, tr.confirmed_at, tr.completed_at, tr.cancelled_at, tr.cancel_reason, tr.created_at, tr.updated_at, tr.checked_in_at, tr.cooking_started_at, tr.source,
+  tr.id, tr.table_id, tr.user_id, tr.merchant_id, tr.reservation_date, tr.reservation_time, tr.guest_count, tr.contact_name, tr.contact_phone, tr.payment_mode, tr.deposit_amount, tr.prepaid_amount, tr.refund_deadline, tr.status, tr.payment_deadline, tr.notes, tr.paid_at, tr.confirmed_at, tr.completed_at, tr.cancelled_at, tr.cancel_reason, tr.created_at, tr.updated_at, tr.checked_in_at, tr.cooking_started_at, tr.source, tr.offline_customer_id, tr.created_by_user_id,
     t.table_no,
     t.table_type
 FROM table_reservations tr
@@ -900,34 +948,36 @@ type ListReservationsByMerchantParams struct {
 }
 
 type ListReservationsByMerchantRow struct {
-	ID               int64              `json:"id"`
-	TableID          int64              `json:"table_id"`
-	UserID           int64              `json:"user_id"`
-	MerchantID       int64              `json:"merchant_id"`
-	ReservationDate  pgtype.Date        `json:"reservation_date"`
-	ReservationTime  pgtype.Time        `json:"reservation_time"`
-	GuestCount       int16              `json:"guest_count"`
-	ContactName      string             `json:"contact_name"`
-	ContactPhone     string             `json:"contact_phone"`
-	PaymentMode      string             `json:"payment_mode"`
-	DepositAmount    int64              `json:"deposit_amount"`
-	PrepaidAmount    int64              `json:"prepaid_amount"`
-	RefundDeadline   time.Time          `json:"refund_deadline"`
-	Status           string             `json:"status"`
-	PaymentDeadline  time.Time          `json:"payment_deadline"`
-	Notes            pgtype.Text        `json:"notes"`
-	PaidAt           pgtype.Timestamptz `json:"paid_at"`
-	ConfirmedAt      pgtype.Timestamptz `json:"confirmed_at"`
-	CompletedAt      pgtype.Timestamptz `json:"completed_at"`
-	CancelledAt      pgtype.Timestamptz `json:"cancelled_at"`
-	CancelReason     pgtype.Text        `json:"cancel_reason"`
-	CreatedAt        time.Time          `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
-	CheckedInAt      pgtype.Timestamptz `json:"checked_in_at"`
-	CookingStartedAt pgtype.Timestamptz `json:"cooking_started_at"`
-	Source           pgtype.Text        `json:"source"`
-	TableNo          string             `json:"table_no"`
-	TableType        string             `json:"table_type"`
+	ID                int64              `json:"id"`
+	TableID           int64              `json:"table_id"`
+	UserID            int64              `json:"user_id"`
+	MerchantID        int64              `json:"merchant_id"`
+	ReservationDate   pgtype.Date        `json:"reservation_date"`
+	ReservationTime   pgtype.Time        `json:"reservation_time"`
+	GuestCount        int16              `json:"guest_count"`
+	ContactName       string             `json:"contact_name"`
+	ContactPhone      string             `json:"contact_phone"`
+	PaymentMode       string             `json:"payment_mode"`
+	DepositAmount     int64              `json:"deposit_amount"`
+	PrepaidAmount     int64              `json:"prepaid_amount"`
+	RefundDeadline    time.Time          `json:"refund_deadline"`
+	Status            string             `json:"status"`
+	PaymentDeadline   time.Time          `json:"payment_deadline"`
+	Notes             pgtype.Text        `json:"notes"`
+	PaidAt            pgtype.Timestamptz `json:"paid_at"`
+	ConfirmedAt       pgtype.Timestamptz `json:"confirmed_at"`
+	CompletedAt       pgtype.Timestamptz `json:"completed_at"`
+	CancelledAt       pgtype.Timestamptz `json:"cancelled_at"`
+	CancelReason      pgtype.Text        `json:"cancel_reason"`
+	CreatedAt         time.Time          `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	CheckedInAt       pgtype.Timestamptz `json:"checked_in_at"`
+	CookingStartedAt  pgtype.Timestamptz `json:"cooking_started_at"`
+	Source            pgtype.Text        `json:"source"`
+	OfflineCustomerID pgtype.Int8        `json:"offline_customer_id"`
+	CreatedByUserID   pgtype.Int8        `json:"created_by_user_id"`
+	TableNo           string             `json:"table_no"`
+	TableType         string             `json:"table_type"`
 }
 
 func (q *Queries) ListReservationsByMerchant(ctx context.Context, arg ListReservationsByMerchantParams) ([]ListReservationsByMerchantRow, error) {
@@ -966,6 +1016,8 @@ func (q *Queries) ListReservationsByMerchant(ctx context.Context, arg ListReserv
 			&i.CheckedInAt,
 			&i.CookingStartedAt,
 			&i.Source,
+			&i.OfflineCustomerID,
+			&i.CreatedByUserID,
 			&i.TableNo,
 			&i.TableType,
 		); err != nil {
@@ -981,7 +1033,7 @@ func (q *Queries) ListReservationsByMerchant(ctx context.Context, arg ListReserv
 
 const listReservationsByMerchantAndDate = `-- name: ListReservationsByMerchantAndDate :many
 SELECT 
-  tr.id, tr.table_id, tr.user_id, tr.merchant_id, tr.reservation_date, tr.reservation_time, tr.guest_count, tr.contact_name, tr.contact_phone, tr.payment_mode, tr.deposit_amount, tr.prepaid_amount, tr.refund_deadline, tr.status, tr.payment_deadline, tr.notes, tr.paid_at, tr.confirmed_at, tr.completed_at, tr.cancelled_at, tr.cancel_reason, tr.created_at, tr.updated_at, tr.checked_in_at, tr.cooking_started_at, tr.source,
+  tr.id, tr.table_id, tr.user_id, tr.merchant_id, tr.reservation_date, tr.reservation_time, tr.guest_count, tr.contact_name, tr.contact_phone, tr.payment_mode, tr.deposit_amount, tr.prepaid_amount, tr.refund_deadline, tr.status, tr.payment_deadline, tr.notes, tr.paid_at, tr.confirmed_at, tr.completed_at, tr.cancelled_at, tr.cancel_reason, tr.created_at, tr.updated_at, tr.checked_in_at, tr.cooking_started_at, tr.source, tr.offline_customer_id, tr.created_by_user_id,
     t.table_no,
     t.table_type
 FROM table_reservations tr
@@ -997,34 +1049,36 @@ type ListReservationsByMerchantAndDateParams struct {
 }
 
 type ListReservationsByMerchantAndDateRow struct {
-	ID               int64              `json:"id"`
-	TableID          int64              `json:"table_id"`
-	UserID           int64              `json:"user_id"`
-	MerchantID       int64              `json:"merchant_id"`
-	ReservationDate  pgtype.Date        `json:"reservation_date"`
-	ReservationTime  pgtype.Time        `json:"reservation_time"`
-	GuestCount       int16              `json:"guest_count"`
-	ContactName      string             `json:"contact_name"`
-	ContactPhone     string             `json:"contact_phone"`
-	PaymentMode      string             `json:"payment_mode"`
-	DepositAmount    int64              `json:"deposit_amount"`
-	PrepaidAmount    int64              `json:"prepaid_amount"`
-	RefundDeadline   time.Time          `json:"refund_deadline"`
-	Status           string             `json:"status"`
-	PaymentDeadline  time.Time          `json:"payment_deadline"`
-	Notes            pgtype.Text        `json:"notes"`
-	PaidAt           pgtype.Timestamptz `json:"paid_at"`
-	ConfirmedAt      pgtype.Timestamptz `json:"confirmed_at"`
-	CompletedAt      pgtype.Timestamptz `json:"completed_at"`
-	CancelledAt      pgtype.Timestamptz `json:"cancelled_at"`
-	CancelReason     pgtype.Text        `json:"cancel_reason"`
-	CreatedAt        time.Time          `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
-	CheckedInAt      pgtype.Timestamptz `json:"checked_in_at"`
-	CookingStartedAt pgtype.Timestamptz `json:"cooking_started_at"`
-	Source           pgtype.Text        `json:"source"`
-	TableNo          string             `json:"table_no"`
-	TableType        string             `json:"table_type"`
+	ID                int64              `json:"id"`
+	TableID           int64              `json:"table_id"`
+	UserID            int64              `json:"user_id"`
+	MerchantID        int64              `json:"merchant_id"`
+	ReservationDate   pgtype.Date        `json:"reservation_date"`
+	ReservationTime   pgtype.Time        `json:"reservation_time"`
+	GuestCount        int16              `json:"guest_count"`
+	ContactName       string             `json:"contact_name"`
+	ContactPhone      string             `json:"contact_phone"`
+	PaymentMode       string             `json:"payment_mode"`
+	DepositAmount     int64              `json:"deposit_amount"`
+	PrepaidAmount     int64              `json:"prepaid_amount"`
+	RefundDeadline    time.Time          `json:"refund_deadline"`
+	Status            string             `json:"status"`
+	PaymentDeadline   time.Time          `json:"payment_deadline"`
+	Notes             pgtype.Text        `json:"notes"`
+	PaidAt            pgtype.Timestamptz `json:"paid_at"`
+	ConfirmedAt       pgtype.Timestamptz `json:"confirmed_at"`
+	CompletedAt       pgtype.Timestamptz `json:"completed_at"`
+	CancelledAt       pgtype.Timestamptz `json:"cancelled_at"`
+	CancelReason      pgtype.Text        `json:"cancel_reason"`
+	CreatedAt         time.Time          `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	CheckedInAt       pgtype.Timestamptz `json:"checked_in_at"`
+	CookingStartedAt  pgtype.Timestamptz `json:"cooking_started_at"`
+	Source            pgtype.Text        `json:"source"`
+	OfflineCustomerID pgtype.Int8        `json:"offline_customer_id"`
+	CreatedByUserID   pgtype.Int8        `json:"created_by_user_id"`
+	TableNo           string             `json:"table_no"`
+	TableType         string             `json:"table_type"`
 }
 
 func (q *Queries) ListReservationsByMerchantAndDate(ctx context.Context, arg ListReservationsByMerchantAndDateParams) ([]ListReservationsByMerchantAndDateRow, error) {
@@ -1063,6 +1117,8 @@ func (q *Queries) ListReservationsByMerchantAndDate(ctx context.Context, arg Lis
 			&i.CheckedInAt,
 			&i.CookingStartedAt,
 			&i.Source,
+			&i.OfflineCustomerID,
+			&i.CreatedByUserID,
 			&i.TableNo,
 			&i.TableType,
 		); err != nil {
@@ -1078,7 +1134,7 @@ func (q *Queries) ListReservationsByMerchantAndDate(ctx context.Context, arg Lis
 
 const listReservationsByMerchantAndStatus = `-- name: ListReservationsByMerchantAndStatus :many
 SELECT 
-  tr.id, tr.table_id, tr.user_id, tr.merchant_id, tr.reservation_date, tr.reservation_time, tr.guest_count, tr.contact_name, tr.contact_phone, tr.payment_mode, tr.deposit_amount, tr.prepaid_amount, tr.refund_deadline, tr.status, tr.payment_deadline, tr.notes, tr.paid_at, tr.confirmed_at, tr.completed_at, tr.cancelled_at, tr.cancel_reason, tr.created_at, tr.updated_at, tr.checked_in_at, tr.cooking_started_at, tr.source,
+  tr.id, tr.table_id, tr.user_id, tr.merchant_id, tr.reservation_date, tr.reservation_time, tr.guest_count, tr.contact_name, tr.contact_phone, tr.payment_mode, tr.deposit_amount, tr.prepaid_amount, tr.refund_deadline, tr.status, tr.payment_deadline, tr.notes, tr.paid_at, tr.confirmed_at, tr.completed_at, tr.cancelled_at, tr.cancel_reason, tr.created_at, tr.updated_at, tr.checked_in_at, tr.cooking_started_at, tr.source, tr.offline_customer_id, tr.created_by_user_id,
     t.table_no,
     t.table_type
 FROM table_reservations tr
@@ -1097,34 +1153,36 @@ type ListReservationsByMerchantAndStatusParams struct {
 }
 
 type ListReservationsByMerchantAndStatusRow struct {
-	ID               int64              `json:"id"`
-	TableID          int64              `json:"table_id"`
-	UserID           int64              `json:"user_id"`
-	MerchantID       int64              `json:"merchant_id"`
-	ReservationDate  pgtype.Date        `json:"reservation_date"`
-	ReservationTime  pgtype.Time        `json:"reservation_time"`
-	GuestCount       int16              `json:"guest_count"`
-	ContactName      string             `json:"contact_name"`
-	ContactPhone     string             `json:"contact_phone"`
-	PaymentMode      string             `json:"payment_mode"`
-	DepositAmount    int64              `json:"deposit_amount"`
-	PrepaidAmount    int64              `json:"prepaid_amount"`
-	RefundDeadline   time.Time          `json:"refund_deadline"`
-	Status           string             `json:"status"`
-	PaymentDeadline  time.Time          `json:"payment_deadline"`
-	Notes            pgtype.Text        `json:"notes"`
-	PaidAt           pgtype.Timestamptz `json:"paid_at"`
-	ConfirmedAt      pgtype.Timestamptz `json:"confirmed_at"`
-	CompletedAt      pgtype.Timestamptz `json:"completed_at"`
-	CancelledAt      pgtype.Timestamptz `json:"cancelled_at"`
-	CancelReason     pgtype.Text        `json:"cancel_reason"`
-	CreatedAt        time.Time          `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
-	CheckedInAt      pgtype.Timestamptz `json:"checked_in_at"`
-	CookingStartedAt pgtype.Timestamptz `json:"cooking_started_at"`
-	Source           pgtype.Text        `json:"source"`
-	TableNo          string             `json:"table_no"`
-	TableType        string             `json:"table_type"`
+	ID                int64              `json:"id"`
+	TableID           int64              `json:"table_id"`
+	UserID            int64              `json:"user_id"`
+	MerchantID        int64              `json:"merchant_id"`
+	ReservationDate   pgtype.Date        `json:"reservation_date"`
+	ReservationTime   pgtype.Time        `json:"reservation_time"`
+	GuestCount        int16              `json:"guest_count"`
+	ContactName       string             `json:"contact_name"`
+	ContactPhone      string             `json:"contact_phone"`
+	PaymentMode       string             `json:"payment_mode"`
+	DepositAmount     int64              `json:"deposit_amount"`
+	PrepaidAmount     int64              `json:"prepaid_amount"`
+	RefundDeadline    time.Time          `json:"refund_deadline"`
+	Status            string             `json:"status"`
+	PaymentDeadline   time.Time          `json:"payment_deadline"`
+	Notes             pgtype.Text        `json:"notes"`
+	PaidAt            pgtype.Timestamptz `json:"paid_at"`
+	ConfirmedAt       pgtype.Timestamptz `json:"confirmed_at"`
+	CompletedAt       pgtype.Timestamptz `json:"completed_at"`
+	CancelledAt       pgtype.Timestamptz `json:"cancelled_at"`
+	CancelReason      pgtype.Text        `json:"cancel_reason"`
+	CreatedAt         time.Time          `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	CheckedInAt       pgtype.Timestamptz `json:"checked_in_at"`
+	CookingStartedAt  pgtype.Timestamptz `json:"cooking_started_at"`
+	Source            pgtype.Text        `json:"source"`
+	OfflineCustomerID pgtype.Int8        `json:"offline_customer_id"`
+	CreatedByUserID   pgtype.Int8        `json:"created_by_user_id"`
+	TableNo           string             `json:"table_no"`
+	TableType         string             `json:"table_type"`
 }
 
 func (q *Queries) ListReservationsByMerchantAndStatus(ctx context.Context, arg ListReservationsByMerchantAndStatusParams) ([]ListReservationsByMerchantAndStatusRow, error) {
@@ -1168,6 +1226,8 @@ func (q *Queries) ListReservationsByMerchantAndStatus(ctx context.Context, arg L
 			&i.CheckedInAt,
 			&i.CookingStartedAt,
 			&i.Source,
+			&i.OfflineCustomerID,
+			&i.CreatedByUserID,
 			&i.TableNo,
 			&i.TableType,
 		); err != nil {
@@ -1182,7 +1242,7 @@ func (q *Queries) ListReservationsByMerchantAndStatus(ctx context.Context, arg L
 }
 
 const listReservationsByTable = `-- name: ListReservationsByTable :many
-SELECT id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source FROM table_reservations
+SELECT id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source, offline_customer_id, created_by_user_id FROM table_reservations
 WHERE table_id = $1
 ORDER BY reservation_date DESC, reservation_time DESC
 LIMIT $2 OFFSET $3
@@ -1230,6 +1290,8 @@ func (q *Queries) ListReservationsByTable(ctx context.Context, arg ListReservati
 			&i.CheckedInAt,
 			&i.CookingStartedAt,
 			&i.Source,
+			&i.OfflineCustomerID,
+			&i.CreatedByUserID,
 		); err != nil {
 			return nil, err
 		}
@@ -1242,7 +1304,7 @@ func (q *Queries) ListReservationsByTable(ctx context.Context, arg ListReservati
 }
 
 const listReservationsByTableAndDate = `-- name: ListReservationsByTableAndDate :many
-SELECT id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source FROM table_reservations
+SELECT id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source, offline_customer_id, created_by_user_id FROM table_reservations
 WHERE table_id = $1 
   AND reservation_date = $2
 ORDER BY reservation_time
@@ -1289,6 +1351,8 @@ func (q *Queries) ListReservationsByTableAndDate(ctx context.Context, arg ListRe
 			&i.CheckedInAt,
 			&i.CookingStartedAt,
 			&i.Source,
+			&i.OfflineCustomerID,
+			&i.CreatedByUserID,
 		); err != nil {
 			return nil, err
 		}
@@ -1302,13 +1366,13 @@ func (q *Queries) ListReservationsByTableAndDate(ctx context.Context, arg ListRe
 
 const listReservationsByUserWithStatus = `-- name: ListReservationsByUserWithStatus :many
 SELECT 
-  tr.id, tr.table_id, tr.user_id, tr.merchant_id, tr.reservation_date, tr.reservation_time, tr.guest_count, tr.contact_name, tr.contact_phone, tr.payment_mode, tr.deposit_amount, tr.prepaid_amount, tr.refund_deadline, tr.status, tr.payment_deadline, tr.notes, tr.paid_at, tr.confirmed_at, tr.completed_at, tr.cancelled_at, tr.cancel_reason, tr.created_at, tr.updated_at, tr.checked_in_at, tr.cooking_started_at, tr.source,
+  tr.id, tr.table_id, tr.user_id, tr.merchant_id, tr.reservation_date, tr.reservation_time, tr.guest_count, tr.contact_name, tr.contact_phone, tr.payment_mode, tr.deposit_amount, tr.prepaid_amount, tr.refund_deadline, tr.status, tr.payment_deadline, tr.notes, tr.paid_at, tr.confirmed_at, tr.completed_at, tr.cancelled_at, tr.cancel_reason, tr.created_at, tr.updated_at, tr.checked_in_at, tr.cooking_started_at, tr.source, tr.offline_customer_id, tr.created_by_user_id,
     t.table_no,
     t.table_type
 FROM table_reservations tr
 INNER JOIN tables t ON tr.table_id = t.id
 WHERE tr.user_id = $1
-  AND (tr.source IS NULL OR tr.source = 'online')
+  AND (tr.source IS NULL OR btrim(tr.source) = '' OR btrim(tr.source) = 'online')
   AND ($2::text IS NULL OR tr.status = $2)
 ORDER BY
   CASE tr.status
@@ -1333,34 +1397,36 @@ type ListReservationsByUserWithStatusParams struct {
 }
 
 type ListReservationsByUserWithStatusRow struct {
-	ID               int64              `json:"id"`
-	TableID          int64              `json:"table_id"`
-	UserID           int64              `json:"user_id"`
-	MerchantID       int64              `json:"merchant_id"`
-	ReservationDate  pgtype.Date        `json:"reservation_date"`
-	ReservationTime  pgtype.Time        `json:"reservation_time"`
-	GuestCount       int16              `json:"guest_count"`
-	ContactName      string             `json:"contact_name"`
-	ContactPhone     string             `json:"contact_phone"`
-	PaymentMode      string             `json:"payment_mode"`
-	DepositAmount    int64              `json:"deposit_amount"`
-	PrepaidAmount    int64              `json:"prepaid_amount"`
-	RefundDeadline   time.Time          `json:"refund_deadline"`
-	Status           string             `json:"status"`
-	PaymentDeadline  time.Time          `json:"payment_deadline"`
-	Notes            pgtype.Text        `json:"notes"`
-	PaidAt           pgtype.Timestamptz `json:"paid_at"`
-	ConfirmedAt      pgtype.Timestamptz `json:"confirmed_at"`
-	CompletedAt      pgtype.Timestamptz `json:"completed_at"`
-	CancelledAt      pgtype.Timestamptz `json:"cancelled_at"`
-	CancelReason     pgtype.Text        `json:"cancel_reason"`
-	CreatedAt        time.Time          `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
-	CheckedInAt      pgtype.Timestamptz `json:"checked_in_at"`
-	CookingStartedAt pgtype.Timestamptz `json:"cooking_started_at"`
-	Source           pgtype.Text        `json:"source"`
-	TableNo          string             `json:"table_no"`
-	TableType        string             `json:"table_type"`
+	ID                int64              `json:"id"`
+	TableID           int64              `json:"table_id"`
+	UserID            int64              `json:"user_id"`
+	MerchantID        int64              `json:"merchant_id"`
+	ReservationDate   pgtype.Date        `json:"reservation_date"`
+	ReservationTime   pgtype.Time        `json:"reservation_time"`
+	GuestCount        int16              `json:"guest_count"`
+	ContactName       string             `json:"contact_name"`
+	ContactPhone      string             `json:"contact_phone"`
+	PaymentMode       string             `json:"payment_mode"`
+	DepositAmount     int64              `json:"deposit_amount"`
+	PrepaidAmount     int64              `json:"prepaid_amount"`
+	RefundDeadline    time.Time          `json:"refund_deadline"`
+	Status            string             `json:"status"`
+	PaymentDeadline   time.Time          `json:"payment_deadline"`
+	Notes             pgtype.Text        `json:"notes"`
+	PaidAt            pgtype.Timestamptz `json:"paid_at"`
+	ConfirmedAt       pgtype.Timestamptz `json:"confirmed_at"`
+	CompletedAt       pgtype.Timestamptz `json:"completed_at"`
+	CancelledAt       pgtype.Timestamptz `json:"cancelled_at"`
+	CancelReason      pgtype.Text        `json:"cancel_reason"`
+	CreatedAt         time.Time          `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	CheckedInAt       pgtype.Timestamptz `json:"checked_in_at"`
+	CookingStartedAt  pgtype.Timestamptz `json:"cooking_started_at"`
+	Source            pgtype.Text        `json:"source"`
+	OfflineCustomerID pgtype.Int8        `json:"offline_customer_id"`
+	CreatedByUserID   pgtype.Int8        `json:"created_by_user_id"`
+	TableNo           string             `json:"table_no"`
+	TableType         string             `json:"table_type"`
 }
 
 // 用户预订列表：只返回在线预订（source = 'online' 或 NULL），不包括商户代客创建的预订
@@ -1405,6 +1471,8 @@ func (q *Queries) ListReservationsByUserWithStatus(ctx context.Context, arg List
 			&i.CheckedInAt,
 			&i.CookingStartedAt,
 			&i.Source,
+			&i.OfflineCustomerID,
+			&i.CreatedByUserID,
 			&i.TableNo,
 			&i.TableType,
 		); err != nil {
@@ -1420,7 +1488,7 @@ func (q *Queries) ListReservationsByUserWithStatus(ctx context.Context, arg List
 
 const listTodayReservationsByMerchant = `-- name: ListTodayReservationsByMerchant :many
 SELECT 
-  tr.id, tr.table_id, tr.user_id, tr.merchant_id, tr.reservation_date, tr.reservation_time, tr.guest_count, tr.contact_name, tr.contact_phone, tr.payment_mode, tr.deposit_amount, tr.prepaid_amount, tr.refund_deadline, tr.status, tr.payment_deadline, tr.notes, tr.paid_at, tr.confirmed_at, tr.completed_at, tr.cancelled_at, tr.cancel_reason, tr.created_at, tr.updated_at, tr.checked_in_at, tr.cooking_started_at, tr.source,
+  tr.id, tr.table_id, tr.user_id, tr.merchant_id, tr.reservation_date, tr.reservation_time, tr.guest_count, tr.contact_name, tr.contact_phone, tr.payment_mode, tr.deposit_amount, tr.prepaid_amount, tr.refund_deadline, tr.status, tr.payment_deadline, tr.notes, tr.paid_at, tr.confirmed_at, tr.completed_at, tr.cancelled_at, tr.cancel_reason, tr.created_at, tr.updated_at, tr.checked_in_at, tr.cooking_started_at, tr.source, tr.offline_customer_id, tr.created_by_user_id,
     t.table_no,
     t.table_type
 FROM table_reservations tr
@@ -1432,34 +1500,36 @@ ORDER BY tr.reservation_time, t.table_no
 `
 
 type ListTodayReservationsByMerchantRow struct {
-	ID               int64              `json:"id"`
-	TableID          int64              `json:"table_id"`
-	UserID           int64              `json:"user_id"`
-	MerchantID       int64              `json:"merchant_id"`
-	ReservationDate  pgtype.Date        `json:"reservation_date"`
-	ReservationTime  pgtype.Time        `json:"reservation_time"`
-	GuestCount       int16              `json:"guest_count"`
-	ContactName      string             `json:"contact_name"`
-	ContactPhone     string             `json:"contact_phone"`
-	PaymentMode      string             `json:"payment_mode"`
-	DepositAmount    int64              `json:"deposit_amount"`
-	PrepaidAmount    int64              `json:"prepaid_amount"`
-	RefundDeadline   time.Time          `json:"refund_deadline"`
-	Status           string             `json:"status"`
-	PaymentDeadline  time.Time          `json:"payment_deadline"`
-	Notes            pgtype.Text        `json:"notes"`
-	PaidAt           pgtype.Timestamptz `json:"paid_at"`
-	ConfirmedAt      pgtype.Timestamptz `json:"confirmed_at"`
-	CompletedAt      pgtype.Timestamptz `json:"completed_at"`
-	CancelledAt      pgtype.Timestamptz `json:"cancelled_at"`
-	CancelReason     pgtype.Text        `json:"cancel_reason"`
-	CreatedAt        time.Time          `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
-	CheckedInAt      pgtype.Timestamptz `json:"checked_in_at"`
-	CookingStartedAt pgtype.Timestamptz `json:"cooking_started_at"`
-	Source           pgtype.Text        `json:"source"`
-	TableNo          string             `json:"table_no"`
-	TableType        string             `json:"table_type"`
+	ID                int64              `json:"id"`
+	TableID           int64              `json:"table_id"`
+	UserID            int64              `json:"user_id"`
+	MerchantID        int64              `json:"merchant_id"`
+	ReservationDate   pgtype.Date        `json:"reservation_date"`
+	ReservationTime   pgtype.Time        `json:"reservation_time"`
+	GuestCount        int16              `json:"guest_count"`
+	ContactName       string             `json:"contact_name"`
+	ContactPhone      string             `json:"contact_phone"`
+	PaymentMode       string             `json:"payment_mode"`
+	DepositAmount     int64              `json:"deposit_amount"`
+	PrepaidAmount     int64              `json:"prepaid_amount"`
+	RefundDeadline    time.Time          `json:"refund_deadline"`
+	Status            string             `json:"status"`
+	PaymentDeadline   time.Time          `json:"payment_deadline"`
+	Notes             pgtype.Text        `json:"notes"`
+	PaidAt            pgtype.Timestamptz `json:"paid_at"`
+	ConfirmedAt       pgtype.Timestamptz `json:"confirmed_at"`
+	CompletedAt       pgtype.Timestamptz `json:"completed_at"`
+	CancelledAt       pgtype.Timestamptz `json:"cancelled_at"`
+	CancelReason      pgtype.Text        `json:"cancel_reason"`
+	CreatedAt         time.Time          `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	CheckedInAt       pgtype.Timestamptz `json:"checked_in_at"`
+	CookingStartedAt  pgtype.Timestamptz `json:"cooking_started_at"`
+	Source            pgtype.Text        `json:"source"`
+	OfflineCustomerID pgtype.Int8        `json:"offline_customer_id"`
+	CreatedByUserID   pgtype.Int8        `json:"created_by_user_id"`
+	TableNo           string             `json:"table_no"`
+	TableType         string             `json:"table_type"`
 }
 
 // 获取今日预订列表
@@ -1499,6 +1569,8 @@ func (q *Queries) ListTodayReservationsByMerchant(ctx context.Context, merchantI
 			&i.CheckedInAt,
 			&i.CookingStartedAt,
 			&i.Source,
+			&i.OfflineCustomerID,
+			&i.CreatedByUserID,
 			&i.TableNo,
 			&i.TableType,
 		); err != nil {
@@ -1519,23 +1591,25 @@ SET
     reservation_date = COALESCE($3, reservation_date),
     reservation_time = COALESCE($4, reservation_time),
     guest_count = COALESCE($5, guest_count),
-    contact_name = COALESCE($6, contact_name),
-    contact_phone = COALESCE($7, contact_phone),
+    contact_name = COALESCE(btrim($6), contact_name),
+    contact_phone = COALESCE(btrim($7), contact_phone),
     notes = COALESCE($8, notes),
+    offline_customer_id = COALESCE($9, offline_customer_id),
     updated_at = now()
 WHERE id = $1
-RETURNING id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source
+RETURNING id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source, offline_customer_id, created_by_user_id
 `
 
 type UpdateReservationParams struct {
-	ID              int64       `json:"id"`
-	TableID         pgtype.Int8 `json:"table_id"`
-	ReservationDate pgtype.Date `json:"reservation_date"`
-	ReservationTime pgtype.Time `json:"reservation_time"`
-	GuestCount      pgtype.Int2 `json:"guest_count"`
-	ContactName     pgtype.Text `json:"contact_name"`
-	ContactPhone    pgtype.Text `json:"contact_phone"`
-	Notes           pgtype.Text `json:"notes"`
+	ID                int64       `json:"id"`
+	TableID           pgtype.Int8 `json:"table_id"`
+	ReservationDate   pgtype.Date `json:"reservation_date"`
+	ReservationTime   pgtype.Time `json:"reservation_time"`
+	GuestCount        pgtype.Int2 `json:"guest_count"`
+	ContactName       pgtype.Text `json:"contact_name"`
+	ContactPhone      pgtype.Text `json:"contact_phone"`
+	Notes             pgtype.Text `json:"notes"`
+	OfflineCustomerID pgtype.Int8 `json:"offline_customer_id"`
 }
 
 // 商户修改预订信息
@@ -1549,6 +1623,7 @@ func (q *Queries) UpdateReservation(ctx context.Context, arg UpdateReservationPa
 		arg.ContactName,
 		arg.ContactPhone,
 		arg.Notes,
+		arg.OfflineCustomerID,
 	)
 	var i TableReservation
 	err := row.Scan(
@@ -1578,6 +1653,8 @@ func (q *Queries) UpdateReservation(ctx context.Context, arg UpdateReservationPa
 		&i.CheckedInAt,
 		&i.CookingStartedAt,
 		&i.Source,
+		&i.OfflineCustomerID,
+		&i.CreatedByUserID,
 	)
 	return i, err
 }
@@ -1592,7 +1669,7 @@ WHERE table_reservations.id = $1
     WHERE ra.reservation_id = table_reservations.id
       AND ra.status IN ('creating_payment', 'pending_payment', 'applying')
   )
-RETURNING id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source
+RETURNING id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source, offline_customer_id, created_by_user_id
 `
 
 // 标记开始起菜
@@ -1626,6 +1703,8 @@ func (q *Queries) UpdateReservationCookingStarted(ctx context.Context, id int64)
 		&i.CheckedInAt,
 		&i.CookingStartedAt,
 		&i.Source,
+		&i.OfflineCustomerID,
+		&i.CreatedByUserID,
 	)
 	return i, err
 }
@@ -1635,7 +1714,7 @@ UPDATE table_reservations
 SET status = $2,
     updated_at = now()
 WHERE id = $1
-RETURNING id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source
+RETURNING id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source, offline_customer_id, created_by_user_id
 `
 
 type UpdateReservationStatusParams struct {
@@ -1673,6 +1752,8 @@ func (q *Queries) UpdateReservationStatus(ctx context.Context, arg UpdateReserva
 		&i.CheckedInAt,
 		&i.CookingStartedAt,
 		&i.Source,
+		&i.OfflineCustomerID,
+		&i.CreatedByUserID,
 	)
 	return i, err
 }
@@ -1684,7 +1765,7 @@ SET status = 'cancelled',
     cancel_reason = $2,
     updated_at = now()
 WHERE id = $1
-RETURNING id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source
+RETURNING id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source, offline_customer_id, created_by_user_id
 `
 
 type UpdateReservationToCancelledParams struct {
@@ -1722,6 +1803,8 @@ func (q *Queries) UpdateReservationToCancelled(ctx context.Context, arg UpdateRe
 		&i.CheckedInAt,
 		&i.CookingStartedAt,
 		&i.Source,
+		&i.OfflineCustomerID,
+		&i.CreatedByUserID,
 	)
 	return i, err
 }
@@ -1732,7 +1815,7 @@ SET status = 'checked_in',
     checked_in_at = now(),
     updated_at = now()
 WHERE id = $1
-RETURNING id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source
+RETURNING id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source, offline_customer_id, created_by_user_id
 `
 
 // 顾客到店签到
@@ -1766,6 +1849,8 @@ func (q *Queries) UpdateReservationToCheckedIn(ctx context.Context, id int64) (T
 		&i.CheckedInAt,
 		&i.CookingStartedAt,
 		&i.Source,
+		&i.OfflineCustomerID,
+		&i.CreatedByUserID,
 	)
 	return i, err
 }
@@ -1776,7 +1861,7 @@ SET status = 'completed',
     completed_at = now(),
     updated_at = now()
 WHERE id = $1
-RETURNING id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source
+RETURNING id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source, offline_customer_id, created_by_user_id
 `
 
 func (q *Queries) UpdateReservationToCompleted(ctx context.Context, id int64) (TableReservation, error) {
@@ -1809,6 +1894,8 @@ func (q *Queries) UpdateReservationToCompleted(ctx context.Context, id int64) (T
 		&i.CheckedInAt,
 		&i.CookingStartedAt,
 		&i.Source,
+		&i.OfflineCustomerID,
+		&i.CreatedByUserID,
 	)
 	return i, err
 }
@@ -1819,7 +1906,7 @@ SET status = 'confirmed',
     confirmed_at = now(),
     updated_at = now()
 WHERE id = $1
-RETURNING id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source
+RETURNING id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source, offline_customer_id, created_by_user_id
 `
 
 func (q *Queries) UpdateReservationToConfirmed(ctx context.Context, id int64) (TableReservation, error) {
@@ -1852,6 +1939,8 @@ func (q *Queries) UpdateReservationToConfirmed(ctx context.Context, id int64) (T
 		&i.CheckedInAt,
 		&i.CookingStartedAt,
 		&i.Source,
+		&i.OfflineCustomerID,
+		&i.CreatedByUserID,
 	)
 	return i, err
 }
@@ -1861,7 +1950,7 @@ UPDATE table_reservations
 SET status = 'expired',
     updated_at = now()
 WHERE id = $1
-RETURNING id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source
+RETURNING id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source, offline_customer_id, created_by_user_id
 `
 
 func (q *Queries) UpdateReservationToExpired(ctx context.Context, id int64) (TableReservation, error) {
@@ -1894,6 +1983,8 @@ func (q *Queries) UpdateReservationToExpired(ctx context.Context, id int64) (Tab
 		&i.CheckedInAt,
 		&i.CookingStartedAt,
 		&i.Source,
+		&i.OfflineCustomerID,
+		&i.CreatedByUserID,
 	)
 	return i, err
 }
@@ -1903,7 +1994,7 @@ UPDATE table_reservations
 SET status = 'no_show',
     updated_at = now()
 WHERE id = $1
-RETURNING id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source
+RETURNING id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source, offline_customer_id, created_by_user_id
 `
 
 func (q *Queries) UpdateReservationToNoShow(ctx context.Context, id int64) (TableReservation, error) {
@@ -1936,6 +2027,8 @@ func (q *Queries) UpdateReservationToNoShow(ctx context.Context, id int64) (Tabl
 		&i.CheckedInAt,
 		&i.CookingStartedAt,
 		&i.Source,
+		&i.OfflineCustomerID,
+		&i.CreatedByUserID,
 	)
 	return i, err
 }
@@ -1946,7 +2039,7 @@ SET status = 'paid',
     paid_at = now(),
     updated_at = now()
 WHERE id = $1
-RETURNING id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source
+RETURNING id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source, offline_customer_id, created_by_user_id
 `
 
 func (q *Queries) UpdateReservationToPaid(ctx context.Context, id int64) (TableReservation, error) {
@@ -1979,6 +2072,8 @@ func (q *Queries) UpdateReservationToPaid(ctx context.Context, id int64) (TableR
 		&i.CheckedInAt,
 		&i.CookingStartedAt,
 		&i.Source,
+		&i.OfflineCustomerID,
+		&i.CreatedByUserID,
 	)
 	return i, err
 }

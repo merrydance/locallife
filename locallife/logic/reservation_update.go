@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -51,10 +52,18 @@ func MerchantUpdateReservation(ctx context.Context, store db.Store, input Mercha
 		updateParams.GuestCount = pgtype.Int2{Int16: *input.GuestCount, Valid: true}
 	}
 	if input.ContactName != nil {
-		updateParams.ContactName = pgtype.Text{String: *input.ContactName, Valid: true}
+		contactName := strings.TrimSpace(*input.ContactName)
+		if contactName == "" {
+			return db.TableReservation{}, NewRequestError(http.StatusBadRequest, errors.New("contact name is required"))
+		}
+		updateParams.ContactName = pgtype.Text{String: contactName, Valid: true}
 	}
 	if input.ContactPhone != nil {
-		updateParams.ContactPhone = pgtype.Text{String: *input.ContactPhone, Valid: true}
+		contactPhone := strings.TrimSpace(*input.ContactPhone)
+		if contactPhone == "" {
+			return db.TableReservation{}, NewRequestError(http.StatusBadRequest, errors.New("contact phone is required"))
+		}
+		updateParams.ContactPhone = pgtype.Text{String: contactPhone, Valid: true}
 	}
 	if input.Notes != nil {
 		updateParams.Notes = pgtype.Text{String: *input.Notes, Valid: true}
@@ -63,6 +72,7 @@ func MerchantUpdateReservation(ctx context.Context, store db.Store, input Mercha
 	updatedReservation, err := store.UpdateReservationTx(ctx, db.UpdateReservationTxParams{
 		MerchantID:  merchant.ID,
 		Reservation: updateParams,
+		OperatorID:  pgtype.Int8{Int64: input.OperatorUserID, Valid: true},
 	})
 	if err != nil {
 		if reqErr := mapReservationUpdateMutationError(err); reqErr != nil {
@@ -86,6 +96,8 @@ func mapReservationUpdateMutationError(err error) error {
 		return NewRequestError(http.StatusConflict, errors.New("cannot modify completed, cancelled or expired reservations"))
 	case errors.Is(err, db.ErrReservationTimeConflict):
 		return NewRequestError(http.StatusConflict, errors.New("time slot is already reserved"))
+	case errors.Is(err, db.ErrReservationInvalidOfflineCustomerContact):
+		return NewRequestError(http.StatusBadRequest, errors.New("contact name and phone are required"))
 	default:
 		return mapReservationTableMutationError(err)
 	}

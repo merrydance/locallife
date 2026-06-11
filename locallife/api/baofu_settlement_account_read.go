@@ -48,13 +48,17 @@ func (server *Server) loadBaofuSettlementAccount(ctx *gin.Context, scope baofuSe
 		}
 	}
 
+	activeBindingFound := bindingFound && strings.TrimSpace(binding.OpenState) == db.BaofuAccountOpenStateActive
 	failedOpeningFlowFound := false
 	flow, flowFound, err := server.loadLatestBaofuAccountOpeningFlow(ctx, scope)
 	if err != nil {
 		return baofuSettlementAccountResponse{}, err
 	}
 	if flowFound {
-		failedOpeningFlowFound = strings.TrimSpace(flow.State) == db.BaofuAccountOpeningStateFailed
+		flowState := strings.TrimSpace(flow.State)
+		failedOpeningFlowFound = flowState == db.BaofuAccountOpeningStateFailed
+	}
+	if flowFound && !activeBindingFound {
 		if accountType := strings.TrimSpace(flow.AccountType); accountType != "" {
 			resp.AccountType = accountType
 		}
@@ -70,9 +74,17 @@ func (server *Server) loadBaofuSettlementAccount(ctx *gin.Context, scope baofuSe
 		}
 	}
 
-	if bindingFound && strings.TrimSpace(binding.OpenState) == db.BaofuAccountOpenStateActive {
+	if activeBindingFound {
 		if err := server.applyActiveBaofuSettlementAccountStatus(ctx, scope, binding, &resp); err != nil {
 			return baofuSettlementAccountResponse{}, err
+		}
+		if flowFound && strings.TrimSpace(flow.State) == strings.TrimSpace(resp.Status) && !failedOpeningFlowFound {
+			resp.FlowID = flow.ID
+			resp.FlowState = strings.TrimSpace(flow.State)
+			resp.SubmittedAt = &flow.CreatedAt
+			if resp.UpdatedAt == nil || flow.UpdatedAt.After(*resp.UpdatedAt) {
+				resp.UpdatedAt = &flow.UpdatedAt
+			}
 		}
 	} else if resp.Status == "" {
 		resp.applyStatus(db.BaofuAccountOpeningStateProfilePending, "资料待补充")
