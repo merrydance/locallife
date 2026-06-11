@@ -106,6 +106,7 @@ JPush 已废弃。商户端不得再引入 JPush SDK、JPush registration_id、J
 - Token 变化时由原生回调通知 Flutter，并立即重新上报
 - 上报 payload 应包含 `device_id`、`push_token`、`provider`、`platform`、`app_version`、`device_model`、`os_version`
 - 当前后端 `merchant_app_devices.platform` 契约是 Android-only，Flutter 设备注册和心跳 payload 的 `platform` 必须上报为 `android`；本地 `device_model` / `os_version` 可继续反映实际运行设备信息。
+- 主动退出或切换商户账号时，Flutter 必须在清本地认证前 best-effort 调用 `DELETE /v1/merchant/device/{device_id}` 注销当前设备；注销失败不能阻断退出，但必须清除本地已注册 push token 标记，使下一次登录可重新注册。
 
 ### 5.2 消息处理
 

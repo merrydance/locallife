@@ -105,11 +105,13 @@ class DeviceSyncService {
     Future<String> Function()? deviceIdProvider,
     Future<String?> Function()? registeredTokenReader,
     Future<void> Function(String token)? registeredTokenWriter,
+    Future<void> Function()? registeredTokenClearer,
     String Function()? runtimePlatformResolver,
     DateTime Function()? now,
   }) : _deviceIdProvider = deviceIdProvider,
        _registeredTokenReader = registeredTokenReader,
        _registeredTokenWriter = registeredTokenWriter,
+       _registeredTokenClearer = registeredTokenClearer,
        _runtimePlatformResolver = runtimePlatformResolver,
        _now = now ?? DateTime.now {
     _pushManager.onTokenRegistered = (token, provider) => ensureRegistered();
@@ -136,6 +138,7 @@ class DeviceSyncService {
   final Future<String> Function()? _deviceIdProvider;
   final Future<String?> Function()? _registeredTokenReader;
   final Future<void> Function(String token)? _registeredTokenWriter;
+  final Future<void> Function()? _registeredTokenClearer;
   final String Function()? _runtimePlatformResolver;
   final DateTime Function() _now;
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
@@ -306,6 +309,21 @@ class DeviceSyncService {
     }
   }
 
+  Future<void> unregisterCurrentDevice() async {
+    try {
+      final deviceId = await _readDeviceId();
+      if (deviceId != null && deviceId.isNotEmpty) {
+        await _apiClient.delete('/merchant/device/$deviceId');
+      }
+    } on DioException catch (error) {
+      if (kDebugMode) {
+        debugPrint('Failed to unregister device: ${error.message}');
+      }
+    } finally {
+      await _clearLastRegisteredPushToken();
+    }
+  }
+
   void _updateState({
     NativePushStatus? nativePushStatus,
     Object? provider = _unset,
@@ -437,11 +455,7 @@ class DeviceSyncService {
   }
 
   Future<String> _getOrCreateDeviceId() async {
-    final provider = _deviceIdProvider;
-    if (provider != null) {
-      return provider();
-    }
-    final existing = await _storage.read(key: _deviceIdKey);
+    final existing = await _readDeviceId();
     if (existing != null && existing.isNotEmpty) {
       return existing;
     }
@@ -449,6 +463,14 @@ class DeviceSyncService {
     final fallback = DateTime.now().millisecondsSinceEpoch.toString();
     await _storage.write(key: _deviceIdKey, value: fallback);
     return fallback;
+  }
+
+  Future<String?> _readDeviceId() async {
+    final provider = _deviceIdProvider;
+    if (provider != null) {
+      return provider();
+    }
+    return _storage.read(key: _deviceIdKey);
   }
 
   Future<String?> _readLastRegisteredPushToken() {
@@ -465,6 +487,16 @@ class DeviceSyncService {
       return writer(token);
     }
     return _storage.write(key: _lastRegisteredPushTokenKey, value: token);
+  }
+
+  Future<void> _clearLastRegisteredPushToken() async {
+    _lastRegisteredPushToken = null;
+    final clearer = _registeredTokenClearer;
+    if (clearer != null) {
+      await clearer();
+      return;
+    }
+    await _storage.delete(key: _lastRegisteredPushTokenKey);
   }
 
   bool _isEndpointNotReady(DioException error) {

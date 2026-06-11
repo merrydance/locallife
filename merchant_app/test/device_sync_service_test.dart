@@ -17,6 +17,7 @@ void main() {
       deviceIdProvider: () async => 'device-1',
       registeredTokenReader: () async => null,
       registeredTokenWriter: (_) async {},
+      registeredTokenClearer: () async {},
     );
 
     await service.ensureRegistered();
@@ -68,6 +69,7 @@ void main() {
       deviceIdProvider: () async => 'device-1',
       registeredTokenReader: () async => null,
       registeredTokenWriter: (_) async {},
+      registeredTokenClearer: () async {},
     );
 
     await service.ensureRegistered();
@@ -105,6 +107,7 @@ void main() {
         deviceIdProvider: () async => 'device-1',
         registeredTokenReader: () async => null,
         registeredTokenWriter: (_) async {},
+        registeredTokenClearer: () async {},
       );
 
       await service.ensureRegistered();
@@ -178,6 +181,7 @@ void main() {
       deviceIdProvider: () async => 'device-1',
       registeredTokenReader: () async => null,
       registeredTokenWriter: (_) async {},
+      registeredTokenClearer: () async {},
     );
 
     await service.sendHeartbeat();
@@ -196,6 +200,126 @@ void main() {
     expect(service.state.degradationMessages, isEmpty);
     expect(service.state.userVisibleDegradationMessages, isEmpty);
   });
+
+  test(
+    'unregister deletes current device and forces next registration',
+    () async {
+      final apiClient = _FakeApiClient();
+      final pushManager = _FakeNativePushManager(
+        registrationId: 'push-token-1',
+        provider: 'xiaomi',
+      );
+      final service = DeviceSyncService(
+        apiClient,
+        pushManager,
+        deviceIdProvider: () async => 'device-1',
+        registeredTokenReader: () async => null,
+        registeredTokenWriter: (_) async {},
+        registeredTokenClearer: () async {},
+      );
+
+      await service.ensureRegistered();
+      await service.unregisterCurrentDevice();
+      await service.ensureRegistered();
+
+      expect(apiClient.deletePaths, <String>['/merchant/device/device-1']);
+      expect(
+        apiClient.postPaths.where(
+          (path) => path == '/merchant/device/register',
+        ),
+        hasLength(2),
+      );
+    },
+  );
+
+  test(
+    'unregister failure still clears local registration marker for rebind',
+    () async {
+      var clearedRegistrationMarker = false;
+      final apiClient = _FakeApiClient(failDelete: true);
+      final pushManager = _FakeNativePushManager(
+        registrationId: 'push-token-1',
+        provider: 'huawei',
+      );
+      final service = DeviceSyncService(
+        apiClient,
+        pushManager,
+        deviceIdProvider: () async => 'device-1',
+        registeredTokenReader: () async => null,
+        registeredTokenWriter: (_) async {},
+        registeredTokenClearer: () async {
+          clearedRegistrationMarker = true;
+        },
+      );
+
+      await service.ensureRegistered();
+      await service.unregisterCurrentDevice();
+      await service.ensureRegistered();
+
+      expect(apiClient.deletePaths, <String>['/merchant/device/device-1']);
+      expect(
+        apiClient.postPaths.where(
+          (path) => path == '/merchant/device/register',
+        ),
+        hasLength(2),
+      );
+      expect(clearedRegistrationMarker, isTrue);
+    },
+  );
+
+  test(
+    'unregister skips backend call when local device id is missing',
+    () async {
+      var clearedRegistrationMarker = false;
+      final apiClient = _FakeApiClient();
+      final pushManager = _FakeNativePushManager(
+        registrationId: 'push-token-1',
+        provider: 'xiaomi',
+      );
+      final service = DeviceSyncService(
+        apiClient,
+        pushManager,
+        deviceIdProvider: () async => '',
+        registeredTokenReader: () async => null,
+        registeredTokenWriter: (_) async {},
+        registeredTokenClearer: () async {
+          clearedRegistrationMarker = true;
+        },
+      );
+
+      await service.unregisterCurrentDevice();
+
+      expect(apiClient.deletePaths, isEmpty);
+      expect(clearedRegistrationMarker, isTrue);
+    },
+  );
+
+  test(
+    'unregister still clears local registration marker when device id read fails',
+    () async {
+      var clearedRegistrationMarker = false;
+      final apiClient = _FakeApiClient();
+      final pushManager = _FakeNativePushManager(
+        registrationId: 'push-token-1',
+        provider: 'xiaomi',
+      );
+      final service = DeviceSyncService(
+        apiClient,
+        pushManager,
+        deviceIdProvider: () async => throw Exception('device id unavailable'),
+        registeredTokenReader: () async => null,
+        registeredTokenWriter: (_) async {},
+        registeredTokenClearer: () async {
+          clearedRegistrationMarker = true;
+        },
+      );
+
+      await expectLater(service.unregisterCurrentDevice(), throwsException);
+
+      expect(apiClient.deletePaths, isEmpty);
+      expect(clearedRegistrationMarker, isTrue);
+    },
+  );
 }
 
 class _FakeNativePushManager extends NativePushManager {
@@ -220,11 +344,17 @@ class _FakeNativePushManager extends NativePushManager {
 }
 
 class _FakeApiClient implements ApiClient {
-  _FakeApiClient({this.failPost = false, this.failPut = false});
+  _FakeApiClient({
+    this.failPost = false,
+    this.failPut = false,
+    this.failDelete = false,
+  });
 
   bool failPost;
   bool failPut;
+  bool failDelete;
   final List<String> postPaths = <String>[];
+  final List<String> deletePaths = <String>[];
   String? lastPostPath;
   Map<String, dynamic>? lastPostData;
   Map<String, dynamic>? lastPutData;
@@ -252,7 +382,19 @@ class _FakeApiClient implements ApiClient {
 
   @override
   Future<Response<dynamic>> delete(String path, {bool requiresAuth = true}) {
-    throw UnimplementedError();
+    deletePaths.add(path);
+    if (failDelete) {
+      throw DioException(
+        requestOptions: RequestOptions(path: path),
+        type: DioExceptionType.connectionError,
+      );
+    }
+    return Future<Response<dynamic>>.value(
+      Response<dynamic>(
+        requestOptions: RequestOptions(path: path),
+        data: const <String, dynamic>{'code': 0, 'message': 'ok'},
+      ),
+    );
   }
 
   @override

@@ -5,6 +5,7 @@ import 'package:merchant_app/config/theme.dart';
 import 'package:merchant_app/core/push/device_sync_service.dart';
 import 'package:merchant_app/core/push/push_provider.dart';
 import 'package:merchant_app/features/auth/auth_provider.dart';
+import 'package:merchant_app/features/auth/auth_logout_controller.dart';
 import 'package:merchant_app/features/order/order_provider.dart';
 import 'package:merchant_app/features/order/working_status_provider.dart';
 import 'package:merchant_app/features/printer/printer_provider.dart';
@@ -195,7 +196,9 @@ class SettingsPage extends ConsumerWidget {
                                 .read(workingStatusProvider.notifier)
                                 .resetLocal();
                             ref.read(orderProvider.notifier).clearOrders();
-                            ref.read(authProvider.notifier).logout();
+                            await ref
+                                .read(authLogoutControllerProvider)
+                                .logout();
                           }
                         },
                       )

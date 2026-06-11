@@ -181,10 +181,16 @@ class AuthService {
   // Token 刷新（Dio 拦截器自动调用）
   Future<TokenPair> refreshToken();
 
-  // 登出（清除本地 token）
+  // 登出（通过 AuthLogoutController 先 best-effort 注销设备，再清除本地 token）
   Future<void> logout();
 }
 ```
+
+登出实现要点：
+
+- 主动退出或切换账号必须通过 `AuthLogoutController`，先尝试调用当前设备的 `/v1/merchant/device/{device_id}` unregister，再清除本地 token。
+- 设备注销失败不能阻断用户退出；本地已注册 push token 标记必须清理，避免重新绑定同一 push token 时跳过注册。
+- 本地没有 `device_uuid` 时不要创建新设备 ID 或调用空 `device_id` 的 unregister，只清理本地注册标记。
 
 ## 6. 小程序端改动
 

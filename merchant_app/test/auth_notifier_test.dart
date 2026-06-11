@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:merchant_app/core/service/auth_session_controller.dart';
+import 'package:merchant_app/features/auth/auth_logout_controller.dart';
 import 'package:merchant_app/features/auth/auth_provider.dart';
 import 'package:merchant_app/features/auth/auth_service.dart';
 
@@ -172,6 +173,38 @@ void main() {
       expect(authService.clearCalls, 0);
     },
   );
+
+  test('logout controller unregisters device before clearing tokens', () async {
+    final authService = _FakeAuthService();
+    final deviceSyncService = _FakeDeviceSyncService();
+    authService._onClear = () => deviceSyncService.events.add('clear');
+    final logoutController = AuthLogoutController(
+      unregisterCurrentDevice: deviceSyncService.unregisterCurrentDevice,
+      clearAuthSession: authService.clearTokens,
+    );
+
+    await logoutController.logout();
+
+    expect(deviceSyncService.unregisterCalls, 1);
+    expect(authService.clearCalls, 1);
+    expect(deviceSyncService.events, <String>['unregister', 'clear']);
+  });
+
+  test('logout controller clears tokens even when unregister fails', () async {
+    final authService = _FakeAuthService();
+    final deviceSyncService = _FakeDeviceSyncService(failUnregister: true);
+    authService._onClear = () => deviceSyncService.events.add('clear');
+    final logoutController = AuthLogoutController(
+      unregisterCurrentDevice: deviceSyncService.unregisterCurrentDevice,
+      clearAuthSession: authService.clearTokens,
+    );
+
+    await logoutController.logout();
+
+    expect(deviceSyncService.unregisterCalls, 1);
+    expect(authService.clearCalls, 1);
+    expect(deviceSyncService.events, <String>['unregister', 'clear']);
+  });
 }
 
 class _FakeAuthService implements AuthService {
@@ -229,6 +262,7 @@ class _FakeAuthService implements AuthService {
   @override
   Future<void> clearTokens() async {
     clearCalls++;
+    _onClear?.call();
   }
 
   @override
@@ -267,5 +301,23 @@ class _FakeAuthService implements AuthService {
   Future<Map<String, dynamic>> verifyBindingCode(String code) {
     verifyCalls++;
     return _verifyCompleter.future;
+  }
+
+  void Function()? _onClear;
+}
+
+class _FakeDeviceSyncService {
+  _FakeDeviceSyncService({this.failUnregister = false});
+
+  final bool failUnregister;
+  final List<String> events = <String>[];
+  int unregisterCalls = 0;
+
+  Future<void> unregisterCurrentDevice() async {
+    unregisterCalls++;
+    events.add('unregister');
+    if (failUnregister) {
+      throw Exception('unregister failed');
+    }
   }
 }
