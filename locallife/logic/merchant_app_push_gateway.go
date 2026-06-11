@@ -5,8 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
+)
+
+const (
+	merchantAppPushPermanentFailureDeactivateAfterCount int32 = 3
+	merchantAppPushFailureReasonMaxRunes                      = 255
 )
 
 type MerchantAppPushTarget struct {
@@ -139,6 +146,14 @@ func (d *MerchantAppPushDispatcher) Dispatch(ctx context.Context, input Merchant
 		if err == nil {
 			deviceResult.Sent = true
 			result.Sent++
+			if merchantAppDeviceHasPushFailure(device) {
+				if _, err := d.store.ClearMerchantAppDevicePushFailure(ctx, db.ClearMerchantAppDevicePushFailureParams{
+					ID:        device.ID,
+					PushToken: device.PushToken,
+				}); err != nil {
+					return result, fmt.Errorf("clear merchant app device push failure: %w", err)
+				}
+			}
 			result.DeviceResultSummaries = append(result.DeviceResultSummaries, deviceResult)
 			continue
 		}
@@ -150,6 +165,14 @@ func (d *MerchantAppPushDispatcher) Dispatch(ctx context.Context, input Merchant
 		} else {
 			deviceResult.Error = "push provider permanent failure"
 			result.PermanentFailures++
+			if _, err := d.store.RecordMerchantAppDevicePermanentPushFailure(ctx, db.RecordMerchantAppDevicePermanentPushFailureParams{
+				ID:                    device.ID,
+				PushToken:             device.PushToken,
+				LastPushFailureReason: merchantAppPushFailureReason(err),
+				DeactivateAfterCount:  merchantAppPushPermanentFailureDeactivateAfterCount,
+			}); err != nil {
+				return result, fmt.Errorf("record merchant app device permanent push failure: %w", err)
+			}
 		}
 		result.DeviceResultSummaries = append(result.DeviceResultSummaries, deviceResult)
 	}
@@ -170,4 +193,23 @@ func merchantAppPushErrorIsRetryable(err error) bool {
 		return sendErr.Retryable
 	}
 	return true
+}
+
+func merchantAppDeviceHasPushFailure(device db.MerchantAppDevice) bool {
+	return device.PushFailureCount > 0 ||
+		device.LastPushFailureReason.Valid ||
+		device.LastPushFailureAt.Valid ||
+		device.PushDegradedAt.Valid
+}
+
+func merchantAppPushFailureReason(err error) pgtype.Text {
+	reason := strings.Join(strings.Fields(err.Error()), " ")
+	if reason == "" {
+		reason = "push provider permanent failure"
+	}
+	runes := []rune(reason)
+	if len(runes) > merchantAppPushFailureReasonMaxRunes {
+		reason = string(runes[:merchantAppPushFailureReasonMaxRunes])
+	}
+	return pgtype.Text{String: reason, Valid: true}
 }

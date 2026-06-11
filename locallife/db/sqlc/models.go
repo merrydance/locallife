@@ -1143,6 +1143,14 @@ type MerchantAppDevice struct {
 	UnregisteredAt   pgtype.Timestamptz `json:"unregistered_at"`
 	CreatedAt        time.Time          `json:"created_at"`
 	UpdatedAt        time.Time          `json:"updated_at"`
+	// Consecutive terminal native-push provider failures for this active device token
+	PushFailureCount int32 `json:"push_failure_count"`
+	// Sanitized terminal native-push provider failure reason
+	LastPushFailureReason pgtype.Text `json:"last_push_failure_reason"`
+	// Last terminal native-push provider failure timestamp
+	LastPushFailureAt pgtype.Timestamptz `json:"last_push_failure_at"`
+	// First timestamp when this active device token entered degraded native-push state
+	PushDegradedAt pgtype.Timestamptz `json:"push_degraded_at"`
 }
 
 type MerchantApplication struct {

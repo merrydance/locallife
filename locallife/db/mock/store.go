@@ -1177,6 +1177,21 @@ func (mr *MockStoreMockRecorder) ClearGroupApplicationTrademarkCertificate(ctx, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearGroupApplicationTrademarkCertificate", reflect.TypeOf((*MockStore)(nil).ClearGroupApplicationTrademarkCertificate), ctx, id)
 }
 
+// ClearMerchantAppDevicePushFailure mocks base method.
+func (m *MockStore) ClearMerchantAppDevicePushFailure(ctx context.Context, arg db.ClearMerchantAppDevicePushFailureParams) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClearMerchantAppDevicePushFailure", ctx, arg)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ClearMerchantAppDevicePushFailure indicates an expected call of ClearMerchantAppDevicePushFailure.
+func (mr *MockStoreMockRecorder) ClearMerchantAppDevicePushFailure(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearMerchantAppDevicePushFailure", reflect.TypeOf((*MockStore)(nil).ClearMerchantAppDevicePushFailure), ctx, arg)
+}
+
 // ClearMerchantApplicationBusinessLicense mocks base method.
 func (m *MockStore) ClearMerchantApplicationBusinessLicense(ctx context.Context, id int64) (db.MerchantApplication, error) {
 	m.ctrl.T.Helper()
@@ -18852,6 +18867,21 @@ func (m *MockStore) RecordBrowseHistory(ctx context.Context, arg db.RecordBrowse
 func (mr *MockStoreMockRecorder) RecordBrowseHistory(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordBrowseHistory", reflect.TypeOf((*MockStore)(nil).RecordBrowseHistory), ctx, arg)
+}
+
+// RecordMerchantAppDevicePermanentPushFailure mocks base method.
+func (m *MockStore) RecordMerchantAppDevicePermanentPushFailure(ctx context.Context, arg db.RecordMerchantAppDevicePermanentPushFailureParams) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RecordMerchantAppDevicePermanentPushFailure", ctx, arg)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RecordMerchantAppDevicePermanentPushFailure indicates an expected call of RecordMerchantAppDevicePermanentPushFailure.
+func (mr *MockStoreMockRecorder) RecordMerchantAppDevicePermanentPushFailure(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordMerchantAppDevicePermanentPushFailure", reflect.TypeOf((*MockStore)(nil).RecordMerchantAppDevicePermanentPushFailure), ctx, arg)
 }
 
 // RecordProviderStatusPollError mocks base method.

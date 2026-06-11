@@ -12,6 +12,37 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const clearMerchantAppDevicePushFailure = `-- name: ClearMerchantAppDevicePushFailure :execrows
+UPDATE merchant_app_devices
+SET push_failure_count = 0,
+    last_push_failure_reason = NULL,
+    last_push_failure_at = NULL,
+    push_degraded_at = NULL,
+    updated_at = now()
+WHERE id = $1
+  AND push_token = $2
+  AND status = 'active'
+  AND (
+      push_failure_count <> 0
+      OR last_push_failure_reason IS NOT NULL
+      OR last_push_failure_at IS NOT NULL
+      OR push_degraded_at IS NOT NULL
+  )
+`
+
+type ClearMerchantAppDevicePushFailureParams struct {
+	ID        int64  `json:"id"`
+	PushToken string `json:"push_token"`
+}
+
+func (q *Queries) ClearMerchantAppDevicePushFailure(ctx context.Context, arg ClearMerchantAppDevicePushFailureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, clearMerchantAppDevicePushFailure, arg.ID, arg.PushToken)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deactivateMerchantAppDevicesByPushToken = `-- name: DeactivateMerchantAppDevicesByPushToken :exec
 UPDATE merchant_app_devices
 SET status = 'inactive',
@@ -50,7 +81,7 @@ func (q *Queries) DeactivateStaleMerchantAppDevices(ctx context.Context, lastAct
 }
 
 const getActiveMerchantAppDevice = `-- name: GetActiveMerchantAppDevice :one
-SELECT id, merchant_id, user_id, device_id, platform, provider, push_token, status, device_model, os_version, app_version, last_registered_at, last_active_at, unregistered_at, created_at, updated_at
+SELECT id, merchant_id, user_id, device_id, platform, provider, push_token, status, device_model, os_version, app_version, last_registered_at, last_active_at, unregistered_at, created_at, updated_at, push_failure_count, last_push_failure_reason, last_push_failure_at, push_degraded_at
 FROM merchant_app_devices
 WHERE merchant_id = $1
   AND device_id = $2
@@ -83,12 +114,16 @@ func (q *Queries) GetActiveMerchantAppDevice(ctx context.Context, arg GetActiveM
 		&i.UnregisteredAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PushFailureCount,
+		&i.LastPushFailureReason,
+		&i.LastPushFailureAt,
+		&i.PushDegradedAt,
 	)
 	return i, err
 }
 
 const listActiveMerchantAppDevicesByMerchant = `-- name: ListActiveMerchantAppDevicesByMerchant :many
-SELECT id, merchant_id, user_id, device_id, platform, provider, push_token, status, device_model, os_version, app_version, last_registered_at, last_active_at, unregistered_at, created_at, updated_at
+SELECT id, merchant_id, user_id, device_id, platform, provider, push_token, status, device_model, os_version, app_version, last_registered_at, last_active_at, unregistered_at, created_at, updated_at, push_failure_count, last_push_failure_reason, last_push_failure_at, push_degraded_at
 FROM merchant_app_devices
 WHERE merchant_id = $1
   AND status = 'active'
@@ -121,6 +156,10 @@ func (q *Queries) ListActiveMerchantAppDevicesByMerchant(ctx context.Context, me
 			&i.UnregisteredAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.PushFailureCount,
+			&i.LastPushFailureReason,
+			&i.LastPushFailureAt,
+			&i.PushDegradedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -133,7 +172,7 @@ func (q *Queries) ListActiveMerchantAppDevicesByMerchant(ctx context.Context, me
 }
 
 const listActiveMerchantAppDevicesByMerchantAndProvider = `-- name: ListActiveMerchantAppDevicesByMerchantAndProvider :many
-SELECT id, merchant_id, user_id, device_id, platform, provider, push_token, status, device_model, os_version, app_version, last_registered_at, last_active_at, unregistered_at, created_at, updated_at
+SELECT id, merchant_id, user_id, device_id, platform, provider, push_token, status, device_model, os_version, app_version, last_registered_at, last_active_at, unregistered_at, created_at, updated_at, push_failure_count, last_push_failure_reason, last_push_failure_at, push_degraded_at
 FROM merchant_app_devices
 WHERE merchant_id = $1
   AND provider = $2
@@ -172,6 +211,10 @@ func (q *Queries) ListActiveMerchantAppDevicesByMerchantAndProvider(ctx context.
 			&i.UnregisteredAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.PushFailureCount,
+			&i.LastPushFailureReason,
+			&i.LastPushFailureAt,
+			&i.PushDegradedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -181,6 +224,46 @@ func (q *Queries) ListActiveMerchantAppDevicesByMerchantAndProvider(ctx context.
 		return nil, err
 	}
 	return items, nil
+}
+
+const recordMerchantAppDevicePermanentPushFailure = `-- name: RecordMerchantAppDevicePermanentPushFailure :execrows
+UPDATE merchant_app_devices
+SET push_failure_count = push_failure_count + 1,
+    last_push_failure_reason = $1,
+    last_push_failure_at = now(),
+    push_degraded_at = COALESCE(push_degraded_at, now()),
+    status = CASE
+        WHEN push_failure_count + 1 >= $2::integer THEN 'inactive'
+        ELSE status
+    END,
+    unregistered_at = CASE
+        WHEN push_failure_count + 1 >= $2::integer THEN COALESCE(unregistered_at, now())
+        ELSE unregistered_at
+    END,
+    updated_at = now()
+WHERE id = $3
+  AND push_token = $4
+  AND status = 'active'
+`
+
+type RecordMerchantAppDevicePermanentPushFailureParams struct {
+	LastPushFailureReason pgtype.Text `json:"last_push_failure_reason"`
+	DeactivateAfterCount  int32       `json:"deactivate_after_count"`
+	ID                    int64       `json:"id"`
+	PushToken             string      `json:"push_token"`
+}
+
+func (q *Queries) RecordMerchantAppDevicePermanentPushFailure(ctx context.Context, arg RecordMerchantAppDevicePermanentPushFailureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordMerchantAppDevicePermanentPushFailure,
+		arg.LastPushFailureReason,
+		arg.DeactivateAfterCount,
+		arg.ID,
+		arg.PushToken,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const registerMerchantAppDevice = `-- name: RegisterMerchantAppDevice :one
@@ -197,7 +280,11 @@ INSERT INTO merchant_app_devices (
     app_version,
     last_registered_at,
     last_active_at,
-    unregistered_at
+    unregistered_at,
+    push_failure_count,
+    last_push_failure_reason,
+    last_push_failure_at,
+    push_degraded_at
 ) VALUES (
     $1,
     $2,
@@ -211,6 +298,10 @@ INSERT INTO merchant_app_devices (
     $9,
     now(),
     now(),
+    NULL,
+    0,
+    NULL,
+    NULL,
     NULL
 )
 ON CONFLICT (device_id) WHERE status = 'active' DO UPDATE
@@ -226,8 +317,12 @@ SET merchant_id = EXCLUDED.merchant_id,
     last_registered_at = now(),
     last_active_at = now(),
     unregistered_at = NULL,
+    push_failure_count = 0,
+    last_push_failure_reason = NULL,
+    last_push_failure_at = NULL,
+    push_degraded_at = NULL,
     updated_at = now()
-RETURNING id, merchant_id, user_id, device_id, platform, provider, push_token, status, device_model, os_version, app_version, last_registered_at, last_active_at, unregistered_at, created_at, updated_at
+RETURNING id, merchant_id, user_id, device_id, platform, provider, push_token, status, device_model, os_version, app_version, last_registered_at, last_active_at, unregistered_at, created_at, updated_at, push_failure_count, last_push_failure_reason, last_push_failure_at, push_degraded_at
 `
 
 type RegisterMerchantAppDeviceParams struct {
@@ -272,6 +367,10 @@ func (q *Queries) RegisterMerchantAppDevice(ctx context.Context, arg RegisterMer
 		&i.UnregisteredAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PushFailureCount,
+		&i.LastPushFailureReason,
+		&i.LastPushFailureAt,
+		&i.PushDegradedAt,
 	)
 	return i, err
 }
@@ -307,11 +406,15 @@ SET provider = COALESCE($1, provider),
     os_version = COALESCE($4, os_version),
     app_version = COALESCE($5, app_version),
     last_active_at = now(),
+    push_failure_count = 0,
+    last_push_failure_reason = NULL,
+    last_push_failure_at = NULL,
+    push_degraded_at = NULL,
     updated_at = now()
 WHERE merchant_id = $6
   AND device_id = $7
   AND status = 'active'
-RETURNING id, merchant_id, user_id, device_id, platform, provider, push_token, status, device_model, os_version, app_version, last_registered_at, last_active_at, unregistered_at, created_at, updated_at
+RETURNING id, merchant_id, user_id, device_id, platform, provider, push_token, status, device_model, os_version, app_version, last_registered_at, last_active_at, unregistered_at, created_at, updated_at, push_failure_count, last_push_failure_reason, last_push_failure_at, push_degraded_at
 `
 
 type UpdateMerchantAppDeviceHeartbeatParams struct {
@@ -352,6 +455,10 @@ func (q *Queries) UpdateMerchantAppDeviceHeartbeat(ctx context.Context, arg Upda
 		&i.UnregisteredAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PushFailureCount,
+		&i.LastPushFailureReason,
+		&i.LastPushFailureAt,
+		&i.PushDegradedAt,
 	)
 	return i, err
 }

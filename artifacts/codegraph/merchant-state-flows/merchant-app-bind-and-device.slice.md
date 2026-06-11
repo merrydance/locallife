@@ -1,6 +1,6 @@
 # Merchant App Bind And Device Slice
 
-Status: merchant-state flow slice created; App bind merchant-id recheck and one-time verification proof repaired 2026-06-08; consume-after-recheckable-preconditions, platform payload, logout unregister, and stale-device cleanup boundaries repaired 2026-06-11
+Status: merchant-state flow slice created; App bind merchant-id recheck and one-time verification proof repaired 2026-06-08; consume-after-recheckable-preconditions, platform payload, logout unregister, stale-device cleanup, and native-push terminal-failure degradation boundaries repaired 2026-06-11
 Risk class: G3 - binding code exchanges a public one-time credential for long-lived merchant App tokens and later binds push devices used for order alerts
 Scope: Mini Program dashboard bind-code popup -> public App bind verification -> App auth token/session storage -> merchant App device registration/heartbeat -> native-push device readers
 
@@ -80,10 +80,10 @@ Successful bind-code verification alone does not prove the device can receive na
     Evidence: `locallife/api/server.go:1007`, `locallife/api/server.go:1008`, `locallife/api/server.go:1010`, `locallife/api/server.go:1011`, `locallife/api/server.go:1012`.
 
 17. Device registration validates merchant/user principal, normalizes platform/provider, and writes `merchant_app_devices` through a transaction that deactivates other active rows with the same push token before upserting by active `device_id`.
-    Evidence: `locallife/logic/merchant_app_device.go:62`, `locallife/logic/merchant_app_device.go:64`, `locallife/logic/merchant_app_device.go:76`, `locallife/logic/merchant_app_device.go:80`, `locallife/logic/merchant_app_device.go:97`, `locallife/db/sqlc/tx_merchant_app_device.go:13`, `locallife/db/sqlc/tx_merchant_app_device.go:17`, `locallife/db/query/merchant_app_device.sql:40`.
+    Evidence: `locallife/logic/merchant_app_device.go:62`, `locallife/logic/merchant_app_device.go:64`, `locallife/logic/merchant_app_device.go:76`, `locallife/logic/merchant_app_device.go:80`, `locallife/logic/merchant_app_device.go:97`, `locallife/db/sqlc/tx_merchant_app_device.go:13`, `locallife/db/sqlc/tx_merchant_app_device.go:17`, `locallife/db/query/merchant_app_device.sql:54`.
 
 18. Heartbeat is sent during order polling and through the settings tile; backend updates active device metadata and `last_active_at`.
-    Evidence: `merchant_app/lib/core/service/order_poller.dart:87`, `merchant_app/lib/features/settings/settings_page.dart:81`, `merchant_app/lib/core/push/device_sync_service.dart:205`, `merchant_app/lib/core/push/device_sync_service.dart:237`, `locallife/logic/merchant_app_device.go:115`, `locallife/db/query/merchant_app_device.sql:64`, `locallife/db/query/merchant_app_device.sql:71`.
+    Evidence: `merchant_app/lib/core/service/order_poller.dart:87`, `merchant_app/lib/features/settings/settings_page.dart:81`, `merchant_app/lib/core/push/device_sync_service.dart:205`, `merchant_app/lib/core/push/device_sync_service.dart:237`, `locallife/logic/merchant_app_device.go:115`, `locallife/db/query/merchant_app_device.sql:120`, `locallife/db/query/merchant_app_device.sql:127`.
 
 19. Active App logout from the order drawer or settings page goes through `AuthLogoutController`, which attempts to unregister the current backend device before clearing the local auth session. Device unregister failure is best-effort and does not block logout; the local last-registered push-token marker is cleared so a later rebind can re-register the same token.
     Evidence: `merchant_app/lib/features/order/order_list_page.dart:216`, `merchant_app/lib/features/settings/settings_page.dart:199`, `merchant_app/lib/features/auth/auth_logout_controller.dart:6`, `merchant_app/lib/features/auth/auth_logout_controller.dart:25`, `merchant_app/lib/features/auth/auth_logout_controller.dart:35`, `merchant_app/lib/core/push/device_sync_service.dart:312`, `merchant_app/lib/core/push/device_sync_service.dart:323`.
@@ -91,8 +91,11 @@ Successful bind-code verification alone does not prove the device can receive na
 20. `DataCleanupScheduler` deactivates active merchant App devices whose `last_active_at` is more than 90 days stale, so uninstall, storage-wipe, token-expiry, or no-logout cases eventually stop remaining active push targets.
     Evidence: `locallife/scheduler/data_cleanup.go:34`, `locallife/scheduler/data_cleanup.go:175`, `locallife/scheduler/data_cleanup.go:213`, `locallife/db/query/merchant_app_device.sql:10`, `locallife/db/query/merchant_app_device.sql:15`, `locallife/db/sqlc/merchant_app_device_test.go:13`, `locallife/scheduler/merchant_app_device_cleanup_test.go:13`.
 
-21. Native push dispatch reads active merchant App devices by merchant, groups by provider, and sends to configured providers; unconfigured providers are skipped rather than deactivating devices.
-    Evidence: `locallife/logic/merchant_app_push_gateway.go:102`, `locallife/logic/merchant_app_push_gateway.go:113`, `locallife/logic/merchant_app_push_gateway.go:127`, `locallife/logic/merchant_app_push_gateway.go:128`, `locallife/logic/merchant_app_push_gateway.go:138`.
+21. Native push dispatch reads active merchant App devices by merchant, groups by provider, and sends to configured providers; unconfigured providers are skipped rather than deactivating devices. Retryable provider failures remain in-memory retry signals, while terminal provider failures record sanitized reason/count on only the affected active `merchant_app_devices` row and deactivate that row only after three consecutive terminal failures.
+    Evidence: `locallife/logic/merchant_app_push_gateway.go:120`, `locallife/logic/merchant_app_push_gateway.go:135`, `locallife/logic/merchant_app_push_gateway.go:145`, `locallife/logic/merchant_app_push_gateway.go:161`, `locallife/logic/merchant_app_push_gateway.go:168`, `locallife/db/query/merchant_app_device.sql:18`, `locallife/db/query/merchant_app_device.sql:24`, `locallife/db/query/merchant_app_device.sql:33`.
+
+22. Successful native-push send, device registration, and heartbeat clear previous per-device push degradation evidence, so recovered devices do not keep stale terminal-failure count.
+    Evidence: `locallife/logic/merchant_app_push_gateway.go:149`, `locallife/db/query/merchant_app_device.sql:37`, `locallife/db/query/merchant_app_device.sql:105`, `locallife/db/query/merchant_app_device.sql:120`, `locallife/db/query/merchant_app_device.sql:128`.
 
 ## Reverse-Reference Findings
 
@@ -103,13 +106,13 @@ Successful bind-code verification alone does not prove the device can receive na
 - Fixed/current 2026-06-11: device registry constrains `platform` to `android`, and Flutter device registration/heartbeat now always report backend platform `android` even if a non-Android runtime branch is present for local metadata collection.
 - Fixed/current 2026-06-11: active Flutter logout now attempts backend device unregister before clearing local auth, clears the local last-registered push-token marker even when unregister fails, and skips backend DELETE if no local device id exists.
 - Fixed/current 2026-06-11: backend stale-device cleanup deactivates active merchant App devices after 90 days without heartbeat, covering uninstall/storage-wipe/no-logout cases without touching merchant, staff user, or App-wide push state.
-- Native push dispatcher does not currently persist per-device degradation after permanent provider failures. It reports summaries only to the caller. Product decision 2026-06-10: current App native vendor push is real/currently supported, but provider sends can fail while the App is not listed in each vendor app market. Terminal provider failures should record provider reason/failure count, mark only the affected `merchant_app_devices` row/device push token degraded first, and deactivate only that device/token after repeated clear terminal failures or long heartbeat absence. This must never deactivate the merchant account, staff user, or App-wide push capability.
+- Fixed/current 2026-06-11: native push dispatcher persists per-device terminal provider failures. It records sanitized provider reason and consecutive failure count on only the affected active `merchant_app_devices` row/push token, keeps the row active while degraded for the first two terminal failures, and deactivates only that row after the third clear terminal failure. This does not deactivate the merchant account, staff user, or App-wide push capability.
 
 ## SQL And Durable State Boundaries
 
 - Redis `app_bind:<code>` and `app_bind:user:<userID>` own short-lived bind-code truth.
 - `sessions` owns issued access/refresh token hashes and App-specific refresh behavior through the prefixed user-agent marker.
-- `merchant_app_devices` owns durable native-push device registration, active/inactive state, provider token, device metadata, and `last_active_at`; migration `000265` adds a partial active-device `last_active_at` index for stale cleanup scans.
+- `merchant_app_devices` owns durable native-push device registration, active/inactive state, provider token, device metadata, `last_active_at`, and per-device native-push terminal-failure evidence; migration `000265` adds a partial active-device `last_active_at` index for stale cleanup scans, and migration `000266` adds `push_failure_count`, `last_push_failure_reason`, `last_push_failure_at`, and `push_degraded_at`.
 - `merchants.bind_code` and `bind_code_expires_at` are not part of App bind truth; they belong to staff invite binding.
 
 ## Trust, Authorization, And Tenant Checks
@@ -125,10 +128,11 @@ Successful bind-code verification alone does not prove the device can receive na
 - Generate reuses a still-valid code per user and rate-limits generation.
 - Fixed/current 2026-06-11: verify is one-time by final Redis compare-and-delete. Recheckable backend failures before that boundary leave the code replayable, while duplicate successful consumption still rejects as expired/invalid. Session-insert failure after final consume attempts TTL-preserving restoration without replacing a newer user-index code.
 - Flutter `AuthNotifier` collapses in-flight bind-code submits.
-- Device registration is idempotent by active `device_id` and deactivates other active rows with the same push token in the same transaction.
-- Heartbeat is repeatable and last-write-wins for mutable device metadata.
+- Device registration is idempotent by active `device_id`, deactivates other active rows with the same push token in the same transaction, and clears prior native-push terminal-failure evidence for the refreshed device row.
+- Heartbeat is repeatable and last-write-wins for mutable device metadata; it also clears prior native-push terminal-failure evidence because the device has proven recent client activity.
 - Active logout unregister is best-effort: a successful backend delete deactivates the current `device_id`; a failed delete still clears the local registered-token marker so the next login can force registration instead of silently reusing a stale local marker.
 - Stale-device cleanup is a status-only convergence update: rows stay in `merchant_app_devices`, but only `status='active'` rows with `last_active_at` before the scheduler cutoff are marked `inactive` with `unregistered_at` set.
+- Native-push terminal failures are scoped by current device row id and push token. The first two terminal failures mark only that row as degraded; the third consecutive terminal failure deactivates only that row. Retryable failures and unconfigured providers do not mutate device status.
 
 ## Recovery And Async Convergence Paths
 
@@ -137,6 +141,7 @@ Successful bind-code verification alone does not prove the device can receive na
 - Device registration failures surface as degraded state in the App settings/order list, but do not block token login.
 - Missing native push token skips registration; polling and websocket still provide other order-reception channels.
 - Active logout clears local auth even if device unregister fails. If the unregister request is unavailable or unauthenticated, backend stale-device cleanup now deactivates the active device row after the 90-day no-heartbeat grace window, while the client no longer suppresses the next registration for the same push token.
+- Terminal native-push provider failures now converge through per-device degradation first. A later successful provider send, device registration, or heartbeat clears stale degradation evidence; repeated terminal failures deactivate only the affected device/token row.
 
 ## Frontend Draft And Backend Rehydration
 
@@ -153,8 +158,8 @@ Observed tests:
 - Backend token test covers App bind sessions keeping the long-lived refresh-token duration.
 - Flutter auth notifier tests cover duplicate bind-code submit suppression, startup/manual refresh behavior, and logout-controller ordering/failure behavior. Flutter device-sync tests cover Android-only platform payloads for registration/heartbeat and logout unregister behavior including failed unregister and missing local device id.
 - Backend API/logic tests cover merchant App device registration, heartbeat, unregister, unsupported provider, and auth denial.
-- Backend DB/scheduler tests cover stale-device cleanup deactivating only old active devices, the daily cleanup scheduler using the 90-day cutoff, the 04:30 cleanup cron expression, and migration `000265` clean/incremental index proof.
-- Push dispatcher tests cover provider grouping, send success, retryable/permanent failures, and skipped unconfigured providers.
+- Backend DB/scheduler tests cover stale-device cleanup deactivating only old active devices, the daily cleanup scheduler using the 90-day cutoff, the 04:30 cleanup cron expression, migration `000265` clean/incremental index proof, per-device terminal push failure degradation/deactivation, success/heartbeat degradation clearing, and migration `000266` clean/incremental schema proof.
+- Push dispatcher tests cover provider grouping, send success, retryable/permanent failures, skipped unconfigured providers, permanent-failure persistence, and clearing prior device degradation after a successful provider send.
 
 Missing high-value tests:
 
@@ -162,7 +167,7 @@ Missing high-value tests:
 - Flutter/contract test for unsupported native-push provider copy if product wants client-side preflight before backend rejection.
 - Fixed/current 2026-06-11: Flutter logout unregister coverage proves active logout attempts backend device unregister before clearing local auth, continues logout on unregister failure, clears the local registered-token marker for rebind, and skips backend DELETE when no local device id exists.
 - Fixed/current 2026-06-11: stale-device cleanup proof covers active devices with old `last_active_at` becoming inactive while recent active and already inactive devices are left alone.
-- Native-push terminal-failure policy tests: provider reason/failure count is recorded, the affected registered device/push token is marked degraded first, repeated clear terminal failures or long heartbeat absence deactivate only that device/token, and merchant/account/App-wide push capability remains unaffected.
+- Fixed/current 2026-06-11: native-push terminal-failure policy tests cover provider reason/failure count recording, the affected registered device/push token being marked degraded first, third clear terminal failure deactivating only that row, heartbeat clearing degradation, success clearing degradation, and migration `000266` clean/incremental schema proof.
 
 ## Gaps And Refactor Notes
 
@@ -172,15 +177,16 @@ Missing high-value tests:
 - Fixed/current 2026-06-11: Flutter device registration and heartbeat payloads align with the Android-only backend platform contract.
 - Fixed/current 2026-06-11: active Flutter logout attempts device unregister before clearing local auth, with best-effort failure handling and rebind-safe local marker cleanup.
 - Fixed/current 2026-06-11: backend stale-device cleanup deactivates 90-day no-heartbeat devices that never receive active logout, such as app uninstall, storage wipe, token expiry, or process loss.
+- Fixed/current 2026-06-11: native-push terminal provider failures record sanitized reason/count on only the affected active device row, mark it degraded before deactivation, and deactivate only that row after the third consecutive terminal failure; successful send, registration, and heartbeat clear stale degradation evidence.
 
 ## Branch Exhaustion
 
 - Entry branches checked: Mini Program App bind popup/code generation, Flutter bind-code login, secure token persistence, App startup refresh, device UUID creation, native push token sync, device registration, heartbeat from polling/settings, device unregister backend route, and native push dispatch for order alerts.
 - Request branches checked: bind-code generate, public bind-code verify, token/session creation, merchant access profile read during verify, device register, heartbeat, unregister, push device query by merchant, and dispatcher provider sends. Legacy staff invite `merchants.bind_code` is tracked separately under staff flow.
-- Backend state branches checked: Redis code/user index reuse and TTL, public verify rate limit, final Redis compare-and-delete consumption, role recheck, session insert, token minting, device platform/provider validation, active device upsert by device id, duplicate push-token deactivation, heartbeat metadata update, push provider grouping, skipped unconfigured providers, retryable send failure, and permanent send failure.
+- Backend state branches checked: Redis code/user index reuse and TTL, public verify rate limit, final Redis compare-and-delete consumption, role recheck, session insert, token minting, device platform/provider validation, active device upsert by device id, duplicate push-token deactivation, heartbeat metadata update plus degradation clearing, push provider grouping, skipped unconfigured providers, retryable send failure, permanent send failure degradation, and third terminal-failure device-row deactivation.
 - Async branches checked: native push dispatch is called from order notification paths; device registration is independent of bind-code verification; missing push token leaves polling/websocket as recovery channels; stale-device cleanup runs through `DataCleanupScheduler`.
-- Failure/retry branches checked: generation Redis unavailable, verify Redis unavailable, expired/missing code, consumed-code retry, user-lookup failure before final consume, session-insert failure after final consume with TTL-preserving restore attempt, duplicate Flutter submit, registration unsupported provider/platform, missing push token, heartbeat failure, logout unregister failure, missing local device id on logout, stale device cleanup after 90 days without heartbeat, unconfigured push provider, and permanent provider failure. Native-push terminal failures should record reason/count, mark only the affected registered device/push token degraded first, and deactivate only that device/token after repeated clear terminal failures or long heartbeat absence.
+- Failure/retry branches checked: generation Redis unavailable, verify Redis unavailable, expired/missing code, consumed-code retry, user-lookup failure before final consume, session-insert failure after final consume with TTL-preserving restore attempt, duplicate Flutter submit, registration unsupported provider/platform, missing push token, heartbeat failure, logout unregister failure, missing local device id on logout, stale device cleanup after 90 days without heartbeat, unconfigured push provider, retryable push provider failure, permanent provider failure degradation, successful-send degradation clearing, and third terminal-failure device-row deactivation.
 - Reader/consumer branches checked: Flutter auth state, settings device sync tile, order polling/alert delivery, backend push dispatcher, sessions table, and merchant App device list used by push.
 - Authorization/tenant branches checked: code generation accepts merchant owner/manager roles, public verify now rechecks the same Redis-embedded merchant id against current active merchant roles, device routes require owner/manager/cashier/chef staff context, and device writes derive merchant id from middleware rather than client payload.
 - Zombie/unreachable branches checked: `merchants.bind_code` is not App binding truth; verify logs but does not persist device metadata.
-- Test-proof gaps checked: existing tests cover Redis failures, full one-time generate/verify/session flow, embedded merchant-id recheck, consume-after-recheckable-preconditions behavior, session-failure restoration, App refresh sessions, Flutter Android-only platform payload contract, active logout unregister, backend stale-device cleanup, device registration/heartbeat/unregister, and dispatcher provider branches. Missing proof remains for the permanent provider-failure degradation policy only.
+- Test-proof gaps checked: existing tests cover Redis failures, full one-time generate/verify/session flow, embedded merchant-id recheck, consume-after-recheckable-preconditions behavior, session-failure restoration, App refresh sessions, Flutter Android-only platform payload contract, active logout unregister, backend stale-device cleanup, device registration/heartbeat/unregister, dispatcher provider branches, per-device permanent provider-failure degradation/deactivation, and degradation clearing on success/heartbeat. No known App bind/device proof gap remains in this slice.

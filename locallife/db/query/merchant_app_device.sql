@@ -15,6 +15,42 @@ SET status = 'inactive',
 WHERE status = 'active'
   AND last_active_at < sqlc.arg('last_active_before');
 
+-- name: RecordMerchantAppDevicePermanentPushFailure :execrows
+UPDATE merchant_app_devices
+SET push_failure_count = push_failure_count + 1,
+    last_push_failure_reason = sqlc.arg('last_push_failure_reason'),
+    last_push_failure_at = now(),
+    push_degraded_at = COALESCE(push_degraded_at, now()),
+    status = CASE
+        WHEN push_failure_count + 1 >= sqlc.arg('deactivate_after_count')::integer THEN 'inactive'
+        ELSE status
+    END,
+    unregistered_at = CASE
+        WHEN push_failure_count + 1 >= sqlc.arg('deactivate_after_count')::integer THEN COALESCE(unregistered_at, now())
+        ELSE unregistered_at
+    END,
+    updated_at = now()
+WHERE id = sqlc.arg('id')
+  AND push_token = sqlc.arg('push_token')
+  AND status = 'active';
+
+-- name: ClearMerchantAppDevicePushFailure :execrows
+UPDATE merchant_app_devices
+SET push_failure_count = 0,
+    last_push_failure_reason = NULL,
+    last_push_failure_at = NULL,
+    push_degraded_at = NULL,
+    updated_at = now()
+WHERE id = sqlc.arg('id')
+  AND push_token = sqlc.arg('push_token')
+  AND status = 'active'
+  AND (
+      push_failure_count <> 0
+      OR last_push_failure_reason IS NOT NULL
+      OR last_push_failure_at IS NOT NULL
+      OR push_degraded_at IS NOT NULL
+  );
+
 -- name: RegisterMerchantAppDevice :one
 INSERT INTO merchant_app_devices (
     merchant_id,
@@ -29,7 +65,11 @@ INSERT INTO merchant_app_devices (
     app_version,
     last_registered_at,
     last_active_at,
-    unregistered_at
+    unregistered_at,
+    push_failure_count,
+    last_push_failure_reason,
+    last_push_failure_at,
+    push_degraded_at
 ) VALUES (
     sqlc.arg('merchant_id'),
     sqlc.arg('user_id'),
@@ -43,6 +83,10 @@ INSERT INTO merchant_app_devices (
     sqlc.narg('app_version'),
     now(),
     now(),
+    NULL,
+    0,
+    NULL,
+    NULL,
     NULL
 )
 ON CONFLICT (device_id) WHERE status = 'active' DO UPDATE
@@ -58,11 +102,15 @@ SET merchant_id = EXCLUDED.merchant_id,
     last_registered_at = now(),
     last_active_at = now(),
     unregistered_at = NULL,
+    push_failure_count = 0,
+    last_push_failure_reason = NULL,
+    last_push_failure_at = NULL,
+    push_degraded_at = NULL,
     updated_at = now()
-RETURNING id, merchant_id, user_id, device_id, platform, provider, push_token, status, device_model, os_version, app_version, last_registered_at, last_active_at, unregistered_at, created_at, updated_at;
+RETURNING id, merchant_id, user_id, device_id, platform, provider, push_token, status, device_model, os_version, app_version, last_registered_at, last_active_at, unregistered_at, created_at, updated_at, push_failure_count, last_push_failure_reason, last_push_failure_at, push_degraded_at;
 
 -- name: GetActiveMerchantAppDevice :one
-SELECT id, merchant_id, user_id, device_id, platform, provider, push_token, status, device_model, os_version, app_version, last_registered_at, last_active_at, unregistered_at, created_at, updated_at
+SELECT id, merchant_id, user_id, device_id, platform, provider, push_token, status, device_model, os_version, app_version, last_registered_at, last_active_at, unregistered_at, created_at, updated_at, push_failure_count, last_push_failure_reason, last_push_failure_at, push_degraded_at
 FROM merchant_app_devices
 WHERE merchant_id = sqlc.arg('merchant_id')
   AND device_id = sqlc.arg('device_id')
@@ -77,11 +125,15 @@ SET provider = COALESCE(sqlc.narg('provider'), provider),
     os_version = COALESCE(sqlc.narg('os_version'), os_version),
     app_version = COALESCE(sqlc.narg('app_version'), app_version),
     last_active_at = now(),
+    push_failure_count = 0,
+    last_push_failure_reason = NULL,
+    last_push_failure_at = NULL,
+    push_degraded_at = NULL,
     updated_at = now()
 WHERE merchant_id = sqlc.arg('merchant_id')
   AND device_id = sqlc.arg('device_id')
   AND status = 'active'
-RETURNING id, merchant_id, user_id, device_id, platform, provider, push_token, status, device_model, os_version, app_version, last_registered_at, last_active_at, unregistered_at, created_at, updated_at;
+RETURNING id, merchant_id, user_id, device_id, platform, provider, push_token, status, device_model, os_version, app_version, last_registered_at, last_active_at, unregistered_at, created_at, updated_at, push_failure_count, last_push_failure_reason, last_push_failure_at, push_degraded_at;
 
 -- name: UnregisterMerchantAppDevice :execrows
 UPDATE merchant_app_devices
@@ -93,14 +145,14 @@ WHERE merchant_id = sqlc.arg('merchant_id')
   AND status = 'active';
 
 -- name: ListActiveMerchantAppDevicesByMerchant :many
-SELECT id, merchant_id, user_id, device_id, platform, provider, push_token, status, device_model, os_version, app_version, last_registered_at, last_active_at, unregistered_at, created_at, updated_at
+SELECT id, merchant_id, user_id, device_id, platform, provider, push_token, status, device_model, os_version, app_version, last_registered_at, last_active_at, unregistered_at, created_at, updated_at, push_failure_count, last_push_failure_reason, last_push_failure_at, push_degraded_at
 FROM merchant_app_devices
 WHERE merchant_id = sqlc.arg('merchant_id')
   AND status = 'active'
 ORDER BY last_active_at DESC, id DESC;
 
 -- name: ListActiveMerchantAppDevicesByMerchantAndProvider :many
-SELECT id, merchant_id, user_id, device_id, platform, provider, push_token, status, device_model, os_version, app_version, last_registered_at, last_active_at, unregistered_at, created_at, updated_at
+SELECT id, merchant_id, user_id, device_id, platform, provider, push_token, status, device_model, os_version, app_version, last_registered_at, last_active_at, unregistered_at, created_at, updated_at, push_failure_count, last_push_failure_reason, last_push_failure_at, push_degraded_at
 FROM merchant_app_devices
 WHERE merchant_id = sqlc.arg('merchant_id')
   AND provider = sqlc.arg('provider')

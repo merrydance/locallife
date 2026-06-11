@@ -106,6 +106,7 @@ type Querier interface {
 	ClearGroupApplicationIDCardBack(ctx context.Context, id int64) (MerchantGroupApplication, error)
 	ClearGroupApplicationIDCardFront(ctx context.Context, id int64) (MerchantGroupApplication, error)
 	ClearGroupApplicationTrademarkCertificate(ctx context.Context, id int64) (MerchantGroupApplication, error)
+	ClearMerchantAppDevicePushFailure(ctx context.Context, arg ClearMerchantAppDevicePushFailureParams) (int64, error)
 	// 清空营业执照关联和 OCR 结果
 	ClearMerchantApplicationBusinessLicense(ctx context.Context, id int64) (MerchantApplication, error)
 	// 清空食品经营许可证关联和 OCR 结果
@@ -1668,6 +1669,7 @@ type Querier interface {
 	ReactivateDisabledMerchantStaff(ctx context.Context, arg ReactivateDisabledMerchantStaffParams) (MerchantStaff, error)
 	// 浏览历史查询
 	RecordBrowseHistory(ctx context.Context, arg RecordBrowseHistoryParams) (BrowseHistory, error)
+	RecordMerchantAppDevicePermanentPushFailure(ctx context.Context, arg RecordMerchantAppDevicePermanentPushFailureParams) (int64, error)
 	RecordProviderStatusPollError(ctx context.Context, arg RecordProviderStatusPollErrorParams) (PrintLog, error)
 	RecoverFailedBaofuAccountOpeningFlowFromActiveBinding(ctx context.Context, arg RecoverFailedBaofuAccountOpeningFlowFromActiveBindingParams) (BaofuAccountOpeningFlow, error)
 	RegisterMerchantAppDevice(ctx context.Context, arg RegisterMerchantAppDeviceParams) (MerchantAppDevice, error)
