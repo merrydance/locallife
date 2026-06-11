@@ -93,6 +93,25 @@ func TestValidateOrderSessionAndBilling_Reservation(t *testing.T) {
 			},
 		},
 		{
+			name:  "OfflineReservationOperatorIsNotCustomerOwner",
+			input: OrderSessionInput{UserID: userID, MerchantID: merchantID, OrderType: "reservation", ReservationID: &reservationID},
+			buildStubs: func(store *mockdb.MockStore) {
+				reservation := baseReservation
+				reservation.Source = pgtype.Text{String: db.ReservationSourcePhone, Valid: true}
+				reservation.OfflineCustomerID = pgtype.Int8{Int64: 60, Valid: true}
+				reservation.CreatedByUserID = pgtype.Int8{Int64: userID, Valid: true}
+				store.EXPECT().
+					GetTableReservation(gomock.Any(), reservationID).
+					Times(1).
+					Return(reservation, nil)
+			},
+			check: func(t *testing.T, _ OrderSessionResult, err error) {
+				reqErr := assertRequestError(t, err)
+				require.Equal(t, 403, reqErr.Status)
+				require.Equal(t, "reservation does not belong to you", reqErr.Err.Error())
+			},
+		},
+		{
 			name:  "ReservationInvalidStatus",
 			input: OrderSessionInput{UserID: userID, MerchantID: merchantID, OrderType: "reservation", ReservationID: &reservationID},
 			buildStubs: func(store *mockdb.MockStore) {
@@ -348,6 +367,29 @@ func TestValidateOrderSessionAndBilling_DineIn(t *testing.T) {
 			},
 		},
 		{
+			name:  "OfflineReservationOperatorIsNotCustomerOwner",
+			input: OrderSessionInput{UserID: userID, MerchantID: merchantID, OrderType: "dine_in", TableID: &tableID, ReservationID: &reservationID},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetActiveDiningSessionByTable(gomock.Any(), tableID).
+					Times(1).
+					Return(baseSession, nil)
+				reservation := baseReservation
+				reservation.Source = pgtype.Text{String: db.ReservationSourceMerchant, Valid: true}
+				reservation.OfflineCustomerID = pgtype.Int8{Int64: 61, Valid: true}
+				reservation.CreatedByUserID = pgtype.Int8{Int64: userID, Valid: true}
+				store.EXPECT().
+					GetTableReservation(gomock.Any(), reservationID).
+					Times(1).
+					Return(reservation, nil)
+			},
+			check: func(t *testing.T, _ OrderSessionResult, err error) {
+				reqErr := assertRequestError(t, err)
+				require.Equal(t, 403, reqErr.Status)
+				require.Equal(t, "reservation does not belong to you", reqErr.Err.Error())
+			},
+		},
+		{
 			name:  "ReservationNotReady",
 			input: OrderSessionInput{UserID: userID, MerchantID: merchantID, OrderType: "dine_in", TableID: &tableID, ReservationID: &reservationID},
 			buildStubs: func(store *mockdb.MockStore) {
@@ -376,6 +418,10 @@ func TestValidateOrderSessionAndBilling_DineIn(t *testing.T) {
 					GetActiveDiningSessionByTable(gomock.Any(), tableID).
 					Times(1).
 					Return(baseSession, nil)
+				store.EXPECT().
+					GetTableReservation(gomock.Any(), reservationID).
+					Times(1).
+					Return(baseReservation, nil)
 				bg := db.BillingGroup{ID: 77, DiningSessionID: baseSession.ID, Status: "closed"}
 				store.EXPECT().
 					GetDefaultBillingGroupBySession(gomock.Any(), baseSession.ID).
@@ -396,6 +442,10 @@ func TestValidateOrderSessionAndBilling_DineIn(t *testing.T) {
 					GetActiveDiningSessionByTable(gomock.Any(), tableID).
 					Times(1).
 					Return(baseSession, nil)
+				store.EXPECT().
+					GetTableReservation(gomock.Any(), reservationID).
+					Times(1).
+					Return(baseReservation, nil)
 				bg := db.BillingGroup{ID: 88, DiningSessionID: baseSession.ID, Status: "open"}
 				store.EXPECT().
 					GetDefaultBillingGroupBySession(gomock.Any(), baseSession.ID).
@@ -414,6 +464,64 @@ func TestValidateOrderSessionAndBilling_DineIn(t *testing.T) {
 				require.NotNil(t, result.DiningSession)
 				require.NotNil(t, result.BillingGroupID)
 				require.Equal(t, int64(88), *result.BillingGroupID)
+			},
+		},
+		{
+			name:  "OfflineReservationSessionWithoutReservationIDIsForbidden",
+			input: OrderSessionInput{UserID: userID, MerchantID: merchantID, OrderType: "dine_in", TableID: &tableID},
+			buildStubs: func(store *mockdb.MockStore) {
+				offlineReservation := baseReservation
+				offlineReservation.Source = pgtype.Text{String: db.ReservationSourceMerchant, Valid: true}
+				offlineReservation.OfflineCustomerID = pgtype.Int8{Int64: 61, Valid: true}
+				offlineReservation.CreatedByUserID = pgtype.Int8{Int64: userID, Valid: true}
+				store.EXPECT().
+					GetActiveDiningSessionByTable(gomock.Any(), tableID).
+					Times(1).
+					Return(db.DiningSession{ID: 88, MerchantID: merchantID, TableID: tableID, ReservationID: pgtype.Int8{Int64: reservationID, Valid: true}}, nil)
+				store.EXPECT().
+					GetTableReservation(gomock.Any(), reservationID).
+					Times(1).
+					Return(offlineReservation, nil)
+			},
+			check: func(t *testing.T, _ OrderSessionResult, err error) {
+				reqErr := assertRequestError(t, err)
+				require.Equal(t, 403, reqErr.Status)
+				require.Equal(t, "reservation does not belong to you", reqErr.Err.Error())
+			},
+		},
+		{
+			name:  "OnlineReservationSessionWithoutReservationIDAllowed",
+			input: OrderSessionInput{UserID: userID, MerchantID: merchantID, OrderType: "dine_in", TableID: &tableID},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetActiveDiningSessionByTable(gomock.Any(), tableID).
+					Times(1).
+					Return(db.DiningSession{ID: 88, MerchantID: merchantID, TableID: tableID, ReservationID: pgtype.Int8{Int64: reservationID, Valid: true}}, nil)
+				reservation := baseReservation
+				reservation.Source = pgtype.Text{String: db.ReservationSourceOnline, Valid: true}
+				store.EXPECT().
+					GetTableReservation(gomock.Any(), reservationID).
+					Times(1).
+					Return(reservation, nil)
+				bg := db.BillingGroup{ID: 99, DiningSessionID: 88, Status: "open"}
+				store.EXPECT().
+					GetDefaultBillingGroupBySession(gomock.Any(), int64(88)).
+					Times(1).
+					Return(bg, nil)
+				store.EXPECT().
+					GetActiveBillingGroupMember(gomock.Any(), db.GetActiveBillingGroupMemberParams{
+						BillingGroupID: bg.ID,
+						UserID:         userID,
+					}).
+					Times(1).
+					Return(db.BillingGroupMember{}, nil)
+			},
+			check: func(t *testing.T, result OrderSessionResult, err error) {
+				require.NoError(t, err)
+				require.NotNil(t, result.DiningSession)
+				require.Nil(t, result.Reservation)
+				require.NotNil(t, result.BillingGroupID)
+				require.Equal(t, int64(99), *result.BillingGroupID)
 			},
 		},
 	}

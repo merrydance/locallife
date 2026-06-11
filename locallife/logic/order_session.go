@@ -45,7 +45,7 @@ func ValidateOrderSessionAndBilling(ctx context.Context, store db.Store, input O
 			return result, err
 		}
 
-		if reservation.UserID != input.UserID {
+		if !isCustomerOwnedReservation(reservation, input.UserID) {
 			return result, NewRequestError(http.StatusForbidden, errors.New("reservation does not belong to you"))
 		}
 		if reservation.MerchantID != input.MerchantID {
@@ -99,15 +99,42 @@ func ValidateOrderSessionAndBilling(ctx context.Context, store db.Store, input O
 			if !session.ReservationID.Valid || session.ReservationID.Int64 != *input.ReservationID {
 				return result, NewRequestError(http.StatusConflict, errors.New("dining session reservation mismatch"))
 			}
+		}
 
-			reservation, err := store.GetTableReservation(ctx, *input.ReservationID)
+		var sessionReservation *db.TableReservation
+		if session.ReservationID.Valid {
+			reservation, err := store.GetTableReservation(ctx, session.ReservationID.Int64)
 			if err != nil {
 				if errors.Is(err, db.ErrRecordNotFound) {
 					return result, NewRequestError(http.StatusNotFound, errors.New("reservation not found"))
 				}
 				return result, err
 			}
-			if reservation.UserID != input.UserID {
+			if reservation.MerchantID != input.MerchantID {
+				return result, NewRequestError(http.StatusBadRequest, errors.New("reservation does not belong to this merchant"))
+			}
+			if reservation.TableID != *input.TableID {
+				return result, NewRequestError(http.StatusBadRequest, errors.New("table does not match reservation"))
+			}
+			if !isOnlineReservationSource(reservation.Source) {
+				return result, NewRequestError(http.StatusForbidden, errors.New("reservation does not belong to you"))
+			}
+			sessionReservation = &reservation
+		}
+
+		if input.ReservationID != nil {
+			reservation := sessionReservation
+			if reservation == nil {
+				loadedReservation, err := store.GetTableReservation(ctx, *input.ReservationID)
+				if err != nil {
+					if errors.Is(err, db.ErrRecordNotFound) {
+						return result, NewRequestError(http.StatusNotFound, errors.New("reservation not found"))
+					}
+					return result, err
+				}
+				reservation = &loadedReservation
+			}
+			if !isCustomerOwnedReservation(*reservation, input.UserID) {
 				return result, NewRequestError(http.StatusForbidden, errors.New("reservation does not belong to you"))
 			}
 			if reservation.MerchantID != input.MerchantID {
@@ -123,7 +150,7 @@ func ValidateOrderSessionAndBilling(ctx context.Context, store db.Store, input O
 				return result, NewRequestError(http.StatusConflict, errors.New("reservation is not ready for dining"))
 			}
 
-			result.Reservation = &reservation
+			result.Reservation = reservation
 		}
 	}
 
