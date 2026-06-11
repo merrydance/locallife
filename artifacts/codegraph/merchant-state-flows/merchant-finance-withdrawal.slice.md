@@ -1,6 +1,6 @@
 # Merchant Finance Withdrawal Slice
 
-Status: withdrawal idempotency, manager create permission, callback fact durability, provider-error command diagnostics, applied-schema idempotency hardening, provider/local balance truth-boundary proof, Mini Program durable-detail terminal polling proof, and settlement-account long-wait UI contract proof implemented 2026-06-10; Baofu account-opening provider failure reasons preserved 2026-06-07
+Status: withdrawal idempotency, manager create permission, callback fact durability, provider-error command diagnostics, applied-schema idempotency hardening, provider/local balance truth-boundary proof, Mini Program durable-detail terminal polling proof, settlement-account long-wait UI contract proof, and provider-returned merchant-facing guidance implemented; Baofu account-opening provider failure reasons preserved 2026-06-07
 Risk class: G3 - merchant money movement, Baofu settlement-account onboarding, provider callbacks, recovery schedulers, sensitive profile data, and finance authorization boundaries
 Scope: Mini Program merchant finance pages -> merchant finance read APIs -> Baofu settlement account onboarding -> Baofu withdrawal create/read APIs -> provider callback/recovery fact application -> durable finance truth
 
@@ -34,6 +34,7 @@ Merchant finance state must separate read-only financial reporting from money mo
 - Merchant withdrawal creation must create durable local withdrawal intent before/alongside provider command tracking.
 - Implemented 2026-06-10: withdrawal provider callbacks first persist a durable `external_payment_facts` callback fact, then asynchronously enqueue terminal withdrawal-state application.
 - Provider callback, query recovery, and task application must converge `baofu_withdrawal_orders` from `processing` to a terminal state without regressing already terminal rows.
+- Implemented 2026-06-11: provider `returned` remains a terminal withdrawal state with no automatic retry or local money movement. Merchant-facing API/Mini Program copy presents it as "提现已退回" and tells the merchant that funds returned to the Baofu settlement account, so they should refresh withdrawable balance before reapplying if needed.
 - A merchant-visible "withdrawal submitted" result must mean there is a durable local withdrawal row the merchant can later inspect.
 - Implemented 2026-06-10: Mini Program accepted/unknown withdrawal create results redirect with the backend-returned durable withdrawal id, the detail page reloads that id, polls non-terminal states while visible, and stops polling once terminal truth is observed.
 
@@ -127,6 +128,7 @@ Merchant finance state must separate read-only financial reporting from money mo
 - Withdrawal callback and recovery both converge through the same fact-application task, which is a good single write path for terminal status.
 - Fixed 2026-06-10: withdrawal callbacks persist a durable `external_payment_facts` callback fact before asynchronous terminal application; if fact persistence fails, the callback returns failure and does not enqueue the application task.
 - Fixed 2026-06-10: Mini Program withdrawal create/detail runtime proof covers duplicate-submit blocking, stable draft `Idempotency-Key`, durable-id redirect after accepted/unknown create response, detail reload by that id, visible-page polling for non-terminal rows, terminal status refresh, and polling cleanup.
+- Fixed 2026-06-11: Baofu provider `state=3` / local `returned` now has explicit merchant-facing semantics: API list/detail use `status_text="提现已退回"` and `sync_message="资金已退回至宝付结算账户，请刷新可提现余额后按需重新申请"`, Mini Program shared withdrawal status view uses the same fallback copy, and the list summary says "列表已退回金额" instead of exposing the provider/internal "退票" term.
 
 ## SQL And Durable State Boundaries
 
@@ -189,12 +191,12 @@ Observed tests:
 - `locallife/api/baofu_settlement_account_test.go` covers merchant owner read/write, manager denial, safe masks/defaults, provider failures, sanitized provider failure-reason display, active binding readiness, applet auth, and many request-validation branches.
 - `locallife/logic/baofu_account_onboarding_service_test.go` covers onboarding profile validation, provider errors, duplicate/recovery branches, merchant report continuation, failed-flow recovery, provider failure-reason persistence, and sensitive snapshot behavior.
 - `locallife/worker/baofu_account_opening_recovery_scheduler_test.go` covers account-opening recovery, merchant-report recovery, failed/processing/noop branches, and safe logging.
-- `locallife/api/baofu_withdrawal_contract_test.go` covers withdrawal balance owner scope, pagination/status text, cross-owner detail denial, required idempotency header, same-key replay, conflicting same-key rejection, manager create permission, invalid amount/provider errors, missing fee member, insufficient balance, accepted/rejected/unknown create branches, provider request fields, and the finance-overview versus Baofu-balance truth-source boundary.
+- `locallife/api/baofu_withdrawal_contract_test.go` covers withdrawal balance owner scope, pagination/status text, returned-state merchant-facing guidance, cross-owner detail denial, required idempotency header, same-key replay, conflicting same-key rejection, manager create permission, invalid amount/provider errors, missing fee member, insufficient balance, accepted/rejected/unknown create branches, provider request fields, and the finance-overview versus Baofu-balance truth-source boundary.
 - `locallife/logic/baofu_withdraw_service_test.go` covers provider balance gating, active binding/fee-member checks, idempotent replay/conflict behavior, command logging, merchant-funds owner mapping, rejected acceptance, unknown result handling, and provider create-error diagnostics preserved in the command ledger.
 - `locallife/db/sqlc/baofu_withdrawal_order_test.go` covers withdrawal idempotency uniqueness per owner, terminal-status non-regression, and DB rejection of partial idempotency key/hash pairs.
 - `locallife/api/baofu_callback_test.go` covers Baofu withdrawal callback parse/identity, durable fact persistence before enqueue/ACK, and no enqueue when fact persistence fails.
 - `locallife/worker/baofu_withdrawal_recovery_scheduler_test.go` and `task_baofu_withdrawal_fact_application_test.go` cover provider query enqueue and terminal fact application.
-- `weapp/scripts/check-baofu-withdrawal-workflow.js` covers Mini Program withdrawal API wrapper scope, required client idempotency key, shared role route registration, merchant create-page duplicate-submit blocking, durable-id redirect after accepted/unknown create response, and merchant detail-page durable reload plus terminal polling cleanup.
+- `weapp/scripts/check-baofu-withdrawal-workflow.js` covers Mini Program withdrawal API wrapper scope, required client idempotency key, shared role route registration, returned-state status guidance, merchant create-page duplicate-submit blocking, durable-id redirect after accepted/unknown create response, and merchant detail-page durable reload plus terminal polling cleanup.
 - `weapp/scripts/check-baofu-onboarding-long-wait.js` covers settlement-account submit/status long-wait UI contract: shared status/submit long-wait sessions, stop/cancel behavior, submit-page long-wait guard, status-page processing wait, and inclusion in `quality:check`.
 
 Missing high-value tests:
@@ -213,7 +215,7 @@ Missing high-value tests:
 - Fixed 2026-06-10: provider withdrawable balance versus local finance-report reconciliation is documented as an intentional split truth boundary and covered by `TestMerchantFinanceOverviewAndBaofuWithdrawalBalanceUseSeparateTruthSources`.
 - Fixed 2026-06-10: Mini Program withdrawal accepted/unknown create response -> durable detail redirect -> non-terminal polling -> terminal refresh behavior is covered by `check:baofu-withdrawal-workflow`.
 - Fixed/current 2026-06-11: Mini Program settlement-account submit/status long-wait UI contract is covered by `check:baofu-onboarding-long-wait`, which is included in `quality:check`.
-- Clarify product copy and backend behavior for provider `returned`: whether it should trigger any merchant-facing balance refresh hint, alert, or manual handling.
+- Fixed 2026-06-11: provider `returned` merchant-facing behavior is clarified as a terminal "提现已退回" state with balance-refresh-and-reapply guidance only; no auto-retry, scheduler write, or local fund movement was introduced.
 
 ## Branch Exhaustion
 

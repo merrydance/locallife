@@ -18,6 +18,7 @@ const (
 	baofuWithdrawalMaxAmountFen            = int64(500000000)
 	baofuWithdrawalIdempotencyHeader       = "Idempotency-Key"
 	baofuWithdrawalMaxIdempotencyKeyLength = 256
+	baofuWithdrawalReturnedSyncMessage     = "资金已退回至宝付结算账户，请刷新可提现余额后按需重新申请"
 )
 
 type baofuWithdrawalOwnerScope struct {
@@ -455,6 +456,7 @@ func newBaofuWithdrawalItem(order db.BaofuWithdrawalOrder) baofuWithdrawalItem {
 		Amount:       order.Amount,
 		Status:       order.Status,
 		StatusText:   baofuWithdrawalStatusText(order.Status),
+		SyncMessage:  baofuWithdrawalSyncMessage(order.Status),
 		CreatedAt:    order.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:    order.UpdatedAt.Format(time.RFC3339),
 	}
@@ -469,9 +471,18 @@ func baofuWithdrawalStatusText(status string) string {
 	case db.BaofuWithdrawalStatusFailed:
 		return "提现失败"
 	case db.BaofuWithdrawalStatusReturned:
-		return "提现退票"
+		return "提现已退回"
 	default:
 		return "提现状态确认中"
+	}
+}
+
+func baofuWithdrawalSyncMessage(status string) string {
+	switch strings.TrimSpace(status) {
+	case db.BaofuWithdrawalStatusReturned:
+		return baofuWithdrawalReturnedSyncMessage
+	default:
+		return ""
 	}
 }
 

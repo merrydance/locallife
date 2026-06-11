@@ -551,7 +551,8 @@ func TestGetBaofuWithdrawalReturnsOwnedOrderWithoutProviderSecrets(t *testing.T)
 	var resp baofuWithdrawalCreateResponse
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 	require.Equal(t, int64(56), resp.Withdrawal.ID)
-	require.Equal(t, "提现退票", resp.Withdrawal.StatusText)
+	require.Equal(t, "提现已退回", resp.Withdrawal.StatusText)
+	require.Equal(t, "资金已退回至宝付结算账户，请刷新可提现余额后按需重新申请", resp.Withdrawal.SyncMessage)
 	require.NotContains(t, recorder.Body.String(), "SECRET_BAOFU_WITHDRAW_NO")
 	require.NotContains(t, recorder.Body.String(), "SECRET_CONTRACT")
 }

@@ -127,7 +127,11 @@ assert.strictEqual(workflow.parseYuanInputToFen('12.345').errorMessage, '金额�
 assert.strictEqual(workflow.parseYuanInputToFen('abc').errorMessage, '请输入有效金额')
 assert.strictEqual(workflow.buildBaofuWithdrawalStatusView('processing').text, '提现处理中')
 assert.strictEqual(workflow.buildBaofuWithdrawalStatusView('succeeded').theme, 'success')
-assert.strictEqual(workflow.buildBaofuWithdrawalStatusView('returned').text, '提现退票')
+assert.strictEqual(workflow.buildBaofuWithdrawalStatusView('returned').text, '提现已退回')
+assert.strictEqual(
+  workflow.buildBaofuWithdrawalStatusView('returned').syncMessage,
+  '资金已退回至宝付结算账户，请刷新可提现余额后按需重新申请'
+)
 assert.strictEqual(workflow.buildBaofuWithdrawalBalanceView({
   available_amount: 99,
   pending_amount: 0,

@@ -38,7 +38,7 @@
       <t-cell title="列表提现成功" note="{{loadedSummary.succeededAmountText}}" />
       <t-cell title="列表申请处理中" note="{{loadedSummary.processingAmountText}}" />
       <t-cell title="列表提现失败" note="{{loadedSummary.failedAmountText}}" />
-      <t-cell title="列表提现退票" note="{{loadedSummary.returnedAmountText}}" />
+      <t-cell title="列表已退回金额" note="{{loadedSummary.returnedAmountText}}" />
     </t-cell-group>
 
     <t-empty wx:if="{{recordsErrorMessage && !rows.length}}" icon="error-circle" description="{{recordsErrorMessage}}" />

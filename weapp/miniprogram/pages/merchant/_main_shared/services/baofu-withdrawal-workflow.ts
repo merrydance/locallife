@@ -142,10 +142,10 @@ export function buildBaofuWithdrawalStatusView(
       }
     case 'returned':
       return {
-        text: '提现退票',
+        text: '提现已退回',
         theme: 'warning',
         syncState: state,
-        syncMessage: syncMessage || '提现已退回，请以账户余额为准。',
+        syncMessage: syncMessage || '资金已退回至宝付结算账户，请刷新可提现余额后按需重新申请',
         isProcessing: false,
         isSucceeded: false,
         isFailed: false,
