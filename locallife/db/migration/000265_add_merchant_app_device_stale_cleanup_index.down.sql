@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_merchant_app_devices_active_last_active_at;

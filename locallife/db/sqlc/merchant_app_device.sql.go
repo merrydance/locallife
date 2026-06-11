@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -29,6 +30,23 @@ type DeactivateMerchantAppDevicesByPushTokenParams struct {
 func (q *Queries) DeactivateMerchantAppDevicesByPushToken(ctx context.Context, arg DeactivateMerchantAppDevicesByPushTokenParams) error {
 	_, err := q.db.Exec(ctx, deactivateMerchantAppDevicesByPushToken, arg.PushToken, arg.DeviceID)
 	return err
+}
+
+const deactivateStaleMerchantAppDevices = `-- name: DeactivateStaleMerchantAppDevices :execrows
+UPDATE merchant_app_devices
+SET status = 'inactive',
+    unregistered_at = COALESCE(unregistered_at, now()),
+    updated_at = now()
+WHERE status = 'active'
+  AND last_active_at < $1
+`
+
+func (q *Queries) DeactivateStaleMerchantAppDevices(ctx context.Context, lastActiveBefore time.Time) (int64, error) {
+	result, err := q.db.Exec(ctx, deactivateStaleMerchantAppDevices, lastActiveBefore)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const getActiveMerchantAppDevice = `-- name: GetActiveMerchantAppDevice :one

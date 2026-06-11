@@ -7,6 +7,14 @@ WHERE push_token = sqlc.arg('push_token')
   AND device_id <> sqlc.arg('device_id')
   AND status = 'active';
 
+-- name: DeactivateStaleMerchantAppDevices :execrows
+UPDATE merchant_app_devices
+SET status = 'inactive',
+    unregistered_at = COALESCE(unregistered_at, now()),
+    updated_at = now()
+WHERE status = 'active'
+  AND last_active_at < sqlc.arg('last_active_before');
+
 -- name: RegisterMerchantAppDevice :one
 INSERT INTO merchant_app_devices (
     merchant_id,

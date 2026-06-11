@@ -5671,6 +5671,21 @@ func (mr *MockStoreMockRecorder) DeactivateRiderActiveCredentialLedger(ctx, arg 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeactivateRiderActiveCredentialLedger", reflect.TypeOf((*MockStore)(nil).DeactivateRiderActiveCredentialLedger), ctx, arg)
 }
 
+// DeactivateStaleMerchantAppDevices mocks base method.
+func (m *MockStore) DeactivateStaleMerchantAppDevices(ctx context.Context, lastActiveBefore time.Time) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeactivateStaleMerchantAppDevices", ctx, lastActiveBefore)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeactivateStaleMerchantAppDevices indicates an expected call of DeactivateStaleMerchantAppDevices.
+func (mr *MockStoreMockRecorder) DeactivateStaleMerchantAppDevices(ctx, lastActiveBefore any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeactivateStaleMerchantAppDevices", reflect.TypeOf((*MockStore)(nil).DeactivateStaleMerchantAppDevices), ctx, lastActiveBefore)
+}
+
 // DecrementVoucherUsedQuantity mocks base method.
 func (m *MockStore) DecrementVoucherUsedQuantity(ctx context.Context, id int64) (db.Voucher, error) {
 	m.ctrl.T.Helper()

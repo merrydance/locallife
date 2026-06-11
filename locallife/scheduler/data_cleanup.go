@@ -31,6 +31,8 @@ const (
 	timedOutPrintAnomalyThreshold        = 15 * time.Minute
 	timedOutPrintAnomalyAlertInterval    = time.Hour
 	staleDeliveryPoolGoneLimitCount      = int32(1<<31 - 1)
+	staleMerchantAppDeviceCleanupCron    = "0 30 4 * * *"
+	staleMerchantAppDeviceThreshold      = 90 * 24 * time.Hour
 )
 
 var riderDepositReminderOffsets = []int{30, 7, 1, 0}
@@ -171,6 +173,12 @@ func (s *DataCleanupScheduler) Start() error {
 		return err
 	}
 
+	// 每天凌晨4点30清理长期无心跳的商户 App 设备，收敛卸载/清存储/未主动退出的 stale 推送目标
+	_, err = s.cron.AddFunc(staleMerchantAppDeviceCleanupCron, s.cleanupStaleMerchantAppDevices)
+	if err != nil {
+		return err
+	}
+
 	s.cron.Start()
 	log.Info().Msg("data cleanup scheduler started")
 	return nil
@@ -201,6 +209,21 @@ func (s *DataCleanupScheduler) cleanupExpiredWebLoginSessions() {
 		log.Info().Int64("count", count).Msg("expired web login sessions")
 	}
 
+}
+
+func (s *DataCleanupScheduler) cleanupStaleMerchantAppDevices() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	count, err := s.store.DeactivateStaleMerchantAppDevices(ctx, time.Now().Add(-staleMerchantAppDeviceThreshold))
+	if err != nil {
+		log.Error().Err(err).Msg("failed to deactivate stale merchant app devices")
+		return
+	}
+
+	if count > 0 {
+		log.Info().Int64("count", count).Msg("deactivated stale merchant app devices")
+	}
 }
 
 func startOfDay(t time.Time) time.Time {

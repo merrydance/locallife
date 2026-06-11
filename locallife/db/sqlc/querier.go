@@ -542,6 +542,7 @@ type Querier interface {
 	DeactivateMerchantActiveCredentialLedger(ctx context.Context, arg DeactivateMerchantActiveCredentialLedgerParams) (int64, error)
 	DeactivateMerchantAppDevicesByPushToken(ctx context.Context, arg DeactivateMerchantAppDevicesByPushTokenParams) error
 	DeactivateRiderActiveCredentialLedger(ctx context.Context, arg DeactivateRiderActiveCredentialLedgerParams) (int64, error)
+	DeactivateStaleMerchantAppDevices(ctx context.Context, lastActiveBefore time.Time) (int64, error)
 	DecrementVoucherUsedQuantity(ctx context.Context, id int64) (Voucher, error)
 	// 从骑手押金扣款（原子操作：检查余额 + 扣款）
 	DeductRiderDeposit(ctx context.Context, arg DeductRiderDepositParams) (Rider, error)
