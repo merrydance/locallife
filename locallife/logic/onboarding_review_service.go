@@ -14,6 +14,7 @@ import (
 type onboardingReviewStore interface {
 	CreateMerchantOnboardingReviewRun(ctx context.Context, arg db.CreateMerchantOnboardingReviewRunParams) (db.OnboardingReviewRun, error)
 	CreateRiderOnboardingReviewRun(ctx context.Context, arg db.CreateRiderOnboardingReviewRunParams) (db.OnboardingReviewRun, error)
+	GetOnboardingReviewRun(ctx context.Context, id int64) (db.OnboardingReviewRun, error)
 	CancelOnboardingReviewRun(ctx context.Context, arg db.CancelOnboardingReviewRunParams) (db.OnboardingReviewRun, error)
 	MarkOnboardingReviewRunProcessing(ctx context.Context, id int64) (db.OnboardingReviewRun, error)
 	CompleteOnboardingReviewRun(ctx context.Context, arg db.CompleteOnboardingReviewRunParams) (db.OnboardingReviewRun, error)
@@ -99,6 +100,43 @@ func (service *OnboardingReviewService) CompleteMerchantReviewRun(ctx context.Co
 	return service.completeMerchantReviewRun(ctx, runID, applicationID, decision)
 }
 
+func (service *OnboardingReviewService) RepairApprovedMerchantReviewRun(ctx context.Context, runID int64, applicationID int64, decision OnboardingReviewDecision) (db.OnboardingReviewRun, error) {
+	if service == nil || service.store == nil {
+		return db.OnboardingReviewRun{}, nil
+	}
+	run, err := service.store.GetOnboardingReviewRun(ctx, runID)
+	if err != nil {
+		return db.OnboardingReviewRun{}, fmt.Errorf("get merchant onboarding review run for repair: %w", err)
+	}
+	if run.ApplicationType != "merchant" || !run.MerchantApplicationID.Valid || run.MerchantApplicationID.Int64 != applicationID {
+		return db.OnboardingReviewRun{}, fmt.Errorf("merchant onboarding review run %d does not belong to application %d", runID, applicationID)
+	}
+
+	switch run.RunStatus {
+	case db.OnboardingReviewRunStatusCompleted:
+		if !run.Outcome.Valid || run.Outcome.String != db.OnboardingReviewOutcomeApproved {
+			return db.OnboardingReviewRun{}, fmt.Errorf("completed merchant onboarding review run %d outcome %s cannot repair approved application", runID, run.Outcome.String)
+		}
+		if err := service.updateMerchantApplicationReviewSummary(ctx, applicationID, run); err != nil {
+			return db.OnboardingReviewRun{}, err
+		}
+		return run, nil
+	case db.OnboardingReviewRunStatusQueued:
+		if _, err := service.store.MarkOnboardingReviewRunProcessing(ctx, runID); err != nil {
+			return db.OnboardingReviewRun{}, fmt.Errorf("mark merchant onboarding review run processing: %w", err)
+		}
+		fallthrough
+	case db.OnboardingReviewRunStatusProcessing:
+		completedRun, err := service.completeMerchantReviewRunWithoutProcessingMark(ctx, runID, applicationID, decision)
+		if err != nil {
+			return db.OnboardingReviewRun{}, err
+		}
+		return completedRun, nil
+	default:
+		return db.OnboardingReviewRun{}, fmt.Errorf("merchant onboarding review run %d status %s cannot repair approved application", runID, run.RunStatus)
+	}
+}
+
 func (service *OnboardingReviewService) CancelReviewRun(ctx context.Context, runID int64, reasonCode string, reasonMessage string) (db.OnboardingReviewRun, error) {
 	if service == nil || service.store == nil {
 		return db.OnboardingReviewRun{}, nil
@@ -151,13 +189,16 @@ func (service *OnboardingReviewService) createMerchantReviewRun(ctx context.Cont
 }
 
 func (service *OnboardingReviewService) completeMerchantReviewRun(ctx context.Context, runID int64, applicationID int64, decision OnboardingReviewDecision) (db.OnboardingReviewRun, error) {
+	if _, err := service.store.MarkOnboardingReviewRunProcessing(ctx, runID); err != nil {
+		return db.OnboardingReviewRun{}, fmt.Errorf("mark merchant onboarding review run processing: %w", err)
+	}
+	return service.completeMerchantReviewRunWithoutProcessingMark(ctx, runID, applicationID, decision)
+}
+
+func (service *OnboardingReviewService) completeMerchantReviewRunWithoutProcessingMark(ctx context.Context, runID int64, applicationID int64, decision OnboardingReviewDecision) (db.OnboardingReviewRun, error) {
 	evidenceJSON, snapshotJSON, err := marshalOnboardingReviewPayloads(decision)
 	if err != nil {
 		return db.OnboardingReviewRun{}, err
-	}
-
-	if _, err := service.store.MarkOnboardingReviewRunProcessing(ctx, runID); err != nil {
-		return db.OnboardingReviewRun{}, fmt.Errorf("mark merchant onboarding review run processing: %w", err)
 	}
 
 	completedRun, err := service.store.CompleteOnboardingReviewRun(ctx, db.CompleteOnboardingReviewRunParams{

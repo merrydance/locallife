@@ -16,6 +16,8 @@ import (
 )
 
 type merchantOnboardingReviewFlowStoreStub struct {
+	getOnboardingReviewRunFn            func(context.Context, int64) (db.OnboardingReviewRun, error)
+	getMerchantOwnedByUserFn            func(context.Context, int64) (db.Merchant, error)
 	approveMerchantApplicationTxFn      func(context.Context, db.ApproveMerchantApplicationTxParams) (db.ApproveMerchantApplicationTxResult, error)
 	markOnboardingReviewRunProcessingFn func(context.Context, int64) (db.OnboardingReviewRun, error)
 	completeOnboardingReviewRunFn       func(context.Context, db.CompleteOnboardingReviewRunParams) (db.OnboardingReviewRun, error)
@@ -27,6 +29,20 @@ type merchantOnboardingReviewFlowStoreStub struct {
 
 func (stub merchantOnboardingReviewFlowStoreStub) GetMerchantApplication(context.Context, int64) (db.MerchantApplication, error) {
 	return db.MerchantApplication{}, fmt.Errorf("unexpected GetMerchantApplication call")
+}
+
+func (stub merchantOnboardingReviewFlowStoreStub) GetOnboardingReviewRun(ctx context.Context, id int64) (db.OnboardingReviewRun, error) {
+	if stub.getOnboardingReviewRunFn == nil {
+		return db.OnboardingReviewRun{}, fmt.Errorf("unexpected GetOnboardingReviewRun call")
+	}
+	return stub.getOnboardingReviewRunFn(ctx, id)
+}
+
+func (stub merchantOnboardingReviewFlowStoreStub) GetMerchantOwnedByUser(ctx context.Context, ownerUserID int64) (db.Merchant, error) {
+	if stub.getMerchantOwnedByUserFn == nil {
+		return db.Merchant{}, fmt.Errorf("unexpected GetMerchantOwnedByUser call")
+	}
+	return stub.getMerchantOwnedByUserFn(ctx, ownerUserID)
 }
 
 func (stub merchantOnboardingReviewFlowStoreStub) ApproveMerchantApplicationTx(ctx context.Context, arg db.ApproveMerchantApplicationTxParams) (db.ApproveMerchantApplicationTxResult, error) {
@@ -348,6 +364,231 @@ func TestMerchantOnboardingReviewServiceProcessSubmittedApplication_ActivatesCre
 	var summary map[string]any
 	require.NoError(t, json.Unmarshal(result.Application.ReviewSummary, &summary))
 	require.Equal(t, "approved", summary["outcome"])
+}
+
+func TestMerchantOnboardingReviewServiceProcessSubmittedApplication_RepairsApprovedApplicationReviewAndCredentials(t *testing.T) {
+	application := merchantReviewTestApplication()
+	application.Status = db.MerchantApplicationStatusApproved
+	existingRunID := int64(905)
+	now := time.Date(2026, 6, 11, 14, 0, 0, 0, time.UTC)
+	merchant := db.Merchant{ID: 77, OwnerUserID: application.UserID}
+
+	store := merchantOnboardingReviewFlowStoreStub{
+		getMerchantOwnedByUserFn: func(_ context.Context, ownerUserID int64) (db.Merchant, error) {
+			require.Equal(t, application.UserID, ownerUserID)
+			return merchant, nil
+		},
+		getOnboardingReviewRunFn: func(_ context.Context, id int64) (db.OnboardingReviewRun, error) {
+			require.Equal(t, existingRunID, id)
+			return db.OnboardingReviewRun{
+				ID:                    existingRunID,
+				ApplicationType:       "merchant",
+				MerchantApplicationID: pgtype.Int8{Int64: application.ID, Valid: true},
+				RunStatus:             db.OnboardingReviewRunStatusProcessing,
+				Stage:                 "review",
+				CreatedAt:             now,
+			}, nil
+		},
+		completeOnboardingReviewRunFn: func(_ context.Context, arg db.CompleteOnboardingReviewRunParams) (db.OnboardingReviewRun, error) {
+			require.Equal(t, existingRunID, arg.ID)
+			require.Equal(t, db.OnboardingReviewOutcomeApproved, arg.Outcome.String)
+			require.Equal(t, "auto_approved", arg.ReasonCode.String)
+			return db.OnboardingReviewRun{
+				ID:                    existingRunID,
+				ApplicationType:       "merchant",
+				MerchantApplicationID: pgtype.Int8{Int64: application.ID, Valid: true},
+				RunStatus:             db.OnboardingReviewRunStatusCompleted,
+				Stage:                 "review",
+				Outcome:               pgtype.Text{String: db.OnboardingReviewOutcomeApproved, Valid: true},
+				ReasonCode:            pgtype.Text{String: "auto_approved", Valid: true},
+				RuleHits:              []string{"merchant.auto_approve"},
+				OcrJobRefs:            []int64{101, 102},
+				CreatedAt:             now,
+				UpdatedAt:             now,
+			}, nil
+		},
+		updateMerchantReviewSummaryFn: func(_ context.Context, arg db.UpdateMerchantApplicationReviewSummaryParams) (db.MerchantApplication, error) {
+			require.Equal(t, application.ID, arg.ID)
+			var summary map[string]any
+			require.NoError(t, json.Unmarshal(arg.ReviewSummary, &summary))
+			require.Equal(t, float64(existingRunID), summary["run_id"])
+			require.Equal(t, db.OnboardingReviewOutcomeApproved, summary["outcome"])
+			application.ReviewSummary = arg.ReviewSummary
+			return application, nil
+		},
+		getActiveMerchantCredentialsFn: func(_ context.Context, merchantID pgtype.Int8) ([]db.CredentialLedger, error) {
+			require.Equal(t, merchant.ID, merchantID.Int64)
+			return nil, nil
+		},
+		activateMerchantCredentialsFn: func(_ context.Context, arg db.ActivateMerchantCredentialLedgersTxParams) ([]db.CredentialLedger, error) {
+			require.Equal(t, merchant.ID, arg.MerchantID)
+			require.Len(t, arg.Entries, 2)
+			require.Equal(t, existingRunID, arg.Entries[0].ReviewRunID.Int64)
+			require.Equal(t, application.ID, arg.Entries[0].MerchantApplicationID)
+			return []db.CredentialLedger{{ID: 201}, {ID: 202}}, nil
+		},
+		restoreMerchantCredentialGovFn: func(_ context.Context, arg db.RestoreMerchantCredentialGovernanceTxParams) (int64, error) {
+			require.Equal(t, merchant.ID, arg.MerchantID)
+			require.Equal(t, []int64{201, 202}, arg.CredentialLedgerIDs)
+			return 0, nil
+		},
+	}
+
+	onboardingSvc := NewOnboardingReviewService(store)
+	governanceSvc := NewCredentialGovernanceService(store)
+	require.NotNil(t, governanceSvc)
+	governanceSvc.now = func() time.Time { return now }
+	service := NewMerchantOnboardingReviewService(store, onboardingSvc, governanceSvc)
+
+	result, err := service.ProcessSubmittedApplication(context.Background(), application, application.UserID, &existingRunID)
+	require.NoError(t, err)
+	require.NotNil(t, result.Merchant)
+	require.Equal(t, merchant.ID, result.Merchant.ID)
+	require.NotNil(t, result.ReviewRun)
+	require.Equal(t, db.OnboardingReviewRunStatusCompleted, result.ReviewRun.RunStatus)
+	require.Len(t, result.CredentialEntries, 2)
+	require.NotEmpty(t, result.Application.ReviewSummary)
+}
+
+func TestMerchantOnboardingReviewServiceProcessSubmittedApplication_SkipsDuplicateCredentialActivationWhenRepairAlreadyActive(t *testing.T) {
+	application := merchantReviewTestApplication()
+	application.Status = db.MerchantApplicationStatusApproved
+	existingRunID := int64(906)
+	now := time.Date(2026, 6, 11, 15, 0, 0, 0, time.UTC)
+	merchant := db.Merchant{ID: 78, OwnerUserID: application.UserID}
+
+	store := merchantOnboardingReviewFlowStoreStub{
+		getMerchantOwnedByUserFn: func(_ context.Context, ownerUserID int64) (db.Merchant, error) {
+			require.Equal(t, application.UserID, ownerUserID)
+			return merchant, nil
+		},
+		getOnboardingReviewRunFn: func(_ context.Context, id int64) (db.OnboardingReviewRun, error) {
+			require.Equal(t, existingRunID, id)
+			return db.OnboardingReviewRun{
+				ID:                    existingRunID,
+				ApplicationType:       "merchant",
+				MerchantApplicationID: pgtype.Int8{Int64: application.ID, Valid: true},
+				RunStatus:             db.OnboardingReviewRunStatusCompleted,
+				Stage:                 "review",
+				Outcome:               pgtype.Text{String: db.OnboardingReviewOutcomeApproved, Valid: true},
+				ReasonCode:            pgtype.Text{String: "auto_approved", Valid: true},
+				CreatedAt:             now,
+			}, nil
+		},
+		updateMerchantReviewSummaryFn: func(_ context.Context, arg db.UpdateMerchantApplicationReviewSummaryParams) (db.MerchantApplication, error) {
+			require.Equal(t, application.ID, arg.ID)
+			return db.MerchantApplication{ID: application.ID, Status: db.MerchantApplicationStatusApproved, ReviewSummary: arg.ReviewSummary}, nil
+		},
+		getActiveMerchantCredentialsFn: func(_ context.Context, merchantID pgtype.Int8) ([]db.CredentialLedger, error) {
+			require.Equal(t, merchant.ID, merchantID.Int64)
+			return []db.CredentialLedger{
+				{
+					ID:                    301,
+					DocumentType:          db.CredentialDocumentTypeBusinessLicense,
+					MerchantApplicationID: pgtype.Int8{Int64: application.ID, Valid: true},
+					ReviewRunID:           pgtype.Int8{Int64: existingRunID, Valid: true},
+					MediaAssetID:          application.BusinessLicenseMediaAssetID.Int64,
+					ExpiresAt:             pgtype.Timestamptz{Time: now.AddDate(1, 0, 0), Valid: true},
+					Active:                true,
+				},
+				{
+					ID:                    302,
+					DocumentType:          db.CredentialDocumentTypeFoodPermit,
+					MerchantApplicationID: pgtype.Int8{Int64: application.ID, Valid: true},
+					ReviewRunID:           pgtype.Int8{Int64: existingRunID, Valid: true},
+					MediaAssetID:          application.FoodPermitMediaAssetID.Int64,
+					ExpiresAt:             pgtype.Timestamptz{Time: now.AddDate(0, 6, 0), Valid: true},
+					Active:                true,
+				},
+			}, nil
+		},
+		restoreMerchantCredentialGovFn: func(_ context.Context, arg db.RestoreMerchantCredentialGovernanceTxParams) (int64, error) {
+			require.Equal(t, merchant.ID, arg.MerchantID)
+			require.Equal(t, []int64{301, 302}, arg.CredentialLedgerIDs)
+			return 0, nil
+		},
+	}
+
+	onboardingSvc := NewOnboardingReviewService(store)
+	governanceSvc := NewCredentialGovernanceService(store)
+	require.NotNil(t, governanceSvc)
+	governanceSvc.now = func() time.Time { return now }
+	service := NewMerchantOnboardingReviewService(store, onboardingSvc, governanceSvc)
+
+	result, err := service.ProcessSubmittedApplication(context.Background(), application, application.UserID, &existingRunID)
+	require.NoError(t, err)
+	require.NotNil(t, result.ReviewRun)
+	require.Len(t, result.CredentialEntries, 2)
+}
+
+func TestMerchantOnboardingReviewServiceProcessSubmittedApplication_RejectsRepairFromCompletedNonApprovedRun(t *testing.T) {
+	application := merchantReviewTestApplication()
+	application.Status = db.MerchantApplicationStatusApproved
+	existingRunID := int64(907)
+	now := time.Date(2026, 6, 11, 15, 30, 0, 0, time.UTC)
+	merchant := db.Merchant{ID: 79, OwnerUserID: application.UserID}
+
+	store := merchantOnboardingReviewFlowStoreStub{
+		getMerchantOwnedByUserFn: func(_ context.Context, ownerUserID int64) (db.Merchant, error) {
+			require.Equal(t, application.UserID, ownerUserID)
+			return merchant, nil
+		},
+		getOnboardingReviewRunFn: func(_ context.Context, id int64) (db.OnboardingReviewRun, error) {
+			require.Equal(t, existingRunID, id)
+			return db.OnboardingReviewRun{
+				ID:                    existingRunID,
+				ApplicationType:       "merchant",
+				MerchantApplicationID: pgtype.Int8{Int64: application.ID, Valid: true},
+				RunStatus:             db.OnboardingReviewRunStatusCompleted,
+				Stage:                 "review",
+				Outcome:               pgtype.Text{String: db.OnboardingReviewOutcomeRejected, Valid: true},
+				ReasonCode:            pgtype.Text{String: "manual_rejected", Valid: true},
+				CreatedAt:             now,
+			}, nil
+		},
+		updateMerchantReviewSummaryFn: func(context.Context, db.UpdateMerchantApplicationReviewSummaryParams) (db.MerchantApplication, error) {
+			require.FailNow(t, "completed non-approved repair must not update review summary")
+			return db.MerchantApplication{}, nil
+		},
+		getActiveMerchantCredentialsFn: func(context.Context, pgtype.Int8) ([]db.CredentialLedger, error) {
+			require.FailNow(t, "completed non-approved repair must not inspect or activate credentials")
+			return nil, nil
+		},
+	}
+
+	onboardingSvc := NewOnboardingReviewService(store)
+	governanceSvc := NewCredentialGovernanceService(store)
+	require.NotNil(t, governanceSvc)
+	service := NewMerchantOnboardingReviewService(store, onboardingSvc, governanceSvc)
+
+	_, err := service.ProcessSubmittedApplication(context.Background(), application, application.UserID, &existingRunID)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "completed merchant onboarding review run")
+	require.Contains(t, err.Error(), db.OnboardingReviewOutcomeRejected)
+}
+
+func TestMerchantOnboardingReviewServiceProcessSubmittedApplication_RequiresReviewServiceForApprovedRepair(t *testing.T) {
+	application := merchantReviewTestApplication()
+	application.Status = db.MerchantApplicationStatusApproved
+	existingRunID := int64(908)
+
+	store := merchantOnboardingReviewFlowStoreStub{
+		getMerchantOwnedByUserFn: func(context.Context, int64) (db.Merchant, error) {
+			require.FailNow(t, "approved repair must validate the review run before loading merchant truth")
+			return db.Merchant{}, nil
+		},
+		getActiveMerchantCredentialsFn: func(context.Context, pgtype.Int8) ([]db.CredentialLedger, error) {
+			require.FailNow(t, "approved repair without review service must not inspect credentials")
+			return nil, nil
+		},
+	}
+	governanceSvc := NewCredentialGovernanceService(store)
+	require.NotNil(t, governanceSvc)
+	service := NewMerchantOnboardingReviewService(store, nil, governanceSvc)
+
+	_, err := service.ProcessSubmittedApplication(context.Background(), application, application.UserID, &existingRunID)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "onboarding review service not configured")
 }
 
 func TestMerchantOnboardingReviewServiceProcessSubmittedApplication_CompletesExistingRunAndReturnsSummary(t *testing.T) {

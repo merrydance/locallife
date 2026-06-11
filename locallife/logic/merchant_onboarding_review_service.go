@@ -8,11 +8,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 )
 
 type merchantOnboardingReviewStore interface {
 	GetMerchantApplication(ctx context.Context, id int64) (db.MerchantApplication, error)
+	GetMerchantOwnedByUser(ctx context.Context, ownerUserID int64) (db.Merchant, error)
 	ApproveMerchantApplicationTx(ctx context.Context, arg db.ApproveMerchantApplicationTxParams) (db.ApproveMerchantApplicationTxResult, error)
 }
 
@@ -106,6 +108,9 @@ func (service *MerchantOnboardingReviewService) ProcessSubmittedApplication(ctx 
 		return MerchantOnboardingReviewResult{}, nil
 	}
 	if application.Status != db.MerchantApplicationStatusSubmitted {
+		if application.Status == db.MerchantApplicationStatusApproved && existingRunID != nil {
+			return service.repairApprovedMerchantApplication(ctx, application, requestedBy, *existingRunID)
+		}
 		if existingRunID != nil && service.onboardingReviewService != nil {
 			return service.cancelSupersededMerchantReviewRun(ctx, application, *existingRunID)
 		}
@@ -153,13 +158,7 @@ func (service *MerchantOnboardingReviewService) ProcessSubmittedApplication(ctx 
 		}
 		result.CredentialEntries = entries
 		if len(entries) > 0 {
-			_, err = service.credentialGovernanceService.ActivateMerchantCredentials(ctx, ActivateMerchantCredentialsInput{
-				MerchantID:            result.Merchant.ID,
-				MerchantApplicationID: result.Application.ID,
-				ReviewRunID:           merchantReviewRunID(result.ReviewRun),
-				Entries:               entries,
-			})
-			if err != nil {
+			if err := service.activateMissingMerchantCredentials(ctx, result.Merchant.ID, result.Application.ID, merchantReviewRunID(result.ReviewRun), entries); err != nil {
 				return MerchantOnboardingReviewResult{}, fmt.Errorf("activate merchant credentials: %w", err)
 			}
 			restoreResult, err := service.credentialGovernanceService.RestoreMerchantIfEligible(ctx, result.Merchant.ID)
@@ -171,6 +170,108 @@ func (service *MerchantOnboardingReviewService) ProcessSubmittedApplication(ctx 
 	}
 
 	return result, nil
+}
+
+func (service *MerchantOnboardingReviewService) repairApprovedMerchantApplication(ctx context.Context, application db.MerchantApplication, requestedBy int64, runID int64) (MerchantOnboardingReviewResult, error) {
+	result := MerchantOnboardingReviewResult{Application: application}
+	if runID <= 0 {
+		return result, fmt.Errorf("merchant application %d status %s is not submitted", application.ID, application.Status)
+	}
+	if service.onboardingReviewService == nil {
+		return MerchantOnboardingReviewResult{}, fmt.Errorf("onboarding review service not configured for approved merchant application repair")
+	}
+
+	merchant, err := service.store.GetMerchantOwnedByUser(ctx, application.UserID)
+	if err != nil {
+		return MerchantOnboardingReviewResult{}, fmt.Errorf("get approved merchant for application repair: %w", err)
+	}
+	result.Merchant = &merchant
+
+	decision := merchantAutoApprovedDecision(application, requestedBy)
+	reviewRun, err := service.onboardingReviewService.RepairApprovedMerchantReviewRun(ctx, runID, application.ID, decision)
+	if err != nil {
+		return MerchantOnboardingReviewResult{}, fmt.Errorf("repair approved merchant onboarding review run: %w", err)
+	}
+	result.ReviewRun = &reviewRun
+	summaryJSON, err := buildOnboardingReviewSummaryJSON(reviewRun)
+	if err != nil {
+		return MerchantOnboardingReviewResult{}, fmt.Errorf("build approved merchant onboarding review summary: %w", err)
+	}
+	result.Application.ReviewSummary = summaryJSON
+
+	if service.credentialGovernanceService != nil {
+		entries, err := buildMerchantCredentialActivationInputs(result.Application)
+		if err != nil {
+			return MerchantOnboardingReviewResult{}, fmt.Errorf("build merchant credential activation inputs: %w", err)
+		}
+		result.CredentialEntries = entries
+		if len(entries) > 0 {
+			if err := service.activateMissingMerchantCredentials(ctx, merchant.ID, result.Application.ID, merchantReviewRunID(result.ReviewRun), entries); err != nil {
+				return MerchantOnboardingReviewResult{}, fmt.Errorf("activate merchant credentials: %w", err)
+			}
+			restoreResult, err := service.credentialGovernanceService.RestoreMerchantIfEligible(ctx, merchant.ID)
+			if err != nil {
+				return MerchantOnboardingReviewResult{}, fmt.Errorf("restore merchant credential governance: %w", err)
+			}
+			result.RestoreReleased = restoreResult.Released
+		}
+	}
+
+	return result, nil
+}
+
+func (service *MerchantOnboardingReviewService) activateMissingMerchantCredentials(ctx context.Context, merchantID int64, applicationID int64, reviewRunID *int64, entries []CredentialActivationInput) error {
+	if service == nil || service.credentialGovernanceService == nil || service.credentialGovernanceService.store == nil || len(entries) == 0 {
+		return nil
+	}
+
+	activeLedgers, err := service.credentialGovernanceService.store.GetActiveMerchantCredentialLedgers(ctx, pgtype.Int8{Int64: merchantID, Valid: true})
+	if err != nil {
+		return fmt.Errorf("get active merchant credential ledgers: %w", err)
+	}
+
+	missingEntries := missingMerchantCredentialEntries(entries, applicationID, reviewRunID, activeLedgers)
+	if len(missingEntries) == 0 {
+		return nil
+	}
+
+	_, err = service.credentialGovernanceService.ActivateMerchantCredentials(ctx, ActivateMerchantCredentialsInput{
+		MerchantID:            merchantID,
+		MerchantApplicationID: applicationID,
+		ReviewRunID:           reviewRunID,
+		Entries:               missingEntries,
+	})
+	return err
+}
+
+func missingMerchantCredentialEntries(entries []CredentialActivationInput, applicationID int64, reviewRunID *int64, activeLedgers []db.CredentialLedger) []CredentialActivationInput {
+	missing := make([]CredentialActivationInput, 0, len(entries))
+	for _, entry := range entries {
+		if !merchantCredentialEntryAlreadyActive(entry, applicationID, reviewRunID, activeLedgers) {
+			missing = append(missing, entry)
+		}
+	}
+	return missing
+}
+
+func merchantCredentialEntryAlreadyActive(entry CredentialActivationInput, applicationID int64, reviewRunID *int64, activeLedgers []db.CredentialLedger) bool {
+	for _, ledger := range activeLedgers {
+		if !ledger.Active || ledger.DocumentType != entry.DocumentType || ledger.MediaAssetID != entry.MediaAssetID {
+			continue
+		}
+		if !ledger.MerchantApplicationID.Valid || ledger.MerchantApplicationID.Int64 != applicationID {
+			continue
+		}
+		if reviewRunID == nil {
+			if ledger.ReviewRunID.Valid {
+				continue
+			}
+		} else if !ledger.ReviewRunID.Valid || ledger.ReviewRunID.Int64 != *reviewRunID {
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 func (service *MerchantOnboardingReviewService) cancelSupersededMerchantReviewRun(ctx context.Context, application db.MerchantApplication, runID int64) (MerchantOnboardingReviewResult, error) {

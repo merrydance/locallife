@@ -118,7 +118,7 @@ func TestProcessTaskOnboardingReview_RiderApproved(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestProcessTaskOnboardingReview_SkipsCompletedRun(t *testing.T) {
+func TestProcessTaskOnboardingReview_SkipsCompletedRiderRun(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -126,10 +126,10 @@ func TestProcessTaskOnboardingReview_SkipsCompletedRun(t *testing.T) {
 	store.EXPECT().
 		GetOnboardingReviewRun(gomock.Any(), int64(999)).
 		Return(db.OnboardingReviewRun{
-			ID:                    999,
-			ApplicationType:       onboardingReviewApplicationTypeMerchant,
-			MerchantApplicationID: pgtype.Int8{Int64: 77, Valid: true},
-			RunStatus:             "completed",
+			ID:                 999,
+			ApplicationType:    onboardingReviewApplicationTypeRider,
+			RiderApplicationID: pgtype.Int8{Int64: 77, Valid: true},
+			RunStatus:          db.OnboardingReviewRunStatusCompleted,
 		}, nil)
 
 	processor := NewTestTaskProcessor(store, nil, nil, nil)
@@ -137,7 +137,7 @@ func TestProcessTaskOnboardingReview_SkipsCompletedRun(t *testing.T) {
 	payloadBytes, err := json.Marshal(OnboardingReviewPayload{
 		ReviewRunID:     999,
 		ApplicationID:   77,
-		ApplicationType: onboardingReviewApplicationTypeMerchant,
+		ApplicationType: onboardingReviewApplicationTypeRider,
 		RequestedBy:     12,
 	})
 	require.NoError(t, err)
@@ -393,6 +393,94 @@ func TestProcessTaskOnboardingReview_MerchantApprovedActivatesCredentials(t *tes
 
 	payloadBytes, err := json.Marshal(OnboardingReviewPayload{
 		ReviewRunID:     902,
+		ApplicationID:   application.ID,
+		ApplicationType: onboardingReviewApplicationTypeMerchant,
+		RequestedBy:     application.UserID,
+	})
+	require.NoError(t, err)
+
+	task := asynq.NewTask(TaskOnboardingReview, payloadBytes, asynq.ProcessIn(1*time.Second))
+	err = processor.ProcessTaskOnboardingReview(context.Background(), task)
+	require.NoError(t, err)
+}
+
+func TestProcessTaskOnboardingReview_CompletedMerchantRunRepairsCredentials(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	application := db.MerchantApplication{
+		ID:                          54,
+		UserID:                      22,
+		Status:                      db.MerchantApplicationStatusApproved,
+		MerchantName:                "测试补偿餐饮店",
+		ContactPhone:                "13712345678",
+		BusinessAddress:             "北京市朝阳区测试路300号",
+		RegionID:                    pgtype.Int8{Int64: 10, Valid: true},
+		BusinessLicenseNumber:       "91110000MA32345678",
+		LegalPersonName:             "王五",
+		LegalPersonIDNumber:         "110101199301011234",
+		BusinessLicenseMediaAssetID: pgtype.Int8{Int64: 31, Valid: true},
+		FoodPermitMediaAssetID:      pgtype.Int8{Int64: 32, Valid: true},
+		IDCardFrontMediaAssetID:     pgtype.Int8{Int64: 33, Valid: true},
+		IDCardBackMediaAssetID:      pgtype.Int8{Int64: 34, Valid: true},
+		BusinessLicenseOcr:          []byte(`{"ocr_job_id":301,"reg_num":"91110000MA32345678","enterprise_name":"测试补偿餐饮店","legal_representative":"王五","address":"北京市朝阳区测试路300号","business_scope":"餐饮服务","valid_period":"2020年01月01日至2040年01月01日","credit_code":"91110000MA32345678"}`),
+		FoodPermitOcr:               []byte(`{"ocr_job_id":302,"permit_no":"JY11105000000003","company_name":"测试补偿餐饮店","operator_name":"王五","valid_to":"2032年12月31日"}`),
+	}
+	reviewRun := db.OnboardingReviewRun{
+		ID:                    904,
+		ApplicationType:       onboardingReviewApplicationTypeMerchant,
+		MerchantApplicationID: pgtype.Int8{Int64: application.ID, Valid: true},
+		RunStatus:             db.OnboardingReviewRunStatusCompleted,
+		Stage:                 "review",
+		Outcome:               pgtype.Text{String: db.OnboardingReviewOutcomeApproved, Valid: true},
+		ReasonCode:            pgtype.Text{String: "auto_approved", Valid: true},
+		CreatedAt:             time.Date(2026, 6, 11, 16, 0, 0, 0, time.UTC),
+	}
+
+	store.EXPECT().
+		GetOnboardingReviewRun(gomock.Any(), reviewRun.ID).
+		Return(reviewRun, nil).
+		Times(2)
+
+	store.EXPECT().
+		GetMerchantApplication(gomock.Any(), application.ID).
+		Return(application, nil)
+
+	store.EXPECT().
+		GetMerchantOwnedByUser(gomock.Any(), application.UserID).
+		Return(db.Merchant{ID: 68, OwnerUserID: application.UserID}, nil)
+
+	store.EXPECT().
+		UpdateMerchantApplicationReviewSummary(gomock.Any(), gomock.Any()).
+		Return(db.MerchantApplication{ID: application.ID, Status: application.Status}, nil)
+
+	governanceSvc := logic.NewCredentialGovernanceService(onboardingWorkerCredentialGovernanceStoreStub{
+		activateMerchantFn: func(_ context.Context, arg db.ActivateMerchantCredentialLedgersTxParams) ([]db.CredentialLedger, error) {
+			require.Equal(t, int64(68), arg.MerchantID)
+			require.Len(t, arg.Entries, 2)
+			require.Equal(t, reviewRun.ID, arg.Entries[0].ReviewRunID.Int64)
+			return []db.CredentialLedger{{ID: 401}, {ID: 402}}, nil
+		},
+		getMerchantFn: func(_ context.Context, merchantID pgtype.Int8) ([]db.CredentialLedger, error) {
+			require.Equal(t, int64(68), merchantID.Int64)
+			return nil, nil
+		},
+		restoreMerchantFn: func(_ context.Context, arg db.RestoreMerchantCredentialGovernanceTxParams) (int64, error) {
+			require.Equal(t, int64(68), arg.MerchantID)
+			require.Equal(t, []int64{401, 402}, arg.CredentialLedgerIDs)
+			return 0, nil
+		},
+	})
+	require.NotNil(t, governanceSvc)
+
+	processor := NewTestTaskProcessor(store, nil, nil, nil)
+	processor.onboardingReviewSvc = logic.NewOnboardingReviewService(store)
+	processor.credentialGovSvc = governanceSvc
+	processor.merchantReviewSvc = logic.NewMerchantOnboardingReviewService(store, processor.onboardingReviewSvc, governanceSvc)
+
+	payloadBytes, err := json.Marshal(OnboardingReviewPayload{
+		ReviewRunID:     reviewRun.ID,
 		ApplicationID:   application.ID,
 		ApplicationType: onboardingReviewApplicationTypeMerchant,
 		RequestedBy:     application.UserID,

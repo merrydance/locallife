@@ -116,8 +116,10 @@ func validateOnboardingReviewPayload(run db.OnboardingReviewRun, payload Onboard
 
 func shouldSkipOnboardingReviewRun(run db.OnboardingReviewRun) bool {
 	switch run.RunStatus {
-	case "completed", "cancelled":
+	case db.OnboardingReviewRunStatusCancelled:
 		return true
+	case db.OnboardingReviewRunStatusCompleted:
+		return run.ApplicationType != onboardingReviewApplicationTypeMerchant
 	default:
 		return false
 	}
