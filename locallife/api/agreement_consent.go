@@ -59,9 +59,19 @@ func parseAgreementConsentRequest(ctx *gin.Context) (*agreementConsentRequest, e
 	return &req, nil
 }
 
-func (server *Server) writeAgreementConsentAudit(ctx *gin.Context, actorUserID int64, action string, targetType string, targetID int64, consent *agreementConsentRequest) {
+func (server *Server) writeAgreementConsentAudit(ctx *gin.Context, actorUserID int64, action string, targetType string, targetID int64, consent *agreementConsentRequest, extraMetadata map[string]any) {
 	if consent == nil {
 		return
+	}
+
+	metadata := map[string]any{
+		"user_agreement_version": consent.UserAgreementVersion,
+		"privacy_policy_version": consent.PrivacyPolicyVersion,
+		"consented_at":           consent.ConsentedAt,
+		"source":                 "weapp_submit",
+	}
+	for key, value := range extraMetadata {
+		metadata[key] = value
 	}
 
 	server.writeAuditLog(ctx, AuditLogInput{
@@ -70,11 +80,6 @@ func (server *Server) writeAgreementConsentAudit(ctx *gin.Context, actorUserID i
 		Action:      action,
 		TargetType:  targetType,
 		TargetID:    &targetID,
-		Metadata: map[string]any{
-			"user_agreement_version": consent.UserAgreementVersion,
-			"privacy_policy_version": consent.PrivacyPolicyVersion,
-			"consented_at":           consent.ConsentedAt,
-			"source":                 "weapp_submit",
-		},
+		Metadata:    metadata,
 	})
 }

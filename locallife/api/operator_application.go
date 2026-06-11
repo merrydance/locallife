@@ -643,7 +643,7 @@ func (server *Server) submitOperatorApplication(ctx *gin.Context) {
 		return
 	}
 
-	server.writeAgreementConsentAudit(ctx, authPayload.UserID, "operator_application_consent_confirmed", "operator_application", app.ID, consentReq)
+	server.writeAgreementConsentAudit(ctx, authPayload.UserID, "operator_application_consent_confirmed", "operator_application", app.ID, consentReq, nil)
 
 	// 个人运营商兜底：若运营商名称为空，自动使用法人/个人姓名
 	if (!app.Name.Valid || strings.TrimSpace(app.Name.String) == "") && app.LegalPersonName.Valid {

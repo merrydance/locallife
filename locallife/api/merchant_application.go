@@ -935,7 +935,9 @@ func (server *Server) submitMerchantApplication(ctx *gin.Context) {
 		return
 	}
 
-	server.writeAgreementConsentAudit(ctx, authPayload.UserID, "merchant_application_consent_confirmed", "merchant_application", app.ID, consentReq)
+	server.writeAgreementConsentAudit(ctx, authPayload.UserID, "merchant_application_submit_attempt_consent_confirmed", "merchant_application", app.ID, consentReq, map[string]any{
+		"event_scope": "submit_attempt",
+	})
 
 	// 检查必填字段
 	if err := validateMerchantApplicationRequired(app); err != nil {

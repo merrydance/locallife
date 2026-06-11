@@ -2933,6 +2933,49 @@ func TestSubmitMerchantApplication(t *testing.T) {
 	}
 }
 
+func TestSubmitMerchantApplication_ValidationFailureWritesSubmitAttemptConsentAudit(t *testing.T) {
+	user, _ := randomUser(t)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	app := randomMerchantAppDraftWithData(user.ID)
+	app.FoodPermitMediaAssetID = pgtype.Int8{}
+	store.EXPECT().
+		GetMerchantApplicationDraft(gomock.Any(), user.ID).
+		Times(1).
+		Return(app, nil)
+
+	server := newTestServer(t, store)
+	auditWriter := &auditSpyWriter{}
+	server.auditWriter = auditWriter
+
+	recorder := httptest.NewRecorder()
+	consentBody := []byte(`{"user_agreement_version":"user-v1","privacy_policy_version":"privacy-v1","consented_at":"2026-06-10T12:00:00Z"}`)
+	request, err := http.NewRequest(http.MethodPost, "/v1/merchant/application/submit", bytes.NewReader(consentBody))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	entries := auditWriter.Entries()
+	require.Len(t, entries, 1)
+	entry := entries[0]
+	require.Equal(t, user.ID, entry.ActorUserID)
+	require.Equal(t, RoleCustomer, entry.ActorRole)
+	require.Equal(t, "merchant_application_submit_attempt_consent_confirmed", entry.Action)
+	require.Equal(t, "merchant_application", entry.TargetType)
+	require.NotNil(t, entry.TargetID)
+	require.Equal(t, app.ID, *entry.TargetID)
+	require.Equal(t, "user-v1", entry.Metadata["user_agreement_version"])
+	require.Equal(t, "privacy-v1", entry.Metadata["privacy_policy_version"])
+	require.Equal(t, "2026-06-10T12:00:00Z", entry.Metadata["consented_at"])
+	require.Equal(t, "weapp_submit", entry.Metadata["source"])
+	require.Equal(t, "submit_attempt", entry.Metadata["event_scope"])
+}
+
 // ==================== 重置申请测试 ====================
 
 func TestSubmitMerchantApplication_QueuesOnboardingReviewWhenAsyncAvailable(t *testing.T) {

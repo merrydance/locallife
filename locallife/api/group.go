@@ -679,7 +679,7 @@ func (server *Server) submitGroupApplication(ctx *gin.Context) {
 		return
 	}
 
-	server.writeAgreementConsentAudit(ctx, authPayload.UserID, "group_application_consent_confirmed", "group_application", app.ID, consentReq)
+	server.writeAgreementConsentAudit(ctx, authPayload.UserID, "group_application_consent_confirmed", "group_application", app.ID, consentReq, nil)
 
 	updated, err := server.store.SubmitGroupApplication(ctx, app.ID)
 	if err != nil {

@@ -53,7 +53,7 @@ func (server *Server) submitRiderApplication(ctx *gin.Context) {
 		return
 	}
 
-	server.writeAgreementConsentAudit(ctx, authPayload.UserID, "rider_application_consent_confirmed", "rider_application", app.ID, consentReq)
+	server.writeAgreementConsentAudit(ctx, authPayload.UserID, "rider_application_consent_confirmed", "rider_application", app.ID, consentReq, nil)
 
 	var missingFields []string
 	if !app.RealName.Valid || app.RealName.String == "" {
