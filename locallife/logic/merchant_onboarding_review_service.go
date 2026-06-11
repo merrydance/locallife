@@ -36,27 +36,36 @@ type MerchantReviewOCRReadiness struct {
 	UnparseableFields []string `json:"unparseable_fields,omitempty"`
 }
 
+type MerchantReviewOCRConfirmation struct {
+	ConfirmedBy int64             `json:"confirmed_by,omitempty"`
+	ConfirmedAt string            `json:"confirmed_at,omitempty"`
+	Source      string            `json:"source,omitempty"`
+	Snapshot    map[string]string `json:"snapshot,omitempty"`
+}
+
 type MerchantReviewBusinessLicenseOCRData struct {
-	Readiness           *MerchantReviewOCRReadiness `json:"readiness,omitempty"`
-	OCRJobID            *int64                      `json:"ocr_job_id,omitempty"`
-	RegNum              string                      `json:"reg_num,omitempty"`
-	EnterpriseName      string                      `json:"enterprise_name,omitempty"`
-	LegalRepresentative string                      `json:"legal_representative,omitempty"`
-	Address             string                      `json:"address,omitempty"`
-	BusinessScope       string                      `json:"business_scope,omitempty"`
-	ValidPeriod         string                      `json:"valid_period,omitempty"`
-	CreditCode          string                      `json:"credit_code,omitempty"`
+	Readiness           *MerchantReviewOCRReadiness    `json:"readiness,omitempty"`
+	Confirmation        *MerchantReviewOCRConfirmation `json:"confirmation,omitempty"`
+	OCRJobID            *int64                         `json:"ocr_job_id,omitempty"`
+	RegNum              string                         `json:"reg_num,omitempty"`
+	EnterpriseName      string                         `json:"enterprise_name,omitempty"`
+	LegalRepresentative string                         `json:"legal_representative,omitempty"`
+	Address             string                         `json:"address,omitempty"`
+	BusinessScope       string                         `json:"business_scope,omitempty"`
+	ValidPeriod         string                         `json:"valid_period,omitempty"`
+	CreditCode          string                         `json:"credit_code,omitempty"`
 }
 
 type MerchantReviewFoodPermitOCRData struct {
-	Readiness    *MerchantReviewOCRReadiness `json:"readiness,omitempty"`
-	OCRJobID     *int64                      `json:"ocr_job_id,omitempty"`
-	RawText      string                      `json:"raw_text,omitempty"`
-	PermitNo     string                      `json:"permit_no,omitempty"`
-	CompanyName  string                      `json:"company_name,omitempty"`
-	OperatorName string                      `json:"operator_name,omitempty"`
-	ValidFrom    string                      `json:"valid_from,omitempty"`
-	ValidTo      string                      `json:"valid_to,omitempty"`
+	Readiness    *MerchantReviewOCRReadiness    `json:"readiness,omitempty"`
+	Confirmation *MerchantReviewOCRConfirmation `json:"confirmation,omitempty"`
+	OCRJobID     *int64                         `json:"ocr_job_id,omitempty"`
+	RawText      string                         `json:"raw_text,omitempty"`
+	PermitNo     string                         `json:"permit_no,omitempty"`
+	CompanyName  string                         `json:"company_name,omitempty"`
+	OperatorName string                         `json:"operator_name,omitempty"`
+	ValidFrom    string                         `json:"valid_from,omitempty"`
+	ValidTo      string                         `json:"valid_to,omitempty"`
 }
 
 type MerchantReviewIDCardOCRData struct {

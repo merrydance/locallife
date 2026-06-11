@@ -9257,7 +9257,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "允许商户在草稿状态下更正营业执照和食品经营许可证 OCR 字段。更正会写回 OCR JSON 并记录 correction 审计元数据；法人身份证字段不支持此接口。",
+                "description": "允许商户在草稿状态下更正营业执照和食品经营许可证 OCR 字段。更正会写回 OCR JSON 并记录 correction 审计元数据；confirmed=true 时会记录商户确认快照，提交前必须完成当前 OCR 字段确认；法人身份证字段不支持此接口。",
                 "consumes": [
                     "application/json"
                 ],
@@ -9267,7 +9267,7 @@ const docTemplate = `{
                 "tags": [
                     "商户申请"
                 ],
-                "summary": "更正商户申请证照 OCR 识别字段",
+                "summary": "更正或确认商户申请证照 OCR 识别字段",
                 "parameters": [
                     {
                         "type": "string",
@@ -32104,6 +32104,9 @@ const docTemplate = `{
                     "description": "经营范围",
                     "type": "string"
                 },
+                "confirmation": {
+                    "$ref": "#/definitions/api.OCRConfirmation"
+                },
                 "correction": {
                     "$ref": "#/definitions/api.OCRCorrection"
                 },
@@ -32236,6 +32239,9 @@ const docTemplate = `{
                 "company_name": {
                     "description": "企业名称",
                     "type": "string"
+                },
+                "confirmation": {
+                    "$ref": "#/definitions/api.OCRConfirmation"
                 },
                 "correction": {
                     "$ref": "#/definitions/api.OCRCorrection"
@@ -32491,6 +32497,26 @@ const docTemplate = `{
                 "message": {
                     "type": "string",
                     "example": "ok"
+                }
+            }
+        },
+        "api.OCRConfirmation": {
+            "type": "object",
+            "properties": {
+                "confirmed_at": {
+                    "type": "string"
+                },
+                "confirmed_by": {
+                    "type": "integer"
+                },
+                "snapshot": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "source": {
+                    "type": "string"
                 }
             }
         },
@@ -41463,6 +41489,9 @@ const docTemplate = `{
                 },
                 "company_name": {
                     "type": "string"
+                },
+                "confirmed": {
+                    "type": "boolean"
                 },
                 "credit_code": {
                     "type": "string"

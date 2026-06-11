@@ -24,6 +24,7 @@ type patchMerchantBusinessLicenseOCRFieldsRequest struct {
 	Address             *string `json:"address" binding:"omitempty,max=200"`
 	BusinessScope       *string `json:"business_scope" binding:"omitempty,max=500"`
 	ValidPeriod         *string `json:"valid_period" binding:"omitempty,max=64"`
+	Confirmed           bool    `json:"confirmed"`
 }
 
 type patchMerchantFoodPermitOCRFieldsRequest struct {
@@ -32,6 +33,7 @@ type patchMerchantFoodPermitOCRFieldsRequest struct {
 	OperatorName *string `json:"operator_name" binding:"omitempty,max=50"`
 	ValidFrom    *string `json:"valid_from" binding:"omitempty,max=32"`
 	ValidTo      *string `json:"valid_to" binding:"omitempty,max=32"`
+	Confirmed    bool    `json:"confirmed"`
 }
 
 type patchMerchantDocumentOCRFieldsRequest struct {
@@ -47,11 +49,12 @@ type patchMerchantDocumentOCRFieldsRequest struct {
 	OperatorName        *string `json:"operator_name,omitempty"`
 	ValidFrom           *string `json:"valid_from,omitempty"`
 	ValidTo             *string `json:"valid_to,omitempty"`
+	Confirmed           bool    `json:"confirmed,omitempty"`
 }
 
 // patchMerchantApplicationDocumentOCRFields godoc
-// @Summary 更正商户申请证照 OCR 识别字段
-// @Description 允许商户在草稿状态下更正营业执照和食品经营许可证 OCR 字段。更正会写回 OCR JSON 并记录 correction 审计元数据；法人身份证字段不支持此接口。
+// @Summary 更正或确认商户申请证照 OCR 识别字段
+// @Description 允许商户在草稿状态下更正营业执照和食品经营许可证 OCR 字段。更正会写回 OCR JSON 并记录 correction 审计元数据；confirmed=true 时会记录商户确认快照，提交前必须完成当前 OCR 字段确认；法人身份证字段不支持此接口。
 // @Tags 商户申请
 // @Accept json
 // @Produce json
@@ -129,6 +132,10 @@ func (server *Server) patchMerchantBusinessLicenseOCRFields(ctx *gin.Context, ap
 	applyStringPointer(req.BusinessScope, &next.BusinessScope)
 	applyStringPointer(req.ValidPeriod, &next.ValidPeriod)
 
+	if req.Confirmed && strings.TrimSpace(next.EnterpriseName) == "" {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("营业执照企业名称未识别，请重新填写")))
+		return
+	}
 	if strings.TrimSpace(next.CreditCode) == "" && strings.TrimSpace(next.RegNum) == "" {
 		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("营业执照统一信用代码未识别，请重新填写")))
 		return
@@ -139,21 +146,27 @@ func (server *Server) patchMerchantBusinessLicenseOCRFields(ctx *gin.Context, ap
 	}
 
 	fields := changedMerchantOCRFields(previous, merchantBusinessLicenseOCRPrevious(&next))
-	if len(fields) == 0 {
+	if len(fields) == 0 && !req.Confirmed {
 		server.writeMerchantApplicationDraftResponse(ctx, http.StatusOK, app)
 		return
 	}
 
-	next.Error = ""
-	next.ErrorCode = ""
-	next.AlertEmittedAt = ""
-	next.Readiness = buildMerchantBusinessLicenseOCRReadinessForAPI(&next)
-	next.Correction = &OCRCorrection{
-		CorrectedBy: userID,
-		CorrectedAt: time.Now().Format(time.RFC3339),
-		Source:      "merchant",
-		Fields:      fields,
-		Previous:    previous,
+	now := time.Now()
+	if len(fields) > 0 {
+		next.Error = ""
+		next.ErrorCode = ""
+		next.AlertEmittedAt = ""
+		next.Readiness = buildMerchantBusinessLicenseOCRReadinessForAPI(&next)
+		next.Correction = &OCRCorrection{
+			CorrectedBy: userID,
+			CorrectedAt: now.Format(time.RFC3339),
+			Source:      "merchant",
+			Fields:      fields,
+			Previous:    previous,
+		}
+	}
+	if req.Confirmed {
+		next.Confirmation = buildMerchantOCRConfirmation(userID, now, merchantBusinessLicenseOCRPrevious(&next))
 	}
 
 	encoded, err := json.Marshal(next)
@@ -221,27 +234,37 @@ func (server *Server) patchMerchantFoodPermitOCRFields(ctx *gin.Context, app db.
 		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("食品经营许可证主体名称未识别，请重新填写")))
 		return
 	}
+	if req.Confirmed && strings.TrimSpace(next.PermitNo) == "" {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("食品经营许可证编号未识别，请重新填写")))
+		return
+	}
 	if strings.TrimSpace(next.ValidTo) == "" || !merchantOCRCorrectionDateAtLeastDaysAfterNow(next.ValidTo, 30, time.Now()) {
 		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("食品经营许可证有效期无法识别或不足30天，请重新填写")))
 		return
 	}
 
 	fields := changedMerchantOCRFields(previous, merchantFoodPermitOCRPrevious(&next))
-	if len(fields) == 0 {
+	if len(fields) == 0 && !req.Confirmed {
 		server.writeMerchantApplicationDraftResponse(ctx, http.StatusOK, app)
 		return
 	}
 
-	next.Error = ""
-	next.ErrorCode = ""
-	next.AlertEmittedAt = ""
-	next.Readiness = buildMerchantFoodPermitOCRReadinessForAPI(&next)
-	next.Correction = &OCRCorrection{
-		CorrectedBy: userID,
-		CorrectedAt: time.Now().Format(time.RFC3339),
-		Source:      "merchant",
-		Fields:      fields,
-		Previous:    previous,
+	now := time.Now()
+	if len(fields) > 0 {
+		next.Error = ""
+		next.ErrorCode = ""
+		next.AlertEmittedAt = ""
+		next.Readiness = buildMerchantFoodPermitOCRReadinessForAPI(&next)
+		next.Correction = &OCRCorrection{
+			CorrectedBy: userID,
+			CorrectedAt: now.Format(time.RFC3339),
+			Source:      "merchant",
+			Fields:      fields,
+			Previous:    previous,
+		}
+	}
+	if req.Confirmed {
+		next.Confirmation = buildMerchantOCRConfirmation(userID, now, merchantFoodPermitOCRPrevious(&next))
 	}
 
 	encoded, err := json.Marshal(next)

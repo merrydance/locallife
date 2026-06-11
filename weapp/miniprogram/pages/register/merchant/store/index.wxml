@@ -67,6 +67,12 @@
                 <t-input label="注册地址" value="{{formData.registerAddress}}" bindchange="onRegisterAddressInput" data-field="registerAddress" />
                 <t-input label="营业期限" value="{{formData.licenseValidity}}" placeholder="例：2020-01-01至2040-01-01" bindchange="onLicenseValidityInput" data-field="licenseValidity" />
                 <t-textarea label="经营范围" value="{{formData.businessScope}}" autosize bindchange="onBusinessScopeInput" data-field="businessScope" />
+                <t-checkbox-group bindchange="onBusinessLicenseOCRConfirmChange">
+                    <label class="consent-label">
+                        <t-checkbox value="confirmed" checked="{{businessLicenseOCRConfirmed}}"></t-checkbox>
+                        <text>我已核对营业执照名称和统一信用代码与原件一致</text>
+                    </label>
+                </t-checkbox-group>
             </block>
             <view class="ocr-status-panel" wx:elif="{{ocrDisplayState.businessLicenseProcessing}}">
                 <view class="ocr-status-title">营业执照识别中</view>
@@ -86,6 +92,12 @@
                 <t-input label="经营者" value="{{formData.foodLicenseOperatorName}}" bindchange="onFoodLicenseOperatorNameInput" data-field="foodLicenseOperatorName" />
                 <t-input label="有效期起" value="{{formData.foodLicenseValidFrom}}" placeholder="例：2025-01-01" bindchange="onFoodLicenseValidFromInput" data-field="foodLicenseValidFrom" />
                 <t-input label="有效期止" value="{{formData.foodLicenseValidity}}" placeholder="例：2030-12-31" bindchange="onFoodLicenseValidityInput" data-field="foodLicenseValidity" />
+                <t-checkbox-group bindchange="onFoodPermitOCRConfirmChange">
+                    <label class="consent-label">
+                        <t-checkbox value="confirmed" checked="{{foodPermitOCRConfirmed}}"></t-checkbox>
+                        <text>我已核对食品经营许可证主体名称和许可证编号与原件一致</text>
+                    </label>
+                </t-checkbox-group>
             </block>
             <view class="ocr-status-panel" wx:elif="{{ocrDisplayState.foodPermitProcessing}}">
                 <view class="ocr-status-title">许可证识别中</view>

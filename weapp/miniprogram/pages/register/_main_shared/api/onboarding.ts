@@ -27,6 +27,13 @@ export interface BaseOCRData {
   ocr_at?: string
 }
 
+export interface OCRConfirmation {
+  confirmed_by?: number
+  confirmed_at?: string
+  source?: string
+  snapshot?: Record<string, string>
+}
+
 export interface BusinessLicenseOCRData extends BaseOCRData {
   reg_num?: string
   enterprise_name?: string
@@ -37,6 +44,7 @@ export interface BusinessLicenseOCRData extends BaseOCRData {
   registered_capital?: string
   valid_period?: string
   credit_code?: string
+  confirmation?: OCRConfirmation
 }
 
 export interface FoodPermitOCRData extends BaseOCRData {
@@ -46,6 +54,7 @@ export interface FoodPermitOCRData extends BaseOCRData {
   operator_name?: string
   valid_from?: string
   valid_to?: string
+  confirmation?: OCRConfirmation
 }
 
 export interface IDCardOCRData extends BaseOCRData {
@@ -583,6 +592,7 @@ export interface PatchMerchantBusinessLicenseOCRFieldsRequest {
   address?: string
   business_scope?: string
   valid_period?: string
+  confirmed?: boolean
 }
 
 export interface PatchMerchantFoodPermitOCRFieldsRequest {
@@ -591,6 +601,7 @@ export interface PatchMerchantFoodPermitOCRFieldsRequest {
   operator_name?: string
   valid_from?: string
   valid_to?: string
+  confirmed?: boolean
 }
 
 // ==================== API Methods ====================

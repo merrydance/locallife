@@ -47,6 +47,8 @@ Page({
       bankAccount: '',
       accountName: ''
     },
+    businessLicenseOCRConfirmed: false,
+    foodPermitOCRConfirmed: false,
     licenseImages: [] as ImageFieldItem[],
     foodLicenseImages: [] as ImageFieldItem[],
     idCardFrontImages: [] as ImageFieldItem[],
