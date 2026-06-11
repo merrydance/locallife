@@ -61,10 +61,61 @@ redis.call("SET", userKey, candidateCode, "EX", ttlSeconds)
 return {"generated", candidateCode, ttlSeconds}
 `
 
+const consumeAppBindCodeScript = `
+local codeKey = KEYS[1]
+local userKey = KEYS[2]
+local expectedBindData = ARGV[1]
+local code = ARGV[2]
+
+local current = redis.call("GET", codeKey)
+if not current then
+	return {"missing", 0}
+end
+if current ~= expectedBindData then
+	return {"mismatch", 0}
+end
+
+local ttl = redis.call("PTTL", codeKey)
+redis.call("DEL", codeKey)
+if redis.call("GET", userKey) == code then
+	redis.call("DEL", userKey)
+end
+return {"consumed", ttl}
+`
+
+const restoreAppBindCodeScript = `
+local codeKey = KEYS[1]
+local userKey = KEYS[2]
+local bindData = ARGV[1]
+local code = ARGV[2]
+local ttlMillis = tonumber(ARGV[3])
+
+if ttlMillis <= 0 then
+	return "skipped"
+end
+local currentUserCode = redis.call("GET", userKey)
+if currentUserCode and currentUserCode ~= code then
+	return "skipped"
+end
+if redis.call("EXISTS", codeKey) == 0 then
+	redis.call("SET", codeKey, bindData, "PX", ttlMillis)
+	if not currentUserCode then
+		redis.call("SET", userKey, code, "PX", ttlMillis)
+	end
+	return "restored"
+end
+return "skipped"
+`
+
 type appBindCodePersistenceResult struct {
 	code      string
 	expiresIn int
 	reused    bool
+}
+
+type appBindCodeConsumeResult struct {
+	consumed  bool
+	ttlMillis int
 }
 
 func makeAppBindSessionUserAgent(userAgent string) string {
@@ -232,6 +283,46 @@ func parseRedisScriptInt(value interface{}) (int, error) {
 	}
 }
 
+func (server *Server) consumeAppBindCode(ctx *gin.Context, codeKey string, userKey string, bindData string, code string) (appBindCodeConsumeResult, error) {
+	raw, err := server.redisClient.Eval(ctx, consumeAppBindCodeScript, []string{codeKey, userKey}, bindData, code).Result()
+	if err != nil {
+		return appBindCodeConsumeResult{}, fmt.Errorf("删除绑定码失败: %w", err)
+	}
+	return parseAppBindCodeConsumeResult(raw)
+}
+
+func parseAppBindCodeConsumeResult(raw interface{}) (appBindCodeConsumeResult, error) {
+	values, ok := raw.([]interface{})
+	if !ok || len(values) != 2 {
+		return appBindCodeConsumeResult{}, fmt.Errorf("unexpected redis consume result")
+	}
+
+	status, ok := values[0].(string)
+	if !ok {
+		return appBindCodeConsumeResult{}, fmt.Errorf("unexpected redis consume status")
+	}
+	ttlMillis, err := parseRedisScriptInt(values[1])
+	if err != nil {
+		return appBindCodeConsumeResult{}, err
+	}
+
+	switch status {
+	case "consumed":
+		return appBindCodeConsumeResult{consumed: true, ttlMillis: ttlMillis}, nil
+	case "missing", "mismatch":
+		return appBindCodeConsumeResult{}, nil
+	default:
+		return appBindCodeConsumeResult{}, fmt.Errorf("unexpected redis consume status %q", status)
+	}
+}
+
+func (server *Server) restoreConsumedAppBindCode(ctx *gin.Context, codeKey string, userKey string, bindData string, code string, ttlMillis int) error {
+	if _, err := server.redisClient.Eval(ctx, restoreAppBindCodeScript, []string{codeKey, userKey}, bindData, code, ttlMillis).Result(); err != nil {
+		return fmt.Errorf("恢复绑定码失败: %w", err)
+	}
+	return nil
+}
+
 type generateAppBindCodeResponse struct {
 	Code      string `json:"code" example:"839471"`
 	ExpiresIn int    `json:"expires_in" example:"300"`
@@ -286,15 +377,7 @@ func (server *Server) verifyAppBindCode(ctx *gin.Context) {
 		return
 	}
 
-	// 一次性：立即删除码（防止重复使用）
 	userKey := fmt.Sprintf("%suser:%d", appBindCodePrefix, userID)
-	pipe := server.redisClient.Pipeline()
-	pipe.Del(ctx, codeKey)
-	pipe.Del(ctx, userKey)
-	if _, err := pipe.Exec(ctx); err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("删除绑定码失败: %w", err)))
-		return
-	}
 
 	// 二次校验：确认用户仍有同一商户的 merchant 角色
 	roles, err := server.store.ListUserRoles(ctx, userID)
@@ -311,6 +394,10 @@ func (server *Server) verifyAppBindCode(ctx *gin.Context) {
 		}
 	}
 	if !hasMatchingMerchantRole {
+		if _, err := server.consumeAppBindCode(ctx, codeKey, userKey, bindData, req.Code); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
 		ctx.JSON(http.StatusForbidden, errorResponse(fmt.Errorf("用户不再具有该商户权限")))
 		return
 	}
@@ -356,6 +443,22 @@ func (server *Server) verifyAppBindCode(ctx *gin.Context) {
 		return
 	}
 
+	userRolesList, workbenches, err := server.buildUserAccessProfile(ctx, user.ID, roles)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("构建用户信息失败: %w", err)))
+		return
+	}
+
+	consumeResult, err := server.consumeAppBindCode(ctx, codeKey, userKey, bindData, req.Code)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	if !consumeResult.consumed {
+		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("绑定码无效或已过期")))
+		return
+	}
+
 	// 创建 session（复用现有机制）
 	session, err := server.store.CreateSession(ctx, db.CreateSessionParams{
 		UserID:                user.ID,
@@ -367,20 +470,14 @@ func (server *Server) verifyAppBindCode(ctx *gin.Context) {
 		ClientIp:              ctx.ClientIP(),
 	})
 	if err != nil {
+		if restoreErr := server.restoreConsumedAppBindCode(ctx, codeKey, userKey, bindData, req.Code, consumeResult.ttlMillis); restoreErr != nil {
+			log.Error().
+				Err(restoreErr).
+				Int64("user_id", userID).
+				Int64("merchant_id", merchantID).
+				Msg("restore app bind code after session creation failure failed")
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("创建会话失败: %w", err)))
-		return
-	}
-
-	// 获取用户角色和工作台
-	userRoles, err := server.store.ListUserRoles(ctx, user.ID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("获取用户角色失败: %w", err)))
-		return
-	}
-
-	userRolesList, workbenches, err := server.buildUserAccessProfile(ctx, user.ID, userRoles)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("构建用户信息失败: %w", err)))
 		return
 	}
 

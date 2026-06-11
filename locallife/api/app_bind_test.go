@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -117,6 +118,62 @@ func TestVerifyAppBindCodeRejectsChangedMerchantRole(t *testing.T) {
 	require.False(t, redisServer.Exists(userKey))
 }
 
+func TestVerifyAppBindCodeDoesNotConsumeCodeWhenUserLookupFails(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	redisServer := miniredis.RunT(t)
+	redisClient := redis.NewClient(&redis.Options{Addr: redisServer.Addr()})
+	t.Cleanup(func() {
+		require.NoError(t, redisClient.Close())
+	})
+
+	const userID int64 = 42
+	const merchantID int64 = 1001
+	const code = "123456"
+
+	codeKey := appBindCodePrefix + code
+	userKey := "app_bind:user:42"
+	redisServer.Set(codeKey, fmt.Sprintf("%d:%d", userID, merchantID))
+	redisServer.SetTTL(codeKey, appBindCodeTTL)
+	redisServer.Set(userKey, code)
+	redisServer.SetTTL(userKey, appBindCodeTTL)
+
+	roles := []db.UserRole{{
+		UserID:          userID,
+		Role:            "merchant_owner",
+		Status:          "active",
+		RelatedEntityID: pgtype.Int8{Int64: merchantID, Valid: true},
+	}}
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		ListUserRoles(gomock.Any(), userID).
+		Times(1).
+		Return(roles, nil)
+	store.EXPECT().
+		GetUser(gomock.Any(), userID).
+		Times(1).
+		Return(db.User{}, errors.New("user lookup failed"))
+
+	server := newTestServer(t, store)
+	server.redisClient = redisClient
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	body := strings.NewReader(`{"code":"123456","device_id":"android-device-1"}`)
+	req, err := http.NewRequest(http.MethodPost, "/v1/auth/app-bind/verify", body)
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	ctx.Request = req
+
+	server.verifyAppBindCode(ctx)
+
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	require.True(t, redisServer.Exists(codeKey))
+	require.True(t, redisServer.Exists(userKey))
+}
+
 func TestAppBindCodeGenerateVerifyCreatesSessionAndPreventsReuse(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -152,7 +209,7 @@ func TestAppBindCodeGenerateVerifyCreatesSessionAndPreventsReuse(t *testing.T) {
 	store := mockdb.NewMockStore(ctrl)
 	store.EXPECT().
 		ListUserRoles(gomock.Any(), userID).
-		Times(3).
+		Times(2).
 		Return(roles, nil)
 	store.EXPECT().
 		GetUser(gomock.Any(), userID).
@@ -297,4 +354,157 @@ func TestGenerateAppBindCodeRegeneratesWhenUserIndexPointsToMissingCode(t *testi
 	ttl, err := redisClient.TTL(context.Background(), appBindCodePrefix+resp.Code).Result()
 	require.NoError(t, err)
 	require.Greater(t, ttl, time.Duration(0))
+}
+
+func TestVerifyAppBindCodeRestoresCodeWhenSessionCreationFails(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	redisServer := miniredis.RunT(t)
+	redisClient := redis.NewClient(&redis.Options{Addr: redisServer.Addr()})
+	t.Cleanup(func() {
+		require.NoError(t, redisClient.Close())
+	})
+
+	const userID int64 = 42
+	const merchantID int64 = 1001
+	const code = "123456"
+
+	user := db.User{
+		ID:           userID,
+		WechatOpenid: "openid-app-bind",
+		FullName:     "App Bind Owner",
+		CreatedAt:    time.Now(),
+	}
+	merchant := db.Merchant{
+		ID:          merchantID,
+		OwnerUserID: userID,
+		Name:        "App Bind Merchant",
+		Status:      "active",
+	}
+	roles := []db.UserRole{{
+		UserID:          userID,
+		Role:            "merchant_owner",
+		Status:          "active",
+		RelatedEntityID: pgtype.Int8{Int64: merchantID, Valid: true},
+	}}
+
+	codeKey := appBindCodePrefix + code
+	userKey := "app_bind:user:42"
+	redisServer.Set(codeKey, fmt.Sprintf("%d:%d", userID, merchantID))
+	redisServer.SetTTL(codeKey, appBindCodeTTL)
+	redisServer.Set(userKey, code)
+	redisServer.SetTTL(userKey, appBindCodeTTL)
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		ListUserRoles(gomock.Any(), userID).
+		Times(1).
+		Return(roles, nil)
+	store.EXPECT().
+		GetUser(gomock.Any(), userID).
+		Times(1).
+		Return(user, nil)
+	store.EXPECT().
+		ListMerchantsByStaff(gomock.Any(), userID).
+		Times(1).
+		Return([]db.Merchant{}, nil)
+	store.EXPECT().
+		ListMerchantsByOwner(gomock.Any(), userID).
+		Times(1).
+		Return([]db.Merchant{merchant}, nil)
+	store.EXPECT().
+		CreateSession(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.Session{}, errors.New("session insert failed"))
+
+	server := newTestServer(t, store)
+	server.redisClient = redisClient
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	body := strings.NewReader(`{"code":"123456","device_id":"android-device-1"}`)
+	req, err := http.NewRequest(http.MethodPost, "/v1/auth/app-bind/verify", body)
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	ctx.Request = req
+
+	server.verifyAppBindCode(ctx)
+
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	require.True(t, redisServer.Exists(codeKey))
+	require.True(t, redisServer.Exists(userKey))
+	bindData, err := redisClient.Get(context.Background(), codeKey).Result()
+	require.NoError(t, err)
+	require.Equal(t, "42:1001", bindData)
+	indexCode, err := redisClient.Get(context.Background(), userKey).Result()
+	require.NoError(t, err)
+	require.Equal(t, code, indexCode)
+}
+
+func TestRestoreConsumedAppBindCodeDoesNotOverwriteNewerUserCode(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	redisClient := redis.NewClient(&redis.Options{Addr: redisServer.Addr()})
+	t.Cleanup(func() {
+		require.NoError(t, redisClient.Close())
+	})
+
+	const userID int64 = 42
+	const merchantID int64 = 1001
+	const oldCode = "123456"
+	const newCode = "654321"
+
+	oldCodeKey := appBindCodePrefix + oldCode
+	newCodeKey := appBindCodePrefix + newCode
+	userKey := "app_bind:user:42"
+	oldBindData := fmt.Sprintf("%d:%d", userID, merchantID)
+	newBindData := fmt.Sprintf("%d:%d", userID, merchantID)
+
+	redisServer.Set(newCodeKey, newBindData)
+	redisServer.SetTTL(newCodeKey, appBindCodeTTL)
+	redisServer.Set(userKey, newCode)
+	redisServer.SetTTL(userKey, appBindCodeTTL)
+
+	server := newTestServer(t, nil)
+	server.redisClient = redisClient
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	req, err := http.NewRequest(http.MethodPost, "/v1/auth/app-bind/verify", nil)
+	require.NoError(t, err)
+	ctx.Request = req
+
+	require.NoError(t, server.restoreConsumedAppBindCode(ctx, oldCodeKey, userKey, oldBindData, oldCode, int(appBindCodeTTL/time.Millisecond)))
+	require.False(t, redisServer.Exists(oldCodeKey))
+	indexCode, err := redisClient.Get(context.Background(), userKey).Result()
+	require.NoError(t, err)
+	require.Equal(t, newCode, indexCode)
+	currentNewBindData, err := redisClient.Get(context.Background(), newCodeKey).Result()
+	require.NoError(t, err)
+	require.Equal(t, newBindData, currentNewBindData)
+}
+
+func TestRestoreConsumedAppBindCodeSkipsExpiredTTL(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	redisClient := redis.NewClient(&redis.Options{Addr: redisServer.Addr()})
+	t.Cleanup(func() {
+		require.NoError(t, redisClient.Close())
+	})
+
+	const code = "123456"
+
+	codeKey := appBindCodePrefix + code
+	userKey := "app_bind:user:42"
+	server := newTestServer(t, nil)
+	server.redisClient = redisClient
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	req, err := http.NewRequest(http.MethodPost, "/v1/auth/app-bind/verify", nil)
+	require.NoError(t, err)
+	ctx.Request = req
+
+	require.NoError(t, server.restoreConsumedAppBindCode(ctx, codeKey, userKey, "42:1001", code, 0))
+	require.False(t, redisServer.Exists(codeKey))
+	require.False(t, redisServer.Exists(userKey))
 }
