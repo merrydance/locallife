@@ -52,6 +52,13 @@ type OCRCorrection struct {
 	Previous    map[string]string `json:"previous,omitempty"`
 }
 
+type OCRConfirmation struct {
+	ConfirmedBy int64             `json:"confirmed_by,omitempty"`
+	ConfirmedAt string            `json:"confirmed_at,omitempty"`
+	Source      string            `json:"source,omitempty"`
+	Snapshot    map[string]string `json:"snapshot,omitempty"`
+}
+
 func decodeOCRPayload(data []byte, target any) error {
 	if len(data) == 0 {
 		return nil

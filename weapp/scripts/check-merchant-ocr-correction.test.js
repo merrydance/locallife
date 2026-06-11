@@ -52,6 +52,17 @@ assert(
   'merchant OCR correction must save both business license and food permit fields'
 )
 assert(
+  runtimeSource.includes('businessLicenseOCRConfirmed') &&
+    runtimeSource.includes('foodPermitOCRConfirmed') &&
+    runtimeSource.includes('confirmed: true'),
+  'merchant OCR correction must require explicit merchant confirmation and persist confirmation snapshots'
+)
+assert(
+  !runtimeSource.includes("foodPermitOCR.company_name || currentDraft.business_license_ocr?.enterprise_name") &&
+    runtimeSource.includes("formOCRFieldValue(formData, touchedFields, 'foodLicenseCompanyName', foodPermitOCR.company_name || formData.foodLicenseCompanyName)"),
+  'food permit subject name must not fall back to the business license OCR name'
+)
+assert(
   runtimeSource.includes('hasMerchantBusinessLicenseResult(latestDraft)') &&
     runtimeSource.includes('hasMerchantFoodPermitResult(currentDraft)'),
   'merchant OCR correction must save displayed legacy OCR results even when old payloads have no status field'
@@ -73,6 +84,13 @@ assert(
     step2Wxml.includes('data-field="foodLicenseValidFrom"') &&
     step2Wxml.includes('data-field="foodLicenseValidity"'),
   'business license and food permit OCR fields must be editable form fields'
+)
+assert(
+  step2Wxml.includes('onBusinessLicenseOCRConfirmChange') &&
+    step2Wxml.includes('onFoodPermitOCRConfirmChange') &&
+    step2Wxml.includes('我已核对营业执照名称和统一信用代码与原件一致') &&
+    step2Wxml.includes('我已核对食品经营许可证主体名称和许可证编号与原件一致'),
+  'Step 2 must show explicit OCR confirmation checkboxes for business license and food permit'
 )
 assert(
   !step2Wxml.includes('<t-cell title="营业执照名"') &&

@@ -164,12 +164,82 @@ const MERCHANT_OCR_CORRECTION_FORM_FIELDS = new Set([
   'foodLicenseValidity'
 ])
 
+const MERCHANT_BUSINESS_LICENSE_OCR_FIELDS = new Set([
+  'licenseName',
+  'creditCode',
+  'licenseLegalRepresentative',
+  'registerAddress',
+  'licenseValidity',
+  'businessScope'
+])
+
+const MERCHANT_FOOD_PERMIT_OCR_FIELDS = new Set([
+  'foodLicensePermitNo',
+  'foodLicenseCompanyName',
+  'foodLicenseOperatorName',
+  'foodLicenseValidFrom',
+  'foodLicenseValidity'
+])
+
 function formOCRFieldValue(formData: Record<string, unknown>, touchedFields: Record<string, unknown>, fieldName: string, fallback: unknown): string {
   const formValue = toSafeString(formData[fieldName]).trim()
   if (touchedFields[fieldName] || formValue) {
     return formValue
   }
   return toSafeString(fallback).trim()
+}
+
+function hasDocumentOCRConfirmationValues(values: unknown): boolean {
+  return Array.isArray(values) && values.some((value) => toSafeString(value) === 'confirmed')
+}
+
+function normalizedDocumentCode(value: unknown): string {
+  return toSafeString(value).replace(/\s/g, '').toUpperCase()
+}
+
+function normalizedDocumentValue(field: string, value: unknown): string {
+  if (field === 'credit_code' || field === 'reg_num' || field === 'permit_no') {
+    return normalizedDocumentCode(value)
+  }
+  return toSafeString(value).trim()
+}
+
+function confirmationSnapshotMatches(
+  confirmation: { snapshot?: Record<string, unknown>, source?: string, confirmed_by?: number, confirmed_at?: string } | undefined,
+  expected: Record<string, unknown>
+): boolean {
+  if (!confirmation || confirmation.source !== 'merchant' || !confirmation.confirmed_by || !confirmation.confirmed_at || !confirmation.snapshot) {
+    return false
+  }
+  return Object.keys(expected).every((field) => (
+    normalizedDocumentValue(field, confirmation.snapshot?.[field]) === normalizedDocumentValue(field, expected[field])
+  ))
+}
+
+function hasConfirmedBusinessLicenseOCR(draft: MerchantDraftExt): boolean {
+  const ocr = draft.business_license_ocr
+  if (!ocr?.enterprise_name || (!ocr.credit_code && !ocr.reg_num)) return false
+  return confirmationSnapshotMatches(ocr.confirmation, {
+    enterprise_name: ocr.enterprise_name,
+    credit_code: ocr.credit_code || '',
+    reg_num: ocr.reg_num || '',
+    legal_representative: ocr.legal_representative || '',
+    address: ocr.address || '',
+    business_scope: ocr.business_scope || '',
+    valid_period: ocr.valid_period || ''
+  })
+}
+
+function hasConfirmedFoodPermitOCR(draft: MerchantDraftExt): boolean {
+  const ocr = draft.food_permit_ocr
+  if (!ocr?.company_name || !ocr.permit_no) return false
+  return confirmationSnapshotMatches(ocr.confirmation, {
+    permit_no: ocr.permit_no,
+    company_name: ocr.company_name,
+    operator_name: ocr.operator_name || '',
+    valid_from: ocr.valid_from || '',
+    valid_to: ocr.valid_to || ''
+  })
 }
 
 export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & ThisType<MerchantStoreRegistrationPageContext> = {
@@ -252,6 +322,8 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
 
       this.setData({
         formData,
+        businessLicenseOCRConfirmed: hasConfirmedBusinessLicenseOCR(data),
+        foodPermitOCRConfirmed: hasConfirmedFoodPermitOCR(data),
         ocrDisplayState: this.buildMerchantOcrDisplayState(data),
         uploadFeedback: this.buildMerchantUploadFeedback(data),
         ocrResults,
@@ -308,6 +380,8 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
         ...buildMerchantLatestOcrFormPatch(data, this.data.formData.address)
       },
       ocrCorrectionTouchedFields: {},
+      businessLicenseOCRConfirmed: hasConfirmedBusinessLicenseOCR(data),
+      foodPermitOCRConfirmed: hasConfirmedFoodPermitOCR(data),
       ocrDisplayState: this.buildMerchantOcrDisplayState(data),
       uploadFeedback: this.buildMerchantUploadFeedback(data),
       ocrResults: {
@@ -380,7 +454,13 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
   },
 
   setUploadedImage(field: UploadField, path: string, assetId?: number) {
-    this.setData(buildMerchantUploadedImagePatch(field, path, assetId))
+    const patch = buildMerchantUploadedImagePatch(field, path, assetId) as Record<string, unknown>
+    if (field === 'license') {
+      patch.businessLicenseOCRConfirmed = false
+    } else if (field === 'foodPermit') {
+      patch.foodPermitOCRConfirmed = false
+    }
+    this.setData(patch)
   },
 
   handleDocumentOCRSubmission(
@@ -482,6 +562,10 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
     const businessLicenseOCR = (latestDraft.business_license_ocr || {}) as OCRResult
     const shouldSaveBusinessLicense = buildMerchantApplicationOCRStatusView(businessLicenseOCR.status).isReady || hasMerchantBusinessLicenseResult(latestDraft)
     if (latestDraft.business_license_media_asset_id && shouldSaveBusinessLicense) {
+      if (!this.data.businessLicenseOCRConfirmed) {
+        wx.showToast({ title: '请先核对营业执照信息', icon: 'none', duration: 3000 })
+        return null
+      }
       currentDraft = await patchMerchantApplicationOCRFields('business_license', {
         enterprise_name: formOCRFieldValue(formData, touchedFields, 'licenseName', businessLicenseOCR.enterprise_name),
         credit_code: formOCRFieldValue(formData, touchedFields, 'creditCode', businessLicenseOCR.credit_code || businessLicenseOCR.reg_num || latestDraft.business_license_number),
@@ -489,19 +573,25 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
         legal_representative: formOCRFieldValue(formData, touchedFields, 'licenseLegalRepresentative', businessLicenseOCR.legal_representative),
         address: formOCRFieldValue(formData, touchedFields, 'registerAddress', businessLicenseOCR.address),
         business_scope: formOCRFieldValue(formData, touchedFields, 'businessScope', latestDraft.business_scope || businessLicenseOCR.business_scope),
-        valid_period: formOCRFieldValue(formData, touchedFields, 'licenseValidity', businessLicenseOCR.valid_period)
+        valid_period: formOCRFieldValue(formData, touchedFields, 'licenseValidity', businessLicenseOCR.valid_period),
+        confirmed: true
       }) as MerchantDraftExt
     }
 
     const foodPermitOCR = (currentDraft.food_permit_ocr || latestDraft.food_permit_ocr || {}) as OCRResult
     const shouldSaveFoodPermit = buildMerchantApplicationOCRStatusView(foodPermitOCR.status).isReady || hasMerchantFoodPermitResult(currentDraft)
     if (currentDraft.food_permit_media_asset_id && shouldSaveFoodPermit) {
+      if (!this.data.foodPermitOCRConfirmed) {
+        wx.showToast({ title: '请先核对食品经营许可证信息', icon: 'none', duration: 3000 })
+        return null
+      }
       currentDraft = await patchMerchantApplicationOCRFields('food_permit', {
         permit_no: formOCRFieldValue(formData, touchedFields, 'foodLicensePermitNo', foodPermitOCR.permit_no),
-        company_name: formOCRFieldValue(formData, touchedFields, 'foodLicenseCompanyName', foodPermitOCR.company_name || currentDraft.business_license_ocr?.enterprise_name || formData.licenseName),
+        company_name: formOCRFieldValue(formData, touchedFields, 'foodLicenseCompanyName', foodPermitOCR.company_name || formData.foodLicenseCompanyName),
         operator_name: formOCRFieldValue(formData, touchedFields, 'foodLicenseOperatorName', foodPermitOCR.operator_name || currentDraft.business_license_ocr?.legal_representative || formData.legalPerson),
         valid_from: formOCRFieldValue(formData, touchedFields, 'foodLicenseValidFrom', foodPermitOCR.valid_from),
-        valid_to: formOCRFieldValue(formData, touchedFields, 'foodLicenseValidity', foodPermitOCR.valid_to)
+        valid_to: formOCRFieldValue(formData, touchedFields, 'foodLicenseValidity', foodPermitOCR.valid_to),
+        confirmed: true
       }) as MerchantDraftExt
     }
 
@@ -620,6 +710,12 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
     if (MERCHANT_OCR_CORRECTION_FORM_FIELDS.has(key)) {
       nextData[`ocrCorrectionTouchedFields.${key}`] = true
     }
+    if (MERCHANT_BUSINESS_LICENSE_OCR_FIELDS.has(key)) {
+      nextData.businessLicenseOCRConfirmed = false
+    }
+    if (MERCHANT_FOOD_PERMIT_OCR_FIELDS.has(key)) {
+      nextData.foodPermitOCRConfirmed = false
+    }
     this.setData(nextData)
     this.saveDraft()
   },
@@ -710,6 +806,14 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
     this.setData({ consentChecked: values.includes('agree') })
   },
 
+  onBusinessLicenseOCRConfirmChange(e: WechatMiniprogram.CustomEvent<{ value?: string[] }>) {
+    this.setData({ businessLicenseOCRConfirmed: hasDocumentOCRConfirmationValues(e.detail.value) })
+  },
+
+  onFoodPermitOCRConfirmChange(e: WechatMiniprogram.CustomEvent<{ value?: string[] }>) {
+    this.setData({ foodPermitOCRConfirmed: hasDocumentOCRConfirmationValues(e.detail.value) })
+  },
+
   openConsentPopup() {
     this.setData({ consentPopupVisible: true })
   },
@@ -766,6 +870,7 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
       let latestDraft: MerchantDraftExt | null = null
       try {
         latestDraft = await this.saveMerchantOCRCorrections() as MerchantDraftExt
+        if (!latestDraft) return
       } catch (error) {
         logger.warn('[MerchantRegister] 保存 OCR 更正失败', error, 'nextStep')
         wx.showToast({ title: getErrorMessage(error, '证照信息保存失败，请检查后重试'), icon: 'none', duration: 3000 })
@@ -1381,7 +1486,11 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
       }
 
       await this.syncToBackend()
-      await this.saveMerchantOCRCorrections()
+      const correctedDraft = await this.saveMerchantOCRCorrections()
+      if (!correctedDraft) {
+        this.setData({ isSubmitting: false })
+        return
+      }
 
       const latestDraft = await getMerchantApplication() as MerchantDraftExt
       const latestRegionId = Number(latestDraft.region_id || 0)

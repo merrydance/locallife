@@ -27,6 +27,13 @@ export interface BaseOCRData {
   ocr_at?: string
 }
 
+export interface OCRConfirmation {
+  confirmed_by?: number
+  confirmed_at?: string
+  source?: string
+  snapshot?: Record<string, string>
+}
+
 export interface BusinessLicenseOCRData extends BaseOCRData {
   reg_num?: string
   enterprise_name?: string
@@ -37,14 +44,17 @@ export interface BusinessLicenseOCRData extends BaseOCRData {
   registered_capital?: string
   valid_period?: string
   credit_code?: string
+  confirmation?: OCRConfirmation
 }
 
 export interface FoodPermitOCRData extends BaseOCRData {
   raw_text?: string
   permit_no?: string
   company_name?: string
+  operator_name?: string
   valid_from?: string
   valid_to?: string
+  confirmation?: OCRConfirmation
 }
 
 export interface IDCardOCRData extends BaseOCRData {

@@ -55,7 +55,7 @@ func randomMerchantAppDraft(userID int64) db.MerchantApplication {
 }
 
 func randomMerchantAppDraftWithData(userID int64) db.MerchantApplication {
-	licenseOCR, _ := json.Marshal(BusinessLicenseOCRData{
+	licenseData := BusinessLicenseOCRData{
 		EnterpriseName:      "测试餐饮有限公司",
 		CreditCode:          "91110000MA12345678",
 		BusinessScope:       "餐饮服务",
@@ -63,14 +63,18 @@ func randomMerchantAppDraftWithData(userID int64) db.MerchantApplication {
 		Address:             "北京市朝阳区测试路100号",
 		LegalRepresentative: "张三",
 		OCRAt:               time.Now().Format(time.RFC3339),
-	})
+	}
+	licenseData.Confirmation = merchantTestBusinessLicenseOCRConfirmation(userID, licenseData)
+	licenseOCR, _ := json.Marshal(licenseData)
 
-	foodPermitOCR, _ := json.Marshal(FoodPermitOCRData{
+	foodPermitData := FoodPermitOCRData{
 		PermitNo:    "JY11105000000001",
 		CompanyName: "测试餐饮有限公司",
 		ValidTo:     "2030年12月31日",
 		OCRAt:       time.Now().Format(time.RFC3339),
-	})
+	}
+	foodPermitData.Confirmation = merchantTestFoodPermitOCRConfirmation(userID, foodPermitData)
+	foodPermitOCR, _ := json.Marshal(foodPermitData)
 
 	idCardFrontOCR, _ := json.Marshal(MerchantIDCardOCRData{
 		Name:  "张三",
@@ -109,6 +113,38 @@ func randomMerchantAppDraftWithData(userID int64) db.MerchantApplication {
 	}
 }
 
+func merchantTestBusinessLicenseOCRConfirmation(userID int64, data BusinessLicenseOCRData) *OCRConfirmation {
+	return &OCRConfirmation{
+		ConfirmedBy: userID,
+		ConfirmedAt: "2026-06-04T21:01:00+08:00",
+		Source:      "merchant",
+		Snapshot: map[string]string{
+			"enterprise_name":      strings.TrimSpace(data.EnterpriseName),
+			"credit_code":          strings.TrimSpace(data.CreditCode),
+			"reg_num":              strings.TrimSpace(data.RegNum),
+			"legal_representative": strings.TrimSpace(data.LegalRepresentative),
+			"address":              strings.TrimSpace(data.Address),
+			"business_scope":       strings.TrimSpace(data.BusinessScope),
+			"valid_period":         strings.TrimSpace(data.ValidPeriod),
+		},
+	}
+}
+
+func merchantTestFoodPermitOCRConfirmation(userID int64, data FoodPermitOCRData) *OCRConfirmation {
+	return &OCRConfirmation{
+		ConfirmedBy: userID,
+		ConfirmedAt: "2026-06-04T21:06:00+08:00",
+		Source:      "merchant",
+		Snapshot: map[string]string{
+			"permit_no":     strings.TrimSpace(data.PermitNo),
+			"company_name":  strings.TrimSpace(data.CompanyName),
+			"operator_name": strings.TrimSpace(data.OperatorName),
+			"valid_from":    strings.TrimSpace(data.ValidFrom),
+			"valid_to":      strings.TrimSpace(data.ValidTo),
+		},
+	}
+}
+
 func expectMerchantApplicationPublicDocumentLookups(store *mockdb.MockStore, userID int64) {
 	assets := map[int64]db.MediaAsset{
 		1: {
@@ -139,6 +175,12 @@ func expectMerchantApplicationPublicDocumentLookups(store *mockdb.MockStore, use
 			}
 			return asset, nil
 		})
+}
+
+func requireMerchantOCRConfirmationBlocked(t *testing.T, recorder *httptest.ResponseRecorder, message string) {
+	t.Helper()
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.Contains(t, recorder.Body.String(), message)
 }
 
 func TestMerchantFoodPermitNeedsOfficialVerification(t *testing.T) {
@@ -263,8 +305,8 @@ func TestCheckMerchantApplicationApproval_UsesCorrectedMerchantDocumentOCRFields
 	store := mockdb.NewMockStore(ctrl)
 	server := &Server{store: store}
 	app := randomMerchantAppDraftWithData(1)
-	app.BusinessLicenseOcr = []byte(`{"status":"done","enterprise_name":"修正后餐饮有限公司","credit_code":"91110000MA12345678","reg_num":"91110000MA12345678","legal_representative":"张三","address":"北京市朝阳区测试路100号","business_scope":"餐饮服务;热食类食品制售","valid_period":"2020年01月01日至2040年01月01日","readiness":{"state":"ready","reason_code":"ok","required_fields":["enterprise_name","legal_representative","address","business_scope","valid_period"]},"correction":{"corrected_by":1,"corrected_at":"2026-06-04T21:00:00+08:00","source":"merchant","fields":["enterprise_name","business_scope"],"previous":{"enterprise_name":"","business_scope":""}}}`)
-	app.FoodPermitOcr = []byte(`{"status":"done","raw_text":"主体名称：修正后餐饮有限公司","permit_no":"JY11105000000001","company_name":"修正后餐饮有限公司","operator_name":"张三","valid_to":"2030年12月31日","readiness":{"state":"ready","reason_code":"ok","required_fields":["company_name","valid_to"]},"correction":{"corrected_by":1,"corrected_at":"2026-06-04T21:05:00+08:00","source":"merchant","fields":["company_name"],"previous":{"company_name":""}}}`)
+	app.BusinessLicenseOcr = []byte(`{"status":"done","enterprise_name":"修正后餐饮有限公司","credit_code":"91110000MA12345678","reg_num":"91110000MA12345678","legal_representative":"张三","address":"北京市朝阳区测试路100号","business_scope":"餐饮服务;热食类食品制售","valid_period":"2020年01月01日至2040年01月01日","readiness":{"state":"ready","reason_code":"ok","required_fields":["enterprise_name","legal_representative","address","business_scope","valid_period"]},"correction":{"corrected_by":1,"corrected_at":"2026-06-04T21:00:00+08:00","source":"merchant","fields":["enterprise_name","business_scope"],"previous":{"enterprise_name":"","business_scope":""}},"confirmation":{"confirmed_by":1,"confirmed_at":"2026-06-04T21:01:00+08:00","source":"merchant","snapshot":{"enterprise_name":"修正后餐饮有限公司","credit_code":"91110000MA12345678","reg_num":"91110000MA12345678","legal_representative":"张三","address":"北京市朝阳区测试路100号","business_scope":"餐饮服务;热食类食品制售","valid_period":"2020年01月01日至2040年01月01日"}}}`)
+	app.FoodPermitOcr = []byte(`{"status":"done","raw_text":"主体名称：修正后餐饮有限公司","permit_no":"JY11105000000001","company_name":"修正后餐饮有限公司","operator_name":"张三","valid_to":"2030年12月31日","readiness":{"state":"ready","reason_code":"ok","required_fields":["company_name","valid_to"]},"correction":{"corrected_by":1,"corrected_at":"2026-06-04T21:05:00+08:00","source":"merchant","fields":["company_name"],"previous":{"company_name":""}},"confirmation":{"confirmed_by":1,"confirmed_at":"2026-06-04T21:06:00+08:00","source":"merchant","snapshot":{"permit_no":"JY11105000000001","company_name":"修正后餐饮有限公司","operator_name":"张三","valid_from":"","valid_to":"2030年12月31日"}}}`)
 
 	store.EXPECT().
 		ListMerchantLocationsInRegion(gomock.Any(), app.RegionID.Int64).
@@ -288,6 +330,57 @@ func TestCheckMerchantApplicationApproval_UsesCorrectedMerchantDocumentOCRFields
 	err := server.checkMerchantApplicationApproval(nil, app)
 
 	require.NoError(t, err)
+}
+
+func TestCheckMerchantApplicationApproval_RequiresMerchantDocumentOCRConfirmation(t *testing.T) {
+	t.Parallel()
+
+	server := &Server{}
+	baseApp := randomMerchantAppDraftWithData(1)
+	baseApp.MerchantName = "识别错饭店"
+	baseApp.BusinessLicenseNumber = "91110000MA12345678"
+	baseApp.BusinessLicenseOcr = []byte(`{"status":"done","enterprise_name":"识别错饭店","credit_code":"91110000MA12345678","reg_num":"91110000MA12345678","legal_representative":"张三","address":"北京市朝阳区测试路100号","business_scope":"餐饮服务","valid_period":"2020年01月01日至2040年01月01日","readiness":{"state":"ready","reason_code":"ok"}}`)
+	baseApp.FoodPermitOcr = []byte(`{"status":"done","permit_no":"JY11105000000001","company_name":"识别错饭店","operator_name":"张三","valid_to":"2030年12月31日","readiness":{"state":"ready","reason_code":"ok"}}`)
+
+	t.Run("blocks when business license confirmation is missing", func(t *testing.T) {
+		app := baseApp
+		app.FoodPermitOcr = []byte(`{"status":"done","permit_no":"JY11105000000001","company_name":"识别错饭店","operator_name":"张三","valid_to":"2030年12月31日","readiness":{"state":"ready","reason_code":"ok"},"confirmation":{"confirmed_by":1,"confirmed_at":"2026-06-04T21:06:00+08:00","source":"merchant","snapshot":{"permit_no":"JY11105000000001","company_name":"识别错饭店"}}}`)
+
+		err := server.checkMerchantApplicationApproval(nil, app)
+
+		require.Error(t, err)
+		apiErr, ok := err.(*APIError)
+		require.True(t, ok)
+		require.Equal(t, ErrApplicationInvalidState.Code, apiErr.Code)
+		require.Contains(t, apiErr.Message, "请核对营业执照企业名称和统一社会信用代码")
+	})
+
+	t.Run("blocks when food permit confirmation is missing", func(t *testing.T) {
+		app := baseApp
+		app.BusinessLicenseOcr = []byte(`{"status":"done","enterprise_name":"识别错饭店","credit_code":"91110000MA12345678","reg_num":"91110000MA12345678","legal_representative":"张三","address":"北京市朝阳区测试路100号","business_scope":"餐饮服务","valid_period":"2020年01月01日至2040年01月01日","readiness":{"state":"ready","reason_code":"ok"},"confirmation":{"confirmed_by":1,"confirmed_at":"2026-06-04T21:01:00+08:00","source":"merchant","snapshot":{"enterprise_name":"识别错饭店","credit_code":"91110000MA12345678","reg_num":"91110000MA12345678","legal_representative":"张三","address":"北京市朝阳区测试路100号","business_scope":"餐饮服务","valid_period":"2020年01月01日至2040年01月01日"}}}`)
+
+		err := server.checkMerchantApplicationApproval(nil, app)
+
+		require.Error(t, err)
+		apiErr, ok := err.(*APIError)
+		require.True(t, ok)
+		require.Equal(t, ErrApplicationInvalidState.Code, apiErr.Code)
+		require.Contains(t, apiErr.Message, "请核对食品经营许可证主体名称和许可证编号")
+	})
+
+	t.Run("blocks stale confirmation snapshot after OCR value changes", func(t *testing.T) {
+		app := baseApp
+		app.BusinessLicenseOcr = []byte(`{"status":"done","enterprise_name":"识别错饭店","credit_code":"91110000MA12345678","reg_num":"91110000MA12345678","legal_representative":"张三","address":"北京市朝阳区测试路100号","business_scope":"餐饮服务","valid_period":"2020年01月01日至2040年01月01日","readiness":{"state":"ready","reason_code":"ok"},"confirmation":{"confirmed_by":1,"confirmed_at":"2026-06-04T21:01:00+08:00","source":"merchant","snapshot":{"enterprise_name":"旧饭店","credit_code":"91110000MA12345678","reg_num":"91110000MA12345678"}}}`)
+		app.FoodPermitOcr = []byte(`{"status":"done","permit_no":"JY11105000000001","company_name":"识别错饭店","operator_name":"张三","valid_to":"2030年12月31日","readiness":{"state":"ready","reason_code":"ok"},"confirmation":{"confirmed_by":1,"confirmed_at":"2026-06-04T21:06:00+08:00","source":"merchant","snapshot":{"permit_no":"JY11105000000001","company_name":"识别错饭店"}}}`)
+
+		err := server.checkMerchantApplicationApproval(nil, app)
+
+		require.Error(t, err)
+		apiErr, ok := err.(*APIError)
+		require.True(t, ok)
+		require.Equal(t, ErrApplicationInvalidState.Code, apiErr.Code)
+		require.Contains(t, apiErr.Message, "请核对营业执照企业名称和统一社会信用代码")
+	})
 }
 
 // ==================== 获取或创建草稿测试 ====================
@@ -795,6 +888,99 @@ func TestPatchMerchantApplicationBusinessLicenseOCRFields(t *testing.T) {
 			},
 		},
 		{
+			name:         "NoChangeWithConfirmationPersistsCurrentFieldSnapshot",
+			documentType: "business_license",
+			body: map[string]interface{}{
+				"enterprise_name":      "测试餐饮有限公司",
+				"credit_code":          "91110000MA12345678",
+				"reg_num":              "91110000MA12345678",
+				"legal_representative": "张三",
+				"address":              "北京市朝阳区测试路100号",
+				"business_scope":       "餐饮服务",
+				"valid_period":         validPeriod,
+				"confirmed":            true,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomMerchantAppDraftWithData(user.ID)
+				app.BusinessLicenseOcr = []byte(fmt.Sprintf(`{"status":"done","enterprise_name":"测试餐饮有限公司","credit_code":"91110000MA12345678","reg_num":"91110000MA12345678","legal_representative":"张三","address":"北京市朝阳区测试路100号","business_scope":"餐饮服务","valid_period":%q,"readiness":{"state":"ready","reason_code":"ok"}}`, validPeriod))
+				updatedApp := app
+
+				store.EXPECT().
+					GetMerchantApplicationDraft(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+				store.EXPECT().
+					UpdateMerchantApplicationBusinessLicense(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ context.Context, arg db.UpdateMerchantApplicationBusinessLicenseParams) (db.MerchantApplication, error) {
+						require.Equal(t, app.ID, arg.ID)
+						var payload map[string]any
+						require.NoError(t, json.Unmarshal(arg.BusinessLicenseOcr, &payload))
+						require.NotContains(t, payload, "correction")
+						confirmation, ok := payload["confirmation"].(map[string]any)
+						require.True(t, ok)
+						require.Equal(t, float64(user.ID), confirmation["confirmed_by"])
+						require.Equal(t, "merchant", confirmation["source"])
+						require.NotEmpty(t, confirmation["confirmed_at"])
+						snapshot, ok := confirmation["snapshot"].(map[string]any)
+						require.True(t, ok)
+						require.Equal(t, "测试餐饮有限公司", snapshot["enterprise_name"])
+						require.Equal(t, "91110000MA12345678", snapshot["credit_code"])
+						require.Equal(t, "91110000MA12345678", snapshot["reg_num"])
+						require.Equal(t, "张三", snapshot["legal_representative"])
+						require.Equal(t, "北京市朝阳区测试路100号", snapshot["address"])
+						require.Equal(t, "餐饮服务", snapshot["business_scope"])
+						require.Equal(t, validPeriod, snapshot["valid_period"])
+						updatedApp.BusinessLicenseOcr = arg.BusinessLicenseOcr
+						return updatedApp, nil
+					})
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp merchantApplicationDraftResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.NotNil(t, resp.BusinessLicenseOCR)
+				require.NotNil(t, resp.BusinessLicenseOCR.Confirmation)
+				require.Equal(t, user.ID, resp.BusinessLicenseOCR.Confirmation.ConfirmedBy)
+				require.Equal(t, "测试餐饮有限公司", resp.BusinessLicenseOCR.Confirmation.Snapshot["enterprise_name"])
+			},
+		},
+		{
+			name:         "ConfirmationMissingEnterpriseNameRejected",
+			documentType: "business_license",
+			body: map[string]interface{}{
+				"enterprise_name":      "",
+				"credit_code":          "91110000MA12345678",
+				"reg_num":              "91110000MA12345678",
+				"legal_representative": "张三",
+				"address":              "北京市朝阳区测试路100号",
+				"business_scope":       "餐饮服务",
+				"valid_period":         validPeriod,
+				"confirmed":            true,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomMerchantAppDraftWithData(user.ID)
+				app.BusinessLicenseOcr = []byte(fmt.Sprintf(`{"status":"done","enterprise_name":"","credit_code":"91110000MA12345678","reg_num":"91110000MA12345678","legal_representative":"张三","address":"北京市朝阳区测试路100号","business_scope":"餐饮服务","valid_period":%q,"readiness":{"state":"partial","reason_code":"required_field_missing","missing_fields":["enterprise_name"]}}`, validPeriod))
+				store.EXPECT().
+					GetMerchantApplicationDraft(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+				store.EXPECT().
+					UpdateMerchantApplicationBusinessLicense(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Contains(t, recorder.Body.String(), "营业执照企业名称未识别")
+			},
+		},
+		{
 			name:         "BackfillsEmptyMerchantNameFromEnterpriseName",
 			documentType: "business_license",
 			body: map[string]interface{}{
@@ -1253,6 +1439,91 @@ func TestPatchMerchantApplicationFoodPermitOCRFields(t *testing.T) {
 				require.NotNil(t, resp.FoodPermitOCR.Correction)
 				require.Equal(t, []string{"valid_to"}, resp.FoodPermitOCR.Correction.Fields)
 				require.Equal(t, "", resp.FoodPermitOCR.Correction.Previous["valid_to"])
+			},
+		},
+		{
+			name: "NoChangeWithConfirmationPersistsCurrentFieldSnapshot",
+			body: map[string]interface{}{
+				"permit_no":     "JY11105000000001",
+				"company_name":  "测试餐饮有限公司",
+				"operator_name": "张三",
+				"valid_from":    "2025-01-01",
+				"valid_to":      futureValidTo,
+				"confirmed":     true,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomMerchantAppDraftWithData(user.ID)
+				app.FoodPermitOcr = []byte(fmt.Sprintf(`{"status":"done","permit_no":"JY11105000000001","company_name":"测试餐饮有限公司","operator_name":"张三","valid_from":"2025-01-01","valid_to":%q,"readiness":{"state":"ready","reason_code":"ok"}}`, futureValidTo))
+				updatedApp := app
+
+				store.EXPECT().
+					GetMerchantApplicationDraft(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+				store.EXPECT().
+					UpdateMerchantApplicationFoodPermit(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ context.Context, arg db.UpdateMerchantApplicationFoodPermitParams) (db.MerchantApplication, error) {
+						require.Equal(t, app.ID, arg.ID)
+						var payload map[string]any
+						require.NoError(t, json.Unmarshal(arg.FoodPermitOcr, &payload))
+						require.NotContains(t, payload, "correction")
+						confirmation, ok := payload["confirmation"].(map[string]any)
+						require.True(t, ok)
+						require.Equal(t, float64(user.ID), confirmation["confirmed_by"])
+						require.Equal(t, "merchant", confirmation["source"])
+						require.NotEmpty(t, confirmation["confirmed_at"])
+						snapshot, ok := confirmation["snapshot"].(map[string]any)
+						require.True(t, ok)
+						require.Equal(t, "JY11105000000001", snapshot["permit_no"])
+						require.Equal(t, "测试餐饮有限公司", snapshot["company_name"])
+						require.Equal(t, "张三", snapshot["operator_name"])
+						require.Equal(t, "2025-01-01", snapshot["valid_from"])
+						require.Equal(t, futureValidTo, snapshot["valid_to"])
+						updatedApp.FoodPermitOcr = arg.FoodPermitOcr
+						return updatedApp, nil
+					})
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp merchantApplicationDraftResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.NotNil(t, resp.FoodPermitOCR)
+				require.NotNil(t, resp.FoodPermitOCR.Confirmation)
+				require.Equal(t, user.ID, resp.FoodPermitOCR.Confirmation.ConfirmedBy)
+				require.Equal(t, "测试餐饮有限公司", resp.FoodPermitOCR.Confirmation.Snapshot["company_name"])
+			},
+		},
+		{
+			name: "ConfirmationMissingPermitNoRejected",
+			body: map[string]interface{}{
+				"permit_no":     "",
+				"company_name":  "测试餐饮有限公司",
+				"operator_name": "张三",
+				"valid_from":    "2025-01-01",
+				"valid_to":      futureValidTo,
+				"confirmed":     true,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomMerchantAppDraftWithData(user.ID)
+				app.FoodPermitOcr = []byte(fmt.Sprintf(`{"status":"done","permit_no":"","company_name":"测试餐饮有限公司","operator_name":"张三","valid_from":"2025-01-01","valid_to":%q,"readiness":{"state":"partial","reason_code":"required_field_missing","missing_fields":["permit_no"]}}`, futureValidTo))
+				store.EXPECT().
+					GetMerchantApplicationDraft(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+				store.EXPECT().
+					UpdateMerchantApplicationFoodPermit(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Contains(t, recorder.Body.String(), "食品经营许可证编号未识别")
 			},
 		},
 		{
@@ -1811,7 +2082,7 @@ func TestSubmitMerchantApplication(t *testing.T) {
 				app := randomMerchantAppDraftWithData(user.ID)
 				app.MerchantName = "宁晋县周鹏饭店"
 				app.BusinessAddress = "河北省邢台市宁晋县凤凰路辅路"
-				licenseOCR, err := json.Marshal(BusinessLicenseOCRData{
+				licenseData := BusinessLicenseOCRData{
 					EnterpriseName:      "宁晋县周鹏饭店",
 					CreditCode:          "92130528MA0A5XB46A",
 					BusinessScope:       "餐饮服务",
@@ -1819,15 +2090,19 @@ func TestSubmitMerchantApplication(t *testing.T) {
 					Address:             "邢台市宁晋县天宝西街与宁米路交叉口北行100米路东",
 					LegalRepresentative: "张三",
 					OCRAt:               time.Now().Format(time.RFC3339),
-				})
+				}
+				licenseData.Confirmation = merchantTestBusinessLicenseOCRConfirmation(user.ID, licenseData)
+				licenseOCR, err := json.Marshal(licenseData)
 				require.NoError(t, err)
 				app.BusinessLicenseOcr = licenseOCR
-				foodPermitOCR, err := json.Marshal(FoodPermitOCRData{
+				foodPermitData := FoodPermitOCRData{
 					PermitNo:    "JY11105000000001",
 					CompanyName: "宁晋县周鹏饭店",
 					ValidTo:     "2030年12月31日",
 					OCRAt:       time.Now().Format(time.RFC3339),
-				})
+				}
+				foodPermitData.Confirmation = merchantTestFoodPermitOCRConfirmation(user.ID, foodPermitData)
+				foodPermitOCR, err := json.Marshal(foodPermitData)
 				require.NoError(t, err)
 				app.FoodPermitOcr = foodPermitOCR
 				store.EXPECT().
@@ -2003,7 +2278,7 @@ func TestSubmitMerchantApplication(t *testing.T) {
 			},
 		},
 		{
-			name: "Approved_FoodPermitRawTextFallback",
+			name: "BadRequest_ReconfirmFoodPermitAfterRawTextRepair",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
@@ -2035,56 +2310,24 @@ func TestSubmitMerchantApplication(t *testing.T) {
 				store.EXPECT().
 					UpdateMerchantApplicationFoodPermit(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(app, nil)
-
-				submittedApp := app
-				submittedApp.Status = "submitted"
-				store.EXPECT().
-					SubmitMerchantApplication(gomock.Any(), app.ID).
-					Times(1).
-					Return(submittedApp, nil)
-
-				store.EXPECT().
-					ListMerchantLocationsInRegion(gomock.Any(), submittedApp.RegionID.Int64).
-					Times(1).
-					Return([]db.ListMerchantLocationsInRegionRow{}, nil)
-
-				store.EXPECT().
-					CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
-						BusinessLicenseNumber: submittedApp.BusinessLicenseNumber,
-						ID:                    submittedApp.ID,
-					}).
-					Times(1).
-					Return(int64(0), nil)
-
-				store.EXPECT().
-					CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
-						LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
-						ID:                  submittedApp.ID,
-					}).
-					Times(1).
-					Return(int64(0), nil)
-
-				approvedApp := submittedApp
-				approvedApp.Status = "approved"
-				store.EXPECT().
-					ApproveMerchantApplicationTx(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.ApproveMerchantApplicationTxResult{
-						Application: approvedApp,
-						Merchant:    db.Merchant{ID: 1},
-					}, nil)
+					DoAndReturn(func(_ context.Context, arg db.UpdateMerchantApplicationFoodPermitParams) (db.MerchantApplication, error) {
+						require.Equal(t, app.ID, arg.ID)
+						var repaired FoodPermitOCRData
+						require.NoError(t, json.Unmarshal(arg.FoodPermitOcr, &repaired))
+						require.Equal(t, "测试餐饮有限公司", repaired.CompanyName)
+						require.Equal(t, "张三", repaired.OperatorName)
+						require.Equal(t, "JY11105000000001", repaired.PermitNo)
+						require.Equal(t, "2030年12月31日", repaired.ValidTo)
+						app.FoodPermitOcr = arg.FoodPermitOcr
+						return app, nil
+					})
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-
-				var resp merchantApplicationDraftResponse
-				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
-				require.Equal(t, "approved", resp.Status)
+				requireMerchantOCRConfirmationBlocked(t, recorder, "请核对食品经营许可证主体名称和许可证编号后再提交")
 			},
 		},
 		{
-			name: "Approved_FoodPermitOCRJobNormalizedFallback",
+			name: "BadRequest_ReconfirmFoodPermitAfterOCRJobNormalizedRepair",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
@@ -2128,63 +2371,31 @@ func TestSubmitMerchantApplication(t *testing.T) {
 				store.EXPECT().
 					UpdateMerchantApplicationFoodPermit(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(app, nil)
-
-				submittedApp := app
-				submittedApp.Status = "submitted"
-				store.EXPECT().
-					SubmitMerchantApplication(gomock.Any(), app.ID).
-					Times(1).
-					Return(submittedApp, nil)
-
-				store.EXPECT().
-					ListMerchantLocationsInRegion(gomock.Any(), submittedApp.RegionID.Int64).
-					Times(1).
-					Return([]db.ListMerchantLocationsInRegionRow{}, nil)
-
-				store.EXPECT().
-					CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
-						BusinessLicenseNumber: submittedApp.BusinessLicenseNumber,
-						ID:                    submittedApp.ID,
-					}).
-					Times(1).
-					Return(int64(0), nil)
-
-				store.EXPECT().
-					CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
-						LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
-						ID:                  submittedApp.ID,
-					}).
-					Times(1).
-					Return(int64(0), nil)
-
-				approvedApp := submittedApp
-				approvedApp.Status = "approved"
-				store.EXPECT().
-					ApproveMerchantApplicationTx(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.ApproveMerchantApplicationTxResult{
-						Application: approvedApp,
-						Merchant:    db.Merchant{ID: 1},
-					}, nil)
+					DoAndReturn(func(_ context.Context, arg db.UpdateMerchantApplicationFoodPermitParams) (db.MerchantApplication, error) {
+						require.Equal(t, app.ID, arg.ID)
+						var repaired FoodPermitOCRData
+						require.NoError(t, json.Unmarshal(arg.FoodPermitOcr, &repaired))
+						require.Equal(t, "测试餐饮有限公司", repaired.CompanyName)
+						require.Equal(t, "张三", repaired.OperatorName)
+						require.Equal(t, "JY11105000000001", repaired.PermitNo)
+						require.Equal(t, "2030年12月31日", repaired.ValidTo)
+						app.FoodPermitOcr = arg.FoodPermitOcr
+						return app, nil
+					})
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-
-				var resp merchantApplicationDraftResponse
-				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
-				require.Equal(t, "approved", resp.Status)
+				requireMerchantOCRConfirmationBlocked(t, recorder, "请核对食品经营许可证主体名称和许可证编号后再提交")
 			},
 		},
 		{
-			name: "Approved_FoodPermitOfficialQRCodeFallback",
+			name: "BadRequest_ReconfirmFoodPermitAfterOfficialQRCodeRepair",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(t *testing.T, store *mockdb.MockStore) {
 				app := randomMerchantAppDraftWithData(user.ID)
 				ocrJobID := int64(779)
-				licenseOCR, err := json.Marshal(BusinessLicenseOCRData{
+				licenseData := BusinessLicenseOCRData{
 					EnterpriseName:      "宁晋县周鹏饭店",
 					CreditCode:          "92130528MA0A5XB46A",
 					BusinessScope:       "餐饮服务",
@@ -2192,7 +2403,9 @@ func TestSubmitMerchantApplication(t *testing.T) {
 					Address:             "河北省邢台市宁晋县经济开发区吉祥路与晶龙街交叉口东侧",
 					LegalRepresentative: "周松涛",
 					OCRAt:               time.Now().Format(time.RFC3339),
-				})
+				}
+				licenseData.Confirmation = merchantTestBusinessLicenseOCRConfirmation(user.ID, licenseData)
+				licenseOCR, err := json.Marshal(licenseData)
 				require.NoError(t, err)
 				app.BusinessLicenseOcr = licenseOCR
 				app.BusinessLicenseNumber = "92130528MA0A5XB46A"
@@ -2259,47 +2472,6 @@ func TestSubmitMerchantApplication(t *testing.T) {
 						app.FoodPermitOcr = arg.FoodPermitOcr
 						return app, nil
 					})
-
-				submittedApp := app
-				submittedApp.Status = "submitted"
-				store.EXPECT().
-					SubmitMerchantApplication(gomock.Any(), app.ID).
-					Times(1).
-					DoAndReturn(func(context.Context, int64) (db.MerchantApplication, error) {
-						submittedApp.FoodPermitOcr = app.FoodPermitOcr
-						return submittedApp, nil
-					})
-
-				store.EXPECT().
-					ListMerchantLocationsInRegion(gomock.Any(), submittedApp.RegionID.Int64).
-					Times(1).
-					Return([]db.ListMerchantLocationsInRegionRow{}, nil)
-
-				store.EXPECT().
-					CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
-						BusinessLicenseNumber: submittedApp.BusinessLicenseNumber,
-						ID:                    submittedApp.ID,
-					}).
-					Times(1).
-					Return(int64(0), nil)
-
-				store.EXPECT().
-					CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
-						LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
-						ID:                  submittedApp.ID,
-					}).
-					Times(1).
-					Return(int64(0), nil)
-
-				approvedApp := submittedApp
-				approvedApp.Status = "approved"
-				store.EXPECT().
-					ApproveMerchantApplicationTx(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.ApproveMerchantApplicationTxResult{
-						Application: approvedApp,
-						Merchant:    db.Merchant{ID: 1},
-					}, nil)
 			},
 			configureServer: func(server *Server) {
 				server.foodPermitOfficialVerifier = stubFoodPermitOfficialVerifier{
@@ -2314,15 +2486,11 @@ func TestSubmitMerchantApplication(t *testing.T) {
 				}
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-
-				var resp merchantApplicationDraftResponse
-				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
-				require.Equal(t, "approved", resp.Status)
+				requireMerchantOCRConfirmationBlocked(t, recorder, "请核对食品经营许可证主体名称和许可证编号后再提交")
 			},
 		},
 		{
-			name: "Approved_BusinessLicenseOCRRawValidDateFallback",
+			name: "BadRequest_ReconfirmBusinessLicenseAfterRawValidDateRepair",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
@@ -2369,58 +2537,13 @@ func TestSubmitMerchantApplication(t *testing.T) {
 						app.BusinessLicenseOcr = arg.BusinessLicenseOcr
 						return app, nil
 					})
-
-				submittedApp := app
-				submittedApp.Status = "submitted"
-				store.EXPECT().
-					SubmitMerchantApplication(gomock.Any(), app.ID).
-					Times(1).
-					DoAndReturn(func(context.Context, int64) (db.MerchantApplication, error) {
-						submittedApp.BusinessLicenseOcr = app.BusinessLicenseOcr
-						return submittedApp, nil
-					})
-
-				store.EXPECT().
-					ListMerchantLocationsInRegion(gomock.Any(), submittedApp.RegionID.Int64).
-					Times(1).
-					Return([]db.ListMerchantLocationsInRegionRow{}, nil)
-
-				store.EXPECT().
-					CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
-						BusinessLicenseNumber: submittedApp.BusinessLicenseNumber,
-						ID:                    submittedApp.ID,
-					}).
-					Times(1).
-					Return(int64(0), nil)
-
-				store.EXPECT().
-					CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
-						LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
-						ID:                  submittedApp.ID,
-					}).
-					Times(1).
-					Return(int64(0), nil)
-
-				approvedApp := submittedApp
-				approvedApp.Status = "approved"
-				store.EXPECT().
-					ApproveMerchantApplicationTx(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.ApproveMerchantApplicationTxResult{
-						Application: approvedApp,
-						Merchant:    db.Merchant{ID: 1},
-					}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-
-				var resp merchantApplicationDraftResponse
-				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
-				require.Equal(t, "approved", resp.Status)
+				requireMerchantOCRConfirmationBlocked(t, recorder, "请核对营业执照企业名称和统一社会信用代码后再提交")
 			},
 		},
 		{
-			name: "Approved_FoodPermitRegistrationTitleIgnored",
+			name: "BadRequest_ReconfirmFoodPermitAfterRegistrationTitleRepair",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
@@ -2445,52 +2568,24 @@ func TestSubmitMerchantApplication(t *testing.T) {
 				store.EXPECT().
 					UpdateMerchantApplicationFoodPermit(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(app, nil)
-
-				submittedApp := app
-				submittedApp.Status = "submitted"
-				store.EXPECT().
-					SubmitMerchantApplication(gomock.Any(), app.ID).
-					Times(1).
-					Return(submittedApp, nil)
-
-				store.EXPECT().
-					ListMerchantLocationsInRegion(gomock.Any(), submittedApp.RegionID.Int64).
-					Times(1).
-					Return([]db.ListMerchantLocationsInRegionRow{}, nil)
-
-				store.EXPECT().
-					CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
-						BusinessLicenseNumber: submittedApp.BusinessLicenseNumber,
-						ID:                    submittedApp.ID,
-					}).
-					Times(1).
-					Return(int64(0), nil)
-
-				store.EXPECT().
-					CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
-						LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
-						ID:                  submittedApp.ID,
-					}).
-					Times(1).
-					Return(int64(0), nil)
-
-				approvedApp := submittedApp
-				approvedApp.Status = "approved"
-				store.EXPECT().
-					ApproveMerchantApplicationTx(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.ApproveMerchantApplicationTxResult{
-						Application: approvedApp,
-						Merchant:    db.Merchant{ID: 1},
-					}, nil)
+					DoAndReturn(func(_ context.Context, arg db.UpdateMerchantApplicationFoodPermitParams) (db.MerchantApplication, error) {
+						require.Equal(t, app.ID, arg.ID)
+						var repaired FoodPermitOCRData
+						require.NoError(t, json.Unmarshal(arg.FoodPermitOcr, &repaired))
+						require.Equal(t, "测试餐饮有限公司", repaired.CompanyName)
+						require.Equal(t, "张三", repaired.OperatorName)
+						require.Equal(t, "2130528020946", repaired.PermitNo)
+						require.Equal(t, "2030年12月31日", repaired.ValidTo)
+						app.FoodPermitOcr = arg.FoodPermitOcr
+						return app, nil
+					})
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				requireMerchantOCRConfirmationBlocked(t, recorder, "请核对食品经营许可证主体名称和许可证编号后再提交")
 			},
 		},
 		{
-			name: "Approved_FoodPermitOperatorFallbackForRegistrationCert",
+			name: "BadRequest_ReconfirmFoodPermitAfterOperatorFallbackRepair",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
@@ -2515,48 +2610,20 @@ func TestSubmitMerchantApplication(t *testing.T) {
 				store.EXPECT().
 					UpdateMerchantApplicationFoodPermit(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(app, nil)
-
-				submittedApp := app
-				submittedApp.Status = "submitted"
-				store.EXPECT().
-					SubmitMerchantApplication(gomock.Any(), app.ID).
-					Times(1).
-					Return(submittedApp, nil)
-
-				store.EXPECT().
-					ListMerchantLocationsInRegion(gomock.Any(), submittedApp.RegionID.Int64).
-					Times(1).
-					Return([]db.ListMerchantLocationsInRegionRow{}, nil)
-
-				store.EXPECT().
-					CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
-						BusinessLicenseNumber: submittedApp.BusinessLicenseNumber,
-						ID:                    submittedApp.ID,
-					}).
-					Times(1).
-					Return(int64(0), nil)
-
-				store.EXPECT().
-					CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
-						LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
-						ID:                  submittedApp.ID,
-					}).
-					Times(1).
-					Return(int64(0), nil)
-
-				approvedApp := submittedApp
-				approvedApp.Status = "approved"
-				store.EXPECT().
-					ApproveMerchantApplicationTx(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.ApproveMerchantApplicationTxResult{
-						Application: approvedApp,
-						Merchant:    db.Merchant{ID: 1},
-					}, nil)
+					DoAndReturn(func(_ context.Context, arg db.UpdateMerchantApplicationFoodPermitParams) (db.MerchantApplication, error) {
+						require.Equal(t, app.ID, arg.ID)
+						var repaired FoodPermitOCRData
+						require.NoError(t, json.Unmarshal(arg.FoodPermitOcr, &repaired))
+						require.Equal(t, "", repaired.CompanyName)
+						require.Equal(t, "张三", repaired.OperatorName)
+						require.Equal(t, "2130528020946", repaired.PermitNo)
+						require.Equal(t, "2030年12月31日", repaired.ValidTo)
+						app.FoodPermitOcr = arg.FoodPermitOcr
+						return app, nil
+					})
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				requireMerchantOCRConfirmationBlocked(t, recorder, "请核对食品经营许可证主体名称和许可证编号后再提交")
 			},
 		},
 		{
