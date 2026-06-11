@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/algorithm"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -24,7 +25,10 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-const merchantApplicationAddressValidationRadiusMeters = 1000
+const (
+	merchantApplicationAddressValidationRadiusMeters = 1000
+	merchantOnboardingReviewTaskUniqueTTL            = 30 * time.Second
+)
 
 // loggingReader wraps io.ReadCloser to log progress
 type loggingReader struct {
@@ -950,6 +954,7 @@ func (server *Server) submitMerchantApplication(ctx *gin.Context) {
 	// 提交申请：支持从 draft, rejected, approved 状态提交
 	// 如果已经是 submitted 状态，则直接使用当前记录（支持重试自动审核）
 	var submittedApp db.MerchantApplication
+	submittedRetry := app.Status == "submitted"
 	if app.Status == "submitted" {
 		submittedApp = app
 	} else {
@@ -964,33 +969,68 @@ func (server *Server) submitMerchantApplication(ctx *gin.Context) {
 	reviewExecutor := logic.NewMerchantOnboardingReviewService(server.store, server.onboardingReviewService, server.credentialGovernanceService)
 	var queuedRun *db.OnboardingReviewRun
 	if server.onboardingReviewService != nil && server.taskDistributor != nil {
-		run, err := server.onboardingReviewService.CreateMerchantReviewRun(ctx, submittedApp.ID, logic.OnboardingReviewDecision{
-			RequestedBy: &authPayload.UserID,
-			OCRJobRefs:  merchantApplicationOCRJobRefs(submittedApp),
-			Snapshot: map[string]any{
-				"application_id":   submittedApp.ID,
-				"application_type": "merchant",
-				"status":           submittedApp.Status,
-				"user_id":          submittedApp.UserID,
-				"merchant_name":    submittedApp.MerchantName,
-			},
-		})
-		if err != nil {
-			log.Error().Err(err).Int64("application_id", submittedApp.ID).Msg("create merchant onboarding review run failed, fallback to sync review")
-		} else {
-			queuedRun = &run
+		reviewTaskEnqueueAttempted := false
+		if submittedRetry {
+			existingRun, found, err := server.latestActiveMerchantReviewRun(ctx, submittedApp.ID)
+			if err != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+				return
+			}
+			if found {
+				queuedRun = &existingRun
+				if existingRun.RunStatus == db.OnboardingReviewRunStatusProcessing {
+					attachMerchantReviewSummary(&submittedApp, queuedRun)
+					server.writeMerchantApplicationDraftResponse(ctx, http.StatusOK, submittedApp)
+					return
+				}
+				err = server.taskDistributor.DistributeTaskOnboardingReview(ctx, &worker.OnboardingReviewPayload{
+					ReviewRunID:     existingRun.ID,
+					ApplicationID:   submittedApp.ID,
+					ApplicationType: "merchant",
+					RequestedBy:     authPayload.UserID,
+				}, asynq.Unique(merchantOnboardingReviewTaskUniqueTTL))
+				reviewTaskEnqueueAttempted = true
+				if err == nil || errors.Is(err, asynq.ErrDuplicateTask) {
+					attachMerchantReviewSummary(&submittedApp, queuedRun)
+					server.writeMerchantApplicationDraftResponse(ctx, http.StatusOK, submittedApp)
+					return
+				}
+				log.Error().Err(err).Int64("application_id", submittedApp.ID).Int64("review_run_id", existingRun.ID).Msg("enqueue existing merchant onboarding review failed, fallback to sync review")
+			}
+		}
+
+		if queuedRun == nil {
+			run, err := server.onboardingReviewService.CreateMerchantReviewRun(ctx, submittedApp.ID, logic.OnboardingReviewDecision{
+				RequestedBy: &authPayload.UserID,
+				OCRJobRefs:  merchantApplicationOCRJobRefs(submittedApp),
+				Snapshot: map[string]any{
+					"application_id":   submittedApp.ID,
+					"application_type": "merchant",
+					"status":           submittedApp.Status,
+					"user_id":          submittedApp.UserID,
+					"merchant_name":    submittedApp.MerchantName,
+				},
+			})
+			if err != nil {
+				log.Error().Err(err).Int64("application_id", submittedApp.ID).Msg("create merchant onboarding review run failed, fallback to sync review")
+			} else {
+				queuedRun = &run
+			}
+		}
+
+		if queuedRun != nil && queuedRun.RunStatus == db.OnboardingReviewRunStatusQueued && !reviewTaskEnqueueAttempted {
 			err = server.taskDistributor.DistributeTaskOnboardingReview(ctx, &worker.OnboardingReviewPayload{
-				ReviewRunID:     run.ID,
+				ReviewRunID:     queuedRun.ID,
 				ApplicationID:   submittedApp.ID,
 				ApplicationType: "merchant",
 				RequestedBy:     authPayload.UserID,
-			})
-			if err == nil {
+			}, asynq.Unique(merchantOnboardingReviewTaskUniqueTTL))
+			if err == nil || errors.Is(err, asynq.ErrDuplicateTask) {
 				attachMerchantReviewSummary(&submittedApp, queuedRun)
 				server.writeMerchantApplicationDraftResponse(ctx, http.StatusOK, submittedApp)
 				return
 			}
-			log.Error().Err(err).Int64("application_id", submittedApp.ID).Int64("review_run_id", run.ID).Msg("enqueue merchant onboarding review failed, fallback to sync review")
+			log.Error().Err(err).Int64("application_id", submittedApp.ID).Int64("review_run_id", queuedRun.ID).Msg("enqueue merchant onboarding review failed, fallback to sync review")
 		}
 	}
 
@@ -1021,6 +1061,30 @@ func (server *Server) submitMerchantApplication(ctx *gin.Context) {
 		Msg("商户审核通过事务完成")
 
 	server.writeMerchantApplicationDraftResponse(ctx, http.StatusOK, result.Application)
+}
+
+func (server *Server) latestActiveMerchantReviewRun(ctx context.Context, applicationID int64) (db.OnboardingReviewRun, bool, error) {
+	if server == nil || server.store == nil || applicationID <= 0 {
+		return db.OnboardingReviewRun{}, false, nil
+	}
+	run, err := server.store.GetLatestActiveMerchantOnboardingReviewRun(ctx, pgtype.Int8{Int64: applicationID, Valid: true})
+	if err != nil {
+		if isNotFoundError(err) {
+			return db.OnboardingReviewRun{}, false, nil
+		}
+		return db.OnboardingReviewRun{}, false, err
+	}
+	if run.ApplicationType != "merchant" ||
+		!run.MerchantApplicationID.Valid ||
+		run.MerchantApplicationID.Int64 != applicationID {
+		return db.OnboardingReviewRun{}, false, nil
+	}
+	switch run.RunStatus {
+	case db.OnboardingReviewRunStatusQueued, db.OnboardingReviewRunStatusProcessing:
+		return run, true, nil
+	default:
+		return db.OnboardingReviewRun{}, false, nil
+	}
 }
 
 // validateMerchantApplicationRequired 验证必填字段

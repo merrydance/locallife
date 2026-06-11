@@ -38,6 +38,20 @@ func (stub stubFoodPermitOfficialVerifier) VerifyMerchantFoodPermit(ctx context.
 	return stub.result, stub.err
 }
 
+func requireOnboardingReviewUniqueOption(t *testing.T, opts []asynq.Option) {
+	t.Helper()
+	for _, opt := range opts {
+		if opt.Type() != asynq.UniqueOpt {
+			continue
+		}
+		ttl, ok := opt.Value().(time.Duration)
+		require.True(t, ok)
+		require.Equal(t, merchantOnboardingReviewTaskUniqueTTL, ttl)
+		return
+	}
+	require.Fail(t, "expected onboarding review enqueue to use asynq.Unique")
+}
+
 func randomMerchantAppDraft(userID int64) db.MerchantApplication {
 	return db.MerchantApplication{
 		ID:                    1,
@@ -2974,12 +2988,13 @@ func TestSubmitMerchantApplication_QueuesOnboardingReviewWhenAsyncAvailable(t *t
 		})
 
 	distributor.EXPECT().
-		DistributeTaskOnboardingReview(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, payload *worker.OnboardingReviewPayload, _ ...asynq.Option) error {
+		DistributeTaskOnboardingReview(gomock.Any(), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, payload *worker.OnboardingReviewPayload, opts ...asynq.Option) error {
 			require.Equal(t, int64(1201), payload.ReviewRunID)
 			require.Equal(t, submittedApp.ID, payload.ApplicationID)
 			require.Equal(t, "merchant", payload.ApplicationType)
 			require.Equal(t, user.ID, payload.RequestedBy)
+			requireOnboardingReviewUniqueOption(t, opts)
 			return nil
 		})
 
@@ -3002,6 +3017,344 @@ func TestSubmitMerchantApplication_QueuesOnboardingReviewWhenAsyncAvailable(t *t
 		t.Fatal("expected queued review summary in async merchant submit response")
 	}
 	require.Equal(t, int64(1201), resp.ReviewSummary.RunID)
+}
+
+func TestSubmitMerchantApplication_ReusesExistingQueuedReviewRun(t *testing.T) {
+	user, _ := randomUser(t)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockworker.NewMockTaskDistributor(ctrl)
+
+	submittedApp := randomMerchantAppDraftWithData(user.ID)
+	submittedApp.Status = db.MerchantApplicationStatusSubmitted
+	store.EXPECT().
+		GetMerchantApplicationDraft(gomock.Any(), user.ID).
+		Return(submittedApp, nil)
+
+	store.EXPECT().
+		ListMerchantLocationsInRegion(gomock.Any(), submittedApp.RegionID.Int64).
+		Return([]db.ListMerchantLocationsInRegionRow{}, nil)
+
+	store.EXPECT().
+		CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
+			BusinessLicenseNumber: submittedApp.BusinessLicenseNumber,
+			ID:                    submittedApp.ID,
+		}).
+		Return(int64(0), nil)
+
+	store.EXPECT().
+		CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
+			LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
+			ID:                  submittedApp.ID,
+		}).
+		Return(int64(0), nil)
+
+	queuedAt := time.Now().Add(-1 * time.Minute).UTC()
+	existingRun := db.OnboardingReviewRun{
+		ID:                    1401,
+		ApplicationType:       "merchant",
+		MerchantApplicationID: pgtype.Int8{Int64: submittedApp.ID, Valid: true},
+		RunStatus:             db.OnboardingReviewRunStatusQueued,
+		Stage:                 "review",
+		RequestedBy:           pgtype.Int8{Int64: user.ID, Valid: true},
+		CreatedAt:             queuedAt,
+		QueuedAt:              queuedAt,
+	}
+	store.EXPECT().
+		GetLatestActiveMerchantOnboardingReviewRun(gomock.Any(), pgtype.Int8{Int64: submittedApp.ID, Valid: true}).
+		Return(existingRun, nil)
+
+	distributor.EXPECT().
+		DistributeTaskOnboardingReview(gomock.Any(), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, payload *worker.OnboardingReviewPayload, opts ...asynq.Option) error {
+			require.Equal(t, existingRun.ID, payload.ReviewRunID)
+			require.Equal(t, submittedApp.ID, payload.ApplicationID)
+			require.Equal(t, "merchant", payload.ApplicationType)
+			require.Equal(t, user.ID, payload.RequestedBy)
+			requireOnboardingReviewUniqueOption(t, opts)
+			return nil
+		})
+
+	server := newTestServerWithTaskDistributor(t, store, distributor)
+	server.onboardingReviewService = logic.NewOnboardingReviewService(store)
+
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodPost, "/v1/merchant/application/submit", bytes.NewReader([]byte(`{"consented":true}`)))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp merchantApplicationDraftResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, db.MerchantApplicationStatusSubmitted, resp.Status)
+	require.NotNil(t, resp.ReviewSummary)
+	require.Equal(t, existingRun.ID, resp.ReviewSummary.RunID)
+	require.Equal(t, "review", resp.ReviewSummary.Stage)
+}
+
+func TestSubmitMerchantApplication_ReusesExistingQueuedReviewRunDuplicateTaskReturnsQueued(t *testing.T) {
+	user, _ := randomUser(t)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockworker.NewMockTaskDistributor(ctrl)
+
+	submittedApp := randomMerchantAppDraftWithData(user.ID)
+	submittedApp.Status = db.MerchantApplicationStatusSubmitted
+	store.EXPECT().
+		GetMerchantApplicationDraft(gomock.Any(), user.ID).
+		Return(submittedApp, nil)
+
+	store.EXPECT().
+		ListMerchantLocationsInRegion(gomock.Any(), submittedApp.RegionID.Int64).
+		Return([]db.ListMerchantLocationsInRegionRow{}, nil)
+
+	store.EXPECT().
+		CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
+			BusinessLicenseNumber: submittedApp.BusinessLicenseNumber,
+			ID:                    submittedApp.ID,
+		}).
+		Return(int64(0), nil)
+
+	store.EXPECT().
+		CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
+			LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
+			ID:                  submittedApp.ID,
+		}).
+		Return(int64(0), nil)
+
+	queuedAt := time.Now().Add(-1 * time.Minute).UTC()
+	existingRun := db.OnboardingReviewRun{
+		ID:                    1404,
+		ApplicationType:       "merchant",
+		MerchantApplicationID: pgtype.Int8{Int64: submittedApp.ID, Valid: true},
+		RunStatus:             db.OnboardingReviewRunStatusQueued,
+		Stage:                 "review",
+		RequestedBy:           pgtype.Int8{Int64: user.ID, Valid: true},
+		CreatedAt:             queuedAt,
+		QueuedAt:              queuedAt,
+	}
+	store.EXPECT().
+		GetLatestActiveMerchantOnboardingReviewRun(gomock.Any(), pgtype.Int8{Int64: submittedApp.ID, Valid: true}).
+		Return(existingRun, nil)
+
+	distributor.EXPECT().
+		DistributeTaskOnboardingReview(gomock.Any(), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, payload *worker.OnboardingReviewPayload, opts ...asynq.Option) error {
+			require.Equal(t, existingRun.ID, payload.ReviewRunID)
+			require.Equal(t, submittedApp.ID, payload.ApplicationID)
+			require.Equal(t, "merchant", payload.ApplicationType)
+			require.Equal(t, user.ID, payload.RequestedBy)
+			requireOnboardingReviewUniqueOption(t, opts)
+			return asynq.ErrDuplicateTask
+		})
+
+	server := newTestServerWithTaskDistributor(t, store, distributor)
+	server.onboardingReviewService = logic.NewOnboardingReviewService(store)
+
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodPost, "/v1/merchant/application/submit", bytes.NewReader([]byte(`{"consented":true}`)))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp merchantApplicationDraftResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, db.MerchantApplicationStatusSubmitted, resp.Status)
+	require.NotNil(t, resp.ReviewSummary)
+	require.Equal(t, existingRun.ID, resp.ReviewSummary.RunID)
+	require.Equal(t, "review", resp.ReviewSummary.Stage)
+}
+
+func TestSubmitMerchantApplication_ReusesExistingProcessingReviewRunWithoutEnqueue(t *testing.T) {
+	user, _ := randomUser(t)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockworker.NewMockTaskDistributor(ctrl)
+
+	submittedApp := randomMerchantAppDraftWithData(user.ID)
+	submittedApp.Status = db.MerchantApplicationStatusSubmitted
+	store.EXPECT().
+		GetMerchantApplicationDraft(gomock.Any(), user.ID).
+		Return(submittedApp, nil)
+
+	store.EXPECT().
+		ListMerchantLocationsInRegion(gomock.Any(), submittedApp.RegionID.Int64).
+		Return([]db.ListMerchantLocationsInRegionRow{}, nil)
+
+	store.EXPECT().
+		CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
+			BusinessLicenseNumber: submittedApp.BusinessLicenseNumber,
+			ID:                    submittedApp.ID,
+		}).
+		Return(int64(0), nil)
+
+	store.EXPECT().
+		CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
+			LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
+			ID:                  submittedApp.ID,
+		}).
+		Return(int64(0), nil)
+
+	queuedAt := time.Now().Add(-2 * time.Minute).UTC()
+	startedAt := time.Now().Add(-1 * time.Minute).UTC()
+	existingRun := db.OnboardingReviewRun{
+		ID:                    1402,
+		ApplicationType:       "merchant",
+		MerchantApplicationID: pgtype.Int8{Int64: submittedApp.ID, Valid: true},
+		RunStatus:             db.OnboardingReviewRunStatusProcessing,
+		Stage:                 "review",
+		RequestedBy:           pgtype.Int8{Int64: user.ID, Valid: true},
+		CreatedAt:             queuedAt,
+		QueuedAt:              queuedAt,
+		StartedAt:             pgtype.Timestamptz{Time: startedAt, Valid: true},
+	}
+	store.EXPECT().
+		GetLatestActiveMerchantOnboardingReviewRun(gomock.Any(), pgtype.Int8{Int64: submittedApp.ID, Valid: true}).
+		Return(existingRun, nil)
+
+	server := newTestServerWithTaskDistributor(t, store, distributor)
+	server.onboardingReviewService = logic.NewOnboardingReviewService(store)
+
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodPost, "/v1/merchant/application/submit", bytes.NewReader([]byte(`{"consented":true}`)))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp merchantApplicationDraftResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, db.MerchantApplicationStatusSubmitted, resp.Status)
+	require.NotNil(t, resp.ReviewSummary)
+	require.Equal(t, existingRun.ID, resp.ReviewSummary.RunID)
+	require.Equal(t, "review", resp.ReviewSummary.Stage)
+}
+
+func TestSubmitMerchantApplication_ReusesExistingQueuedReviewRunForSyncFallback(t *testing.T) {
+	user, _ := randomUser(t)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockworker.NewMockTaskDistributor(ctrl)
+
+	submittedApp := randomMerchantAppDraftWithData(user.ID)
+	submittedApp.Status = db.MerchantApplicationStatusSubmitted
+	store.EXPECT().
+		GetMerchantApplicationDraft(gomock.Any(), user.ID).
+		Return(submittedApp, nil)
+
+	store.EXPECT().
+		ListMerchantLocationsInRegion(gomock.Any(), submittedApp.RegionID.Int64).
+		Return([]db.ListMerchantLocationsInRegionRow{}, nil)
+
+	store.EXPECT().
+		CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
+			BusinessLicenseNumber: submittedApp.BusinessLicenseNumber,
+			ID:                    submittedApp.ID,
+		}).
+		Return(int64(0), nil)
+
+	store.EXPECT().
+		CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
+			LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
+			ID:                  submittedApp.ID,
+		}).
+		Return(int64(0), nil)
+
+	queuedAt := time.Now().Add(-1 * time.Minute).UTC()
+	existingRun := db.OnboardingReviewRun{
+		ID:                    1403,
+		ApplicationType:       "merchant",
+		MerchantApplicationID: pgtype.Int8{Int64: submittedApp.ID, Valid: true},
+		RunStatus:             db.OnboardingReviewRunStatusQueued,
+		Stage:                 "review",
+		RequestedBy:           pgtype.Int8{Int64: user.ID, Valid: true},
+		CreatedAt:             queuedAt,
+		QueuedAt:              queuedAt,
+	}
+	store.EXPECT().
+		GetLatestActiveMerchantOnboardingReviewRun(gomock.Any(), pgtype.Int8{Int64: submittedApp.ID, Valid: true}).
+		Return(existingRun, nil)
+
+	distributor.EXPECT().
+		DistributeTaskOnboardingReview(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(errors.New("queue unavailable"))
+
+	approvedApp := submittedApp
+	approvedApp.Status = db.MerchantApplicationStatusApproved
+	merchant := db.Merchant{ID: 502, OwnerUserID: user.ID}
+	store.EXPECT().
+		ApproveMerchantApplicationTx(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.ApproveMerchantApplicationTxParams) (db.ApproveMerchantApplicationTxResult, error) {
+			require.Equal(t, submittedApp.ID, arg.ApplicationID)
+			require.Equal(t, user.ID, arg.UserID)
+			return db.ApproveMerchantApplicationTxResult{Application: approvedApp, Merchant: merchant}, nil
+		})
+
+	store.EXPECT().
+		MarkOnboardingReviewRunProcessing(gomock.Any(), existingRun.ID).
+		Return(db.OnboardingReviewRun{ID: existingRun.ID, ApplicationType: "merchant", RunStatus: db.OnboardingReviewRunStatusProcessing, Stage: "review"}, nil)
+
+	store.EXPECT().
+		CompleteOnboardingReviewRun(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.CompleteOnboardingReviewRunParams) (db.OnboardingReviewRun, error) {
+			require.Equal(t, existingRun.ID, arg.ID)
+			require.Equal(t, db.OnboardingReviewOutcomeApproved, arg.Outcome.String)
+			return db.OnboardingReviewRun{
+				ID:                    existingRun.ID,
+				ApplicationType:       "merchant",
+				MerchantApplicationID: pgtype.Int8{Int64: submittedApp.ID, Valid: true},
+				RunStatus:             db.OnboardingReviewRunStatusCompleted,
+				Stage:                 arg.Stage,
+				Outcome:               arg.Outcome,
+				ReasonCode:            arg.ReasonCode,
+				CreatedAt:             queuedAt,
+			}, nil
+		})
+
+	store.EXPECT().
+		UpdateMerchantApplicationReviewSummary(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.UpdateMerchantApplicationReviewSummaryParams) (db.MerchantApplication, error) {
+			var summary map[string]any
+			require.NoError(t, json.Unmarshal(arg.ReviewSummary, &summary))
+			require.Equal(t, float64(existingRun.ID), summary["run_id"])
+			require.Equal(t, db.OnboardingReviewOutcomeApproved, summary["outcome"])
+			return db.MerchantApplication{ID: submittedApp.ID, ReviewSummary: arg.ReviewSummary}, nil
+		})
+
+	server := newTestServerWithTaskDistributor(t, store, distributor)
+	server.onboardingReviewService = logic.NewOnboardingReviewService(store)
+
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodPost, "/v1/merchant/application/submit", bytes.NewReader([]byte(`{"consented":true}`)))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp merchantApplicationDraftResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, db.MerchantApplicationStatusApproved, resp.Status)
+	require.NotNil(t, resp.ReviewSummary)
+	require.Equal(t, existingRun.ID, resp.ReviewSummary.RunID)
+	require.Equal(t, db.OnboardingReviewOutcomeApproved, resp.ReviewSummary.Outcome)
 }
 
 func TestSubmitMerchantApplication_FallsBackToSyncReviewWhenEnqueueFails(t *testing.T) {
@@ -3076,7 +3429,7 @@ func TestSubmitMerchantApplication_FallsBackToSyncReviewWhenEnqueueFails(t *test
 		}())
 
 	distributor.EXPECT().
-		DistributeTaskOnboardingReview(gomock.Any(), gomock.Any()).
+		DistributeTaskOnboardingReview(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(errors.New("redis unavailable"))
 
 	approvedApp := submittedApp

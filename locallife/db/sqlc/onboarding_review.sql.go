@@ -342,6 +342,44 @@ func (q *Queries) CreateRiderOnboardingReviewRun(ctx context.Context, arg Create
 	return i, err
 }
 
+const getLatestActiveMerchantOnboardingReviewRun = `-- name: GetLatestActiveMerchantOnboardingReviewRun :one
+SELECT id, application_type, merchant_application_id, rider_application_id, run_status, stage, outcome, reason_code, reason_message, evidence, rule_hits, ocr_job_refs, snapshot, requested_by, reviewed_by, queued_at, started_at, finished_at, created_at, updated_at
+FROM onboarding_review_runs
+WHERE merchant_application_id = $1
+  AND application_type = 'merchant'
+  AND run_status IN ('queued', 'processing')
+ORDER BY created_at DESC, id DESC
+LIMIT 1
+`
+
+func (q *Queries) GetLatestActiveMerchantOnboardingReviewRun(ctx context.Context, merchantApplicationID pgtype.Int8) (OnboardingReviewRun, error) {
+	row := q.db.QueryRow(ctx, getLatestActiveMerchantOnboardingReviewRun, merchantApplicationID)
+	var i OnboardingReviewRun
+	err := row.Scan(
+		&i.ID,
+		&i.ApplicationType,
+		&i.MerchantApplicationID,
+		&i.RiderApplicationID,
+		&i.RunStatus,
+		&i.Stage,
+		&i.Outcome,
+		&i.ReasonCode,
+		&i.ReasonMessage,
+		&i.Evidence,
+		&i.RuleHits,
+		&i.OcrJobRefs,
+		&i.Snapshot,
+		&i.RequestedBy,
+		&i.ReviewedBy,
+		&i.QueuedAt,
+		&i.StartedAt,
+		&i.FinishedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getLatestMerchantOnboardingReviewRun = `-- name: GetLatestMerchantOnboardingReviewRun :one
 SELECT id, application_type, merchant_application_id, rider_application_id, run_status, stage, outcome, reason_code, reason_message, evidence, rule_hits, ocr_job_refs, snapshot, requested_by, reviewed_by, queued_at, started_at, finished_at, created_at, updated_at
 FROM onboarding_review_runs

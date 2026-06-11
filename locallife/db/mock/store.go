@@ -8862,6 +8862,21 @@ func (mr *MockStoreMockRecorder) GetLatestActiveAppVersion(ctx, arg any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLatestActiveAppVersion", reflect.TypeOf((*MockStore)(nil).GetLatestActiveAppVersion), ctx, arg)
 }
 
+// GetLatestActiveMerchantOnboardingReviewRun mocks base method.
+func (m *MockStore) GetLatestActiveMerchantOnboardingReviewRun(ctx context.Context, merchantApplicationID pgtype.Int8) (db.OnboardingReviewRun, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetLatestActiveMerchantOnboardingReviewRun", ctx, merchantApplicationID)
+	ret0, _ := ret[0].(db.OnboardingReviewRun)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetLatestActiveMerchantOnboardingReviewRun indicates an expected call of GetLatestActiveMerchantOnboardingReviewRun.
+func (mr *MockStoreMockRecorder) GetLatestActiveMerchantOnboardingReviewRun(ctx, merchantApplicationID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLatestActiveMerchantOnboardingReviewRun", reflect.TypeOf((*MockStore)(nil).GetLatestActiveMerchantOnboardingReviewRun), ctx, merchantApplicationID)
+}
+
 // GetLatestApprovedMerchantApplicationByUser mocks base method.
 func (m *MockStore) GetLatestApprovedMerchantApplicationByUser(ctx context.Context, userID int64) (db.MerchantApplication, error) {
 	m.ctrl.T.Helper()

@@ -806,6 +806,7 @@ type Querier interface {
 	GetIngredient(ctx context.Context, id int64) (Ingredient, error)
 	GetInventoryStats(ctx context.Context, arg GetInventoryStatsParams) (GetInventoryStatsRow, error)
 	GetLatestActiveAppVersion(ctx context.Context, arg GetLatestActiveAppVersionParams) (AppVersion, error)
+	GetLatestActiveMerchantOnboardingReviewRun(ctx context.Context, merchantApplicationID pgtype.Int8) (OnboardingReviewRun, error)
 	GetLatestApprovedMerchantApplicationByUser(ctx context.Context, userID int64) (MerchantApplication, error)
 	GetLatestBaofuAccountOpeningFlowByOwner(ctx context.Context, arg GetLatestBaofuAccountOpeningFlowByOwnerParams) (BaofuAccountOpeningFlow, error)
 	GetLatestBehaviorDecisionByClaimID(ctx context.Context, claimID pgtype.Int8) (BehaviorDecision, error)
