@@ -1184,6 +1184,90 @@ func TestGetMerchantApplicationDraftUsesIDTieBreaker(t *testing.T) {
 	require.Greater(t, app2.ID, app1.ID)
 }
 
+func TestResetStaleMerchantOCRStatusMarksPendingAndProcessingFailed(t *testing.T) {
+	ctx := context.Background()
+	store, ok := testStore.(*SQLStore)
+	require.True(t, ok)
+
+	staleApp := createRandomMerchantApplication(t)
+	recentApp := createRandomMerchantApplication(t)
+	cutoff := time.Now().UTC().Add(-1 * time.Hour).Truncate(time.Microsecond)
+	staleUpdatedAt := cutoff.Add(-1 * time.Minute)
+	recentUpdatedAt := cutoff.Add(1 * time.Minute)
+
+	_, err := store.connPool.Exec(ctx, `
+		UPDATE merchant_applications
+		SET business_license_ocr = $1::jsonb,
+		    food_permit_ocr = $2::jsonb,
+		    id_card_front_ocr = $3::jsonb,
+		    id_card_back_ocr = $4::jsonb,
+		    updated_at = $5
+		WHERE id = $6
+	`, `{"status":"pending","queued_at":"2026-06-11T10:00:00Z","ocr_job_id":701}`,
+		`{"status":"processing","queued_at":"2026-06-11T10:01:00Z","ocr_job_id":702,"started_at":"2026-06-11T10:02:00Z"}`,
+		`{"status":"done","queued_at":"2026-06-11T10:03:00Z","ocr_job_id":703,"ocr_at":"2026-06-11T10:04:00Z"}`,
+		`{"status":"failed","queued_at":"2026-06-11T10:05:00Z","ocr_job_id":704,"error":"old failure"}`,
+		staleUpdatedAt,
+		staleApp.ID,
+	)
+	require.NoError(t, err)
+
+	_, err = store.connPool.Exec(ctx, `
+		UPDATE merchant_applications
+		SET business_license_ocr = $1::jsonb,
+		    updated_at = $2
+		WHERE id = $3
+	`, `{"status":"pending","queued_at":"2026-06-11T10:06:00Z","ocr_job_id":801}`,
+		recentUpdatedAt,
+		recentApp.ID,
+	)
+	require.NoError(t, err)
+
+	require.NoError(t, testStore.ResetStaleMerchantOCRStatus(ctx, cutoff))
+
+	updatedStale, err := testStore.GetMerchantApplication(ctx, staleApp.ID)
+	require.NoError(t, err)
+	updatedRecent, err := testStore.GetMerchantApplication(ctx, recentApp.ID)
+	require.NoError(t, err)
+
+	type ocrPayload struct {
+		Status    string `json:"status"`
+		QueuedAt  string `json:"queued_at"`
+		OCRJobID  int64  `json:"ocr_job_id"`
+		StartedAt string `json:"started_at"`
+		Error     string `json:"error"`
+	}
+	decode := func(raw []byte) ocrPayload {
+		t.Helper()
+		var payload ocrPayload
+		require.NoError(t, json.Unmarshal(raw, &payload))
+		return payload
+	}
+
+	businessLicense := decode(updatedStale.BusinessLicenseOcr)
+	require.Equal(t, "failed", businessLicense.Status)
+	require.Equal(t, int64(701), businessLicense.OCRJobID)
+	require.Equal(t, "2026-06-11T10:00:00Z", businessLicense.QueuedAt)
+
+	foodPermit := decode(updatedStale.FoodPermitOcr)
+	require.Equal(t, "failed", foodPermit.Status)
+	require.Equal(t, int64(702), foodPermit.OCRJobID)
+	require.Equal(t, "2026-06-11T10:02:00Z", foodPermit.StartedAt)
+
+	idCardFront := decode(updatedStale.IDCardFrontOcr)
+	require.Equal(t, "done", idCardFront.Status)
+	require.Equal(t, int64(703), idCardFront.OCRJobID)
+
+	idCardBack := decode(updatedStale.IDCardBackOcr)
+	require.Equal(t, "failed", idCardBack.Status)
+	require.Equal(t, int64(704), idCardBack.OCRJobID)
+	require.Equal(t, "old failure", idCardBack.Error)
+
+	recentBusinessLicense := decode(updatedRecent.BusinessLicenseOcr)
+	require.Equal(t, "pending", recentBusinessLicense.Status)
+	require.Equal(t, int64(801), recentBusinessLicense.OCRJobID)
+}
+
 func TestUpdateMerchantShopImagesTargetsMerchantOnly(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)

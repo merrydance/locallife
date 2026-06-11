@@ -223,15 +223,15 @@ RETURNING *;
 -- name: ResetStaleMerchantOCRStatus :exec
 UPDATE merchant_applications
 SET 
-  business_license_ocr = CASE WHEN business_license_ocr->>'status' = 'processing' THEN jsonb_set(business_license_ocr, '{status}', '"failed"') ELSE business_license_ocr END,
-  food_permit_ocr = CASE WHEN food_permit_ocr->>'status' = 'processing' THEN jsonb_set(food_permit_ocr, '{status}', '"failed"') ELSE food_permit_ocr END,
-  id_card_front_ocr = CASE WHEN id_card_front_ocr->>'status' = 'processing' THEN jsonb_set(id_card_front_ocr, '{status}', '"failed"') ELSE id_card_front_ocr END,
-  id_card_back_ocr = CASE WHEN id_card_back_ocr->>'status' = 'processing' THEN jsonb_set(id_card_back_ocr, '{status}', '"failed"') ELSE id_card_back_ocr END
+  business_license_ocr = CASE WHEN business_license_ocr->>'status' IN ('pending', 'processing') THEN jsonb_set(business_license_ocr, '{status}', '"failed"') ELSE business_license_ocr END,
+  food_permit_ocr = CASE WHEN food_permit_ocr->>'status' IN ('pending', 'processing') THEN jsonb_set(food_permit_ocr, '{status}', '"failed"') ELSE food_permit_ocr END,
+  id_card_front_ocr = CASE WHEN id_card_front_ocr->>'status' IN ('pending', 'processing') THEN jsonb_set(id_card_front_ocr, '{status}', '"failed"') ELSE id_card_front_ocr END,
+  id_card_back_ocr = CASE WHEN id_card_back_ocr->>'status' IN ('pending', 'processing') THEN jsonb_set(id_card_back_ocr, '{status}', '"failed"') ELSE id_card_back_ocr END
 WHERE 
-  (business_license_ocr->>'status' = 'processing' OR
-   food_permit_ocr->>'status' = 'processing' OR
-   id_card_front_ocr->>'status' = 'processing' OR
-   id_card_back_ocr->>'status' = 'processing')
+  (business_license_ocr->>'status' IN ('pending', 'processing') OR
+   food_permit_ocr->>'status' IN ('pending', 'processing') OR
+   id_card_front_ocr->>'status' IN ('pending', 'processing') OR
+   id_card_back_ocr->>'status' IN ('pending', 'processing'))
   AND updated_at < $1;
 
 -- name: UpdateMerchantApplicationReviewSummary :one

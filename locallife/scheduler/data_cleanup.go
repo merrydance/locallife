@@ -1677,7 +1677,7 @@ func (s *DataCleanupScheduler) cleanupExpiredCarts() {
 	log.Info().Msg("cleanup expired carts (older than 7 days) completed")
 }
 
-// cleanupStaleOCRTasks 清理长期处于 processing 状态的 OCR 任务
+// cleanupStaleOCRTasks 清理长期处于 pending/processing 状态的 OCR 任务
 // 超过1小时未更新的 OCR 标记为 failed，允许用户重试
 func (s *DataCleanupScheduler) cleanupStaleOCRTasks() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
