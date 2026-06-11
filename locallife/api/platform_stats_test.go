@@ -551,20 +551,24 @@ func TestGetPlatformBaofuDailyReconciliationAPI(t *testing.T) {
 	store.EXPECT().
 		GetBaofuDailyReconciliation(gomock.Any(), gomock.Any()).
 		Return([]db.GetBaofuDailyReconciliationRow{{
-			Date:                     pgtype.Date{Time: time.Date(2026, 5, 3, 0, 0, 0, 0, time.UTC), Valid: true},
-			Provider:                 db.ExternalPaymentProviderBaofu,
-			Channel:                  db.PaymentChannelBaofuAggregate,
-			PaidAmount:               10000,
-			PaymentFee:               30,
-			MerchantAmount:           8970,
-			RiderAmount:              500,
-			PlatformCommission:       200,
-			OperatorCommission:       300,
-			WithdrawSucceededAmount:  6000,
-			WithdrawProcessingAmount: 1500,
-			UnappliedFactCount:       2,
-			UnknownCommandCount:      1,
-			FeeLedgerMismatchCount:   1,
+			Date:                                  pgtype.Date{Time: time.Date(2026, 5, 3, 0, 0, 0, 0, time.UTC), Valid: true},
+			Provider:                              db.ExternalPaymentProviderBaofu,
+			Channel:                               db.PaymentChannelBaofuAggregate,
+			PaidAmount:                            10000,
+			PaymentFee:                            30,
+			MerchantAmount:                        8970,
+			RiderAmount:                           500,
+			PlatformCommission:                    200,
+			OperatorCommission:                    300,
+			WithdrawSucceededAmount:               6000,
+			WithdrawProcessingAmount:              1500,
+			UnappliedFactCount:                    2,
+			UnknownCommandCount:                   1,
+			FeeLedgerMismatchCount:                1,
+			HistoricalRetryableFailedRefundCount:  2,
+			HistoricalRetryableFailedRefundAmount: 3200,
+			HistoricalQueryableFailedRefundCount:  1,
+			HistoricalQueryableFailedRefundAmount: 2100,
 		}}, nil)
 
 	server := newTestServer(t, store)
@@ -597,6 +601,10 @@ func TestGetPlatformBaofuDailyReconciliationAPI(t *testing.T) {
 	require.Equal(t, int64(2), resp[0].UnappliedFactCount)
 	require.Equal(t, int64(1), resp[0].UnknownCommandCount)
 	require.Equal(t, int64(1), resp[0].FeeLedgerMismatchCount)
+	require.Equal(t, int64(2), resp[0].HistoricalRetryableFailedRefundCount)
+	require.Equal(t, int64(3200), resp[0].HistoricalRetryableFailedRefundAmount)
+	require.Equal(t, int64(1), resp[0].HistoricalQueryableFailedRefundCount)
+	require.Equal(t, int64(2100), resp[0].HistoricalQueryableFailedRefundAmount)
 }
 
 // ============================================================================

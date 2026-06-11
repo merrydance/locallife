@@ -41926,6 +41926,18 @@ const docTemplate = `{
                 "fee_ledger_mismatch_count": {
                     "type": "integer"
                 },
+                "historical_queryable_failed_refund_amount": {
+                    "type": "integer"
+                },
+                "historical_queryable_failed_refund_count": {
+                    "type": "integer"
+                },
+                "historical_retryable_failed_refund_amount": {
+                    "type": "integer"
+                },
+                "historical_retryable_failed_refund_count": {
+                    "type": "integer"
+                },
                 "merchant_amount": {
                     "type": "integer"
                 },

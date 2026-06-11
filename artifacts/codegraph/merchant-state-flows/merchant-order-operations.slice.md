@@ -1,6 +1,6 @@
 # Merchant Order Operations Slice
 
-Status: merchant-state flow slice created; manual refund idempotency and pending order-refund recovery repaired 2026-05-31; reject refund submission truth repaired 2026-06-01; Mini Program `order_update` realtime contract and Baofu refund-create failure classification repaired 2026-06-02
+Status: merchant-state flow slice created; manual refund idempotency and pending order-refund recovery repaired 2026-05-31; reject refund submission truth repaired 2026-06-01; Mini Program `order_update` realtime contract and Baofu refund-create failure classification repaired 2026-06-02; platform Baofu daily reconciliation now exposes evidence-backed historical failed-refund candidates 2026-06-11
 Risk class: G3 where merchant actions create or recover refunds; G2 for non-money order status and print transitions
 Scope: merchant order list/detail/kitchen/print anomaly pages -> merchant and kitchen order APIs -> order status/refund/print durable state -> notification, websocket, worker, callback, and recovery paths
 
@@ -124,6 +124,9 @@ Merchant order operations must converge from merchant action to durable order/re
 28. Fixed 2026-06-02: Baofu refund create classification is shared by manual refund, merchant-reject refund, and the refund worker. The Baofu aggregate refund client checks `resultCode=FAIL` before success-response field validation, preserving upstream `errCode` such as `ORDER_EXIST`; retryable transport/provider create errors keep command status `unknown`, queryable errors move to `processing`, and terminal business/config/validation failures remain rejected/failed.
     Evidence: `locallife/baofu/aggregatepay/client.go:114`, `locallife/baofu/aggregatepay/client.go:125`, `locallife/logic/refund_error_mapping.go:76`, `locallife/logic/refund_error_mapping.go:90`, `locallife/logic/refund_error_mapping.go:98`, `locallife/logic/refund_error_mapping.go:129`, `locallife/logic/refund_error_mapping.go:138`, `locallife/logic/refund_service.go:350`, `locallife/logic/refund_service.go:352`, `locallife/logic/refund_service.go:356`, `locallife/logic/refund_service.go:384`, `locallife/logic/refund_service.go:386`, `locallife/logic/refund_service.go:407`, `locallife/worker/task_process_payment.go:1071`, `locallife/worker/task_process_payment.go:1074`, `locallife/worker/task_process_payment.go:1078`, `locallife/worker/task_process_payment.go:1106`, `locallife/worker/task_process_payment.go:1108`.
 
+28a. Fixed 2026-06-11: platform Baofu daily reconciliation now reports only evidence-backed historical terminal `failed` order-refund candidates, without changing refund status or re-sending money movement. The query requires `refund_orders.status='failed'`, Baofu aggregate order payment ownership, `external_payment_commands` `create_refund` evidence matched by both `refund_order` id and `out_refund_no`, and a classified retryable or queryable create-error code. `HTTP_STATUS` is intentionally excluded from the historical retryable bucket because historical command snapshots do not persist the upstream status code needed to prove a retryable 0/5xx response. The API exposes aggregate count/amount fields only; operators must still manually reconcile or run a separately approved migration if they decide to promote any candidate.
+    Evidence: `locallife/db/query/baofu_reconciliation.sql`, `locallife/api/platform_baofu_reconciliation.go`, `locallife/db/sqlc/payment_order_refund_recovery_test.go`, `locallife/api/platform_stats_test.go`.
+
 29. Order printing is scheduled by order service, manually scheduled by `PrintMerchantOrder`, executed by the Redis print worker, then updated by direct vendor response or Feieyun callback.
     Evidence: `locallife/logic/order_service.go:683`, `locallife/logic/order_service.go:701`, `locallife/logic/order_service.go:705`, `locallife/logic/order_service.go:709`, `locallife/logic/order_service.go:726`, `locallife/logic/order_service.go:733`, `locallife/logic/order_service.go:737`, `locallife/worker/task_print_order.go:178`, `locallife/worker/task_print_order.go:192`, `locallife/worker/task_print_order.go:204`, `locallife/worker/task_print_order.go:253`, `locallife/api/feieyun_callback.go:17`, `locallife/api/feieyun_callback.go:72`, `locallife/api/feieyun_callback.go:84`.
 
@@ -141,7 +144,7 @@ Merchant order operations must converge from merchant action to durable order/re
 - `CompleteOrderTx` is broader than merchant completion logic. Merchant logic allows ready-only non-takeout completion, while the SQL primitive allows any non-cancelled/non-completed order. DB tests use it from non-merchant flows, so it should be documented as a broad shared primitive/refactor risk rather than immediately called a defect.
 - Fixed 2026-05-31 in `6a19a9c0`: manual refund creation now satisfies the frontend/backend idempotency header contract and has a Mini Program wrapper contract test.
 - Fixed 2026-06-01: reject-order refund remains a two-step product workflow, but the API/UI now exposes refund submission truth through `refund_submission` instead of overclaiming that refund submission always started.
-- Fixed for new writes 2026-06-02: Baofu refund create/provider errors are classified before writing refund state. Retryable failures keep rows `pending`, queryable or possible-provider-created failures become `processing`, and explicit terminal failures become `failed`. Existing historical terminal `failed` rows still require durable command/fact evidence before any migration or automatic retry can be safe.
+- Fixed for new writes 2026-06-02: Baofu refund create/provider errors are classified before writing refund state. Retryable failures keep rows `pending`, queryable or possible-provider-created failures become `processing`, and explicit terminal failures become `failed`. Fixed 2026-06-11: existing historical terminal `failed` order-refund candidates with durable Baofu `create_refund` command evidence are visible in platform daily reconciliation as aggregate retryable/queryable count and amount, but no migration or automatic retry is performed by status alone.
 - Fixed 2026-06-02: merchant order websocket status updates now refresh Mini Program order list/detail and kitchen board/detail through `order_update` subscriptions.
 - Kitchen realtime stops entirely when open-status refresh fails, which can turn an auxiliary status-check failure into stale kitchen order realtime.
 - Printing has both order-operation consumers and configuration owners. Device/display configuration should be audited separately because `auto_accept_paid_orders`, `enable_print`, trigger mode, and printer registration are outside this flow.
@@ -190,7 +193,7 @@ Merchant order operations must converge from merchant action to durable order/re
 - Accepted/ready status transitions enqueue print tasks according to display/printer config; manual print can create a task only when manual trigger mode is enabled.
 - Print execution writes `print_logs`, updates success/failed/pending, consumes Feieyun result callbacks, and surfaces anomalies through list/status/retry APIs and timed alert scheduler.
 - Manual refunds poll the refund order after creation; terminal truth comes from provider callbacks/query facts applied by payment fact service and payment-domain outbox workers.
-- Refund recovery covers cancelled order payments with no refund row, pending normal-order refund rows for cancelled paid orders, pending reservation refund rows, and stuck `processing` refund rows. It still does not automatically retry historical terminal `failed` rows after provider create failure.
+- Refund recovery covers cancelled order payments with no refund row, pending normal-order refund rows for cancelled paid orders, pending reservation refund rows, and stuck `processing` refund rows. It still does not automatically retry historical terminal `failed` rows after provider create failure; platform Baofu daily reconciliation now exposes only evidence-backed aggregate candidates for manual/operator review.
 
 ## Frontend Draft And Backend Rehydration
 
@@ -235,7 +238,7 @@ Async branches:
 
 - Fixed 2026-06-02: merchant order websocket publish uses `order_update`, and Mini Program order/kitchen subscribers consume that type for cross-terminal backend-truth refresh.
 - Payment/refund terminal truth flows through Baofu callback/query facts, payment fact application, payment-domain outbox, and notification/alert workers.
-- Refund recovery scans no-refund cancelled payments, pending normal-order refunds, pending reservation refunds, and stuck `processing` refunds; it does not cover historical terminal `failed` rows after merchant reject unless a future evidence-backed reconciliation explicitly promotes them.
+- Refund recovery scans no-refund cancelled payments, pending normal-order refunds, pending reservation refunds, and stuck `processing` refunds; it does not cover historical terminal `failed` rows after merchant reject. Platform Baofu daily reconciliation separately reports evidence-backed historical `failed` order-refund candidates as read-only aggregate counts/amounts.
 - Print async branches include Redis print worker, Feieyun direct response, Feieyun callback by vendor order id, retry print jobs, manual print jobs, and timed print anomaly scheduler.
 - Flutter local notification/foreground/polling branches can trigger backend-authorized alert auto-accept and BLE print; backend observes the ordinary accept call and still does not observe the local alert or local BLE print side effect.
 
@@ -268,14 +271,14 @@ Zombie and unreachable branches:
 - `CompleteOrderTx` is broader than merchant completion logic and is a refactor risk if reused without caller-side guard.
 - Fixed 2026-06-02: Mini Program websocket `order_update` handling is reachable through the shared enum and order/kitchen subscribers.
 - Fixed 2026-05-31 in `6a19a9c0`: manual refund UI path now sends `Idempotency-Key`.
-- Fixed for new writes 2026-06-02: existing pending order refund rows after merchant reject are picked up, and new retryable/queryable Baofu create errors avoid terminal `failed`; historical terminal `failed` rows are still not retried automatically by status alone.
+- Fixed for new writes 2026-06-02: existing pending order refund rows after merchant reject are picked up, and new retryable/queryable Baofu create errors avoid terminal `failed`; since 2026-06-11, historical terminal `failed` candidates with durable Baofu create-command evidence are visible in platform reconciliation, but still are not retried automatically by status alone.
 - Fixed 2026-06-10: Flutter alert auto-accept and backend display-config auto-accept no longer have separate local/remote controls; the App consults backend display-config truth before executing alert-driven accept.
 
 Test-proof gaps:
 
 - Fixed 2026-05-31 in `6a19a9c0`: Mini Program contract test proves the wrapper sends `Idempotency-Key` and order detail generates/reuses the draft key.
 - Fixed 2026-06-01: logic/API tests prove merchant reject reports pending-recovery and manual-required refund submission states while preserving durable order cancellation success.
-- Fixed for `pending` on 2026-05-31 in `d3e84050`: worker and sqlc tests prove recovery includes existing normal-order refund rows stuck in `pending`. Eligible retryable `failed` rows remain open.
+- Fixed for `pending` on 2026-05-31 in `d3e84050`: worker and sqlc tests prove recovery includes existing normal-order refund rows stuck in `pending`. Fixed 2026-06-11: sqlc/API tests prove platform Baofu reconciliation counts only evidence-backed historical `failed` order-refund candidates and excludes rows without command evidence, non-order refunds, non-`failed` rows, terminal business errors, and unprovable `HTTP_STATUS` history.
 - Fixed 2026-06-02: `check-merchant-order-update-websocket-contract.test.js` proves backend `order_update` is declared and Mini Program order list/detail plus kitchen board/detail subscribe through dedicated refresh handlers.
 - Prove Flutter push/websocket/polling duplicate alerts cannot double-accept or double-print local BLE receipts.
 - Fixed 2026-06-10 in `merchant-device-display-config`: Flutter alert auto-accept now reads backend display-config truth and fails closed when config read fails/times out.
@@ -296,7 +299,7 @@ Observed tests:
 Missing high-value tests:
 
 - Fixed 2026-06-01: API/logic tests prove merchant reject surfaces refund-submission state for not-needed, pending-recovery, and manual-required branches.
-- Optional historical refund reconciliation tests, only if a future migration proves retryable/queryable `failed` rows from durable command/fact evidence and intentionally promotes them.
+- Fixed 2026-06-11: historical failed-refund reconciliation proof exists for read-only platform aggregate visibility. A future state-changing migration or retry job would still need a separate design, approval, and proof that each promoted row is safe to mutate.
 - Fixed 2026-06-02: Mini Program contract test proves `order_update` is declared and wired to order list/detail plus kitchen board/detail refresh handlers.
 - Kitchen realtime degradation test for open-status refresh failure.
 - Flutter App contract tests proving push/poll/websocket duplicates cannot double-accept and do not double-print BLE receipts after retries. Backend-truth auto-accept convergence is covered in `merchant-device-display-config`.
@@ -305,7 +308,7 @@ Missing high-value tests:
 
 - Fixed 2026-05-31 in `6a19a9c0`: manual refund wrapper/header is now present and covered by a Mini Program contract test.
 - Fixed 2026-06-01: reject-order copy now comes from backend `refund_submission.message`, and the backend contract distinguishes accepted, pending recovery, manual required, and not needed.
-- Fixed for new writes 2026-06-02: refund recovery covers order refund rows stuck in `pending` and uses original `out_refund_no`; Baofu create/provider errors now classify retryable, queryable, and terminal outcomes before writing refund state. Historical `failed` retry remains a separate evidence-backed reconciliation question.
+- Fixed for new writes 2026-06-02: refund recovery covers order refund rows stuck in `pending` and uses original `out_refund_no`; Baofu create/provider errors now classify retryable, queryable, and terminal outcomes before writing refund state. Fixed 2026-06-11: historical terminal `failed` retry remains non-automatic, but platform reconciliation now gives operators a read-only, command-evidence-backed candidate count/amount for manual review.
 - Fixed 2026-06-02: websocket message types were aligned by adding `order_update` handling in Mini Program order/kitchen flows and a durable contract script.
 - Keep `CompleteOrderTx` broad only if all callers deliberately guard it before use. If refactoring, rename or split it to avoid accidental merchant-like use without ready-state checks.
 - Fixed 2026-06-10 in `merchant-device-display-config`: the App local auto-accept control was removed; alert-driven auto-accept reads backend display-config truth before calling the ordinary accept endpoint. Remaining App print-policy work is BLE observability/deduplication and backend display-config enforcement for local receipt printing.

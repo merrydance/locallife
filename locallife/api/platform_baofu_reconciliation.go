@@ -11,25 +11,29 @@ import (
 )
 
 type platformBaofuDailyReconciliationRow struct {
-	Date                        string `json:"date"`
-	Provider                    string `json:"provider"`
-	Channel                     string `json:"channel"`
-	PaidAmount                  int64  `json:"paid_amount"`
-	PaymentFee                  int64  `json:"payment_fee"`
-	ProviderPaymentFee          int64  `json:"provider_payment_fee"`
-	MerchantPaymentFee          int64  `json:"merchant_payment_fee"`
-	RiderPaymentFee             int64  `json:"rider_payment_fee"`
-	PlatformPaymentFeeIncome    int64  `json:"platform_payment_fee_income"`
-	PlatformNetPaymentFeeMargin int64  `json:"platform_net_payment_fee_margin"`
-	MerchantAmount              int64  `json:"merchant_amount"`
-	RiderAmount                 int64  `json:"rider_amount"`
-	PlatformCommission          int64  `json:"platform_commission"`
-	OperatorCommission          int64  `json:"operator_commission"`
-	WithdrawSucceededAmount     int64  `json:"withdraw_succeeded_amount"`
-	WithdrawProcessingAmount    int64  `json:"withdraw_processing_amount"`
-	UnappliedFactCount          int64  `json:"unapplied_fact_count"`
-	UnknownCommandCount         int64  `json:"unknown_command_count"`
-	FeeLedgerMismatchCount      int64  `json:"fee_ledger_mismatch_count"`
+	Date                                  string `json:"date"`
+	Provider                              string `json:"provider"`
+	Channel                               string `json:"channel"`
+	PaidAmount                            int64  `json:"paid_amount"`
+	PaymentFee                            int64  `json:"payment_fee"`
+	ProviderPaymentFee                    int64  `json:"provider_payment_fee"`
+	MerchantPaymentFee                    int64  `json:"merchant_payment_fee"`
+	RiderPaymentFee                       int64  `json:"rider_payment_fee"`
+	PlatformPaymentFeeIncome              int64  `json:"platform_payment_fee_income"`
+	PlatformNetPaymentFeeMargin           int64  `json:"platform_net_payment_fee_margin"`
+	MerchantAmount                        int64  `json:"merchant_amount"`
+	RiderAmount                           int64  `json:"rider_amount"`
+	PlatformCommission                    int64  `json:"platform_commission"`
+	OperatorCommission                    int64  `json:"operator_commission"`
+	WithdrawSucceededAmount               int64  `json:"withdraw_succeeded_amount"`
+	WithdrawProcessingAmount              int64  `json:"withdraw_processing_amount"`
+	UnappliedFactCount                    int64  `json:"unapplied_fact_count"`
+	UnknownCommandCount                   int64  `json:"unknown_command_count"`
+	FeeLedgerMismatchCount                int64  `json:"fee_ledger_mismatch_count"`
+	HistoricalRetryableFailedRefundCount  int64  `json:"historical_retryable_failed_refund_count"`
+	HistoricalRetryableFailedRefundAmount int64  `json:"historical_retryable_failed_refund_amount"`
+	HistoricalQueryableFailedRefundCount  int64  `json:"historical_queryable_failed_refund_count"`
+	HistoricalQueryableFailedRefundAmount int64  `json:"historical_queryable_failed_refund_amount"`
 }
 
 // getPlatformBaofuDailyReconciliation 获取宝付每日对账汇总
@@ -86,25 +90,29 @@ func (server *Server) getPlatformBaofuDailyReconciliation(ctx *gin.Context) {
 	result := make([]platformBaofuDailyReconciliationRow, len(rows))
 	for i, row := range rows {
 		result[i] = platformBaofuDailyReconciliationRow{
-			Date:                        row.Date.Time.Format("2006-01-02"),
-			Provider:                    row.Provider,
-			Channel:                     row.Channel,
-			PaidAmount:                  row.PaidAmount,
-			PaymentFee:                  row.PaymentFee,
-			ProviderPaymentFee:          row.ProviderPaymentFee,
-			MerchantPaymentFee:          row.MerchantPaymentFee,
-			RiderPaymentFee:             row.RiderPaymentFee,
-			PlatformPaymentFeeIncome:    row.PlatformPaymentFeeIncome,
-			PlatformNetPaymentFeeMargin: row.PlatformNetPaymentFeeMargin,
-			MerchantAmount:              row.MerchantAmount,
-			RiderAmount:                 row.RiderAmount,
-			PlatformCommission:          row.PlatformCommission,
-			OperatorCommission:          row.OperatorCommission,
-			WithdrawSucceededAmount:     row.WithdrawSucceededAmount,
-			WithdrawProcessingAmount:    row.WithdrawProcessingAmount,
-			UnappliedFactCount:          row.UnappliedFactCount,
-			UnknownCommandCount:         row.UnknownCommandCount,
-			FeeLedgerMismatchCount:      row.FeeLedgerMismatchCount,
+			Date:                                  row.Date.Time.Format("2006-01-02"),
+			Provider:                              row.Provider,
+			Channel:                               row.Channel,
+			PaidAmount:                            row.PaidAmount,
+			PaymentFee:                            row.PaymentFee,
+			ProviderPaymentFee:                    row.ProviderPaymentFee,
+			MerchantPaymentFee:                    row.MerchantPaymentFee,
+			RiderPaymentFee:                       row.RiderPaymentFee,
+			PlatformPaymentFeeIncome:              row.PlatformPaymentFeeIncome,
+			PlatformNetPaymentFeeMargin:           row.PlatformNetPaymentFeeMargin,
+			MerchantAmount:                        row.MerchantAmount,
+			RiderAmount:                           row.RiderAmount,
+			PlatformCommission:                    row.PlatformCommission,
+			OperatorCommission:                    row.OperatorCommission,
+			WithdrawSucceededAmount:               row.WithdrawSucceededAmount,
+			WithdrawProcessingAmount:              row.WithdrawProcessingAmount,
+			UnappliedFactCount:                    row.UnappliedFactCount,
+			UnknownCommandCount:                   row.UnknownCommandCount,
+			FeeLedgerMismatchCount:                row.FeeLedgerMismatchCount,
+			HistoricalRetryableFailedRefundCount:  row.HistoricalRetryableFailedRefundCount,
+			HistoricalRetryableFailedRefundAmount: row.HistoricalRetryableFailedRefundAmount,
+			HistoricalQueryableFailedRefundCount:  row.HistoricalQueryableFailedRefundCount,
+			HistoricalQueryableFailedRefundAmount: row.HistoricalQueryableFailedRefundAmount,
 		}
 	}
 
