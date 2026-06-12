@@ -127,7 +127,7 @@ export async function saveOperatorDeliveryFeeConfig(regionId: number, config: Op
     extra_fee_per_km: Math.round(Number(config.extra_fee_per_km) * 100),
     value_ratio: Number(config.value_ratio),
     min_fee: Math.round(Number(config.min_fee) * 100),
-    max_fee: config.max_fee ? Math.round(Number(config.max_fee) * 100) : undefined
+    max_fee: config.max_fee ? Math.round(Number(config.max_fee) * 100) : null
   })
 }
 

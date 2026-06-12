@@ -14,9 +14,6 @@ import (
 const (
 	// 地理常量已迁移至 logic/geo_constants.go，这里仅保留本包内的别名以兼容现有代码。
 	defaultDeliveryDistance = DefaultDeliveryDistance
-	minDeliveryDistance     = MinDeliveryDistance
-	metersPerLatDegree      = MetersPerLatDegree
-	metersPerLngDegree      = MetersPerLngDegree
 )
 
 // OrderCalculationInput defines the input for order preview calculation.
@@ -177,23 +174,18 @@ func CalculateOrderPreview(
 		if userLat != 0 && userLng != 0 && merchant.Latitude.Valid && merchant.Longitude.Valid {
 			merchantLat, _ := merchant.Latitude.Float64Value()
 			merchantLng, _ := merchant.Longitude.Float64Value()
+			routeResolved := false
 			if mapClient != nil {
 				fromLoc := maps.Location{Lat: merchantLat.Float64, Lng: merchantLng.Float64}
 				toLoc := maps.Location{Lat: userLat, Lng: userLng}
 				routeResult, err := mapClient.GetBicyclingRoute(ctx, fromLoc, toLoc)
-				if err == nil && routeResult != nil {
+				if err == nil && routeResult != nil && routeResult.Distance > 0 {
 					deliveryDistance = int32(routeResult.Distance)
+					routeResolved = true
 				}
-			} else {
-				latDiff := (userLat - merchantLat.Float64) * metersPerLatDegree
-				lngDiff := (userLng - merchantLng.Float64) * metersPerLngDegree
-				dist := int32(latDiff*latDiff + lngDiff*lngDiff)
-				if dist > 0 {
-					deliveryDistance = int32(float64(dist) / 1000)
-					if deliveryDistance < minDeliveryDistance {
-						deliveryDistance = minDeliveryDistance
-					}
-				}
+			}
+			if !routeResolved {
+				deliveryDistance = fallbackTakeoutDistance(userLat, userLng, merchantLat.Float64, merchantLng.Float64)
 			}
 		}
 

@@ -139,6 +139,32 @@ func TestUpdateDeliveryFeeConfig(t *testing.T) {
 	require.Equal(t, newBaseFee, config2.BaseFee)
 }
 
+func TestUpdateDeliveryFeeConfigPreservesMaxFeeWhenOmitted(t *testing.T) {
+	config1 := createRandomDeliveryFeeConfig(t)
+	require.True(t, config1.MaxFee.Valid)
+
+	newBaseFee := int64(999)
+	config2, err := testStore.UpdateDeliveryFeeConfig(context.Background(), UpdateDeliveryFeeConfigParams{
+		ID:      config1.ID,
+		BaseFee: pgtype.Int8{Int64: newBaseFee, Valid: true},
+	})
+	require.NoError(t, err)
+	require.True(t, config2.MaxFee.Valid)
+	require.Equal(t, config1.MaxFee.Int64, config2.MaxFee.Int64)
+}
+
+func TestUpdateDeliveryFeeConfigCanClearMaxFee(t *testing.T) {
+	config1 := createRandomDeliveryFeeConfig(t)
+	require.True(t, config1.MaxFee.Valid)
+
+	config2, err := testStore.UpdateDeliveryFeeConfig(context.Background(), UpdateDeliveryFeeConfigParams{
+		ID:          config1.ID,
+		ClearMaxFee: true,
+	})
+	require.NoError(t, err)
+	require.False(t, config2.MaxFee.Valid)
+}
+
 func TestListActiveDeliveryFeeConfigs(t *testing.T) {
 	// 先创建一个配置（会成功因为使用唯一的region）
 	config := createRandomDeliveryFeeConfig(t)

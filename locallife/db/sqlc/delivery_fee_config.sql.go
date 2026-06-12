@@ -235,9 +235,12 @@ SET
   base_distance = COALESCE($3, base_distance),
   extra_fee_per_km = COALESCE($4, extra_fee_per_km),
   value_ratio = COALESCE($5, value_ratio),
-  max_fee = $6,
-  min_fee = COALESCE($7, min_fee),
-  is_active = COALESCE($8, is_active),
+  max_fee = CASE
+    WHEN $6::boolean THEN NULL
+    ELSE COALESCE($7, max_fee)
+  END,
+  min_fee = COALESCE($8, min_fee),
+  is_active = COALESCE($9, is_active),
   updated_at = now()
 WHERE id = $1
 RETURNING id, region_id, base_fee, base_distance, extra_fee_per_km, value_ratio, max_fee, min_fee, is_active, created_at, updated_at
@@ -249,6 +252,7 @@ type UpdateDeliveryFeeConfigParams struct {
 	BaseDistance  pgtype.Int4    `json:"base_distance"`
 	ExtraFeePerKm pgtype.Int8    `json:"extra_fee_per_km"`
 	ValueRatio    pgtype.Numeric `json:"value_ratio"`
+	ClearMaxFee   bool           `json:"clear_max_fee"`
 	MaxFee        pgtype.Int8    `json:"max_fee"`
 	MinFee        pgtype.Int8    `json:"min_fee"`
 	IsActive      pgtype.Bool    `json:"is_active"`
@@ -261,6 +265,7 @@ func (q *Queries) UpdateDeliveryFeeConfig(ctx context.Context, arg UpdateDeliver
 		arg.BaseDistance,
 		arg.ExtraFeePerKm,
 		arg.ValueRatio,
+		arg.ClearMaxFee,
 		arg.MaxFee,
 		arg.MinFee,
 		arg.IsActive,

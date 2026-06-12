@@ -681,7 +681,7 @@ func (server *Server) updateOperatorRule(ctx *gin.Context) {
 
 		// Handle "不限" logic for max fee if valid number or 0
 		if req.Value == "不限" && key == "MAX_DELIVERY_FEE" {
-			arg.MaxFee = pgtype.Int8{Valid: false}
+			arg.ClearMaxFee = true
 			// Skip parsing float
 		} else {
 			val, err := strconv.ParseFloat(req.Value, 64)
@@ -720,7 +720,7 @@ func (server *Server) updateOperatorRule(ctx *gin.Context) {
 					// 0 or negative considered as no limit or clear limit?
 					// Typical logic: 0 or -1 means no limit.
 					// User might enter 0. Let's treat 0 as "No Limit" (NULL).
-					arg.MaxFee = pgtype.Int8{Valid: false}
+					arg.ClearMaxFee = true
 				} else {
 					arg.MaxFee = pgtype.Int8{Int64: yuanToFen(val), Valid: true}
 				}
@@ -744,11 +744,11 @@ func (server *Server) updateOperatorRule(ctx *gin.Context) {
 			effectiveMaxFee = &currentMaxFee
 		}
 		if key == "MAX_DELIVERY_FEE" {
-			if arg.MaxFee.Valid {
+			if arg.ClearMaxFee {
+				effectiveMaxFee = nil
+			} else if arg.MaxFee.Valid {
 				updatedMaxFee := arg.MaxFee.Int64
 				effectiveMaxFee = &updatedMaxFee
-			} else {
-				effectiveMaxFee = nil
 			}
 		}
 

@@ -3,10 +3,12 @@ package logic
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/merrydance/locallife/algorithm"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/stretchr/testify/require"
@@ -430,4 +432,168 @@ func TestCalculateOrderPreview_RejectsForeignAddress(t *testing.T) {
 	reqErr := assertRequestError(t, err)
 	require.Equal(t, 403, reqErr.Status)
 	require.Equal(t, "address does not belong to you", reqErr.Err.Error())
+}
+
+func TestCalculateOrderPreview_UsesRouteDistanceFallback(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	userID := int64(1)
+	merchantID := int64(2)
+	userLat := 30.02
+	userLng := 120.02
+	merchant := db.Merchant{
+		ID:        merchantID,
+		RegionID:  9,
+		Latitude:  numericFromFloat(30.0),
+		Longitude: numericFromFloat(120.0),
+	}
+
+	store.EXPECT().
+		GetCartByUserAndMerchant(gomock.Any(), db.GetCartByUserAndMerchantParams{
+			UserID:     userID,
+			MerchantID: merchantID,
+			OrderType:  db.OrderTypeTakeout,
+		}).
+		Times(1).
+		Return(db.Cart{ID: 31}, nil)
+	store.EXPECT().
+		ListCartItems(gomock.Any(), int64(31)).
+		Times(1).
+		Return([]db.ListCartItemsRow{
+			{DishID: pgtype.Int8{Int64: 5, Valid: true}, DishName: pgtype.Text{String: "Dish", Valid: true}, DishPrice: pgtype.Int8{Int64: 1000, Valid: true}, Quantity: 1},
+		}, nil)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchantID).
+		Times(1).
+		Return(merchant, nil)
+	store.EXPECT().
+		ListActiveDiscountRules(gomock.Any(), merchantID).
+		Times(1).
+		Return([]db.DiscountRule{}, nil)
+	store.EXPECT().
+		ListUserAvailableVouchersForMerchant(gomock.Any(), db.ListUserAvailableVouchersForMerchantParams{
+			UserID:         userID,
+			MerchantID:     merchantID,
+			MinOrderAmount: 1000,
+		}).
+		Times(1).
+		Return([]db.ListUserAvailableVouchersForMerchantRow{}, nil)
+	store.EXPECT().
+		GetMembershipByMerchantAndUser(gomock.Any(), db.GetMembershipByMerchantAndUserParams{
+			MerchantID: merchantID,
+			UserID:     userID,
+		}).
+		Times(1).
+		Return(db.MerchantMembership{}, db.ErrRecordNotFound)
+
+	expectedDistance := int32(float64(algorithm.HaversineDistance(
+		algorithm.Location{Latitude: userLat, Longitude: userLng},
+		algorithm.Location{Latitude: 30.0, Longitude: 120.0},
+	)) * 1.4)
+
+	result, err := CalculateOrderPreview(
+		context.Background(),
+		store,
+		nil,
+		OrderCalculationInput{
+			UserID:     userID,
+			MerchantID: merchantID,
+			OrderType:  db.OrderTypeTakeout,
+			Latitude:   &userLat,
+			Longitude:  &userLng,
+		},
+		func(context.Context, int64, map[string]interface{}) ([]byte, int64, error) {
+			return json.RawMessage{}, 0, nil
+		},
+		func(_ context.Context, regionID, merchantID int64, distance int32, orderAmount int64) (DeliveryFeeComputation, error) {
+			require.Equal(t, expectedDistance, distance)
+			return DeliveryFeeComputation{Fee: 500}, nil
+		},
+	)
+	require.NoError(t, err)
+	require.Equal(t, int64(500), result.DeliveryFee)
+}
+
+func TestCalculateOrderPreview_FallsBackToRouteDistanceEstimateWhenMapFails(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	userID := int64(1)
+	merchantID := int64(2)
+	userLat := 30.02
+	userLng := 120.02
+	merchant := db.Merchant{
+		ID:        merchantID,
+		RegionID:  9,
+		Latitude:  numericFromFloat(30.0),
+		Longitude: numericFromFloat(120.0),
+	}
+
+	store.EXPECT().
+		GetCartByUserAndMerchant(gomock.Any(), db.GetCartByUserAndMerchantParams{
+			UserID:     userID,
+			MerchantID: merchantID,
+			OrderType:  db.OrderTypeTakeout,
+		}).
+		Times(1).
+		Return(db.Cart{ID: 31}, nil)
+	store.EXPECT().
+		ListCartItems(gomock.Any(), int64(31)).
+		Times(1).
+		Return([]db.ListCartItemsRow{
+			{DishID: pgtype.Int8{Int64: 5, Valid: true}, DishName: pgtype.Text{String: "Dish", Valid: true}, DishPrice: pgtype.Int8{Int64: 1000, Valid: true}, Quantity: 1},
+		}, nil)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchantID).
+		Times(1).
+		Return(merchant, nil)
+	store.EXPECT().
+		ListActiveDiscountRules(gomock.Any(), merchantID).
+		Times(1).
+		Return([]db.DiscountRule{}, nil)
+	store.EXPECT().
+		ListUserAvailableVouchersForMerchant(gomock.Any(), db.ListUserAvailableVouchersForMerchantParams{
+			UserID:         userID,
+			MerchantID:     merchantID,
+			MinOrderAmount: 1000,
+		}).
+		Times(1).
+		Return([]db.ListUserAvailableVouchersForMerchantRow{}, nil)
+	store.EXPECT().
+		GetMembershipByMerchantAndUser(gomock.Any(), db.GetMembershipByMerchantAndUserParams{
+			MerchantID: merchantID,
+			UserID:     userID,
+		}).
+		Times(1).
+		Return(db.MerchantMembership{}, db.ErrRecordNotFound)
+
+	expectedDistance := int32(float64(algorithm.HaversineDistance(
+		algorithm.Location{Latitude: userLat, Longitude: userLng},
+		algorithm.Location{Latitude: 30.0, Longitude: 120.0},
+	)) * 1.4)
+
+	result, err := CalculateOrderPreview(
+		context.Background(),
+		store,
+		&fakeMapClient{err: errors.New("route unavailable")},
+		OrderCalculationInput{
+			UserID:     userID,
+			MerchantID: merchantID,
+			OrderType:  db.OrderTypeTakeout,
+			Latitude:   &userLat,
+			Longitude:  &userLng,
+		},
+		func(context.Context, int64, map[string]interface{}) ([]byte, int64, error) {
+			return json.RawMessage{}, 0, nil
+		},
+		func(_ context.Context, regionID, merchantID int64, distance int32, orderAmount int64) (DeliveryFeeComputation, error) {
+			require.Equal(t, expectedDistance, distance)
+			return DeliveryFeeComputation{Fee: 500}, nil
+		},
+	)
+	require.NoError(t, err)
+	require.Equal(t, int64(500), result.DeliveryFee)
 }

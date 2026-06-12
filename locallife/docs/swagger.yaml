@@ -9605,6 +9605,7 @@ definitions:
         type: boolean
       max_fee:
         type: integer
+        x-nullable: true
       min_fee:
         type: integer
       value_ratio:

@@ -464,6 +464,70 @@ func TestCreateDeliveryFeeConfigAPI(t *testing.T) {
 	}
 }
 
+func TestCreateDeliveryFeeConfigAPI_AllowsZeroValueRatio(t *testing.T) {
+	user, _ := randomUser(t)
+	regionID := util.RandomInt(1, 100)
+	config := randomDeliveryFeeConfig(regionID)
+	zeroValueRatioConfig := config
+	zeroValueRatioConfig.ValueRatio = numericFromFloat(0)
+	operator := randomOperator(user.ID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		ListUserRoles(gomock.Any(), user.ID).
+		Times(1).
+		Return([]db.UserRole{{UserID: user.ID, Role: "operator", Status: "active"}}, nil)
+	store.EXPECT().
+		GetOperatorByUser(gomock.Any(), user.ID).
+		Times(1).
+		Return(operator, nil)
+	store.EXPECT().
+		CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
+			OperatorID: operator.ID,
+			RegionID:   regionID,
+		}).
+		Times(1).
+		Return(true, nil)
+	store.EXPECT().
+		CreateDeliveryFeeConfig(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ any, arg db.CreateDeliveryFeeConfigParams) (db.DeliveryFeeConfig, error) {
+			value, err := arg.ValueRatio.Float64Value()
+			require.NoError(t, err)
+			require.True(t, value.Valid)
+			require.InDelta(t, 0, value.Float64, 0.000001)
+			return zeroValueRatioConfig, nil
+		})
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	body := gin.H{
+		"region_id":        regionID,
+		"base_fee":         config.BaseFee,
+		"base_distance":    config.BaseDistance,
+		"extra_fee_per_km": config.ExtraFeePerKm,
+		"value_ratio":      0,
+		"max_fee":          config.MaxFee.Int64,
+		"min_fee":          config.MinFee,
+	}
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, fmt.Sprintf("/v1/delivery-fee/regions/%d/config", regionID), bytes.NewReader(data))
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusCreated, recorder.Code)
+
+	var response deliveryFeeConfigResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.InDelta(t, 0, response.ValueRatio, 0.000001)
+}
+
 // ==================== 获取运费配置测试 ====================
 
 func TestGetDeliveryFeeConfigAPI(t *testing.T) {
@@ -545,6 +609,122 @@ func TestGetDeliveryFeeConfigAPI(t *testing.T) {
 			tc.checkResponse(t, recorder)
 		})
 	}
+}
+
+func TestUpdateDeliveryFeeConfigAPI_PreservesExistingMaxFeeWhenOmitted(t *testing.T) {
+	user, _ := randomUser(t)
+	regionID := util.RandomInt(1, 100)
+	config := randomDeliveryFeeConfig(regionID)
+	operator := randomOperator(user.ID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		ListUserRoles(gomock.Any(), user.ID).
+		Times(1).
+		Return([]db.UserRole{{UserID: user.ID, Role: "operator", Status: "active"}}, nil)
+	store.EXPECT().
+		GetOperatorByUser(gomock.Any(), user.ID).
+		Times(1).
+		Return(operator, nil)
+	store.EXPECT().
+		CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
+			OperatorID: operator.ID,
+			RegionID:   regionID,
+		}).
+		Times(1).
+		Return(true, nil)
+	store.EXPECT().
+		GetDeliveryFeeConfigByRegion(gomock.Any(), regionID).
+		Times(1).
+		Return(config, nil)
+	store.EXPECT().
+		UpdateDeliveryFeeConfig(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ any, arg db.UpdateDeliveryFeeConfigParams) (db.DeliveryFeeConfig, error) {
+			require.Equal(t, config.ID, arg.ID)
+			require.True(t, arg.MaxFee.Valid)
+			require.Equal(t, config.MaxFee.Int64, arg.MaxFee.Int64)
+			return config, nil
+		})
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	body := gin.H{
+		"base_fee": config.BaseFee,
+	}
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPatch, fmt.Sprintf("/v1/delivery-fee/regions/%d/config", regionID), bytes.NewReader(data))
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+}
+
+func TestUpdateDeliveryFeeConfigAPI_ClearsMaxFeeWhenNull(t *testing.T) {
+	user, _ := randomUser(t)
+	regionID := util.RandomInt(1, 100)
+	config := randomDeliveryFeeConfig(regionID)
+	updatedConfig := config
+	updatedConfig.MaxFee = pgtype.Int8{}
+	operator := randomOperator(user.ID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		ListUserRoles(gomock.Any(), user.ID).
+		Times(1).
+		Return([]db.UserRole{{UserID: user.ID, Role: "operator", Status: "active"}}, nil)
+	store.EXPECT().
+		GetOperatorByUser(gomock.Any(), user.ID).
+		Times(1).
+		Return(operator, nil)
+	store.EXPECT().
+		CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
+			OperatorID: operator.ID,
+			RegionID:   regionID,
+		}).
+		Times(1).
+		Return(true, nil)
+	store.EXPECT().
+		GetDeliveryFeeConfigByRegion(gomock.Any(), regionID).
+		Times(1).
+		Return(config, nil)
+	store.EXPECT().
+		UpdateDeliveryFeeConfig(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ any, arg db.UpdateDeliveryFeeConfigParams) (db.DeliveryFeeConfig, error) {
+			require.Equal(t, config.ID, arg.ID)
+			require.True(t, arg.ClearMaxFee)
+			require.False(t, arg.MaxFee.Valid)
+			return updatedConfig, nil
+		})
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	body := gin.H{
+		"max_fee": nil,
+	}
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPatch, fmt.Sprintf("/v1/delivery-fee/regions/%d/config", regionID), bytes.NewReader(data))
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var response deliveryFeeConfigResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.Nil(t, response.MaxFee)
 }
 
 // ==================== 运费计算测试 ====================

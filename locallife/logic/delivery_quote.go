@@ -3,9 +3,9 @@ package logic
 import (
 	"context"
 	"errors"
-	"math"
 	"net/http"
 
+	"github.com/merrydance/locallife/algorithm"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/maps"
 )
@@ -13,7 +13,7 @@ import (
 const (
 	// 代取距离下限与经纬度转米常量已迁移至 logic/geo_constants.go，这里保留内部别名
 	minDeliveryDistanceMeters = MinDeliveryDistance
-	metersPerDegree           = MetersPerLatDegree
+	fallbackRouteMultiplier   = 1.4
 )
 
 // DeliveryFeeComputation describes the fee computation output.
@@ -79,10 +79,7 @@ func ComputeDeliveryQuote(ctx context.Context, input DeliveryQuoteInput, mapClie
 	}
 
 	if calculatedDistance == 0 {
-		latDiff := (userLat.Float64 - merchantLat.Float64) * metersPerDegree
-		avgLatRad := (userLat.Float64 + merchantLat.Float64) / 2.0 * math.Pi / 180.0
-		lngDiff := (userLng.Float64 - merchantLng.Float64) * metersPerDegree * math.Cos(avgLatRad)
-		calculatedDistance = int32(math.Sqrt(latDiff*latDiff+lngDiff*lngDiff) * 1.4)
+		calculatedDistance = fallbackTakeoutDistance(userLat.Float64, userLng.Float64, merchantLat.Float64, merchantLng.Float64)
 	}
 
 	if calculatedDistance < minDeliveryDistanceMeters {
@@ -111,4 +108,15 @@ func ComputeDeliveryQuote(ctx context.Context, input DeliveryQuoteInput, mapClie
 	result.Discount = feeResult.Discount
 	result.SuspendReason = feeResult.SuspendReason
 	return result, nil
+}
+
+func fallbackTakeoutDistance(userLat, userLng, merchantLat, merchantLng float64) int32 {
+	distance := int32(float64(algorithm.HaversineDistance(
+		algorithm.Location{Latitude: userLat, Longitude: userLng},
+		algorithm.Location{Latitude: merchantLat, Longitude: merchantLng},
+	)) * fallbackRouteMultiplier)
+	if distance < minDeliveryDistanceMeters {
+		return minDeliveryDistanceMeters
+	}
+	return distance
 }

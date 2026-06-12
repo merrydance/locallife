@@ -3,7 +3,6 @@ package logic
 import (
 	"context"
 	"errors"
-	"math"
 	"net/http"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -183,13 +182,7 @@ func resolveRouteAndFee(
 
 	// Haversine straight-line fallback when map client is unavailable or the call failed.
 	if distance == 0 {
-		latDiff := (userLat - merchantLat) * metersPerDegree
-		avgLatRad := (userLat + merchantLat) / 2.0 * math.Pi / 180.0
-		lngDiff := (userLng - merchantLng) * metersPerDegree * math.Cos(avgLatRad)
-		distance = int32(math.Sqrt(latDiff*latDiff+lngDiff*lngDiff) * 1.4)
-		if distance < minDeliveryDistanceMeters {
-			distance = minDeliveryDistanceMeters
-		}
+		distance = fallbackTakeoutDistance(userLat, userLng, merchantLat, merchantLng)
 	}
 
 	if feeFn != nil {

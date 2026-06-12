@@ -267,7 +267,7 @@ export interface DeliveryFeeConfigResponse {
     distance_fee_per_km: number
     id: number
     is_active: boolean
-    max_fee: number
+    max_fee?: number | null
     min_fee: number
     region_id: number
     region_name: string
@@ -285,7 +285,7 @@ export interface CreateDeliveryFeeConfigRequest extends Record<string, unknown> 
     base_distance: number
     base_fee: number
     distance_fee_per_km: number
-    max_fee?: number
+    max_fee?: number | null
     min_fee?: number
     region_id: number
     value_ratio?: number
@@ -301,7 +301,7 @@ export interface UpdateDeliveryFeeConfigRequest extends Record<string, unknown> 
     base_fee?: number
     extra_fee_per_km?: number
     is_active?: boolean
-    max_fee?: number
+    max_fee?: number | null
     min_fee?: number
     value_ratio?: number
 }

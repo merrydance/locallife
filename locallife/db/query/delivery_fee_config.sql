@@ -41,7 +41,10 @@ SET
   base_distance = COALESCE(sqlc.narg(base_distance), base_distance),
   extra_fee_per_km = COALESCE(sqlc.narg(extra_fee_per_km), extra_fee_per_km),
   value_ratio = COALESCE(sqlc.narg(value_ratio), value_ratio),
-  max_fee = sqlc.narg(max_fee),
+  max_fee = CASE
+    WHEN sqlc.arg(clear_max_fee)::boolean THEN NULL
+    ELSE COALESCE(sqlc.narg(max_fee), max_fee)
+  END,
   min_fee = COALESCE(sqlc.narg(min_fee), min_fee),
   is_active = COALESCE(sqlc.narg(is_active), is_active),
   updated_at = now()

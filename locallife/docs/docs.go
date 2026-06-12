@@ -46278,7 +46278,8 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "max_fee": {
-                    "type": "integer"
+                    "type": "integer",
+                    "x-nullable": true
                 },
                 "min_fee": {
                     "type": "integer"

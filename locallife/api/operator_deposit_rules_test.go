@@ -982,3 +982,46 @@ func TestUpdateOperatorRule_BaseDeliveryFeeReusesInactiveRegionConfig(t *testing
 
 	require.Equal(t, http.StatusOK, recorder.Code)
 }
+
+func TestUpdateOperatorRule_MaxDeliveryFeeAllowsUnlimited(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	operator := db.Operator{ID: 8, UserID: 88, RegionID: 12, RiderDeposit: 26000}
+	existingConfig := db.DeliveryFeeConfig{
+		ID:            77,
+		RegionID:      12,
+		BaseFee:       600,
+		BaseDistance:  3000,
+		ExtraFeePerKm: 100,
+		ValueRatio:    numericFromFloat(0.01),
+		MaxFee:        pgtype.Int8{Int64: 3000, Valid: true},
+		MinFee:        500,
+		IsActive:      true,
+	}
+	updatedConfig := existingConfig
+	updatedConfig.MaxFee = pgtype.Int8{}
+
+	store.EXPECT().
+		GetDeliveryFeeConfigByRegion(gomock.Any(), int64(12)).
+		Return(existingConfig, nil)
+	store.EXPECT().
+		UpdateDeliveryFeeConfig(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ any, arg db.UpdateDeliveryFeeConfigParams) (db.DeliveryFeeConfig, error) {
+			require.Equal(t, existingConfig.ID, arg.ID)
+			require.True(t, arg.IsActive.Valid)
+			require.True(t, arg.IsActive.Bool)
+			require.True(t, arg.ClearMaxFee)
+			return updatedConfig, nil
+		})
+
+	ctx, recorder := newJSONTestContext(http.MethodPatch, "/v1/operator/rules/MAX_DELIVERY_FEE", `{"value":"不限"}`)
+	ctx.Params = gin.Params{{Key: "key", Value: "MAX_DELIVERY_FEE"}}
+	ctx.Set(operatorKey, operator)
+
+	server.updateOperatorRule(ctx)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+}

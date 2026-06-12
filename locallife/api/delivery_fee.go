@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -220,13 +221,13 @@ func (server *Server) respondOperatorRegionSelectionError(ctx *gin.Context, err 
 // ============================================================================
 
 type createDeliveryFeeConfigRequest struct {
-	RegionID      int64   `json:"region_id" binding:"required,gt=0"`
-	BaseFee       int64   `json:"base_fee" binding:"required,gte=0"`
-	BaseDistance  int32   `json:"base_distance" binding:"required,gt=0"`
-	ExtraFeePerKm int64   `json:"extra_fee_per_km" binding:"required,gte=0"`
-	ValueRatio    float64 `json:"value_ratio" binding:"gte=0,lte=1"`
-	MaxFee        *int64  `json:"max_fee"`
-	MinFee        int64   `json:"min_fee" binding:"gte=0"`
+	RegionID      int64    `json:"region_id" binding:"required,gt=0"`
+	BaseFee       int64    `json:"base_fee" binding:"required,gte=0"`
+	BaseDistance  int32    `json:"base_distance" binding:"required,gt=0"`
+	ExtraFeePerKm int64    `json:"extra_fee_per_km" binding:"required,gte=0"`
+	ValueRatio    *float64 `json:"value_ratio" binding:"omitempty,gte=0,lte=1"`
+	MaxFee        *int64   `json:"max_fee"`
+	MinFee        int64    `json:"min_fee" binding:"gte=0"`
 }
 
 type deliveryFeeConfigResponse struct {
@@ -319,14 +320,11 @@ func (server *Server) createDeliveryFeeConfig(ctx *gin.Context) {
 		IsActive:      true,
 	}
 
-	// ValueRatio: 默认1%
-	valueRatio := req.ValueRatio
-	if valueRatio > 0 {
-		_ = arg.ValueRatio.Scan(valueRatio)
-	} else {
-		valueRatio = 0.01
-		_ = arg.ValueRatio.Scan(valueRatio)
+	valueRatio := 0.01
+	if req.ValueRatio != nil {
+		valueRatio = *req.ValueRatio
 	}
+	arg.ValueRatio = numericFromFloat(valueRatio)
 
 	if req.MaxFee != nil {
 		arg.MaxFee = pgtype.Int8{Int64: *req.MaxFee, Valid: true}
@@ -405,14 +403,38 @@ type updateDeliveryFeeConfigURI struct {
 	RegionID int64 `uri:"region_id" binding:"required,gt=0"`
 }
 
+type nullableInt64Field struct {
+	Int64 int64
+	Set   bool
+	Valid bool
+}
+
+func (field *nullableInt64Field) UnmarshalJSON(data []byte) error {
+	field.Set = true
+
+	var value *int64
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	if value == nil {
+		field.Valid = false
+		field.Int64 = 0
+		return nil
+	}
+
+	field.Valid = true
+	field.Int64 = *value
+	return nil
+}
+
 type updateDeliveryFeeConfigRequest struct {
-	BaseFee       *int64   `json:"base_fee"`
-	BaseDistance  *int32   `json:"base_distance"`
-	ExtraFeePerKm *int64   `json:"extra_fee_per_km"`
-	ValueRatio    *float64 `json:"value_ratio"`
-	MaxFee        *int64   `json:"max_fee"`
-	MinFee        *int64   `json:"min_fee"`
-	IsActive      *bool    `json:"is_active"`
+	BaseFee       *int64             `json:"base_fee"`
+	BaseDistance  *int32             `json:"base_distance"`
+	ExtraFeePerKm *int64             `json:"extra_fee_per_km"`
+	ValueRatio    *float64           `json:"value_ratio"`
+	MaxFee        nullableInt64Field `json:"max_fee" swaggertype:"integer" extensions:"x-nullable"`
+	MinFee        *int64             `json:"min_fee"`
+	IsActive      *bool              `json:"is_active"`
 }
 
 // updateDeliveryFeeConfig godoc
@@ -473,9 +495,13 @@ func (server *Server) updateDeliveryFeeConfig(ctx *gin.Context) {
 		currentMaxFee := existingConfig.MaxFee.Int64
 		effectiveMaxFee = &currentMaxFee
 	}
-	if req.MaxFee != nil {
-		newMaxFee := *req.MaxFee
-		effectiveMaxFee = &newMaxFee
+	if req.MaxFee.Set {
+		if req.MaxFee.Valid {
+			newMaxFee := req.MaxFee.Int64
+			effectiveMaxFee = &newMaxFee
+		} else {
+			effectiveMaxFee = nil
+		}
 	}
 
 	if err := validateMinMaxFee(effectiveMinFee, effectiveMaxFee); err != nil {
@@ -493,11 +519,16 @@ func (server *Server) updateDeliveryFeeConfig(ctx *gin.Context) {
 		arg.ExtraFeePerKm = pgtype.Int8{Int64: *req.ExtraFeePerKm, Valid: true}
 	}
 	if req.ValueRatio != nil {
-		arg.ValueRatio = pgtype.Numeric{}
-		_ = arg.ValueRatio.Scan(*req.ValueRatio)
+		arg.ValueRatio = numericFromFloat(*req.ValueRatio)
 	}
-	if req.MaxFee != nil {
-		arg.MaxFee = pgtype.Int8{Int64: *req.MaxFee, Valid: true}
+	if req.MaxFee.Set {
+		if req.MaxFee.Valid {
+			arg.MaxFee = pgtype.Int8{Int64: req.MaxFee.Int64, Valid: true}
+		} else {
+			arg.ClearMaxFee = true
+		}
+	} else if existingConfig.MaxFee.Valid {
+		arg.MaxFee = existingConfig.MaxFee
 	}
 	if req.MinFee != nil {
 		arg.MinFee = pgtype.Int8{Int64: *req.MinFee, Valid: true}
@@ -525,8 +556,12 @@ func (server *Server) updateDeliveryFeeConfig(ctx *gin.Context) {
 	if req.ValueRatio != nil {
 		updatedFields["value_ratio"] = *req.ValueRatio
 	}
-	if req.MaxFee != nil {
-		updatedFields["max_fee"] = *req.MaxFee
+	if req.MaxFee.Set {
+		if req.MaxFee.Valid {
+			updatedFields["max_fee"] = req.MaxFee.Int64
+		} else {
+			updatedFields["max_fee"] = nil
+		}
 	}
 	if req.MinFee != nil {
 		updatedFields["min_fee"] = *req.MinFee

@@ -39,7 +39,7 @@ export interface DeliveryFeeConfigResponse {
     extra_fee_per_km: number     // 超出距离每公里的费用(分)
     value_ratio: number          // 货值费率(0.01 = 1%)
     min_fee: number              // 最低运费(分)
-    max_fee?: number             // 最高运费(分), 空表示不限
+    max_fee?: number | null      // 最高运费(分), null/空表示不限
     is_active: boolean
     created_at: string
 }
@@ -52,7 +52,7 @@ export interface CreateDeliveryFeeConfigRequest {
     extra_fee_per_km: number
     value_ratio: number
     min_fee: number
-    max_fee?: number
+    max_fee?: number | null
 }
 
 /** 峰时配置响应 */

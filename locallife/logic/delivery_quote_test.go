@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/merrydance/locallife/algorithm"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/maps"
 	"github.com/stretchr/testify/require"
@@ -173,4 +174,44 @@ func TestComputeDeliveryQuote(t *testing.T) {
 			tc.check(t, result, err)
 		})
 	}
+}
+
+func TestComputeDeliveryQuote_FallbackUsesRouteDistanceEstimate(t *testing.T) {
+	merchant := db.Merchant{
+		ID:        1,
+		RegionID:  2,
+		Latitude:  numericFromFloat(30.0),
+		Longitude: numericFromFloat(120.0),
+	}
+	address := db.UserAddress{
+		UserID:    10,
+		RegionID:  2,
+		Latitude:  numericFromFloat(30.02),
+		Longitude: numericFromFloat(120.02),
+	}
+
+	expectedDistance := int32(float64(algorithm.HaversineDistance(
+		algorithm.Location{Latitude: 30.02, Longitude: 120.02},
+		algorithm.Location{Latitude: 30.0, Longitude: 120.0},
+	)) * 1.4)
+
+	result, err := ComputeDeliveryQuote(
+		context.Background(),
+		DeliveryQuoteInput{
+			UserID:    address.UserID,
+			OrderType: "takeout",
+			Subtotal:  1000,
+			Merchant:  merchant,
+			Address:   address,
+		},
+		nil,
+		func(ctx context.Context, regionID, merchantID int64, distance int32, orderAmount int64) (DeliveryFeeComputation, error) {
+			require.Equal(t, expectedDistance, distance)
+			return DeliveryFeeComputation{Fee: 500}, nil
+		},
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, expectedDistance, result.Distance)
+	require.Equal(t, int64(500), result.Fee)
 }
