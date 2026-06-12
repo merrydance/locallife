@@ -10,6 +10,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func baofuProfitSharingFixtureAnchor(paymentOrderID int64) time.Time {
+	return time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC).Add(-time.Duration(paymentOrderID) * time.Second)
+}
+
 func backdateBaofuProfitSharingFixtures(t *testing.T, paymentOrderID int64, orderID int64, reservationID int64, hasOrder bool, hasReservation bool, at time.Time) {
 	t.Helper()
 
@@ -211,7 +215,7 @@ func TestListBaofuOrdersReadyForProfitSharing_GatesCompletedPaidAndRefundClosed(
 	})
 	require.NoError(t, err)
 
-	profitSharingAnchor := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+	profitSharingAnchor := baofuProfitSharingFixtureAnchor(paymentOrder.ID)
 	backdateBaofuProfitSharingFixtures(t, paymentOrder.ID, order.ID, 0, true, false, profitSharingAnchor)
 
 	rows, err := testStore.ListBaofuOrdersReadyForProfitSharing(context.Background(), ListBaofuOrdersReadyForProfitSharingParams{
@@ -299,7 +303,7 @@ func TestListBaofuOrdersReadyForProfitSharing_SkipsOrderAfterSuccessfulRefund(t 
 	_, err = testStore.UpdateRefundOrderToSuccess(context.Background(), refund.ID)
 	require.NoError(t, err)
 
-	profitSharingAnchor := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+	profitSharingAnchor := baofuProfitSharingFixtureAnchor(paymentOrder.ID)
 	backdateBaofuProfitSharingFixtures(t, paymentOrder.ID, order.ID, 0, true, false, profitSharingAnchor)
 
 	rows, err := testStore.ListBaofuOrdersReadyForProfitSharing(context.Background(), ListBaofuOrdersReadyForProfitSharingParams{
@@ -342,7 +346,7 @@ func TestListBaofuOrdersReadyForProfitSharing_AllowsReservationSuccessfulRefundW
 	_, err = testStore.UpdateRefundOrderToSuccess(context.Background(), refund.ID)
 	require.NoError(t, err)
 
-	profitSharingAnchor := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+	profitSharingAnchor := baofuProfitSharingFixtureAnchor(paymentOrder.ID)
 	backdateBaofuProfitSharingFixtures(t, paymentOrder.ID, 0, reservation.ID, false, true, profitSharingAnchor)
 	_, err = testStore.(*SQLStore).connPool.Exec(context.Background(), `
 		UPDATE table_reservations
@@ -379,7 +383,7 @@ func TestListBaofuOrdersReadyForProfitSharing_RequiresCompletedReservationWithCo
 	type reservationCase struct {
 		name           string
 		status         string
-		completedAt    pgtype.Timestamptz
+		completedAt    bool
 		expectIncluded bool
 	}
 
@@ -388,7 +392,7 @@ func TestListBaofuOrdersReadyForProfitSharing_RequiresCompletedReservationWithCo
 		{name: "confirmed", status: "confirmed"},
 		{name: "checked_in", status: "checked_in"},
 		{name: "completed_without_completed_at", status: "completed"},
-		{name: "completed_with_completed_at", status: "completed", completedAt: pgtype.Timestamptz{Time: time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC), Valid: true}, expectIncluded: true},
+		{name: "completed_with_completed_at", status: "completed", completedAt: true, expectIncluded: true},
 	}
 
 	for _, tc := range cases {
@@ -414,14 +418,14 @@ func TestListBaofuOrdersReadyForProfitSharing_RequiresCompletedReservationWithCo
 			})
 			require.NoError(t, err)
 
-			profitSharingAnchor := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+			profitSharingAnchor := baofuProfitSharingFixtureAnchor(paymentOrder.ID)
 			backdateBaofuProfitSharingFixtures(t, paymentOrder.ID, 0, reservation.ID, false, true, profitSharingAnchor)
-			if tc.completedAt.Valid {
+			if tc.completedAt {
 				_, err = testStore.(*SQLStore).connPool.Exec(context.Background(), `
 					UPDATE table_reservations
 					SET completed_at = $1
 					WHERE id = $2
-				`, tc.completedAt.Time, reservation.ID)
+				`, profitSharingAnchor, reservation.ID)
 				require.NoError(t, err)
 			}
 
@@ -502,7 +506,7 @@ func TestListBaofuProfitSharingOrdersReadyForCommand_RequiresCompletedReservatio
 	})
 	require.NoError(t, err)
 
-	profitSharingAnchor := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+	profitSharingAnchor := baofuProfitSharingFixtureAnchor(paymentOrder.ID)
 	backdateBaofuProfitSharingFixtures(t, paymentOrder.ID, 0, reservation.ID, false, true, profitSharingAnchor)
 	_, err = testStore.(*SQLStore).connPool.Exec(context.Background(), `
 		UPDATE profit_sharing_orders
