@@ -245,7 +245,8 @@ func TestProcessTaskPaymentDomainOutbox_AutoAcceptsPaidOrderAndSchedulesPrint(t 
 	distributor.EXPECT().DistributeTaskPrintOrder(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, payload *worker.PrintOrderPayload, opts ...asynq.Option) error {
 		require.Equal(t, order.ID, payload.OrderID)
 		require.Equal(t, "accepted", payload.Trigger)
-		require.NotEmpty(t, payload.TaskKey)
+		require.Equal(t, fmt.Sprintf("order:%d:accepted", order.ID), payload.TaskKey)
+		requireHasUniqueOption(t, opts)
 		return nil
 	})
 	distributor.EXPECT().DistributeTaskSendNotification(gomock.Any(), gomock.AssignableToTypeOf(&worker.SendNotificationPayload{}), gomock.Any()).AnyTimes().Return(nil)
@@ -321,16 +322,178 @@ func TestProcessTaskPaymentDomainOutbox_RetriesAcceptedPrintForAutoAcceptedOrder
 	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
 	store.EXPECT().GetOrderDisplayConfigByMerchant(gomock.Any(), order.MerchantID).Return(config, nil)
 	store.EXPECT().ListActiveCloudPrintersByMerchant(gomock.Any(), order.MerchantID).Return([]db.CloudPrinter{printer}, nil)
+	store.EXPECT().ListPrintLogsByOrder(gomock.Any(), order.ID).Return([]db.ListPrintLogsByOrderRow{}, nil)
 	distributor.EXPECT().DistributeTaskPrintOrder(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, payload *worker.PrintOrderPayload, opts ...asynq.Option) error {
 		require.Equal(t, order.ID, payload.OrderID)
 		require.Equal(t, "accepted", payload.Trigger)
 		require.Equal(t, fmt.Sprintf("order:%d:accepted", order.ID), payload.TaskKey)
+		requireHasUniqueOption(t, opts)
 		return nil
 	})
 	distributor.EXPECT().DistributeTaskSendNotification(gomock.Any(), gomock.AssignableToTypeOf(&worker.SendNotificationPayload{}), gomock.Any()).AnyTimes().Return(nil)
 	store.EXPECT().GetDeliveryByOrderID(gomock.Any(), order.ID).Return(db.Delivery{}, db.ErrRecordNotFound)
 	store.EXPECT().GetDeliveryPoolByOrderID(gomock.Any(), order.ID).Return(db.DeliveryPool{}, db.ErrRecordNotFound)
 	store.EXPECT().GetMerchant(gomock.Any(), order.MerchantID).Return(db.Merchant{ID: order.MerchantID, OwnerUserID: 9902}, nil).AnyTimes()
+	store.EXPECT().GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+		OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
+		BusinessType: db.ExternalPaymentBusinessOwnerOrder,
+	}).Return(paymentOrder, nil)
+	store.EXPECT().GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(profitSharingOrder, nil)
+	store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+	store.EXPECT().MarkPaymentDomainOutboxPublished(gomock.Any(), outbox.ID).Return(db.PaymentDomainOutbox{ID: outbox.ID, Status: db.PaymentDomainOutboxStatusPublished}, nil)
+
+	processor := worker.NewTestTaskProcessor(store, distributor, nil, nil)
+	payload, err := json.Marshal(worker.PaymentDomainOutboxPayload{OutboxID: outbox.ID})
+	require.NoError(t, err)
+
+	err = processor.ProcessTaskPaymentDomainOutbox(context.Background(), asynq.NewTask(worker.TaskProcessPaymentDomainOutbox, payload))
+	require.NoError(t, err)
+}
+
+func TestProcessTaskPaymentDomainOutbox_SkipsAcceptedPrintRetryWhenPrintLogExists(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockwk.NewMockTaskDistributor(ctrl)
+	order := db.Order{
+		ID:                6404,
+		MerchantID:        7304,
+		UserID:            8104,
+		OrderNo:           "ORD6404",
+		OrderType:         db.OrderTypeTakeout,
+		Status:            db.OrderStatusPreparing,
+		FulfillmentStatus: db.FulfillmentStatusPreparing,
+	}
+	paymentOrder := db.PaymentOrder{
+		ID:           9104,
+		BusinessType: db.ExternalPaymentBusinessOwnerOrder,
+		OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
+		Status:       "paid",
+		Amount:       order.TotalAmount,
+	}
+	profitSharingOrder := db.ProfitSharingOrder{
+		ID:             9204,
+		PaymentOrderID: paymentOrder.ID,
+		MerchantID:     order.MerchantID,
+		TotalAmount:    order.TotalAmount,
+		MerchantAmount: order.TotalAmount,
+	}
+	outbox := buildOrderPaymentSucceededOutbox(t, 9304, paymentOrder.ID, order.ID, order.MerchantID)
+	config := db.OrderDisplayConfig{
+		MerchantID:           order.MerchantID,
+		EnablePrint:          true,
+		PrintTakeout:         true,
+		PrintDineIn:          true,
+		PrintReservation:     true,
+		PrintDispatchMode:    "single_full",
+		PrintTriggerMode:     "accepted",
+		AutoAcceptPaidOrders: true,
+	}
+	printer := db.CloudPrinter{
+		ID:           7104,
+		MerchantID:   order.MerchantID,
+		PrinterType:  "feieyun",
+		PrintTakeout: true,
+		IsActive:     true,
+	}
+	taskKey := fmt.Sprintf("order:%d:accepted", order.ID)
+
+	store.EXPECT().ClaimPaymentDomainOutbox(gomock.Any(), gomock.Any()).Return(outbox, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
+	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
+	store.EXPECT().GetOrderDisplayConfigByMerchant(gomock.Any(), order.MerchantID).Return(config, nil)
+	store.EXPECT().ListActiveCloudPrintersByMerchant(gomock.Any(), order.MerchantID).Return([]db.CloudPrinter{printer}, nil)
+	store.EXPECT().ListPrintLogsByOrder(gomock.Any(), order.ID).Return([]db.ListPrintLogsByOrderRow{
+		{ID: 8804, OrderID: order.ID, PrinterID: 7004, TaskKey: pgtype.Text{String: taskKey, Valid: true}},
+	}, nil)
+	distributor.EXPECT().DistributeTaskPrintOrder(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+	distributor.EXPECT().DistributeTaskSendNotification(gomock.Any(), gomock.AssignableToTypeOf(&worker.SendNotificationPayload{}), gomock.Any()).AnyTimes().Return(nil)
+	store.EXPECT().GetDeliveryByOrderID(gomock.Any(), order.ID).Return(db.Delivery{}, db.ErrRecordNotFound)
+	store.EXPECT().GetDeliveryPoolByOrderID(gomock.Any(), order.ID).Return(db.DeliveryPool{}, db.ErrRecordNotFound)
+	store.EXPECT().GetMerchant(gomock.Any(), order.MerchantID).Return(db.Merchant{ID: order.MerchantID, OwnerUserID: 9904}, nil).AnyTimes()
+	store.EXPECT().GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+		OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
+		BusinessType: db.ExternalPaymentBusinessOwnerOrder,
+	}).Return(paymentOrder, nil)
+	store.EXPECT().GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(profitSharingOrder, nil)
+	store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+	store.EXPECT().MarkPaymentDomainOutboxPublished(gomock.Any(), outbox.ID).Return(db.PaymentDomainOutbox{ID: outbox.ID, Status: db.PaymentDomainOutboxStatusPublished}, nil)
+
+	processor := worker.NewTestTaskProcessor(store, distributor, nil, nil)
+	payload, err := json.Marshal(worker.PaymentDomainOutboxPayload{OutboxID: outbox.ID})
+	require.NoError(t, err)
+
+	err = processor.ProcessTaskPaymentDomainOutbox(context.Background(), asynq.NewTask(worker.TaskProcessPaymentDomainOutbox, payload))
+	require.NoError(t, err)
+}
+
+func TestProcessTaskPaymentDomainOutbox_TreatsDuplicateAcceptedPrintTaskAsScheduled(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockwk.NewMockTaskDistributor(ctrl)
+	order := db.Order{
+		ID:                6405,
+		MerchantID:        7305,
+		UserID:            8105,
+		OrderNo:           "ORD6405",
+		OrderType:         db.OrderTypeTakeout,
+		Status:            db.OrderStatusPreparing,
+		FulfillmentStatus: db.FulfillmentStatusPreparing,
+	}
+	paymentOrder := db.PaymentOrder{
+		ID:           9105,
+		BusinessType: db.ExternalPaymentBusinessOwnerOrder,
+		OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
+		Status:       "paid",
+		Amount:       order.TotalAmount,
+	}
+	profitSharingOrder := db.ProfitSharingOrder{
+		ID:             9205,
+		PaymentOrderID: paymentOrder.ID,
+		MerchantID:     order.MerchantID,
+		TotalAmount:    order.TotalAmount,
+		MerchantAmount: order.TotalAmount,
+	}
+	outbox := buildOrderPaymentSucceededOutbox(t, 9305, paymentOrder.ID, order.ID, order.MerchantID)
+	config := db.OrderDisplayConfig{
+		MerchantID:           order.MerchantID,
+		EnablePrint:          true,
+		PrintTakeout:         true,
+		PrintDineIn:          true,
+		PrintReservation:     true,
+		PrintDispatchMode:    "single_full",
+		PrintTriggerMode:     "accepted",
+		AutoAcceptPaidOrders: true,
+	}
+	printer := db.CloudPrinter{
+		ID:           7105,
+		MerchantID:   order.MerchantID,
+		PrinterType:  "feieyun",
+		PrintTakeout: true,
+		IsActive:     true,
+	}
+	taskKey := fmt.Sprintf("order:%d:accepted", order.ID)
+
+	store.EXPECT().ClaimPaymentDomainOutbox(gomock.Any(), gomock.Any()).Return(outbox, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
+	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
+	store.EXPECT().GetOrderDisplayConfigByMerchant(gomock.Any(), order.MerchantID).Return(config, nil)
+	store.EXPECT().ListActiveCloudPrintersByMerchant(gomock.Any(), order.MerchantID).Return([]db.CloudPrinter{printer}, nil)
+	store.EXPECT().ListPrintLogsByOrder(gomock.Any(), order.ID).Return([]db.ListPrintLogsByOrderRow{}, nil)
+	distributor.EXPECT().DistributeTaskPrintOrder(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, payload *worker.PrintOrderPayload, opts ...asynq.Option) error {
+		require.Equal(t, order.ID, payload.OrderID)
+		require.Equal(t, "accepted", payload.Trigger)
+		require.Equal(t, taskKey, payload.TaskKey)
+		requireHasUniqueOption(t, opts)
+		return asynq.ErrDuplicateTask
+	})
+	distributor.EXPECT().DistributeTaskSendNotification(gomock.Any(), gomock.AssignableToTypeOf(&worker.SendNotificationPayload{}), gomock.Any()).AnyTimes().Return(nil)
+	store.EXPECT().GetDeliveryByOrderID(gomock.Any(), order.ID).Return(db.Delivery{}, db.ErrRecordNotFound)
+	store.EXPECT().GetDeliveryPoolByOrderID(gomock.Any(), order.ID).Return(db.DeliveryPool{}, db.ErrRecordNotFound)
+	store.EXPECT().GetMerchant(gomock.Any(), order.MerchantID).Return(db.Merchant{ID: order.MerchantID, OwnerUserID: 9905}, nil).AnyTimes()
 	store.EXPECT().GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
 		OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
 		BusinessType: db.ExternalPaymentBusinessOwnerOrder,
@@ -748,4 +911,14 @@ func buildReservationPaymentSucceededOutbox(t *testing.T, outboxID int64, paymen
 		Payload:       rawPayload,
 		Status:        db.PaymentDomainOutboxStatusProcessing,
 	}
+}
+
+func requireHasUniqueOption(t *testing.T, opts []asynq.Option) {
+	t.Helper()
+	for _, opt := range opts {
+		if opt.Type() == asynq.UniqueOpt {
+			return
+		}
+	}
+	require.Fail(t, "expected unique option for accepted print task")
 }

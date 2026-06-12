@@ -20,6 +20,7 @@ const (
 	PaymentDomainOutboxEventDispatcherProbe = "payment_domain_outbox_dispatcher_probe"
 	paymentDomainOutboxRetryDelay           = 5 * time.Minute
 	reservationNoShowAlertDedupWindow       = 24 * time.Hour
+	orderAcceptedPrintTaskUniqueWindow      = 30 * time.Minute
 )
 
 type PaymentDomainOutboxTaskDistributor interface {
@@ -256,20 +257,57 @@ func (processor *RedisTaskProcessor) scheduleAutoAcceptedOrderPrint(ctx context.
 	if !hasAutoAcceptPrinterForOrder(printers, order.OrderType) {
 		return nil
 	}
+	taskKey := stableOrderPrintTaskKey(order.ID, printTriggerAccepted)
+	alreadyLogged, err := processor.acceptedPrintTaskAlreadyLogged(ctx, order.ID, taskKey)
+	if err != nil {
+		return err
+	}
+	if alreadyLogged {
+		return nil
+	}
 
 	return processor.distributeAutoAcceptedOrderPrint(ctx, order)
 }
 
 func (processor *RedisTaskProcessor) distributeAutoAcceptedOrderPrint(ctx context.Context, order db.Order) error {
-	return processor.distributor.DistributeTaskPrintOrder(ctx, &PrintOrderPayload{
+	taskKey := stableOrderPrintTaskKey(order.ID, printTriggerAccepted)
+	err := processor.distributor.DistributeTaskPrintOrder(ctx, &PrintOrderPayload{
 		OrderID: order.ID,
 		Trigger: printTriggerAccepted,
-		TaskKey: stableOrderPrintTaskKey(order.ID, printTriggerAccepted),
-	})
+		TaskKey: taskKey,
+	}, asynq.Unique(orderAcceptedPrintTaskUniqueWindow))
+	if errors.Is(err, asynq.ErrDuplicateTask) {
+		log.Info().
+			Int64("order_id", order.ID).
+			Int64("merchant_id", order.MerchantID).
+			Str("task_key", taskKey).
+			Msg("auto accepted order print task already enqueued")
+		return nil
+	}
+	return err
 }
 
 func stableOrderPrintTaskKey(orderID int64, trigger string) string {
 	return fmt.Sprintf("order:%d:%s", orderID, trigger)
+}
+
+func (processor *RedisTaskProcessor) acceptedPrintTaskAlreadyLogged(ctx context.Context, orderID int64, taskKey string) (bool, error) {
+	printLogs, err := processor.store.ListPrintLogsByOrder(ctx, orderID)
+	if err != nil {
+		return false, fmt.Errorf("list order print logs for auto accepted print task key: %w", err)
+	}
+	for _, printLog := range printLogs {
+		if printLog.TaskKey.Valid && printLog.TaskKey.String == taskKey {
+			log.Info().
+				Int64("order_id", printLog.OrderID).
+				Int64("printer_id", printLog.PrinterID).
+				Int64("print_log_id", printLog.ID).
+				Str("task_key", taskKey).
+				Msg("skip auto accepted order print because task key already has a print log")
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func hasAutoAcceptPrinterForOrder(printers []db.CloudPrinter, orderType string) bool {
