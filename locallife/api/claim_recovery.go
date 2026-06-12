@@ -19,6 +19,8 @@ type claimRecoveryResponse struct {
 	RecoveryTarget   *string   `json:"recovery_target,omitempty"`
 	RecoveryAmount   int64     `json:"recovery_amount"`
 	Status           string    `json:"status"`
+	ReleaseStatus    *string   `json:"release_status,omitempty"`
+	ReleaseMessage   *string   `json:"release_message,omitempty"`
 	DueAt            time.Time `json:"due_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
 }
@@ -51,6 +53,19 @@ func newClaimRecoveryResponse(recovery db.ClaimRecovery) claimRecoveryResponse {
 		DueAt:            recovery.DueAt,
 		UpdatedAt:        recovery.UpdatedAt,
 	}
+}
+
+func newMerchantClaimRecoveryResponse(result logic.ClaimRecoveryMerchantResult) claimRecoveryResponse {
+	resp := newClaimRecoveryResponse(result.Recovery)
+	if result.ReleaseVisibility != nil {
+		status := result.ReleaseVisibility.Status
+		resp.ReleaseStatus = &status
+		if result.ReleaseVisibility.Message != "" {
+			message := result.ReleaseVisibility.Message
+			resp.ReleaseMessage = &message
+		}
+	}
+	return resp
 }
 
 func newClaimRecoveryPaymentResponse(result logic.ClaimRecoveryPaymentResult) claimRecoveryPaymentResponse {
@@ -104,7 +119,7 @@ func (server *Server) getMerchantClaimRecovery(ctx *gin.Context) {
 		return
 	}
 
-	recovery, err := logic.GetClaimRecoveryForMerchant(ctx, server.store, logic.MerchantClaimRecoveryInput{
+	result, err := logic.GetClaimRecoveryForMerchant(ctx, server.store, logic.MerchantClaimRecoveryInput{
 		RecoveryID: recoveryID,
 		MerchantID: merchant.ID,
 	})
@@ -116,7 +131,7 @@ func (server *Server) getMerchantClaimRecovery(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newClaimRecoveryResponse(recovery))
+	ctx.JSON(http.StatusOK, newMerchantClaimRecoveryResponse(result))
 }
 
 // getRiderClaimRecovery 骑手查看追偿单

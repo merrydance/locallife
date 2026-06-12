@@ -178,6 +178,7 @@ Page({
         traceSummary: decisionError ? undefined : decision?.trace_summary,
         recoveryStatusLabel: recoveryError ? '追偿信息加载失败' : formatRecoveryStatus(recovery?.status),
         recoveryAmountText: recovery ? formatMoney(recovery.recovery_amount) : undefined,
+        recoveryReleaseMessage: recovery?.release_message,
         dueAtLabel: recovery?.due_at ? formatTime(recovery.due_at) : undefined,
         appealStatusLabel: formatAppealStatus(appeal?.status || appealStatus),
         reviewNotes: appeal?.review_notes || claim.recovery_dispute_review_notes || claim.appeal_review_notes,
@@ -272,14 +273,18 @@ Page({
     const paymentFailed = isClaimRecoveryPaymentIncomplete(status)
     const nextRecoveryStatus = paymentSucceeded ? 'paid' : recovery.status
     const actionNoticeMessage = paymentSucceeded
-      ? '追偿支付已完成，页面状态稍后同步'
+      ? '追偿支付已完成，服务限制正在解除，可稍后刷新查看'
       : paymentFailed
         ? '追偿支付未完成，请稍后重试'
         : '追偿支付已提交，系统正在确认到账结果'
+    const recoveryReleaseMessage = paymentSucceeded
+      ? '追偿已结清，服务限制正在解除，可稍后刷新查看'
+      : recovery.release_message
 
     this.setData({
       'detail.recoveryStatusLabel': formatRecoveryStatus(nextRecoveryStatus),
       'detail.recoveryAmountText': formatMoney(recovery.recovery_amount),
+      'detail.recoveryReleaseMessage': recoveryReleaseMessage,
       'detail.dueAtLabel': recovery.due_at ? formatTime(recovery.due_at) : undefined,
       'detail.canPayRecovery': false,
       'detail.progressCurrent': getMerchantClaimProgressCurrent(undefined, nextRecoveryStatus, this.data.detail.hasAppeal),
@@ -341,6 +346,7 @@ Page({
         recoveryErrorMessage: '',
         'detail.recoveryStatusLabel': formatRecoveryStatus(recovery.status),
         'detail.recoveryAmountText': formatMoney(recovery.recovery_amount),
+        'detail.recoveryReleaseMessage': recovery.release_message,
         'detail.dueAtLabel': recovery.due_at ? formatTime(recovery.due_at) : undefined,
         'detail.canPayRecovery': canPayClaimRecovery(recovery.status)
       })
@@ -354,6 +360,7 @@ Page({
           recoveryErrorMessage: '',
           'detail.recoveryStatusLabel': '无追偿单',
           'detail.recoveryAmountText': undefined,
+          'detail.recoveryReleaseMessage': undefined,
           'detail.dueAtLabel': undefined,
           'detail.canPayRecovery': false
         })
@@ -366,6 +373,7 @@ Page({
         recoveryErrorMessage: getErrorMessage(error, '追偿信息加载失败，可稍后重试'),
         'detail.recoveryStatusLabel': '追偿信息加载失败',
         'detail.recoveryAmountText': undefined,
+        'detail.recoveryReleaseMessage': undefined,
         'detail.dueAtLabel': undefined,
         'detail.canPayRecovery': false
       })

@@ -24,20 +24,29 @@ type OperatorClaimRecoveryInput struct {
 	RegionIDs  []int64
 }
 
-func GetClaimRecoveryForMerchant(ctx context.Context, store db.Store, input MerchantClaimRecoveryInput) (db.ClaimRecovery, error) {
+type ClaimRecoveryMerchantResult struct {
+	Recovery          db.ClaimRecovery
+	ReleaseVisibility *ClaimRecoveryReleaseVisibility
+}
+
+func GetClaimRecoveryForMerchant(ctx context.Context, store db.Store, input MerchantClaimRecoveryInput) (ClaimRecoveryMerchantResult, error) {
 	recoveryCtx, err := getClaimRecoveryContextByID(ctx, store, input.RecoveryID)
 	if err != nil {
-		return db.ClaimRecovery{}, err
+		return ClaimRecoveryMerchantResult{}, err
 	}
 
 	if recoveryCtx.MerchantID != input.MerchantID {
-		return db.ClaimRecovery{}, NewRequestError(http.StatusForbidden, errors.New("this claim does not belong to your merchant"))
+		return ClaimRecoveryMerchantResult{}, NewRequestError(http.StatusForbidden, errors.New("this claim does not belong to your merchant"))
 	}
 	if recoveryCtx.RecoveryTarget.String != "merchant" {
-		return db.ClaimRecovery{}, NewRequestError(http.StatusForbidden, errors.New("this claim recovery does not belong to your merchant"))
+		return ClaimRecoveryMerchantResult{}, NewRequestError(http.StatusForbidden, errors.New("this claim recovery does not belong to your merchant"))
 	}
 
-	return claimRecoveryFromContextByID(recoveryCtx), nil
+	recovery := claimRecoveryFromContextByID(recoveryCtx)
+	return ClaimRecoveryMerchantResult{
+		Recovery:          recovery,
+		ReleaseVisibility: resolveMerchantClaimRecoveryReleaseVisibility(ctx, store, recovery),
+	}, nil
 }
 
 func GetClaimRecoveryForRider(ctx context.Context, store db.Store, input RiderClaimRecoveryInput) (db.ClaimRecovery, error) {

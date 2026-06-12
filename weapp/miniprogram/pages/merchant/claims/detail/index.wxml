@@ -210,6 +210,9 @@
         <text class="label">追偿状态</text>
         <text class="value">{{detail.recoveryStatusLabel}}</text>
       </view>
+      <view class="pending-tip" wx:if="{{detail.recoveryReleaseMessage}}">
+        {{detail.recoveryReleaseMessage}}
+      </view>
       <view class="row" wx:if="{{detail.recoveryAmountText}}">
         <text class="label">追偿金额</text>
         <text class="value">{{detail.recoveryAmountText}}</text>

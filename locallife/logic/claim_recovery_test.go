@@ -52,7 +52,7 @@ func TestGetClaimRecoveryForMerchant(t *testing.T) {
 	testCases := []struct {
 		name       string
 		buildStubs func(store *mockdb.MockStore)
-		check      func(t *testing.T, got db.ClaimRecovery, err error)
+		check      func(t *testing.T, got ClaimRecoveryMerchantResult, err error)
 	}{
 		{
 			name: "ClaimNotFound",
@@ -62,7 +62,7 @@ func TestGetClaimRecoveryForMerchant(t *testing.T) {
 					Times(1).
 					Return(db.GetClaimRecoveryContextByIDRow{}, db.ErrRecordNotFound)
 			},
-			check: func(t *testing.T, _ db.ClaimRecovery, err error) {
+			check: func(t *testing.T, _ ClaimRecoveryMerchantResult, err error) {
 				reqErr := assertRequestError(t, err)
 				require.Equal(t, 404, reqErr.Status)
 				require.Equal(t, "claim recovery not found", reqErr.Err.Error())
@@ -76,7 +76,7 @@ func TestGetClaimRecoveryForMerchant(t *testing.T) {
 					Times(1).
 					Return(claimRecoveryContextFor(recovery, merchantID+1, 99, nil), nil)
 			},
-			check: func(t *testing.T, _ db.ClaimRecovery, err error) {
+			check: func(t *testing.T, _ ClaimRecoveryMerchantResult, err error) {
 				reqErr := assertRequestError(t, err)
 				require.Equal(t, 403, reqErr.Status)
 				require.Equal(t, "this claim does not belong to your merchant", reqErr.Err.Error())
@@ -92,7 +92,7 @@ func TestGetClaimRecoveryForMerchant(t *testing.T) {
 					Times(1).
 					Return(claimRecoveryContextFor(riderRecovery, merchantID, 99, nil), nil)
 			},
-			check: func(t *testing.T, _ db.ClaimRecovery, err error) {
+			check: func(t *testing.T, _ ClaimRecoveryMerchantResult, err error) {
 				reqErr := assertRequestError(t, err)
 				require.Equal(t, 403, reqErr.Status)
 				require.Equal(t, "this claim recovery does not belong to your merchant", reqErr.Err.Error())
@@ -106,7 +106,7 @@ func TestGetClaimRecoveryForMerchant(t *testing.T) {
 					Times(1).
 					Return(db.GetClaimRecoveryContextByIDRow{}, db.ErrRecordNotFound)
 			},
-			check: func(t *testing.T, _ db.ClaimRecovery, err error) {
+			check: func(t *testing.T, _ ClaimRecoveryMerchantResult, err error) {
 				reqErr := assertRequestError(t, err)
 				require.Equal(t, 404, reqErr.Status)
 				require.Equal(t, "claim recovery not found", reqErr.Err.Error())
@@ -120,9 +120,204 @@ func TestGetClaimRecoveryForMerchant(t *testing.T) {
 					Times(1).
 					Return(claimRecoveryContextFor(recovery, merchantID, 99, nil), nil)
 			},
-			check: func(t *testing.T, got db.ClaimRecovery, err error) {
+			check: func(t *testing.T, got ClaimRecoveryMerchantResult, err error) {
 				require.NoError(t, err)
-				require.Equal(t, recovery.ID, got.ID)
+				require.Equal(t, recovery.ID, got.Recovery.ID)
+				require.Nil(t, got.ReleaseVisibility)
+			},
+		},
+		{
+			name: "PaidRecoveryExposesFailedReleaseRetry",
+			buildStubs: func(store *mockdb.MockStore) {
+				paidRecovery := recovery
+				paidRecovery.Status = db.ClaimRecoveryStatusPaid
+				paidRecovery.OrderID = 40
+				paidRecovery.DecisionID = pgtype.Int8{Int64: 50, Valid: true}
+				store.EXPECT().
+					GetClaimRecoveryContextByID(gomock.Any(), claimID).
+					Times(1).
+					Return(claimRecoveryContextFor(paidRecovery, merchantID, 99, nil), nil)
+				store.EXPECT().
+					ListBehaviorActionsByDecision(gomock.Any(), int64(50)).
+					Times(1).
+					Return([]db.BehaviorAction{{
+						ID:           60,
+						DecisionID:   50,
+						ActionType:   "release",
+						TargetEntity: "merchant",
+						Status:       "failed",
+						Detail:       []byte(`{"action":"release_recovery_suspension","claim_id":10,"recovery_id":30,"order_id":40,"target_entity":"merchant","last_error":"internal failure"}`),
+					}}, nil)
+			},
+			check: func(t *testing.T, got ClaimRecoveryMerchantResult, err error) {
+				require.NoError(t, err)
+				require.Equal(t, recovery.ID, got.Recovery.ID)
+				require.NotNil(t, got.ReleaseVisibility)
+				require.Equal(t, "retrying", got.ReleaseVisibility.Status)
+				require.Equal(t, "追偿已结清，服务限制解除正在重试，可稍后刷新查看", got.ReleaseVisibility.Message)
+			},
+		},
+		{
+			name: "PendingRecoveryDoesNotLookupReleaseAction",
+			buildStubs: func(store *mockdb.MockStore) {
+				pendingRecovery := recovery
+				pendingRecovery.Status = db.ClaimRecoveryStatusPending
+				pendingRecovery.DecisionID = pgtype.Int8{Int64: 50, Valid: true}
+				store.EXPECT().
+					GetClaimRecoveryContextByID(gomock.Any(), claimID).
+					Times(1).
+					Return(claimRecoveryContextFor(pendingRecovery, merchantID, 99, nil), nil)
+				store.EXPECT().
+					ListBehaviorActionsByDecision(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			check: func(t *testing.T, got ClaimRecoveryMerchantResult, err error) {
+				require.NoError(t, err)
+				require.Equal(t, recovery.ID, got.Recovery.ID)
+				require.Nil(t, got.ReleaseVisibility)
+			},
+		},
+		{
+			name: "PaidRecoveryReleaseLookupErrorShowsSyncing",
+			buildStubs: func(store *mockdb.MockStore) {
+				paidRecovery := recovery
+				paidRecovery.Status = db.ClaimRecoveryStatusPaid
+				paidRecovery.OrderID = 40
+				paidRecovery.DecisionID = pgtype.Int8{Int64: 50, Valid: true}
+				store.EXPECT().
+					GetClaimRecoveryContextByID(gomock.Any(), claimID).
+					Times(1).
+					Return(claimRecoveryContextFor(paidRecovery, merchantID, 99, nil), nil)
+				store.EXPECT().
+					ListBehaviorActionsByDecision(gomock.Any(), int64(50)).
+					Times(1).
+					Return(nil, errors.New("database unavailable"))
+			},
+			check: func(t *testing.T, got ClaimRecoveryMerchantResult, err error) {
+				require.NoError(t, err)
+				require.Equal(t, recovery.ID, got.Recovery.ID)
+				require.NotNil(t, got.ReleaseVisibility)
+				require.Equal(t, "syncing", got.ReleaseVisibility.Status)
+				require.Equal(t, "追偿已结清，服务限制状态正在同步，可稍后刷新查看", got.ReleaseVisibility.Message)
+			},
+		},
+		{
+			name: "WaivedRecoveryFindsReviewDecisionReleaseRetry",
+			buildStubs: func(store *mockdb.MockStore) {
+				waivedRecovery := recovery
+				waivedRecovery.Status = db.ClaimRecoveryStatusWaived
+				waivedRecovery.OrderID = 40
+				waivedRecovery.DecisionID = pgtype.Int8{Int64: 50, Valid: true}
+				store.EXPECT().
+					GetClaimRecoveryContextByID(gomock.Any(), claimID).
+					Times(1).
+					Return(claimRecoveryContextFor(waivedRecovery, merchantID, 99, nil), nil)
+				store.EXPECT().
+					ListBehaviorActionsByDecision(gomock.Any(), int64(50)).
+					Times(1).
+					Return(nil, nil)
+				store.EXPECT().
+					ListBehaviorDecisionsByOrder(gomock.Any(), pgtype.Int8{Int64: 40, Valid: true}).
+					Times(1).
+					Return([]db.BehaviorDecision{
+						{ID: 50, OrderID: pgtype.Int8{Int64: 40, Valid: true}},
+						{ID: 60, OrderID: pgtype.Int8{Int64: 40, Valid: true}},
+					}, nil)
+				store.EXPECT().
+					ListBehaviorActionsByDecision(gomock.Any(), int64(60)).
+					Times(1).
+					Return([]db.BehaviorAction{{
+						ID:           70,
+						DecisionID:   60,
+						ActionType:   "release",
+						TargetEntity: "merchant",
+						Status:       "failed",
+						Detail:       []byte(`{"action":"release_recovery_suspension","claim_id":10,"recovery_id":30,"order_id":40,"target_entity":"merchant"}`),
+					}}, nil)
+			},
+			check: func(t *testing.T, got ClaimRecoveryMerchantResult, err error) {
+				require.NoError(t, err)
+				require.Equal(t, recovery.ID, got.Recovery.ID)
+				require.NotNil(t, got.ReleaseVisibility)
+				require.Equal(t, "retrying", got.ReleaseVisibility.Status)
+				require.Equal(t, "追偿已结清，服务限制解除正在重试，可稍后刷新查看", got.ReleaseVisibility.Message)
+			},
+		},
+		{
+			name: "PaidRecoveryWithoutDecisionFindsOrderDecisionReleaseRetry",
+			buildStubs: func(store *mockdb.MockStore) {
+				paidRecovery := recovery
+				paidRecovery.Status = db.ClaimRecoveryStatusPaid
+				paidRecovery.OrderID = 40
+				paidRecovery.DecisionID = pgtype.Int8{}
+				store.EXPECT().
+					GetClaimRecoveryContextByID(gomock.Any(), claimID).
+					Times(1).
+					Return(claimRecoveryContextFor(paidRecovery, merchantID, 99, nil), nil)
+				store.EXPECT().
+					ListBehaviorDecisionsByOrder(gomock.Any(), pgtype.Int8{Int64: 40, Valid: true}).
+					Times(1).
+					Return([]db.BehaviorDecision{{ID: 50, OrderID: pgtype.Int8{Int64: 40, Valid: true}}}, nil)
+				store.EXPECT().
+					ListBehaviorActionsByDecision(gomock.Any(), int64(50)).
+					Times(1).
+					Return([]db.BehaviorAction{{
+						ID:           80,
+						DecisionID:   50,
+						ActionType:   "release",
+						TargetEntity: "merchant",
+						Status:       "failed",
+						Detail:       []byte(`{"action":"release_recovery_suspension","claim_id":10,"recovery_id":30,"order_id":40,"target_entity":"merchant"}`),
+					}}, nil)
+			},
+			check: func(t *testing.T, got ClaimRecoveryMerchantResult, err error) {
+				require.NoError(t, err)
+				require.Equal(t, recovery.ID, got.Recovery.ID)
+				require.NotNil(t, got.ReleaseVisibility)
+				require.Equal(t, "retrying", got.ReleaseVisibility.Status)
+				require.Equal(t, "追偿已结清，服务限制解除正在重试，可稍后刷新查看", got.ReleaseVisibility.Message)
+			},
+		},
+		{
+			name: "WaivedRecoveryFindsReviewDecisionReleaseSuccess",
+			buildStubs: func(store *mockdb.MockStore) {
+				waivedRecovery := recovery
+				waivedRecovery.Status = db.ClaimRecoveryStatusWaived
+				waivedRecovery.OrderID = 40
+				waivedRecovery.DecisionID = pgtype.Int8{Int64: 50, Valid: true}
+				store.EXPECT().
+					GetClaimRecoveryContextByID(gomock.Any(), claimID).
+					Times(1).
+					Return(claimRecoveryContextFor(waivedRecovery, merchantID, 99, nil), nil)
+				store.EXPECT().
+					ListBehaviorActionsByDecision(gomock.Any(), int64(50)).
+					Times(1).
+					Return(nil, nil)
+				store.EXPECT().
+					ListBehaviorDecisionsByOrder(gomock.Any(), pgtype.Int8{Int64: 40, Valid: true}).
+					Times(1).
+					Return([]db.BehaviorDecision{
+						{ID: 50, OrderID: pgtype.Int8{Int64: 40, Valid: true}},
+						{ID: 60, OrderID: pgtype.Int8{Int64: 40, Valid: true}},
+					}, nil)
+				store.EXPECT().
+					ListBehaviorActionsByDecision(gomock.Any(), int64(60)).
+					Times(1).
+					Return([]db.BehaviorAction{{
+						ID:           90,
+						DecisionID:   60,
+						ActionType:   "release",
+						TargetEntity: "merchant",
+						Status:       "success",
+						Detail:       []byte(`{"action":"release_recovery_suspension","claim_id":10,"recovery_id":30,"order_id":40,"target_entity":"merchant"}`),
+					}}, nil)
+			},
+			check: func(t *testing.T, got ClaimRecoveryMerchantResult, err error) {
+				require.NoError(t, err)
+				require.Equal(t, recovery.ID, got.Recovery.ID)
+				require.NotNil(t, got.ReleaseVisibility)
+				require.Equal(t, "released", got.ReleaseVisibility.Status)
+				require.Empty(t, got.ReleaseVisibility.Message)
 			},
 		},
 	}

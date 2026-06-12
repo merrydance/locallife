@@ -23,6 +23,7 @@ export interface MerchantClaimDetailView {
   traceSummary?: string
   recoveryStatusLabel: string
   recoveryAmountText?: string
+  recoveryReleaseMessage?: string
   dueAtLabel?: string
   appealStatusLabel: string
   reviewNotes?: string

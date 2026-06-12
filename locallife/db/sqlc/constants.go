@@ -168,6 +168,12 @@ const (
 	ClaimRecoveryBasisMerchantRecovery = "merchant_recovery"
 	ClaimRecoveryBasisRiderRecovery    = "rider_recovery"
 
+	ClaimRecoveryStatusPending  = "pending"
+	ClaimRecoveryStatusPaid     = "paid"
+	ClaimRecoveryStatusOverdue  = "overdue"
+	ClaimRecoveryStatusWaived   = "waived"
+	ClaimRecoveryStatusDisputed = "disputed"
+
 	BehaviorSnapshotWindowKey7d  = "7d"
 	BehaviorSnapshotWindowKey30d = "30d"
 	BehaviorSnapshotScopeRaw     = "raw"

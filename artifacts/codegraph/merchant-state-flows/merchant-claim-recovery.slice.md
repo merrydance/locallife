@@ -1,6 +1,6 @@
 # Merchant Claim Recovery Slice
 
-Status: merchant-state flow slice partially repaired; route contract fixed 2026-05-31, payment-fact release convergence fixed 2026-06-02, and manager dispute-create proof added 2026-06-10
+Status: merchant-state flow slice partially repaired; route contract fixed 2026-05-31, payment-fact release convergence fixed 2026-06-02, manager dispute-create proof added 2026-06-10, and merchant delayed-release visibility added 2026-06-12
 Risk class: G3 - claim compensation, recovery payment, WeChat direct payment facts, merchant takeout suspension/release, dispute review, async workers, and tenant-sensitive merchant/rider boundaries
 Scope: merchant Mini Program claim/recovery/appeal pages -> merchant claim and recovery APIs -> claim recovery creation, dispute, overdue, payment, release, and notification paths
 
@@ -29,6 +29,7 @@ Merchant claim recovery must converge from claim payout to exactly one merchant-
 - If a merchant owes recovery, the claim detail must be able to fetch the recovery row and pay the recovery using the backend's recovery id contract.
 - Recovery payment must not mark the recovery paid until WeChat direct payment terminal truth is applied.
 - Overdue recovery must generate a durable block action and suspend merchant takeout until all blocking recovery rows are cleared.
+- Once merchant recovery is `paid` or `waived`, merchant detail must expose a safe delayed-release state when release action execution is still pending, retrying, or synchronizing.
 - A recovery dispute must atomically create the dispute and move a payable recovery to `disputed`; approval waives and releases, rejection resumes `pending/overdue`.
 - Product decision 2026-06-10: store managers are explicitly authorized to handle/create compensation recovery disputes.
 - Frontend tabs, DTO names, and status enums must match backend truth: `disputed`, `recovery_dispute_id/status`, and `claim_recoveries.status`.
@@ -56,7 +57,7 @@ Merchant claim recovery must converge from claim payout to exactly one merchant-
 7. The Mini Program recovery wrappers previously called claim-based paths that are not registered by the backend; merchant/rider shared wrappers now call `/v1/{role}/recoveries/:id` and `/pay`.
    Evidence: `weapp/miniprogram/pages/merchant/_main_shared/api/appeals-customer-service.ts:444`, `weapp/miniprogram/pages/merchant/_main_shared/api/appeals-customer-service.ts:464`, `locallife/api/server.go:1040`, `locallife/api/server.go:1054`.
 
-8. Backend merchant recovery read/pay handlers parse `ctx.Param("id")` as recovery id, not claim id.
+8. Backend merchant recovery read/pay handlers parse `ctx.Param("id")` as recovery id, not claim id. Merchant recovery read also derives optional `release_status/release_message` from durable release actions for `paid/waived` rows.
    Evidence: `locallife/api/claim_recovery.go:94`, `locallife/api/claim_recovery.go:95`, `locallife/api/claim_recovery.go:107`, `locallife/api/claim_recovery.go:223`, `locallife/api/claim_recovery.go:224`, `locallife/api/claim_recovery.go:236`.
 
 9. Merchant claim read routes allow owner/manager; recovery payment allows owner only.
@@ -113,22 +114,25 @@ Merchant claim recovery must converge from claim payout to exactly one merchant-
 26. Release action execution clears merchant/rider suspension only if no other blocking recovery remains, then writes a closed event.
     Evidence: `locallife/worker/task_claim_behavior_action.go:151`, `locallife/worker/task_claim_behavior_action.go:425`, `locallife/worker/task_claim_behavior_action.go:475`, `locallife/worker/task_claim_behavior_action.go:489`, `locallife/worker/task_claim_behavior_action.go:503`.
 
-27. Merchant detail appeal submission posts `claim_id` and reason to the merchant appeal wrapper.
+27. Merchant recovery detail maps backend release visibility into the recovery card, rendering only backend-provided Chinese `release_message`; local payment success copy tells the merchant that service limits are being released and the detail can be refreshed.
+    Evidence: `locallife/logic/claim_recovery.go:27`, `locallife/logic/claim_recovery_release_visibility.go:40`, `locallife/api/claim_recovery.go:14`, `weapp/miniprogram/pages/merchant/_main_shared/api/appeals-customer-service.ts:36`, `weapp/miniprogram/pages/merchant/claims/detail/index.ts:181`, `weapp/miniprogram/pages/merchant/claims/detail/index.ts:276`, `weapp/miniprogram/pages/merchant/claims/detail/index.wxml:213`.
+
+28. Merchant detail appeal submission posts `claim_id` and reason to the merchant appeal wrapper.
     Evidence: `weapp/miniprogram/pages/merchant/claims/detail/index.ts:432`, `weapp/miniprogram/pages/merchant/claims/detail/index.ts:443`, `weapp/miniprogram/pages/merchant/claims/detail/index.ts:444`, `weapp/miniprogram/pages/merchant/_main_shared/api/appeals-customer-service.ts:361`.
 
-28. The appeal wrapper previously posted `/v1/merchant/appeals`; merchant wrappers now use `/v1/merchant/recovery-disputes`.
+29. The appeal wrapper previously posted `/v1/merchant/appeals`; merchant wrappers now use `/v1/merchant/recovery-disputes`.
     Evidence: `weapp/miniprogram/pages/merchant/_main_shared/api/appeals-customer-service.ts:361`, `weapp/miniprogram/pages/merchant/_main_shared/api/appeals-customer-service.ts:363`, `locallife/api/server.go:1041`.
 
-29. Merchant appeal list/detail pages now rely on service calls backed by `/v1/merchant/recovery-disputes/**`.
+30. Merchant appeal list/detail pages now rely on service calls backed by `/v1/merchant/recovery-disputes/**`.
     Evidence: `weapp/miniprogram/pages/merchant/appeals/index.ts:98`, `weapp/miniprogram/pages/merchant/appeals/index.ts:111`, `weapp/miniprogram/pages/merchant/appeals/detail/index.ts:185`, `weapp/miniprogram/pages/merchant/_main_shared/api/appeals-customer-service.ts:321`, `weapp/miniprogram/pages/merchant/_main_shared/api/appeals-customer-service.ts:350`, `locallife/api/server.go:1042`, `locallife/api/server.go:1043`, `locallife/api/server.go:1044`.
 
-30. Backend recovery dispute create resolves the merchant, verifies claim/recovery ownership, checks the dispute window, rejects duplicates, creates the dispute, marks the recovery `disputed`, and auto-resolves best effort.
+31. Backend recovery dispute create resolves the merchant, verifies claim/recovery ownership, checks the dispute window, rejects duplicates, creates the dispute, marks the recovery `disputed`, and auto-resolves best effort.
     Evidence: `locallife/api/recovery_dispute.go:670`, `locallife/api/recovery_dispute.go:683`, `locallife/logic/recovery_dispute.go:44`, `locallife/logic/recovery_dispute.go:53`, `locallife/logic/recovery_dispute.go:57`, `locallife/logic/recovery_dispute.go:63`, `locallife/logic/recovery_dispute.go:74`, `locallife/db/sqlc/tx_create_recovery_dispute.go:20`, `locallife/db/sqlc/tx_create_recovery_dispute.go:44`, `locallife/api/recovery_dispute.go:698`.
 
-31. Auto-resolution derives approved/rejected from persisted behavior decisions. Approved disputes waive recovery and create release actions; rejected disputes resume `pending/overdue`.
+32. Auto-resolution derives approved/rejected from persisted behavior decisions. Approved disputes waive recovery and create release actions; rejected disputes resume `pending/overdue`.
     Evidence: `locallife/logic/recovery_dispute_auto_resolution.go:35`, `locallife/logic/recovery_dispute_auto_resolution.go:59`, `locallife/db/sqlc/tx_recovery_dispute_review.go:49`, `locallife/db/sqlc/tx_recovery_dispute_review.go:52`, `locallife/db/sqlc/tx_recovery_dispute_review.go:72`, `locallife/db/sqlc/tx_recovery_dispute_review.go:76`, `locallife/db/sqlc/tx_recovery_dispute_review.go:90`.
 
-32. Recovery dispute result effects execute release/compensation or resume, then send appellant and claimant notifications; if inline dispatch fails, a retry task can process later.
+33. Recovery dispute result effects execute release/compensation or resume, then send appellant and claimant notifications; if inline dispatch fails, a retry task can process later.
     Evidence: `locallife/api/recovery_dispute.go:1719`, `locallife/api/recovery_dispute.go:1738`, `locallife/api/recovery_dispute.go:1763`, `locallife/api/recovery_dispute.go:1792`, `locallife/worker/task_process_recovery_dispute_result.go:103`, `locallife/worker/task_process_recovery_dispute_result.go:106`, `locallife/worker/task_process_recovery_dispute_result.go:125`, `locallife/worker/task_process_recovery_dispute_result.go:258`, `locallife/worker/task_process_recovery_dispute_result.go:313`.
 
 ## Reverse-Reference Findings
@@ -143,7 +147,7 @@ Merchant claim recovery must converge from claim payout to exactly one merchant-
 - Fixed 2026-06-10: recovery dispute creation/handling may be performed by store managers, and `TestCreateMerchantRecoveryDisputeAPIManagerCanCreate` now proves the registered create route admits manager staff through the real owner/manager middleware. Payment remains owner-only.
 - Auto-resolution uses persisted behavior decisions and does not re-run adjudication in read paths, which is a healthy no-side-effect boundary.
 - Fixed 2026-06-02: paid claim-recovery fact application now returns the release action to the worker, which immediately enqueues it on the critical queue; `created/failed` release actions still have scheduler recovery.
-- Remaining: paid/waived release side effects are still async/retryable, so merchant-facing copy or detail state should expose delayed release if the worker has not cleared `is_takeout_suspended` yet.
+- Fixed 2026-06-12: merchant recovery read exposes safe delayed-release visibility for `paid/waived` rows through `release_status` and `release_message`; failed release actions show retry copy, created/running actions show pending copy, and missing/unmatched action truth shows synchronizing copy.
 
 ## SQL And Durable State Boundaries
 
@@ -185,6 +189,7 @@ Merchant claim recovery must converge from claim payout to exactly one merchant-
 - WeChat direct payment callback records claim recovery payment facts and creates fact-application rows; payment fact application scheduler retries domain application every minute.
 - Payment success marks the recovery paid, creates a release action, and the payment fact application worker immediately enqueues that release action; behavior-action worker clears merchant/rider suspension only if no blocking recovery remains.
 - Claim behavior action recovery scheduler scans `created` and `failed` release actions every five minutes as the fallback for enqueue/worker failures.
+- Merchant recovery read is a no-side-effect visibility path: `paid/waived` rows first look up release actions by the recovery decision id when present, then fall back to order-scoped behavior decisions and match release actions by persisted recovery/claim/order detail. Lookup failures degrade to synchronizing copy instead of leaking internal errors.
 - Recovery dispute create auto-resolves inline best effort; on failure it enqueues `recovery_dispute:automatic_resolution`.
 - Recovery dispute result worker executes release/compensation/resume effects and sends appellant/claimant notifications.
 
@@ -192,7 +197,7 @@ Merchant claim recovery must converge from claim payout to exactly one merchant-
 
 - Claim list has no draft; it rebuilds rows from backend list and secondary decision hydration.
 - Claim detail keeps local appeal reason draft, submits it through recovery-dispute routes, then reloads detail.
-- Recovery payment now calls backend by `recovery_id`, runs shared payment workflow, locally reflects pending/success, then reloads detail.
+- Recovery payment now calls backend by `recovery_id`, runs shared payment workflow, locally reflects pending/success, displays backend release guidance when present, then reloads detail.
 - Appeal list/detail pages are read-only and preserve last trusted data on silent refresh failure; merchant service calls now use recovery-dispute routes.
 - Backend detail returns recovery dispute fields, and Mini Program pages now read them before old appeal compatibility fields.
 
@@ -213,6 +218,10 @@ Observed tests:
 - `locallife/worker/task_payment_fact_application_test.go` now covers immediate release-action enqueue after claim recovery payment fact application.
 - `locallife/integration/takeout_journey_integration_test.go` now covers pay request -> WeChat direct payment fact application -> release action execution -> merchant/rider suspension clear for D10/D12 recovery-pay journeys.
 - `locallife/api/recovery_dispute_test.go` now proves a staff manager can create a merchant recovery dispute through the registered route and real merchant staff middleware.
+- `locallife/api/claim_recovery_operator_test.go` now proves merchant recovery GET maps backend release visibility into `release_status/release_message` through the registered route.
+- `locallife/logic/claim_recovery_test.go` now covers merchant release visibility for paid failed-release retry, pending recovery no-action lookup, release lookup failure downgrade, legacy paid recoveries without `decision_id`, and waived recovery fallback to review-decision release actions.
+- `weapp/scripts/check-merchant-claim-recovery-contract.test.js` now covers `release_status/release_message` typing and merchant detail rendering.
+- Validation run 2026-06-12 covered Swagger regeneration, generated-artifact sync, focused and package-level backend `logic`/`api` tests, Mini Program claim-recovery contract, compile, lint, and the remaining Mini Program gates after `quality:check` hit unrelated historical page-complexity backlog.
 
 Missing high-value tests:
 
@@ -223,6 +232,7 @@ Missing high-value tests:
 - Fixed 2026-06-02: concurrent recovery-dispute duplicate submit behavior is covered at logic and DB transaction levels.
 - Fixed 2026-06-02: end-to-end claim recovery payment/release coverage now runs through pay request, WeChat fact application, paid recovery, release action execution, and suspension clear.
 - Fixed 2026-06-10: manager recovery-dispute creation permission is covered through the registered `POST /v1/merchant/recovery-disputes` route; low-privilege denial and manager payment denial remain covered by authz tests.
+- Fixed 2026-06-12: merchant delayed-release visibility is covered by backend logic regressions and Mini Program route/field/render contract checks.
 
 ## Gaps And Refactor Notes
 
@@ -234,7 +244,7 @@ Missing high-value tests:
 - Fixed 2026-06-10: managers may submit and handle recovery disputes. Keep create/read middleware aligned with owner/manager unless a later payment or finance policy narrows it; `TestCreateMerchantRecoveryDisputeAPIManagerCanCreate` guards the create route.
 - Fixed 2026-06-02: DB uniqueness already protects duplicate recovery disputes, and logic now maps concurrent unique-conflict errors to stable duplicate-submit semantics.
 - Fixed 2026-06-02: claim recovery payment fact application now surfaces and immediately enqueues the paid-release action, with scheduler fallback for durable `created/failed` actions.
-- Make paid/waived release action retry status visible to merchant if suspension release is delayed.
+- Fixed 2026-06-12: paid/waived delayed-release visibility is merchant-facing through `release_status/release_message`; release action matching uses recovery decision id plus order-scoped decision fallback, and the Mini Program displays the safe message in the recovery card without exposing behavior-action internals.
 
 ## Branch Exhaustion
 
@@ -242,8 +252,8 @@ Missing high-value tests:
 - Request branches checked: merchant claim list/detail/summary/decision reads, recovery read/pay routes, recovery-dispute create/list/detail/summary routes, repaired former `/v1/merchant/appeals/**` Mini Program wrappers, repaired former claim-id recovery wrappers, WeChat direct payment creation, payment callback/query fact routes, and worker task inputs.
 - Backend state branches checked: approved/auto-approved claim visibility, behavior-decision source, recovery row creation after payout, recovery open action, `pending/overdue/disputed/paid/waived` transitions, overdue merchant suspension, payment order reuse/expiry, WeChat terminal success application, dispute create/auto-resolution/review result, release/resume/compensation actions, and notification side effects.
 - Async branches checked: claim payout worker, behavior-action worker, overdue scheduler, WeChat direct payment callback/query facts, payment fact application scheduler, immediate release-action enqueue, automatic dispute-resolution task, dispute-result worker, and release-action retry behavior. Merchant UI recovery is reload/re-entry; no claim recovery realtime subscription was found.
-- Failure/retry branches checked: broken frontend route/id mismatch before recovery payment reaches backend, existing pending payment order reuse, expired payment order close-and-recreate, duplicate scheduler runs, repeated payment facts, dispute auto-resolution failure enqueue, release action enqueue fallback, and release action failure delaying suspension clear.
+- Failure/retry branches checked: broken frontend route/id mismatch before recovery payment reaches backend, existing pending payment order reuse, expired payment order close-and-recreate, duplicate scheduler runs, repeated payment facts, dispute auto-resolution failure enqueue, release action enqueue fallback, release action failure delaying suspension clear, and merchant-visible pending/retrying/synchronizing release states.
 - Reader/consumer branches checked: claim list tabs/summary, claim detail fan-out, recovery card/action state, appeal/dispute list/detail, merchant takeout suspension readers, payment order readers, and notification consumers.
 - Authorization/tenant branches checked: owner/manager claim reads and dispute reads/creates, owner-only recovery payment, merchant ownership rechecks by order/recovery target, dispute window and duplicate checks, callback fact validation by business object, and release-action expected recovery id checks. Product decision 2026-06-10 explicitly approves manager dispute handling, and the create path now has registered-route regression proof.
 - Zombie/unreachable branches checked: frontend `appealed` bucket, Mini Program `/v1/merchant/appeals/**` API paths, and claim-id recovery read/pay wrappers were repaired on 2026-05-31; backend helper for claim-id context still exists but is not exposed as merchant compatibility API.
-- Test-proof gaps checked: backend coverage exists for recovery dispute logic, claim recovery payment, payout/release workers, and payment facts. 2026-05-31 added Mini Program route/field contract coverage and backend list/detail recovery-id/status coverage. 2026-06-02 added logic and DB transaction proof for concurrent duplicate recovery-dispute submissions plus end-to-end pay -> fact -> release -> suspension-clear proof. 2026-06-10 added registered-route proof for manager dispute creation. Missing proof remains for the product contract choice around claim-id compatibility and merchant-facing delayed-release visibility.
+- Test-proof gaps checked: backend coverage exists for recovery dispute logic, claim recovery payment, payout/release workers, and payment facts. 2026-05-31 added Mini Program route/field contract coverage and backend list/detail recovery-id/status coverage. 2026-06-02 added logic and DB transaction proof for concurrent duplicate recovery-dispute submissions plus end-to-end pay -> fact -> release -> suspension-clear proof. 2026-06-10 added registered-route proof for manager dispute creation. 2026-06-12 added backend and Mini Program proof for merchant-facing delayed-release visibility. Missing proof remains only for the product contract choice around claim-id compatibility.

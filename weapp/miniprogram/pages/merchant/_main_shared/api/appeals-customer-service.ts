@@ -36,6 +36,7 @@ export type ApprovalType = 'full' | 'partial' | 'rejected'
 
 /** 追偿单状态枚举 */
 export type ClaimRecoveryStatus = 'pending' | 'paid' | 'overdue' | 'waived' | 'disputed'
+export type ClaimRecoveryReleaseStatus = 'pending' | 'released' | 'retrying' | 'syncing'
 export type AppealStatusTheme = 'warning' | 'success' | 'danger'
 export type ClaimRecoveryStatusTheme = 'warning' | 'success' | 'danger'
 
@@ -142,6 +143,8 @@ export interface ClaimRecoveryResponse {
     recovery_target?: string
     recovery_amount: number
     status: ClaimRecoveryStatus
+    release_status?: ClaimRecoveryReleaseStatus
+    release_message?: string
     due_at: string
     updated_at: string
 }

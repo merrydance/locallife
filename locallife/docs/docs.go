@@ -34406,6 +34406,12 @@ const docTemplate = `{
                 "recovery_target": {
                     "type": "string"
                 },
+                "release_message": {
+                    "type": "string"
+                },
+                "release_status": {
+                    "type": "string"
+                },
                 "responsible_party": {
                     "type": "string"
                 },
