@@ -4,18 +4,50 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/maps"
 	"github.com/merrydance/locallife/util"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
+
+type searchDistanceMatrixMapClient struct {
+	result *maps.DistanceMatrixResult
+	err    error
+}
+
+func (c searchDistanceMatrixMapClient) GetBicyclingRoute(ctx context.Context, from, to maps.Location) (*maps.RouteResult, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (c searchDistanceMatrixMapClient) GetWalkingRoute(ctx context.Context, from, to maps.Location) (*maps.RouteResult, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (c searchDistanceMatrixMapClient) GetDrivingRoute(ctx context.Context, from, to maps.Location) (*maps.RouteResult, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (c searchDistanceMatrixMapClient) GetDistanceMatrix(ctx context.Context, froms, tos []maps.Location, mode string) (*maps.DistanceMatrixResult, error) {
+	return c.result, c.err
+}
+
+func (c searchDistanceMatrixMapClient) Geocode(ctx context.Context, address string) (*maps.GeocodeResult, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (c searchDistanceMatrixMapClient) ReverseGeocode(ctx context.Context, location maps.Location) (*maps.ReverseGeocodeResult, error) {
+	return nil, errors.New("not implemented")
+}
 
 // ==================== 菜品搜索测试 ====================
 
@@ -357,6 +389,95 @@ func TestSearchMerchantsAPI(t *testing.T) {
 			tc.checkResponse(t, recorder)
 		})
 	}
+}
+
+func TestCalculateSearchMerchantDistancesAndFeesKeepsDisplayDistanceAlignedWithFeeDistance(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	const (
+		regionID   int64 = 7
+		merchantID int64 = 42
+	)
+
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	server.mapClient = searchDistanceMatrixMapClient{
+		result: &maps.DistanceMatrixResult{
+			Rows: []maps.DistanceMatrixRow{
+				{Elements: []maps.DistanceMatrixElement{{Distance: 4000, Duration: 900}}},
+			},
+		},
+	}
+
+	store.EXPECT().
+		GetDeliveryFeeConfigByRegion(gomock.Any(), regionID).
+		Return(db.DeliveryFeeConfig{
+			RegionID:      regionID,
+			BaseFee:       500,
+			BaseDistance:  1000,
+			ExtraFeePerKm: 100,
+			ValueRatio:    numericFromFloat(0),
+			MinFee:        0,
+			IsActive:      true,
+		}, nil)
+	store.EXPECT().
+		GetLatestWeatherCoefficient(gomock.Any(), regionID).
+		Return(db.WeatherCoefficient{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		ListPeakHourConfigsByRegion(gomock.Any(), regionID).
+		Return([]db.PeakHourConfig{}, nil)
+	store.EXPECT().
+		ListActiveDeliveryPromotionsByMerchant(gomock.Any(), merchantID).
+		Return([]db.MerchantDeliveryPromotion{}, nil)
+
+	sqlDistance := 1500
+	merchants := []searchMerchantResponse{{
+		ID:       merchantID,
+		RegionID: regionID,
+		Latitude: 39.90, Longitude: 116.40,
+		Distance: &sqlDistance,
+	}}
+	ginCtx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ginCtx.Request = httptest.NewRequest(http.MethodGet, "/v1/search/merchants", nil)
+
+	server.calculateSearchMerchantDistancesAndFees(ginCtx, merchants, 39.91, 116.41)
+
+	require.NotNil(t, merchants[0].Distance)
+	require.Equal(t, 4000, *merchants[0].Distance)
+	require.NotNil(t, merchants[0].EstimatedDeliveryFee)
+	require.EqualValues(t, 800, *merchants[0].EstimatedDeliveryFee)
+}
+
+func TestCalculateSearchMerchantDistancesAndFeesIgnoresZeroRouteDistance(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	server.mapClient = searchDistanceMatrixMapClient{
+		result: &maps.DistanceMatrixResult{
+			Rows: []maps.DistanceMatrixRow{
+				{Elements: []maps.DistanceMatrixElement{{Distance: 0, Duration: 0}}},
+			},
+		},
+	}
+
+	sqlDistance := 1500
+	merchants := []searchMerchantResponse{{
+		ID:       42,
+		RegionID: 7,
+		Latitude: 39.90, Longitude: 116.40,
+		Distance: &sqlDistance,
+	}}
+	ginCtx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ginCtx.Request = httptest.NewRequest(http.MethodGet, "/v1/search/merchants", nil)
+
+	server.calculateSearchMerchantDistancesAndFees(ginCtx, merchants, 39.91, 116.41)
+
+	require.NotNil(t, merchants[0].Distance)
+	require.Equal(t, 1500, *merchants[0].Distance)
+	require.Nil(t, merchants[0].EstimatedDeliveryFee)
 }
 
 // ==================== 套餐搜索测试 ====================

@@ -528,9 +528,9 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 		assignMerchantLabels(response, repurchaseRates, orderCounts)
 	}
 
-	// 如果用户提供了位置，计算精确距离（展示用）和运费
+	// 如果用户提供了位置，计算路网距离（展示用）和运费
 	if resolvedLat != nil && resolvedLng != nil && server.mapClient != nil {
-		server.calculateSearchMerchantDistancesAndFees(ctx, response, *resolvedLat, *resolvedLng, !preferDistanceSort)
+		server.calculateSearchMerchantDistancesAndFees(ctx, response, *resolvedLat, *resolvedLng)
 	}
 
 	// 后台记录搜索历史 + 热词
@@ -1243,7 +1243,7 @@ func parseTime(timeStr string) (pgtype.Time, error) {
 // ==================== 距离和运费计算辅助函数 ====================
 
 // calculateSearchMerchantDistancesAndFees 批量计算搜索结果中商户到用户的距离和预估运费
-func (server *Server) calculateSearchMerchantDistancesAndFees(ctx *gin.Context, merchants []searchMerchantResponse, userLat, userLng float64, overwriteDistance bool) {
+func (server *Server) calculateSearchMerchantDistancesAndFees(ctx *gin.Context, merchants []searchMerchantResponse, userLat, userLng float64) {
 	if len(merchants) == 0 || server.mapClient == nil {
 		return
 	}
@@ -1283,9 +1283,10 @@ func (server *Server) calculateSearchMerchantDistancesAndFees(ctx *gin.Context, 
 		idx := validIndices[i]
 		if len(row.Elements) > 0 {
 			distance := row.Elements[0].Distance
-			if overwriteDistance || merchants[idx].Distance == nil {
-				merchants[idx].Distance = &distance
+			if distance <= 0 {
+				continue
 			}
+			merchants[idx].Distance = &distance
 
 			// 商户列表没有具体订单金额，传0表示只计算基础运费+距离费，不含货值加价
 			// 时段系数和天气系数仍正常参与计算
