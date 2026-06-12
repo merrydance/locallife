@@ -52,6 +52,15 @@
         >查看状态</t-button>
       </view>
 
+      <merchant-printer-reconciliation-section
+        jobs="{{reconciliationJobs}}"
+        error-message="{{reconciliationErrorMessage}}"
+        loading="{{reconciliationLoading}}"
+        retrying-job-id="{{retryingReconciliationJobId}}"
+        bind:refresh="onRefreshReconciliationJobs"
+        bind:retry="onRetryReconciliationJob"
+      />
+
       <view wx:if="{{loading && !printers.length}}" class="loading-state">
         <t-loading theme="circular" size="40rpx" text="加载中..." vertical />
       </view>

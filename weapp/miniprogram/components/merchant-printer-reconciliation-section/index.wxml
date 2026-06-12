@@ -1,0 +1,51 @@
+<view wx:if="{{jobs.length || errorMessage}}" class="reconciliation-section">
+  <view class="reconciliation-section__header">
+    <view class="reconciliation-section__heading">
+      <text class="reconciliation-section__title">设备同步异常</text>
+      <text class="reconciliation-section__subtitle">云打印平台和本地记录未对齐时，可在这里恢复同步</text>
+    </view>
+    <t-button
+      wx:if="{{errorMessage}}"
+      size="small"
+      theme="primary"
+      variant="outline"
+      loading="{{loading}}"
+      bind:tap="onRefreshTap"
+    >重新加载</t-button>
+  </view>
+
+  <t-notice-bar
+    wx:if="{{errorMessage}}"
+    theme="warning"
+    visible="{{true}}"
+    content="{{errorMessage}}"
+  />
+
+  <view wx:if="{{jobs.length}}" class="reconciliation-list">
+    <view wx:for="{{jobs}}" wx:key="id" class="reconciliation-item">
+      <view class="reconciliation-item__main">
+        <view class="reconciliation-item__title-row">
+          <text class="reconciliation-item__title">{{item.issue_title}}</text>
+          <t-tag size="small" theme="{{item.status_theme}}" variant="light">{{item.status_label}}</t-tag>
+        </view>
+        <view class="reconciliation-item__meta">
+          <text>{{item.source_action_label}}</text>
+          <text>{{item.printer_type_label}}</text>
+          <text>{{item.retry_count_label}}</text>
+        </view>
+        <text class="reconciliation-item__hint">{{item.action_hint}}</text>
+        <text class="reconciliation-item__time">更新时间 {{item.updated_at_label || item.created_at_label || '--'}}</text>
+      </view>
+      <t-button
+        size="small"
+        theme="primary"
+        variant="outline"
+        icon="refresh"
+        loading="{{retryingJobId === item.id}}"
+        disabled="{{!item.can_retry || retryingJobId && retryingJobId !== item.id}}"
+        data-id="{{item.id}}"
+        bind:tap="onRetryTap"
+      >{{item.desired_action_label}}</t-button>
+    </view>
+  </view>
+</view>

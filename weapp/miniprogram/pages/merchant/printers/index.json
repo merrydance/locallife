@@ -9,7 +9,8 @@
     "t-fab": "tdesign-miniprogram/fab/fab",
     "t-loading": "tdesign-miniprogram/loading/loading",
     "t-popup": "tdesign-miniprogram/popup/popup",
-    "t-tag": "tdesign-miniprogram/tag/tag"
+    "t-tag": "tdesign-miniprogram/tag/tag",
+    "merchant-printer-reconciliation-section": "/components/merchant-printer-reconciliation-section/index"
   },
   "navigationStyle": "custom",
   "enablePullDownRefresh": true

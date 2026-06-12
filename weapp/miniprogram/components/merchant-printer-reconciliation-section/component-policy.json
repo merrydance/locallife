@@ -1,0 +1,11 @@
+{
+  "purpose": "Merchant printer recovery section for pending cloud-printer reconciliation jobs with inline refresh and guarded retry affordances.",
+  "tdesignGroup": "feedback",
+  "tdesignCandidates": [
+    "notice-bar",
+    "tag",
+    "button"
+  ],
+  "decision": "tdesign-wrapper",
+  "rationale": "The section owns a repeated recovery list, local refresh notice, and per-job retry event wiring while keeping page orchestration and backend calls in the page."
+}

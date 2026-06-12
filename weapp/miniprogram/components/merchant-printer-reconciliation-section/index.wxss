@@ -1,0 +1,102 @@
+.reconciliation-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-sm);
+  padding: var(--spacer-md);
+  border-radius: var(--radius-md);
+  background: var(--td-bg-color-container);
+  box-shadow: var(--shadow-sm);
+}
+
+.reconciliation-section__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacer-sm);
+}
+
+.reconciliation-section__heading {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.reconciliation-section__title {
+  font-size: var(--font-size-md);
+  line-height: 1.4;
+  font-weight: 700;
+  color: var(--td-text-color-primary);
+}
+
+.reconciliation-section__subtitle {
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  color: var(--td-text-color-secondary);
+}
+
+.reconciliation-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-sm);
+}
+
+.reconciliation-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacer-sm);
+  padding: var(--spacer-sm);
+  border-radius: var(--radius-md);
+  background: var(--td-bg-color-secondarycontainer);
+}
+
+.reconciliation-item__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.reconciliation-item__title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12rpx;
+}
+
+.reconciliation-item__title {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.reconciliation-item__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8rpx 16rpx;
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  color: var(--td-text-color-secondary);
+}
+
+.reconciliation-item__hint,
+.reconciliation-item__time {
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  color: var(--td-text-color-placeholder);
+}
+
+@media (max-width: 420px) {
+  .reconciliation-section__header,
+  .reconciliation-item,
+  .reconciliation-item__title-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

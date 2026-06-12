@@ -4,8 +4,7 @@ import {
   deviceManagementService,
   type PrinterLiveStatusResponse,
   type PrinterRole,
-  type PrinterResponse,
-  type PrinterType
+  type PrinterResponse
 } from '../../../api/table-device-management'
 import {
   ensureMerchantDeviceManagementAccess,
@@ -14,16 +13,16 @@ import {
   isMerchantDeviceManagementGranted
 } from '../../../utils/console-access'
 import { logger } from '../../../utils/logger'
+import { isSettledFulfilled, isSettledRejected, settleAll } from '../../../utils/promise'
+import {
+  buildPrinterReconciliationJobView,
+  buildPrinterTypeLabel,
+  buildReconciliationLoadErrorMessage,
+  type PrinterReconciliationJobView
+} from '../../../utils/printer-reconciliation-view'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 
 const PRINTERS_AUTO_REFRESH_WINDOW_MS = 60 * 1000
-
-const PRINTER_TYPE_LABELS: Record<PrinterType, string> = {
-  feieyun: '飞鹅云',
-  shangpeng: '商鹏云',
-  yilianyun: '易联云',
-  other: '其他'
-}
 
 const PRINTER_ROLE_LABELS: Record<PrinterRole, string> = {
   front: '前台',
@@ -70,8 +69,7 @@ function formatTimeLabel(value?: string) {
 }
 
 function printerTypeLabel(type?: string) {
-  if (!type) return '未设置'
-  return PRINTER_TYPE_LABELS[type as PrinterType] || type
+  return buildPrinterTypeLabel(type)
 }
 
 function printerRoleLabel(role?: string) {
@@ -183,6 +181,10 @@ Page({
     pageDirty: false,
     needsReloadOnShow: false,
     printers: [] as PrinterView[],
+    reconciliationJobs: [] as PrinterReconciliationJobView[],
+    reconciliationErrorMessage: '',
+    reconciliationLoading: false,
+    retryingReconciliationJobId: 0,
     deletingPrinterId: 0,
     testingPrinterId: 0,
     confirmDialogVisible: false,
@@ -295,18 +297,46 @@ Page({
             initialLoading: true,
             initialError: false,
             initialErrorMessage: '',
-            refreshErrorMessage: ''
+            refreshErrorMessage: '',
+            reconciliationLoading: true,
+            reconciliationErrorMessage: ''
           }
         : {
             initialError: false,
             initialErrorMessage: '',
-            refreshErrorMessage: ''
+            refreshErrorMessage: '',
+            reconciliationLoading: true,
+            reconciliationErrorMessage: ''
           })
     })
 
     try {
-      const response = await deviceManagementService.listPrinters()
-      const printers = ensureArray(response?.printers).map(buildPrinterView)
+      const [printersResult, reconciliationResult] = await settleAll([
+        deviceManagementService.listPrinters(),
+        deviceManagementService.listPrinterReconciliationJobs('pending')
+      ] as const)
+
+      const reconciliationState: Record<string, unknown> = {
+        reconciliationLoading: false
+      }
+      if (isSettledFulfilled(reconciliationResult)) {
+        reconciliationState.reconciliationJobs = ensureArray(reconciliationResult.value?.jobs)
+          .map((job) => buildPrinterReconciliationJobView(job, formatTimeLabel))
+        reconciliationState.reconciliationErrorMessage = ''
+      } else {
+        logger.error('Load printer reconciliation jobs failed', reconciliationResult.reason)
+        reconciliationState.reconciliationErrorMessage = buildReconciliationLoadErrorMessage(
+          getErrorMessage(reconciliationResult.reason, '设备恢复状态加载失败，请稍后重试'),
+          this.data.reconciliationJobs.length > 0
+        )
+      }
+
+      if (isSettledRejected(printersResult)) {
+        this.setData(reconciliationState)
+        throw printersResult.reason
+      }
+
+      const printers = ensureArray(printersResult.value?.printers).map(buildPrinterView)
       this.setData({
         printers,
         resultSummaryText: buildPrinterResultSummary(printers.length),
@@ -316,7 +346,8 @@ Page({
         initialErrorMessage: '',
         refreshErrorMessage: '',
         lastLoadedAt: Date.now(),
-        pageDirty: false
+        pageDirty: false,
+        ...reconciliationState
       })
     } catch (err) {
       logger.error('Load printers failed', err)
@@ -333,8 +364,37 @@ Page({
         })
       }
     } finally {
-      this.setData({ loading: false, initialLoading: false })
+      this.setData({ loading: false, initialLoading: false, reconciliationLoading: false })
       wx.stopPullDownRefresh()
+    }
+  },
+
+  async loadReconciliationJobs(showLoading = true) {
+    if (this.data.reconciliationLoading) return
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
+
+    this.setData({
+      reconciliationLoading: showLoading,
+      reconciliationErrorMessage: ''
+    })
+
+    try {
+      const response = await deviceManagementService.listPrinterReconciliationJobs('pending')
+      this.setData({
+        reconciliationJobs: ensureArray(response?.jobs)
+          .map((job) => buildPrinterReconciliationJobView(job, formatTimeLabel)),
+        reconciliationErrorMessage: ''
+      })
+    } catch (err) {
+      logger.error('Load printer reconciliation jobs failed', err)
+      this.setData({
+        reconciliationErrorMessage: buildReconciliationLoadErrorMessage(
+          getErrorMessage(err, '设备恢复状态加载失败，请稍后重试'),
+          this.data.reconciliationJobs.length > 0
+        )
+      })
+    } finally {
+      this.setData({ reconciliationLoading: false })
     }
   },
 
@@ -344,6 +404,10 @@ Page({
 
   onRetry() {
     void this.loadPageData(true, true)
+  },
+
+  onRefreshReconciliationJobs() {
+    void this.loadReconciliationJobs(true)
   },
 
   onCreatePrinter() {
@@ -362,6 +426,37 @@ Page({
   async handleMutationFailure(err: unknown, fallbackMessage: string) {
     await this.loadPageData(false, true)
     wx.showToast({ title: getErrorMessage(err, fallbackMessage), icon: 'none' })
+  },
+
+  async onRetryReconciliationJob(e: WechatMiniprogram.TouchEvent | WechatMiniprogram.CustomEvent) {
+    const detail = (e as WechatMiniprogram.CustomEvent).detail as { id?: number } | undefined
+    const dataset = e.currentTarget.dataset as { id?: number }
+    const jobId = Number(detail?.id || dataset.id || 0)
+    if (!jobId || this.data.retryingReconciliationJobId) return
+
+    this.setData({
+      retryingReconciliationJobId: jobId,
+      reconciliationErrorMessage: ''
+    })
+
+    try {
+      await deviceManagementService.retryPrinterReconciliationJob(jobId)
+      await this.loadPageData(false, true)
+      const hasRefreshWarning = Boolean(this.data.refreshErrorMessage || this.data.reconciliationErrorMessage)
+      this.setData({
+        commandResultText: '设备同步恢复已完成',
+        commandResultNote: hasRefreshWarning
+          ? '恢复已完成，最新状态同步失败，稍后重新进入查看'
+          : '设备列表和异常恢复状态已按后端结果回读',
+        commandResultPrinterId: 0
+      })
+    } catch (err) {
+      logger.error('Retry printer reconciliation job failed', err)
+      const message = getErrorMessage(err, '设备同步恢复失败，请稍后重试')
+      this.setData({ reconciliationErrorMessage: message })
+    } finally {
+      this.setData({ retryingReconciliationJobId: 0 })
+    }
   },
 
   openConfirmDialog(action: ConfirmActionKind, targetId: number, targetName: string) {
