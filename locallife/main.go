@@ -493,6 +493,11 @@ func runTaskProcessor(
 		})
 	}
 	taskProcessor.SetBaofuAccountClient(baofuAccountClient, dataEncryptor)
+	taskProcessor.SetBaofuWithdrawalConfig(worker.BaofuWithdrawalCommandDispatchConfig{
+		PayoutMerchantID:  config.BaofuPayoutMerchantID,
+		PayoutTerminalID:  config.BaofuPayoutTerminalID,
+		WithdrawNotifyURL: config.EffectiveBaofuWithdrawNotifyURL(),
+	})
 	taskProcessor.SetBaofuMerchantReportClient(baofuMerchantReportClient)
 	log.Info().Msg("start task processor")
 

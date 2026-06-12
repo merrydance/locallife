@@ -97,6 +97,7 @@ type Querier interface {
 	ClaimPaymentDomainOutbox(ctx context.Context, arg ClaimPaymentDomainOutboxParams) (PaymentDomainOutbox, error)
 	ClaimPendingProviderStatusPrintLogs(ctx context.Context, arg ClaimPendingProviderStatusPrintLogsParams) ([]ClaimPendingProviderStatusPrintLogsRow, error)
 	ClaimRiderSuspensionIfAvailable(ctx context.Context, arg ClaimRiderSuspensionIfAvailableParams) (int64, error)
+	ClaimSubmittedExternalPaymentCommandForDispatch(ctx context.Context, arg ClaimSubmittedExternalPaymentCommandForDispatchParams) (ExternalPaymentCommand, error)
 	// P1-026: 清理长期未更新的购物车及其商品（ON DELETE CASCADE）
 	CleanupOldCarts(ctx context.Context, updatedAt time.Time) error
 	ClearAbnormalStatsDailyForBackfill(ctx context.Context, arg ClearAbnormalStatsDailyForBackfillParams) error
@@ -785,6 +786,7 @@ type Querier interface {
 	GetDishesWithMerchantByIDs(ctx context.Context, dollar_1 []int64) ([]GetDishesWithMerchantByIDsRow, error)
 	// 获取用户未购买过的热门菜品（探索推荐）
 	GetExploreDishes(ctx context.Context, arg GetExploreDishesParams) ([]GetExploreDishesRow, error)
+	GetExternalPaymentCommand(ctx context.Context, id int64) (ExternalPaymentCommand, error)
 	GetExternalPaymentCommandByExternalObject(ctx context.Context, arg GetExternalPaymentCommandByExternalObjectParams) (ExternalPaymentCommand, error)
 	GetExternalPaymentFact(ctx context.Context, id int64) (ExternalPaymentFact, error)
 	GetExternalPaymentFactApplication(ctx context.Context, id int64) (ExternalPaymentFactApplication, error)
@@ -1581,6 +1583,7 @@ type Querier interface {
 	// 查找持续处于 processing 状态超过阈值时间的退款单（支付通道回调可能永久丢失）
 	// 用于运营告警，让人工核查对应支付后台退款结果
 	ListStuckProcessingRefundOrders(ctx context.Context, arg ListStuckProcessingRefundOrdersParams) ([]ListStuckProcessingRefundOrdersRow, error)
+	ListSubmittedBaofuWithdrawalCommandsForDispatch(ctx context.Context, arg ListSubmittedBaofuWithdrawalCommandsForDispatchParams) ([]ExternalPaymentCommand, error)
 	ListSuspendedRegions(ctx context.Context) ([]WeatherCoefficient, error)
 	ListTableImages(ctx context.Context, tableID int64) ([]TableImage, error)
 	ListTableTags(ctx context.Context, tableID int64) ([]ListTableTagsRow, error)

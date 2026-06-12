@@ -41,7 +41,7 @@ check_present "account query must keep official version 4.0.0" 'OfficialQueryAcc
 check_present "account query loginNo mode must require official identity/platform fields" 'certificateNo is required when loginNo is used|platformNo is required when loginNo is used' baofu/account/contracts
 check_present "withdrawal request must expose official feeMemberId" 'FeeMemberID\s+string' baofu/account/contracts
 check_present "withdrawal client must send feeMemberId to Baofoo" 'FeeMemberID:\s+strings\.TrimSpace\(req\.FeeMemberID\)' baofu/account/client.go
-check_present "withdrawal service must populate feeMemberId from account binding" 'FeeMemberID:\s+feeMemberID' logic/baofu_withdraw_service.go
+check_present "withdrawal command dispatch must populate feeMemberId from account binding" 'FeeMemberID:\s+feeMemberID' worker/task_baofu_withdrawal_command_dispatch.go
 check_present "aggregate callbacks must unwrap official dataContent envelope" 'normalizeAggregateNotificationDataContent' baofu/aggregatepay/notification
 check_present "aggregate callbacks must support signed public envelope parser" 'NewParserWithPublicKey' baofu/aggregatepay/notification api
 check_present "aggregate callback envelope must verify dataContent signature" 'PublicNotificationEnvelope.*VerifySignature|VerifySignature\(publicKeyPEM string\)' baofu

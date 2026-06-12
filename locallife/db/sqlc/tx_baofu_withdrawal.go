@@ -63,6 +63,7 @@ func baofuWithdrawSubmittedCommandSnapshot(order BaofuWithdrawalOrder) []byte {
 		"provider":                  ExternalPaymentProviderBaofu,
 		"operation":                 "create_baofu_withdraw",
 		"state":                     "submitted",
+		"dispatch_mode":             "async_worker",
 		"baofu_withdrawal_order_id": order.ID,
 		"owner_type":                order.OwnerType,
 		"owner_id":                  order.OwnerID,

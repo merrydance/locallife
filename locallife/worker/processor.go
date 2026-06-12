@@ -56,6 +56,7 @@ type RedisTaskProcessor struct {
 	transferClient            wechat.TransferClientInterface      // 商家转账客户端（索赔赔付到零钱）
 	baofuAggregateClient      aggregatepay.Client                 // 宝付聚合支付/分账客户端
 	baofuAccountClient        logic.BaofuAccountClient
+	baofuWithdrawClient       logic.BaofuWithdrawClient
 	baofuMerchantReportClient baofuMerchantReportContinuationClient
 	dataEncryptor             util.DataEncryptor        // 本地敏感资料加解密
 	pubSubPublisher           websocket.PubSubPublisher // Pub/Sub 发布器（用于推送通知）
@@ -70,6 +71,7 @@ type RedisTaskProcessor struct {
 	printerClient             cloudprint.Client
 	config                    util.Config
 	baofuProfitSharingConfig  BaofuProfitSharingWorkerConfig
+	baofuWithdrawalConfig     BaofuWithdrawalCommandDispatchConfig
 	roleCache                 map[int64]cachedUserRoles
 	roleCacheMu               sync.RWMutex
 	roleCacheTTL              time.Duration
@@ -192,7 +194,15 @@ func (processor *RedisTaskProcessor) SetBaofuAggregateClient(client aggregatepay
 
 func (processor *RedisTaskProcessor) SetBaofuAccountClient(client logic.BaofuAccountClient, encryptor util.DataEncryptor) {
 	processor.baofuAccountClient = client
+	if withdrawClient, ok := client.(logic.BaofuWithdrawClient); ok {
+		processor.baofuWithdrawClient = withdrawClient
+	}
 	processor.dataEncryptor = encryptor
+}
+
+func (processor *RedisTaskProcessor) SetBaofuWithdrawClientForTest(client logic.BaofuWithdrawClient, config BaofuWithdrawalCommandDispatchConfig) {
+	processor.baofuWithdrawClient = client
+	processor.baofuWithdrawalConfig = config.normalized()
 }
 
 func (processor *RedisTaskProcessor) SetBaofuMerchantReportClient(client baofuMerchantReportContinuationClient) {
@@ -339,6 +349,7 @@ func (processor *RedisTaskProcessor) Start() error {
 	mux.HandleFunc(TaskProcessBaofuProfitSharing, processor.ProcessTaskBaofuProfitSharing)
 	mux.HandleFunc(TaskProcessBaofuAccountOpening, processor.ProcessTaskBaofuAccountOpening)
 	mux.HandleFunc(TaskProcessBaofuWithdrawalFactApplication, processor.ProcessTaskBaofuWithdrawalFactApplication)
+	mux.HandleFunc(TaskProcessBaofuWithdrawalCommandDispatch, processor.ProcessTaskBaofuWithdrawalCommandDispatch)
 
 	// 商户入驻证照OCR任务
 	mux.HandleFunc(TaskMerchantApplicationBusinessLicenseOCR, processor.ProcessTaskMerchantApplicationBusinessLicenseOCR)

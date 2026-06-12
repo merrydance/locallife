@@ -114,8 +114,31 @@ func (s *BaofuWithdrawalRecoveryScheduler) runOnce(ctx context.Context) {
 		log.Error().Err(err).Msg("list processing baofu withdrawal orders for recovery failed")
 		return
 	}
+	s.enqueueSubmittedCommands(ctx)
 	for _, order := range rows {
 		s.queryAndEnqueue(ctx, cfg, order)
+	}
+}
+
+func (s *BaofuWithdrawalRecoveryScheduler) enqueueSubmittedCommands(ctx context.Context) {
+	rows, err := s.store.ListSubmittedBaofuWithdrawalCommandsForDispatch(ctx, db.ListSubmittedBaofuWithdrawalCommandsForDispatchParams{
+		SubmittedBefore: time.Now().UTC(),
+		LimitCount:      baofuWithdrawalRecoveryBatchLimit,
+	})
+	if err != nil {
+		log.Error().Err(err).Msg("list submitted baofu withdrawal commands for dispatch failed")
+		return
+	}
+	for _, command := range rows {
+		if err := s.distributor.DistributeTaskProcessBaofuWithdrawalCommandDispatch(ctx, &BaofuWithdrawalCommandDispatchPayload{
+			CommandID: command.ID,
+		}, asynq.MaxRetry(5), asynq.Queue(QueueCritical), asynq.Unique(baofuWithdrawalCommandDispatchUniqueTTL)); err != nil {
+			log.Error().
+				Err(err).
+				Int64("external_payment_command_id", command.ID).
+				Str("out_request_no", strings.TrimSpace(command.ExternalObjectKey)).
+				Msg("enqueue baofu withdrawal command dispatch failed")
+		}
 	}
 }
 

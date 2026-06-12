@@ -38,6 +38,8 @@ func TestBaofuWithdrawalRecoverySchedulerQueriesProcessingWithdrawals(t *testing
 	}
 	store.EXPECT().ListProcessingBaofuWithdrawalOrdersForRecovery(gomock.Any(), gomock.Any()).
 		Return([]db.BaofuWithdrawalOrder{withdrawal}, nil)
+	store.EXPECT().ListSubmittedBaofuWithdrawalCommandsForDispatch(gomock.Any(), gomock.Any()).
+		Return(nil, nil)
 
 	scheduler := worker.NewBaofuWithdrawalRecoveryScheduler(store, distributor, client, worker.BaofuWithdrawalRecoveryConfig{
 		PayoutMerchantID: "PAYOUT_MER",
@@ -51,6 +53,33 @@ func TestBaofuWithdrawalRecoverySchedulerQueriesProcessingWithdrawals(t *testing
 	require.Equal(t, "2026-05-05", client.queryReq.TradeTime)
 	require.Equal(t, []int64{withdrawal.ID}, distributor.withdrawalOrderIDs)
 	require.Equal(t, []string{"3"}, distributor.upstreamStates)
+}
+
+func TestBaofuWithdrawalRecoverySchedulerEnqueuesSubmittedAsyncWithdrawCommands(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	client := &baofuWithdrawalRecoveryClient{}
+	distributor := &baofuWithdrawalRecoveryDistributor{}
+	command := db.ExternalPaymentCommand{
+		ID:                501,
+		CommandStatus:     db.ExternalPaymentCommandStatusSubmitted,
+		ExternalObjectKey: "WD_ASYNC_001",
+		ResponseSnapshot:  []byte(`{"state":"submitted","dispatch_mode":"async_worker"}`),
+	}
+	store.EXPECT().ListSubmittedBaofuWithdrawalCommandsForDispatch(gomock.Any(), gomock.Any()).
+		Return([]db.ExternalPaymentCommand{command}, nil)
+	store.EXPECT().ListProcessingBaofuWithdrawalOrdersForRecovery(gomock.Any(), gomock.Any()).
+		Return(nil, nil)
+
+	scheduler := worker.NewBaofuWithdrawalRecoveryScheduler(store, distributor, client, worker.BaofuWithdrawalRecoveryConfig{
+		PayoutMerchantID: "PAYOUT_MER",
+		PayoutTerminalID: "PAYOUT_TER",
+	})
+	scheduler.RunOnce()
+
+	require.Equal(t, []int64{command.ID}, distributor.withdrawCommandIDs)
 }
 
 type baofuWithdrawalRecoveryClient struct {
@@ -67,10 +96,16 @@ type baofuWithdrawalRecoveryDistributor struct {
 	worker.NoopTaskDistributor
 	withdrawalOrderIDs []int64
 	upstreamStates     []string
+	withdrawCommandIDs []int64
 }
 
 func (d *baofuWithdrawalRecoveryDistributor) DistributeTaskProcessBaofuWithdrawalFactApplication(_ context.Context, payload *worker.BaofuWithdrawalFactApplicationPayload, _ ...asynq.Option) error {
 	d.withdrawalOrderIDs = append(d.withdrawalOrderIDs, payload.WithdrawalOrderID)
 	d.upstreamStates = append(d.upstreamStates, payload.UpstreamState)
+	return nil
+}
+
+func (d *baofuWithdrawalRecoveryDistributor) DistributeTaskProcessBaofuWithdrawalCommandDispatch(_ context.Context, payload *worker.BaofuWithdrawalCommandDispatchPayload, _ ...asynq.Option) error {
+	d.withdrawCommandIDs = append(d.withdrawCommandIDs, payload.CommandID)
 	return nil
 }

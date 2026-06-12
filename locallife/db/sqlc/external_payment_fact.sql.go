@@ -77,6 +77,61 @@ func (q *Queries) ClaimPaymentDomainOutbox(ctx context.Context, arg ClaimPayment
 	return i, err
 }
 
+const claimSubmittedExternalPaymentCommandForDispatch = `-- name: ClaimSubmittedExternalPaymentCommandForDispatch :one
+UPDATE external_payment_commands
+SET command_status = $1,
+    last_error_code = $2,
+    last_error_message = $3,
+    response_snapshot = $4,
+    updated_at = now()
+WHERE id = $5
+    AND command_status = 'submitted'
+RETURNING id, provider, channel, capability, command_type, business_owner, business_object_type, business_object_id, external_object_type, external_object_key, external_secondary_key, command_status, submitted_at, accepted_at, rejected_at, last_error_code, last_error_message, request_fingerprint, response_snapshot, created_at, updated_at
+`
+
+type ClaimSubmittedExternalPaymentCommandForDispatchParams struct {
+	CommandStatus    string      `json:"command_status"`
+	LastErrorCode    pgtype.Text `json:"last_error_code"`
+	LastErrorMessage pgtype.Text `json:"last_error_message"`
+	ResponseSnapshot []byte      `json:"response_snapshot"`
+	ID               int64       `json:"id"`
+}
+
+func (q *Queries) ClaimSubmittedExternalPaymentCommandForDispatch(ctx context.Context, arg ClaimSubmittedExternalPaymentCommandForDispatchParams) (ExternalPaymentCommand, error) {
+	row := q.db.QueryRow(ctx, claimSubmittedExternalPaymentCommandForDispatch,
+		arg.CommandStatus,
+		arg.LastErrorCode,
+		arg.LastErrorMessage,
+		arg.ResponseSnapshot,
+		arg.ID,
+	)
+	var i ExternalPaymentCommand
+	err := row.Scan(
+		&i.ID,
+		&i.Provider,
+		&i.Channel,
+		&i.Capability,
+		&i.CommandType,
+		&i.BusinessOwner,
+		&i.BusinessObjectType,
+		&i.BusinessObjectID,
+		&i.ExternalObjectType,
+		&i.ExternalObjectKey,
+		&i.ExternalSecondaryKey,
+		&i.CommandStatus,
+		&i.SubmittedAt,
+		&i.AcceptedAt,
+		&i.RejectedAt,
+		&i.LastErrorCode,
+		&i.LastErrorMessage,
+		&i.RequestFingerprint,
+		&i.ResponseSnapshot,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createExternalPaymentCommand = `-- name: CreateExternalPaymentCommand :one
 INSERT INTO external_payment_commands (
     provider,
@@ -557,6 +612,42 @@ func (q *Queries) CreatePaymentDomainOutboxOnce(ctx context.Context, arg CreateP
 	return i, err
 }
 
+const getExternalPaymentCommand = `-- name: GetExternalPaymentCommand :one
+SELECT id, provider, channel, capability, command_type, business_owner, business_object_type, business_object_id, external_object_type, external_object_key, external_secondary_key, command_status, submitted_at, accepted_at, rejected_at, last_error_code, last_error_message, request_fingerprint, response_snapshot, created_at, updated_at
+FROM external_payment_commands
+WHERE id = $1
+LIMIT 1
+`
+
+func (q *Queries) GetExternalPaymentCommand(ctx context.Context, id int64) (ExternalPaymentCommand, error) {
+	row := q.db.QueryRow(ctx, getExternalPaymentCommand, id)
+	var i ExternalPaymentCommand
+	err := row.Scan(
+		&i.ID,
+		&i.Provider,
+		&i.Channel,
+		&i.Capability,
+		&i.CommandType,
+		&i.BusinessOwner,
+		&i.BusinessObjectType,
+		&i.BusinessObjectID,
+		&i.ExternalObjectType,
+		&i.ExternalObjectKey,
+		&i.ExternalSecondaryKey,
+		&i.CommandStatus,
+		&i.SubmittedAt,
+		&i.AcceptedAt,
+		&i.RejectedAt,
+		&i.LastErrorCode,
+		&i.LastErrorMessage,
+		&i.RequestFingerprint,
+		&i.ResponseSnapshot,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getExternalPaymentCommandByExternalObject = `-- name: GetExternalPaymentCommandByExternalObject :one
 SELECT id, provider, channel, capability, command_type, business_owner, business_object_type, business_object_id, external_object_type, external_object_key, external_secondary_key, command_status, submitted_at, accepted_at, rejected_at, last_error_code, last_error_message, request_fingerprint, response_snapshot, created_at, updated_at
 FROM external_payment_commands
@@ -1022,6 +1113,68 @@ func (q *Queries) ListRetryableExternalPaymentFactApplicationsByTarget(ctx conte
 			&i.LastError,
 			&i.NextRetryAt,
 			&i.AppliedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSubmittedBaofuWithdrawalCommandsForDispatch = `-- name: ListSubmittedBaofuWithdrawalCommandsForDispatch :many
+SELECT id, provider, channel, capability, command_type, business_owner, business_object_type, business_object_id, external_object_type, external_object_key, external_secondary_key, command_status, submitted_at, accepted_at, rejected_at, last_error_code, last_error_message, request_fingerprint, response_snapshot, created_at, updated_at
+FROM external_payment_commands
+WHERE provider = 'baofu'
+    AND channel = 'baofu_aggregate'
+    AND capability = 'baofu_withdraw'
+    AND command_type = 'create_baofu_withdraw'
+    AND external_object_type = 'withdraw'
+    AND command_status = 'submitted'
+    AND submitted_at <= $1
+    AND COALESCE(response_snapshot, '{}'::jsonb) @> '{"dispatch_mode":"async_worker"}'::jsonb
+ORDER BY submitted_at ASC, id ASC
+LIMIT $2
+`
+
+type ListSubmittedBaofuWithdrawalCommandsForDispatchParams struct {
+	SubmittedBefore time.Time `json:"submitted_before"`
+	LimitCount      int32     `json:"limit_count"`
+}
+
+func (q *Queries) ListSubmittedBaofuWithdrawalCommandsForDispatch(ctx context.Context, arg ListSubmittedBaofuWithdrawalCommandsForDispatchParams) ([]ExternalPaymentCommand, error) {
+	rows, err := q.db.Query(ctx, listSubmittedBaofuWithdrawalCommandsForDispatch, arg.SubmittedBefore, arg.LimitCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExternalPaymentCommand{}
+	for rows.Next() {
+		var i ExternalPaymentCommand
+		if err := rows.Scan(
+			&i.ID,
+			&i.Provider,
+			&i.Channel,
+			&i.Capability,
+			&i.CommandType,
+			&i.BusinessOwner,
+			&i.BusinessObjectType,
+			&i.BusinessObjectID,
+			&i.ExternalObjectType,
+			&i.ExternalObjectKey,
+			&i.ExternalSecondaryKey,
+			&i.CommandStatus,
+			&i.SubmittedAt,
+			&i.AcceptedAt,
+			&i.RejectedAt,
+			&i.LastErrorCode,
+			&i.LastErrorMessage,
+			&i.RequestFingerprint,
+			&i.ResponseSnapshot,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {

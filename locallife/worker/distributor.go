@@ -72,6 +72,13 @@ type TaskDistributor interface {
 		opts ...asynq.Option,
 	) error
 
+	// DistributeTaskProcessBaofuWithdrawalCommandDispatch 分发宝付提现提交命令派发任务
+	DistributeTaskProcessBaofuWithdrawalCommandDispatch(
+		ctx context.Context,
+		payload *BaofuWithdrawalCommandDispatchPayload,
+		opts ...asynq.Option,
+	) error
+
 	// DistributeTaskSendNotification 分发发送通知任务
 	DistributeTaskSendNotification(
 		ctx context.Context,

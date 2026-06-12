@@ -111,6 +111,23 @@ WHERE id = sqlc.arg(id)
     AND command_status IN ('submitted', 'unknown', sqlc.arg(command_status))
 RETURNING id, provider, channel, capability, command_type, business_owner, business_object_type, business_object_id, external_object_type, external_object_key, external_secondary_key, command_status, submitted_at, accepted_at, rejected_at, last_error_code, last_error_message, request_fingerprint, response_snapshot, created_at, updated_at;
 
+-- name: ClaimSubmittedExternalPaymentCommandForDispatch :one
+UPDATE external_payment_commands
+SET command_status = sqlc.arg(command_status),
+    last_error_code = sqlc.narg(last_error_code),
+    last_error_message = sqlc.narg(last_error_message),
+    response_snapshot = sqlc.narg(response_snapshot),
+    updated_at = now()
+WHERE id = sqlc.arg(id)
+    AND command_status = 'submitted'
+RETURNING id, provider, channel, capability, command_type, business_owner, business_object_type, business_object_id, external_object_type, external_object_key, external_secondary_key, command_status, submitted_at, accepted_at, rejected_at, last_error_code, last_error_message, request_fingerprint, response_snapshot, created_at, updated_at;
+
+-- name: GetExternalPaymentCommand :one
+SELECT id, provider, channel, capability, command_type, business_owner, business_object_type, business_object_id, external_object_type, external_object_key, external_secondary_key, command_status, submitted_at, accepted_at, rejected_at, last_error_code, last_error_message, request_fingerprint, response_snapshot, created_at, updated_at
+FROM external_payment_commands
+WHERE id = $1
+LIMIT 1;
+
 -- name: GetExternalPaymentCommandByExternalObject :one
 SELECT id, provider, channel, capability, command_type, business_owner, business_object_type, business_object_id, external_object_type, external_object_key, external_secondary_key, command_status, submitted_at, accepted_at, rejected_at, last_error_code, last_error_message, request_fingerprint, response_snapshot, created_at, updated_at
 FROM external_payment_commands
@@ -121,6 +138,20 @@ WHERE provider = $1
     AND external_object_type = $5
     AND external_object_key = $6
 LIMIT 1;
+
+-- name: ListSubmittedBaofuWithdrawalCommandsForDispatch :many
+SELECT id, provider, channel, capability, command_type, business_owner, business_object_type, business_object_id, external_object_type, external_object_key, external_secondary_key, command_status, submitted_at, accepted_at, rejected_at, last_error_code, last_error_message, request_fingerprint, response_snapshot, created_at, updated_at
+FROM external_payment_commands
+WHERE provider = 'baofu'
+    AND channel = 'baofu_aggregate'
+    AND capability = 'baofu_withdraw'
+    AND command_type = 'create_baofu_withdraw'
+    AND external_object_type = 'withdraw'
+    AND command_status = 'submitted'
+    AND submitted_at <= sqlc.arg(submitted_before)
+    AND COALESCE(response_snapshot, '{}'::jsonb) @> '{"dispatch_mode":"async_worker"}'::jsonb
+ORDER BY submitted_at ASC, id ASC
+LIMIT sqlc.arg(limit_count);
 
 -- name: CreateExternalPaymentFact :one
 INSERT INTO external_payment_facts (

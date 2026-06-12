@@ -60,6 +60,10 @@ func (NoopTaskDistributor) DistributeTaskProcessBaofuWithdrawalFactApplication(c
 	return financialTaskDistributorUnavailable("baofu withdrawal fact application")
 }
 
+func (NoopTaskDistributor) DistributeTaskProcessBaofuWithdrawalCommandDispatch(ctx context.Context, payload *BaofuWithdrawalCommandDispatchPayload, opts ...asynq.Option) error {
+	return financialTaskDistributorUnavailable("baofu withdrawal command dispatch")
+}
+
 func (NoopTaskDistributor) DistributeTaskSendNotification(ctx context.Context, payload *SendNotificationPayload, opts ...asynq.Option) error {
 	return nil
 }

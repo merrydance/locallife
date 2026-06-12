@@ -309,10 +309,10 @@ func (server *Server) handleCreateBaofuWithdrawal(ctx *gin.Context, scope baofuW
 		IdempotencyKey: idempotencyKey,
 	})
 	if err != nil {
-		if server.respondBaofuWithdrawalCreateResultError(ctx, result, err) {
-			return
-		}
 		server.respondBaofuWithdrawalCreateError(ctx, err)
+		return
+	}
+	if server.respondBaofuWithdrawalCreateSubmitted(ctx, result) {
 		return
 	}
 	status := http.StatusCreated

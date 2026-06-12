@@ -1046,6 +1046,21 @@ func (mr *MockStoreMockRecorder) ClaimRiderSuspensionIfAvailable(ctx, arg any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClaimRiderSuspensionIfAvailable", reflect.TypeOf((*MockStore)(nil).ClaimRiderSuspensionIfAvailable), ctx, arg)
 }
 
+// ClaimSubmittedExternalPaymentCommandForDispatch mocks base method.
+func (m *MockStore) ClaimSubmittedExternalPaymentCommandForDispatch(ctx context.Context, arg db.ClaimSubmittedExternalPaymentCommandForDispatchParams) (db.ExternalPaymentCommand, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClaimSubmittedExternalPaymentCommandForDispatch", ctx, arg)
+	ret0, _ := ret[0].(db.ExternalPaymentCommand)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ClaimSubmittedExternalPaymentCommandForDispatch indicates an expected call of ClaimSubmittedExternalPaymentCommandForDispatch.
+func (mr *MockStoreMockRecorder) ClaimSubmittedExternalPaymentCommandForDispatch(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClaimSubmittedExternalPaymentCommandForDispatch", reflect.TypeOf((*MockStore)(nil).ClaimSubmittedExternalPaymentCommandForDispatch), ctx, arg)
+}
+
 // ClaimVoucherTx mocks base method.
 func (m *MockStore) ClaimVoucherTx(ctx context.Context, arg db.ClaimVoucherTxParams) (db.ClaimVoucherTxResult, error) {
 	m.ctrl.T.Helper()
@@ -8575,6 +8590,21 @@ func (m *MockStore) GetExploreDishes(ctx context.Context, arg db.GetExploreDishe
 func (mr *MockStoreMockRecorder) GetExploreDishes(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExploreDishes", reflect.TypeOf((*MockStore)(nil).GetExploreDishes), ctx, arg)
+}
+
+// GetExternalPaymentCommand mocks base method.
+func (m *MockStore) GetExternalPaymentCommand(ctx context.Context, id int64) (db.ExternalPaymentCommand, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetExternalPaymentCommand", ctx, id)
+	ret0, _ := ret[0].(db.ExternalPaymentCommand)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetExternalPaymentCommand indicates an expected call of GetExternalPaymentCommand.
+func (mr *MockStoreMockRecorder) GetExternalPaymentCommand(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExternalPaymentCommand", reflect.TypeOf((*MockStore)(nil).GetExternalPaymentCommand), ctx, id)
 }
 
 // GetExternalPaymentCommandByExternalObject mocks base method.
@@ -17479,6 +17509,21 @@ func (m *MockStore) ListStuckProcessingRefundOrders(ctx context.Context, arg db.
 func (mr *MockStoreMockRecorder) ListStuckProcessingRefundOrders(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListStuckProcessingRefundOrders", reflect.TypeOf((*MockStore)(nil).ListStuckProcessingRefundOrders), ctx, arg)
+}
+
+// ListSubmittedBaofuWithdrawalCommandsForDispatch mocks base method.
+func (m *MockStore) ListSubmittedBaofuWithdrawalCommandsForDispatch(ctx context.Context, arg db.ListSubmittedBaofuWithdrawalCommandsForDispatchParams) ([]db.ExternalPaymentCommand, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListSubmittedBaofuWithdrawalCommandsForDispatch", ctx, arg)
+	ret0, _ := ret[0].([]db.ExternalPaymentCommand)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListSubmittedBaofuWithdrawalCommandsForDispatch indicates an expected call of ListSubmittedBaofuWithdrawalCommandsForDispatch.
+func (mr *MockStoreMockRecorder) ListSubmittedBaofuWithdrawalCommandsForDispatch(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListSubmittedBaofuWithdrawalCommandsForDispatch", reflect.TypeOf((*MockStore)(nil).ListSubmittedBaofuWithdrawalCommandsForDispatch), ctx, arg)
 }
 
 // ListSuspendedRegions mocks base method.

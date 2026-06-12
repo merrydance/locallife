@@ -76,6 +76,9 @@ func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskProces
 func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskProcessBaofuWithdrawalFactApplication(context.Context, *BaofuWithdrawalFactApplicationPayload, ...asynq.Option) error {
 	return nil
 }
+func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskProcessBaofuWithdrawalCommandDispatch(context.Context, *BaofuWithdrawalCommandDispatchPayload, ...asynq.Option) error {
+	return nil
+}
 func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskCheckMerchantForeignObject(context.Context, int64, ...asynq.Option) error {
 	return nil
 }
