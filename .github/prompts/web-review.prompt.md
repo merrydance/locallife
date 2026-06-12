@@ -9,6 +9,7 @@ Use this template when asking for a web review in `web/`.
 If this session is new, compacted, forked, or handed off, rerun routing from `.github/README.md`, reopen the matching instructions, and confirm the review scope before writing the request. Do not keep relying on stale context.
 
 Use the web row in `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md` as the shared source for implementation push items, prohibited shortcuts, and findings-first review checks.
+Use `.agents/skills/locallife-human-centered-ui/references/review-rubric.md` for non-trivial Web UI review so user-task fit, role habits, preserved context, recovery, and API-flattening defects are reported before cosmetic issues.
 
 ## Web Review
 
@@ -16,6 +17,7 @@ Request:
 
 - Review this change with findings first, ordered by severity
 - Check it against `.github/standards/web/WEB_UI_STANDARDS.md` and `.github/standards/web/DESIGN_GUARDRAILS.md`
+- Check whether the UI matches the role's task habits, first-screen judgment needs, default/preserved state, and recovery path
 - Prioritize broken field propagation, inconsistent states, contract drift, and UI pattern regressions
 - Flag missing loading, empty, error, disabled, and validation states
 - Call out dangerous or high-impact user paths that changed but still appear unverified in real interaction flow
@@ -27,6 +29,8 @@ Required context:
 
 Optional context:
 
+- User role and primary task: <operator, merchant, platform, or other + task goal>
+- Task frequency and preserved context expectations: <filters, tab, sort, selection, draft, return state>
 - Expected UX behavior: <details>
 - Reference page or pattern: <path>
 - Validation evidence already run: <commands or none>
@@ -34,6 +38,8 @@ Optional context:
 Review checklist:
 
 - Field and status changes are fully threaded through data fetch, state, render, and copy
+- The page is not shaped by API/DTO/entity flattening and still makes the high-frequency task easiest
+- Empty, error, retry, stale-data, and re-entry behavior help the user recover without guessing
 - Shared UI primitives were reused instead of cloning divergent patterns
 - Tabs, filters, tables, and action areas still follow established semantics
 - Error copy and disabled states are understandable to operators or merchants

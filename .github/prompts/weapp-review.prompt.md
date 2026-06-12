@@ -10,6 +10,7 @@ If this session is new, compacted, forked, or handed off, rerun routing from `.g
 
 Use the Mini Program row in `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md` as the shared source for implementation push items, prohibited shortcuts, and findings-first review checks.
 Use `.github/standards/weapp/README.md` as the standards index, `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md` as the default review baseline, and `.github/standards/weapp/REVIEW_CHECKLIST.md` as the compact checklist instead of copying the full weapp standards body into the prompt.
+Use `.agents/skills/locallife-human-centered-ui/references/review-rubric.md` and `.agents/skills/locallife-human-centered-ui/references/weapp-mobile.md` for non-trivial page review so touch-first habits, weak-network recovery, return/re-entry context, and typing friction are reviewed before cosmetic issues.
 Infer or state the task risk level (`G0`/`G1`/`G2`/`G3`) using `.github/standards/engineering/ENGINEERING_GOVERNANCE_BASELINE.md`, then scale validation and residual-risk expectations with `.github/standards/engineering/VALIDATION_AND_RELEASE_MATRIX.md`.
 
 ## Mini Program Review
@@ -20,6 +21,7 @@ Request:
 - Infer or confirm the task risk level (`G0`/`G1`/`G2`/`G3`) and call out when the implementation treated a clearly higher-risk path as routine
 - Check it against `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md`; when the task explicitly involves visual-system drift or component visual baseline, use the role-matched design document: consumer surfaces use `.github/standards/weapp/DESIGN_SYSTEM.md`; non-consumer surfaces use `.github/standards/weapp/NON_CONSUMER_DESIGN_SYSTEM.md`
 - Use `.github/standards/weapp/REVIEW_CHECKLIST.md` as the compact PR review checklist so the review covers both baseline conformance and user-facing coherence
+- Check whether the changed surface matches the user's touch habits, common path, first-screen needs, preserved context, weak-network recovery, and typing-reduction expectations
 - State what validation evidence exists, what was not verified, and what residual risk remains
 
 Review must prioritize:
@@ -63,6 +65,7 @@ Optional context:
 - Expected behavior: <details>
 - User role and task goal: <details>
 - High-frequency or weak-network sensitivity: <details>
+- Preserved context expectation: <tab, filter, scroll, draft, payment/result state, selected item>
 - Review mode: <baseline conformance | overall upgrade audit | payment/high-risk focus>
 - Reference page or component: <path>
 - Validation evidence already run: <commands or none>
@@ -89,6 +92,7 @@ Baseline review must check:
 - Local wrappers around TDesign content have a concrete structural job instead of existing only to add another visual layer
 - The review names the correct role-side design document when visual-system assertions depend on it rather than treating one design document as universal
 - User-facing copy and affordances are clear in weak-network and empty-data scenarios
+- The common mobile path avoids unnecessary typing, preserves context, and gives actionable recovery on timeout or re-entry
 - Primary and secondary actions remain visually and behaviorally clear
 - Returning to the page, retrying, or foreground re-entry does not break the user's task context
 

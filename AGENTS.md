@@ -47,7 +47,10 @@ High-risk backend paths include payment, refund, profit sharing, withdrawal, del
 
 ## Repository Skills
 
-Repo-local Codex skills live under `.agents/skills/`. Use `locallife-prompt-router` when a task needs help selecting the correct `.github` instructions, prompts, standards, or validation path.
+Repo-local Codex skills live under `.agents/skills/`.
+
+- Use `locallife-prompt-router` when a task needs help selecting the correct `.github` instructions, prompts, standards, or validation path.
+- Use `locallife-human-centered-ui` when frontend work or review needs user-habit, task-model, information-architecture, ViewState, recovery-path, or "does this feel like it understands the user" reasoning before implementation.
 
 ## Superpowers Compatibility
 

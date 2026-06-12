@@ -10,6 +10,7 @@ If this session is new, compacted, forked, or handed off, rerun routing from `.g
 
 Use `.github/standards/frontend/FRONTEND_ARCHITECTURE_BASELINE.md` as the cross-frontend baseline for user-task-first design, repository/use-case/presentation boundaries, ViewState modeling, and API-flattening anti-patterns.
 Use the Flutter Merchant App row in `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md` as the shared source for implementation push items, prohibited shortcuts, and review-ready hand-off expectations.
+Use `.agents/skills/locallife-human-centered-ui` before merchant-facing UI or workflow changes so store work habits, high-frequency actions, preserved context, degraded states, and recovery boundaries shape the screen before Widget composition.
 Use `.github/standards/flutter/README.md` as the standards index, `.github/standards/flutter/PRODUCTION_ROBUSTNESS_BASELINE.md` as the default reliability baseline, and the smallest relevant deep doc such as visual design, architecture, push, auth, or keep-alive instead of copying the full standards body here.
 Classify the task as `G0`, `G1`, `G2`, or `G3` using `.github/standards/engineering/ENGINEERING_GOVERNANCE_BASELINE.md`, then choose validation depth and residual-risk wording using `.github/standards/engineering/VALIDATION_AND_RELEASE_MATRIX.md`.
 
@@ -19,6 +20,7 @@ Request:
 
 - Update or build <feature, page, provider, or service>
 - State the task risk level (`G0`/`G1`/`G2`/`G3`) and why
+- Include a compact Human-Centered UI Check from `.agents/skills/locallife-human-centered-ui` when UI or user-facing feedback changes
 - Follow `.github/standards/flutter/PRODUCTION_ROBUSTNESS_BASELINE.md` for failure model, prohibited shortcuts, and task annotation expectations
 - Follow the smallest relevant deep doc explicitly: visual design standard, architecture, auth binding, push notification standards, or Android keep-alive guide
 - Run validation that matches the risk level and report what was executed
@@ -56,6 +58,7 @@ Required context:
 Optional context:
 
 - Failure modes to preserve: <duplicate/retry/weak network/cold start/re-entry/permission loss>
+- Habit path and preserved context: <current store/order/tab/filter/draft/alert state>
 - State owner candidate: <provider/service>
 - Recovery boundary: <persisted state + restore path>
 - Device or vendor sensitivity: <Huawei/Xiaomi/OPPO/vivo/Android version>
@@ -64,6 +67,7 @@ Optional context:
 Acceptance focus:
 
 - The hand-off names the risk level, state owner, recovery boundary, and validation depth
+- The hand-off names the merchant's common path, first-screen priority, preserved state, and recovery behavior when UI is touched
 - The implementation is closed across service, provider, persistence, lifecycle, and user feedback instead of stopping at one layer
 - If the changed path is reliability-sensitive, duplicate delivery and re-entry behavior are either verified or explicitly listed as residual risk
 - Any missing backend contract or real-device dependency is stated directly instead of guessed around

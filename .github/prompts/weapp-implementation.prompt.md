@@ -12,6 +12,7 @@ This is the default implementation prompt for Mini Program page work, including 
 
 Use the Mini Program row in `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md` as the shared source for implementation push items, prohibited shortcuts, and review-ready hand-off expectations.
 Use `.github/standards/frontend/FRONTEND_ARCHITECTURE_BASELINE.md` as the cross-frontend baseline for user-task-first design, ViewState modeling, domain ownership, and API-flattening anti-patterns.
+Use `.agents/skills/locallife-human-centered-ui` before non-trivial Mini Program page or flow changes so touch habits, weak-network recovery, return/re-entry context, first-screen priority, and typing reduction shape the design before TDesign and styling choices.
 Use `.github/standards/weapp/README.md` as the weapp standards index, `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md` as the default page-delivery baseline, and the role-matched design document for visual rules instead of restating the full standards body here.
 Classify the task as `G0`, `G1`, `G2`, or `G3` using `.github/standards/engineering/ENGINEERING_GOVERNANCE_BASELINE.md`, then choose validation depth and residual-risk wording using `.github/standards/engineering/VALIDATION_AND_RELEASE_MATRIX.md`.
 
@@ -21,6 +22,7 @@ Request:
 
 - Update or build <page or component>
 - State the task risk level (`G0`/`G1`/`G2`/`G3`) and why
+- Include a compact Human-Centered UI Check from `.agents/skills/locallife-human-centered-ui`
 - Follow `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md` for the non-visual delivery baseline
 - Use the role-matched visual standard explicitly: consumer surfaces use `.github/standards/weapp/DESIGN_SYSTEM.md`; merchant, operator, platform, rider, and other non-consumer surfaces use `.github/standards/weapp/NON_CONSUMER_DESIGN_SYSTEM.md`
 - Run validation that matches the risk level and report what was executed
@@ -105,6 +107,7 @@ Required context:
 Optional context:
 
 - Task frequency: <first-time, occasional, high-frequency>
+- Habit path and typing-reduction expectation: <defaults, picker/search presets, remembered tab/filter/draft, one-tap action>
 - Weak-network or re-entry sensitivity: <details>
 - State to preserve: <scroll position, filters, draft form, selected tab, local cache>
 - Existing reference page or component: <path>
@@ -116,6 +119,7 @@ Optional context:
 Acceptance focus:
 
 - The hand-off names the task risk level, the role-side design document used, and the validation depth chosen for that risk
+- The hand-off states the user's common path, first-screen priority, state to preserve, and recovery behavior before component choices
 - The implementation is closed across service, state, handlers, render branches, feedback, and any affected payment or recovery path
 - The delivery names the task-domain owner and, when relevant, the page-group owner, service owner, and workflow/controller owner
 - The first screen enters the task directly instead of opening with explanatory cards or stacked guidance copy
