@@ -99,11 +99,12 @@
 职责：
 
 - 处理真正需要工具边界的模式，如只读审计或多 Agent 编排。
+- 处理真正需要工具边界的模式，如只读审计或多 Agent 编排；这里描述的是路由边界，不是能力上限。
 - 把可自动化校验的规则做成脚本和 CI 门禁。
 
 要求：
 
-- 能用 Prompt 表达的，不新增 Agent。
+- 能用 Prompt 表达的，不新增 Agent；这不表示 prompt 或 superpowers 能力被降级，只是优先采用更小的路由表面。
 - 能用 lint 与 workflow 阻断的，不只写成文档提醒。
 
 ## 2. Prompt Gate Requirements

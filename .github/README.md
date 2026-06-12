@@ -8,7 +8,7 @@ This directory is the normalized entrypoint for AI-facing workspace rules, promp
 - `AGENTS.md`: Codex directory-local entrypoint for maintaining `.github` AI assets.
 - `standards/`: canonical project-owned engineering and domain standards.
 - `instructions/`: auto-matched rules using `applyTo` patterns.
-- `agents/`: narrowly scoped custom agents kept only when a dedicated tool boundary or read-only mode is required.
+- `agents/`: narrowly scoped custom agents kept only when a dedicated tool boundary or read-only mode is required; this is a routing choice, not a capability limit.
 - `prompts/`: reusable prompt templates with normalized names.
 - `workflows/`: workflow assets and CI gate definitions used by this workspace.
 
@@ -42,7 +42,7 @@ Prefer the smallest customization primitive that solves the routing problem.
 
 1. Use `instructions/` for always-on repository or path-scoped rules.
 2. Use `prompts/` for implementation, review, refactor, test, or diagram requests.
-3. Use `agents/` only when the mode needs a real boundary such as read-only analysis, a deliberately restricted tool set, or a clearly separate working persona.
+3. Use `agents/` only when the mode needs a real boundary such as read-only analysis, a deliberately restricted tool set, or a clearly separate working persona. This selects the right surface; it does not narrow the workflow's underlying capability.
 
 Context rehydration rule:
 
@@ -63,7 +63,7 @@ Practical defaults for this workspace:
 - When a prompt is worth keeping, prefer updating an existing reusable prompt over adding another near-duplicate file.
 - Keep Codex-specific `AGENTS.md` files as thin routing guides that link to this `.github` source of truth instead of duplicating standards or prompts into a separate `.codex/` tree.
 
-There is currently no repository-backed custom agent file set under `.github/agents/`; keep routing prompt-first unless a future workflow lands real agent assets.
+There is currently no repository-backed custom agent file set under `.github/agents/`; keep routing prompt-first unless a future workflow lands real agent assets. That routing default does not narrow what the workflow skills can do.
 
 ## Authoritative Source Strategy
 

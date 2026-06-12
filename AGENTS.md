@@ -54,7 +54,7 @@ Repo-local Codex skills live under `.agents/skills/`.
 
 ## Superpowers Compatibility
 
-LocalLife project instructions are the primary workflow source in this repository. Use superpowers skills only as lightweight process aids when they add value.
+LocalLife project instructions and standards are the primary workflow source in this repository. Use superpowers skills at full strength when they add value, but keep them subject to this project's engineering standards, quality requirements, and explicit user instructions.
 
 - Use `superpowers:systematic-debugging` for real bugs, failing tests, or unexpected behavior.
 - Use `superpowers:verification-before-completion` before making completion, fixed, or passing claims.
