@@ -30,6 +30,22 @@ var (
 		[]string{"method", "path"},
 	)
 
+	httpRequestBytesTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "http_request_bytes_total",
+			Help: "Total HTTP request body bytes",
+		},
+		[]string{"method", "path", "status"},
+	)
+
+	httpResponseBytesTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "http_response_bytes_total",
+			Help: "Total HTTP response body bytes",
+		},
+		[]string{"method", "path", "status"},
+	)
+
 	// 活跃请求数
 	httpRequestsInFlight = promauto.NewGauge(
 		prometheus.GaugeOpts{
@@ -157,10 +173,38 @@ func PrometheusMiddleware() gin.HandlerFunc {
 		httpRequestsInFlight.Dec()
 		duration := time.Since(start).Seconds()
 		status := strconv.Itoa(ctx.Writer.Status())
+		requestBytes := requestSizeBytes(ctx)
+		responseBytes := responseSizeBytes(ctx)
 
 		httpRequestsTotal.WithLabelValues(ctx.Request.Method, path, status).Inc()
 		httpRequestDuration.WithLabelValues(ctx.Request.Method, path).Observe(duration)
+		httpRequestBytesTotal.WithLabelValues(ctx.Request.Method, path, status).Add(float64(requestBytes))
+		httpResponseBytesTotal.WithLabelValues(ctx.Request.Method, path, status).Add(float64(responseBytes))
+		if path != trafficSummaryRoutePath {
+			globalTrafficRecorder.record(trafficObservation{
+				Method:        ctx.Request.Method,
+				Path:          path,
+				Status:        ctx.Writer.Status(),
+				RequestBytes:  requestBytes,
+				ResponseBytes: responseBytes,
+				Duration:      time.Since(start),
+			})
+		}
 	}
+}
+
+func requestSizeBytes(ctx *gin.Context) int64 {
+	if ctx == nil || ctx.Request == nil || ctx.Request.ContentLength < 0 {
+		return 0
+	}
+	return ctx.Request.ContentLength
+}
+
+func responseSizeBytes(ctx *gin.Context) int64 {
+	if ctx == nil || ctx.Writer == nil || ctx.Writer.Size() < 0 {
+		return 0
+	}
+	return int64(ctx.Writer.Size())
 }
 
 // MetricsHandler 返回 Prometheus 指标处理器

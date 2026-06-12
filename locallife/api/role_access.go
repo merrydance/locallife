@@ -55,6 +55,7 @@ func buildRoleAccessEntries() ([]RoleAccessEntry, error) {
 		{PathPrefix: "/v1/auth/wechat-login", Roles: []string{"public"}, AuthRequired: false},
 		{PathPrefix: "/v1/auth/refresh", Roles: []string{"public"}, AuthRequired: false},
 		{PathPrefix: "/v1/webhooks", Roles: []string{"public"}, AuthRequired: false, Notes: "wechat callbacks"},
+		{PathPrefix: "/v1/platform/stats/traffic/summary", Roles: []string{"admin"}, AuthRequired: true, Notes: "traffic snapshot"},
 	}
 
 	enforcer := GetGlobalCasbinEnforcer()

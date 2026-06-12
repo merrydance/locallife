@@ -16,6 +16,7 @@ import {
   LogOut,
   PanelsTopLeft,
   Percent,
+  RadioTower,
   ShieldAlert,
   ShieldCheck,
   Store,
@@ -90,6 +91,14 @@ const navGroups: Array<{
     label: "风控与审计",
     description: "异常裁决与审计",
     items: [
+      {
+        label: "流量监控",
+        href: "/platform/traffic",
+        activePrefix: "/platform/traffic",
+        exact: true,
+        icon: RadioTower,
+        requiredRoles: ["admin"],
+      },
       {
         label: "风控审计",
         href: "/platform/audit",

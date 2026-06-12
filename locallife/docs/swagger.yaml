@@ -9354,6 +9354,56 @@ definitions:
       total_sold:
         type: integer
     type: object
+  api.trafficRouteSummary:
+    properties:
+      average_latency_ms:
+        type: number
+      error_requests:
+        type: integer
+      method:
+        type: string
+      path:
+        type: string
+      request_bytes:
+        type: integer
+      requests:
+        type: integer
+      response_bytes:
+        type: integer
+      status_counts:
+        additionalProperties:
+          format: int64
+          type: integer
+        type: object
+    type: object
+  api.trafficSummaryResponse:
+    properties:
+      generated_at:
+        type: string
+      route_limit:
+        type: integer
+      routes:
+        items:
+          $ref: '#/definitions/api.trafficRouteSummary'
+        type: array
+      totals:
+        $ref: '#/definitions/api.trafficTotalsResponse'
+      window_seconds:
+        type: integer
+    type: object
+  api.trafficTotalsResponse:
+    properties:
+      average_latency_ms:
+        type: number
+      error_requests:
+        type: integer
+      request_bytes:
+        type: integer
+      requests:
+        type: integer
+      response_bytes:
+        type: integer
+    type: object
   api.transactionResponse:
     properties:
       amount:
@@ -26839,6 +26889,32 @@ paths:
       security:
       - BearerAuth: []
       summary: 获取骑手绩效排行榜
+      tags:
+      - Platform
+  /v1/platform/stats/traffic/summary:
+    get:
+      consumes:
+      - application/json
+      description: 返回最近时间窗口内的 HTTP 请求、响应字节与路由排行快照
+      parameters:
+      - description: 窗口秒数，默认 300
+        in: query
+        name: window_seconds
+        type: integer
+      - description: 路由条数，默认 20
+        in: query
+        name: route_limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.trafficSummaryResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取平台流量汇总
       tags:
       - Platform
   /v1/platform/ws:

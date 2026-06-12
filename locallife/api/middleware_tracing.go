@@ -90,7 +90,8 @@ func RequestLoggingMiddleware() gin.HandlerFunc {
 			Dur("latency", latency).
 			Str("client_ip", clientIP).
 			Str("user_agent", userAgent).
-			Int("body_size", ctx.Writer.Size())
+			Int64("request_size_bytes", requestSizeBytes(ctx)).
+			Int64("response_size_bytes", responseSizeBytes(ctx))
 
 		// 如果有错误，记录错误信息
 		if len(ctx.Errors) > 0 {

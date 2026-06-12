@@ -24520,6 +24520,48 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/platform/stats/traffic/summary": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "返回最近时间窗口内的 HTTP 请求、响应字节与路由排行快照",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Platform"
+                ],
+                "summary": "获取平台流量汇总",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "窗口秒数，默认 300",
+                        "name": "window_seconds",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "路由条数，默认 20",
+                        "name": "route_limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.trafficSummaryResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/platform/ws": {
             "get": {
                 "security": [
@@ -45796,6 +45838,82 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "total_sold": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.trafficRouteSummary": {
+            "type": "object",
+            "properties": {
+                "average_latency_ms": {
+                    "type": "number"
+                },
+                "error_requests": {
+                    "type": "integer"
+                },
+                "method": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "request_bytes": {
+                    "type": "integer"
+                },
+                "requests": {
+                    "type": "integer"
+                },
+                "response_bytes": {
+                    "type": "integer"
+                },
+                "status_counts": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer",
+                        "format": "int64"
+                    }
+                }
+            }
+        },
+        "api.trafficSummaryResponse": {
+            "type": "object",
+            "properties": {
+                "generated_at": {
+                    "type": "string"
+                },
+                "route_limit": {
+                    "type": "integer"
+                },
+                "routes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.trafficRouteSummary"
+                    }
+                },
+                "totals": {
+                    "$ref": "#/definitions/api.trafficTotalsResponse"
+                },
+                "window_seconds": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.trafficTotalsResponse": {
+            "type": "object",
+            "properties": {
+                "average_latency_ms": {
+                    "type": "number"
+                },
+                "error_requests": {
+                    "type": "integer"
+                },
+                "request_bytes": {
+                    "type": "integer"
+                },
+                "requests": {
+                    "type": "integer"
+                },
+                "response_bytes": {
                     "type": "integer"
                 }
             }

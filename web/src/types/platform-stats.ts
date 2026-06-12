@@ -104,3 +104,30 @@ export interface RuleHitRow {
   merchant_id?: number | null;
   created_at: string;
 }
+
+export interface PlatformTrafficRouteSummary {
+  method: string;
+  path: string;
+  requests: number;
+  request_bytes: number;
+  response_bytes: number;
+  error_requests: number;
+  average_latency_ms: number;
+  status_counts: Record<string, number>;
+}
+
+export interface PlatformTrafficTotals {
+  requests: number;
+  request_bytes: number;
+  response_bytes: number;
+  error_requests: number;
+  average_latency_ms: number;
+}
+
+export interface PlatformTrafficSummaryResponse {
+  generated_at: string;
+  window_seconds: number;
+  route_limit: number;
+  totals: PlatformTrafficTotals;
+  routes: PlatformTrafficRouteSummary[];
+}
