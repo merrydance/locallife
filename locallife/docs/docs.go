@@ -12089,6 +12089,77 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/merchant/orders/{id}/local-print-events": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "商户 App 记录本地蓝牙小票打印的 started/success/failed 状态；服务端按商户和事件键幂等收敛，并校验订单归属",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户订单管理"
+                ],
+                "summary": "记录商户端本地打印事件",
+                "parameters": [
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "订单ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "本地打印事件",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.recordMerchantLocalPrintEventBody"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "事件已记录",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantLocalPrintEventResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "订单不存在或不属于当前商户",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/merchant/orders/{id}/print-jobs": {
             "get": {
                 "security": [
@@ -39089,6 +39160,44 @@ const docTemplate = `{
                 }
             }
         },
+        "api.merchantLocalPrintEventResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "error_message": {
+                    "type": "string"
+                },
+                "event_key": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "merchant_id": {
+                    "type": "integer"
+                },
+                "order_id": {
+                    "type": "integer"
+                },
+                "printed_at": {
+                    "type": "string"
+                },
+                "printer_name": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
         "api.merchantMemberDetailResponse": {
             "type": "object",
             "properties": {
@@ -43174,6 +43283,35 @@ const docTemplate = `{
                     "type": "integer",
                     "maximum": 100000000,
                     "minimum": 1
+                }
+            }
+        },
+        "api.recordMerchantLocalPrintEventBody": {
+            "type": "object",
+            "required": [
+                "event_key",
+                "status"
+            ],
+            "properties": {
+                "error_message": {
+                    "type": "string",
+                    "maxLength": 500
+                },
+                "event_key": {
+                    "type": "string",
+                    "maxLength": 160
+                },
+                "printer_name": {
+                    "type": "string",
+                    "maxLength": 100
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "started",
+                        "success",
+                        "failed"
+                    ]
                 }
             }
         },

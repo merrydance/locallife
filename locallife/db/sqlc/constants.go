@@ -219,6 +219,12 @@ const (
 	PrintLogStatusFailed    = "failed"
 	PrintLogStatusCancelled = "cancelled"
 
+	MerchantLocalPrintEventSourceBle = "merchant_app_ble"
+
+	MerchantLocalPrintEventStatusStarted = "started"
+	MerchantLocalPrintEventStatusSuccess = "success"
+	MerchantLocalPrintEventStatusFailed  = "failed"
+
 	MerchantCapabilityStatusUnknown = "unknown"
 	MerchantCapabilityStatusYes     = "yes"
 	MerchantCapabilityStatusNo      = "no"

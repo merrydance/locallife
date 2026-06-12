@@ -883,6 +883,7 @@ type Querier interface {
 	GetMerchantHourlyStats(ctx context.Context, arg GetMerchantHourlyStatsParams) ([]GetMerchantHourlyStatsRow, error)
 	// 获取商户营业状态
 	GetMerchantIsOpen(ctx context.Context, id int64) (GetMerchantIsOpenRow, error)
+	GetMerchantLocalPrintEventByKey(ctx context.Context, arg GetMerchantLocalPrintEventByKeyParams) (MerchantLocalPrintEvent, error)
 	GetMerchantMembership(ctx context.Context, id int64) (MerchantMembership, error)
 	// 商户会员设置查询
 	GetMerchantMembershipSettings(ctx context.Context, merchantID int64) (MerchantMembershipSetting, error)
@@ -2018,6 +2019,7 @@ type Querier interface {
 	UpsertGroupPolicies(ctx context.Context, arg UpsertGroupPoliciesParams) (GroupPolicy, error)
 	UpsertMerchantCapabilities(ctx context.Context, arg UpsertMerchantCapabilitiesParams) (MerchantCapability, error)
 	UpsertMerchantCapabilitiesDefaults(ctx context.Context, merchantID int64) error
+	UpsertMerchantLocalPrintEvent(ctx context.Context, arg UpsertMerchantLocalPrintEventParams) (MerchantLocalPrintEvent, error)
 	UpsertMerchantMembershipSettings(ctx context.Context, arg UpsertMerchantMembershipSettingsParams) (MerchantMembershipSetting, error)
 	UpsertMerchantOfflineCustomer(ctx context.Context, arg UpsertMerchantOfflineCustomerParams) (MerchantOfflineCustomer, error)
 	UpsertMerchantPaymentConfig(ctx context.Context, arg UpsertMerchantPaymentConfigParams) (MerchantPaymentConfig, error)

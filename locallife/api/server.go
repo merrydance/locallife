@@ -1032,6 +1032,7 @@ func (server *Server) setupRouter() {
 		merchantOrdersGroup.GET("/:id/print-jobs", server.listMerchantOrderPrintJobs)
 		merchantOrdersGroup.GET("/:id/print-jobs/:print_log_id/status", server.getMerchantOrderPrintJobStatus)
 		merchantOrdersGroup.POST("/:id/print-jobs/:print_log_id/retry", server.retryMerchantOrderPrintJob)
+		merchantOrdersGroup.POST("/:id/local-print-events", server.recordMerchantLocalPrintEvent)
 		merchantOrdersGroup.POST("/:id/accept", server.acceptOrder)
 		merchantOrdersGroup.POST("/:id/reject", server.rejectOrder) // 拒单
 		merchantOrdersGroup.POST("/:id/ready", server.markOrderReady)

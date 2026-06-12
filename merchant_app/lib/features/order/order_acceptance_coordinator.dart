@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:merchant_app/features/auth/auth_provider.dart';
+import 'package:merchant_app/features/display_config/display_config_provider.dart';
 import 'package:merchant_app/features/order/order_provider.dart';
+import 'package:merchant_app/features/printer/local_print_event_repository.dart';
 import 'package:merchant_app/features/printer/printer_provider.dart';
 import 'package:merchant_app/features/settings/notification_settings_provider.dart';
 import 'package:merchant_app/models/order.dart';
@@ -21,7 +23,9 @@ final acceptedOrderReceiptPrinterProvider =
 abstract class AcceptedOrderReceiptPrinter {
   bool get hasConnectedPrinter;
 
-  Future<void> printAcceptedOrder(OrderModel order, {required String shopName});
+  String? get printerName;
+
+  Future<bool> printAcceptedOrder(OrderModel order, {required String shopName});
 }
 
 class BleAcceptedOrderReceiptPrinter implements AcceptedOrderReceiptPrinter {
@@ -34,7 +38,14 @@ class BleAcceptedOrderReceiptPrinter implements AcceptedOrderReceiptPrinter {
       _ref.read(printerProvider).connectedDevice != null;
 
   @override
-  Future<void> printAcceptedOrder(
+  String? get printerName {
+    final name = _ref.read(printerProvider).connectedDevice?.platformName;
+    final normalized = name?.trim() ?? '';
+    return normalized.isEmpty ? null : normalized;
+  }
+
+  @override
+  Future<bool> printAcceptedOrder(
     OrderModel order, {
     required String shopName,
   }) {
@@ -128,10 +139,75 @@ class OrderAcceptanceCoordinator {
       return;
     }
 
+    final displayConfigRepository = _ref.read(
+      orderDisplayConfigRepositoryProvider,
+    );
+    final displayConfig = await _loadDisplayConfigForLocalPrint(
+      displayConfigRepository,
+    );
+    if (displayConfig == null ||
+        !displayConfig.allowsAcceptedReceiptPrint(order.orderType)) {
+      return;
+    }
+
+    final localPrintEvents = _ref.read(localPrintEventRepositoryProvider);
+    await _recordLocalPrintEvent(
+      localPrintEvents,
+      order,
+      status: 'started',
+      printerName: receiptPrinter.printerName,
+    );
     try {
-      await receiptPrinter.printAcceptedOrder(order, shopName: shopName);
+      final printed = await receiptPrinter.printAcceptedOrder(
+        order,
+        shopName: shopName,
+      );
+      await _recordLocalPrintEvent(
+        localPrintEvents,
+        order,
+        status: printed ? 'success' : 'failed',
+        printerName: receiptPrinter.printerName,
+        errorMessage: printed ? null : '本地蓝牙打印失败',
+      );
     } catch (error) {
       debugPrint('Failed to print accepted order receipt: $error');
+      await _recordLocalPrintEvent(
+        localPrintEvents,
+        order,
+        status: 'failed',
+        printerName: receiptPrinter.printerName,
+        errorMessage: '本地蓝牙打印失败',
+      );
+    }
+  }
+
+  Future<OrderDisplayConfig?> _loadDisplayConfigForLocalPrint(
+    OrderDisplayConfigRepository repository,
+  ) async {
+    try {
+      return await repository.fetchDisplayConfig();
+    } catch (error) {
+      debugPrint('Failed to load display config for local receipt: $error');
+      return null;
+    }
+  }
+
+  Future<void> _recordLocalPrintEvent(
+    LocalPrintEventRepository repository,
+    OrderModel order, {
+    required String status,
+    String? printerName,
+    String? errorMessage,
+  }) async {
+    try {
+      await repository.recordAcceptedReceiptEvent(
+        order,
+        status: status,
+        printerName: printerName,
+        errorMessage: errorMessage,
+      );
+    } catch (error) {
+      debugPrint('Failed to record local print event: $error');
     }
   }
 
@@ -153,6 +229,7 @@ class OrderAcceptanceCoordinator {
     return OrderModel(
       id: message.orderId,
       orderNum: message.orderNumber,
+      orderType: message.orderType,
       pickupCode: message.pickupCode,
       pickupCodeMasked: message.pickupCodeMasked,
       amount: message.amount,

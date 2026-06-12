@@ -1342,6 +1342,20 @@ type MerchantGroupMember struct {
 	InvitedBy pgtype.Int8 `json:"invited_by"`
 }
 
+type MerchantLocalPrintEvent struct {
+	ID           int64              `json:"id"`
+	MerchantID   int64              `json:"merchant_id"`
+	OrderID      int64              `json:"order_id"`
+	EventKey     string             `json:"event_key"`
+	Source       string             `json:"source"`
+	Status       string             `json:"status"`
+	PrinterName  pgtype.Text        `json:"printer_name"`
+	ErrorMessage pgtype.Text        `json:"error_message"`
+	PrintedAt    pgtype.Timestamptz `json:"printed_at"`
+	CreatedAt    time.Time          `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
 // M10: 商户会员账户表
 type MerchantMembership struct {
 	ID               int64              `json:"id"`

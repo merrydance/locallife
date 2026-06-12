@@ -7,6 +7,10 @@ void main() {
   test('display config repository reads backend auto-accept truth', () async {
     final apiClient = _FakeApiClient(<String, dynamic>{
       'enable_print': true,
+      'print_takeout': true,
+      'print_dine_in': false,
+      'print_reservation': true,
+      'print_trigger_mode': 'accepted',
       'auto_accept_paid_orders': true,
     });
     final repository = ApiOrderDisplayConfigRepository(apiClient);
@@ -17,6 +21,10 @@ void main() {
     expect(config.enablePrint, isTrue);
     expect(config.autoAcceptPaidOrders, isTrue);
     expect(config.allowsAutoAcceptPaidOrders, isTrue);
+    expect(config.allowsAcceptedReceiptPrint('takeout'), isTrue);
+    expect(config.allowsAcceptedReceiptPrint('takeaway'), isTrue);
+    expect(config.allowsAcceptedReceiptPrint('dine_in'), isFalse);
+    expect(config.allowsAcceptedReceiptPrint('reservation'), isTrue);
   });
 
   test('display config disables auto-accept when printing is disabled', () {
@@ -26,6 +34,20 @@ void main() {
     });
 
     expect(config.allowsAutoAcceptPaidOrders, isFalse);
+    expect(config.allowsAcceptedReceiptPrint('takeout'), isFalse);
+  });
+
+  test('display config only allows accepted-trigger local receipts', () {
+    final config = OrderDisplayConfig.fromJson(<String, dynamic>{
+      'enable_print': true,
+      'print_takeout': true,
+      'print_dine_in': true,
+      'print_reservation': true,
+      'print_trigger_mode': 'manual',
+      'auto_accept_paid_orders': false,
+    });
+
+    expect(config.allowsAcceptedReceiptPrint('takeout'), isFalse);
   });
 }
 

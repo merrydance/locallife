@@ -143,18 +143,18 @@ class PrinterNotifier extends StateNotifier<PrinterState> {
     }
   }
 
-  Future<void> printReceipt(PushMessage message) async {
+  Future<bool> printReceipt(PushMessage message) async {
     if (state.connectedDevice == null) {
       state = state.copyWith(error: "打印机未连接");
-      return;
+      return false;
     }
     if (message.itemsLoadFailed) {
       state = state.copyWith(error: "订单明细仍在同步，暂不打印小票");
-      return;
+      return false;
     }
     if (message.feeBreakdown == null) {
       state = state.copyWith(error: "订单收款账单仍在同步，暂不打印小票");
-      return;
+      return false;
     }
 
     try {
@@ -176,7 +176,7 @@ class PrinterNotifier extends StateNotifier<PrinterState> {
 
       if (writeCharacteristic == null) {
         state = state.copyWith(error: "未找到打印机写入通道");
-        return;
+        return false;
       }
 
       final bytes = EscPosUtils.generateOrderReceipt(message);
@@ -190,27 +190,30 @@ class PrinterNotifier extends StateNotifier<PrinterState> {
           withoutResponse: writeCharacteristic.properties.writeWithoutResponse,
         );
       }
+      return true;
     } catch (e) {
       state = state.copyWith(error: "打印失败: $e");
+      return false;
     }
   }
 
-  Future<void> printAcceptedOrder(
+  Future<bool> printAcceptedOrder(
     OrderModel order, {
     required String shopName,
   }) async {
     if (!order.hasReliableItems) {
       state = state.copyWith(error: "订单明细仍在同步，暂不打印小票");
-      return;
+      return false;
     }
     final normalizedShopName = shopName.trim().isNotEmpty
         ? shopName.trim()
         : '商户工作台';
-    await printReceipt(
+    return printReceipt(
       PushMessage(
         messageId: 'accepted-${order.id}',
         orderId: order.id,
         orderNumber: order.orderNum,
+        orderType: order.orderType,
         pickupCode: order.pickupCode,
         pickupCodeMasked: order.pickupCodeMasked,
         title: '订单已接单',

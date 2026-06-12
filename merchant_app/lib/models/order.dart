@@ -52,6 +52,7 @@ enum FulfillmentStatus {
 class OrderModel {
   final String id;
   final String orderNum;
+  final String orderType;
   final String? pickupCode;
   final String? pickupCodeMasked;
   final double amount;
@@ -68,6 +69,7 @@ class OrderModel {
   OrderModel({
     required this.id,
     required this.orderNum,
+    this.orderType = '',
     this.pickupCode,
     this.pickupCodeMasked,
     required this.amount,
@@ -90,6 +92,7 @@ class OrderModel {
         'order_num',
         'order_number',
       ]),
+      orderType: _firstString(json, const ['order_type']),
       pickupCode: _firstNullableString(json, const [
         'pickup_code',
         'pickup_number',

@@ -89,6 +89,27 @@ void main() {
     },
   );
 
+  test('addOrUpdateOrder preserves and updates order type', () {
+    final notifier = OrderNotifier(_FakeApiClient());
+
+    notifier.addOrUpdateOrder(
+      OrderModel.fromJson(
+        _orderJson(id: '501', status: 'paid', orderType: 'takeout'),
+      ),
+    );
+    notifier.addOrUpdateOrder(
+      OrderModel.fromJson(_orderJson(id: '501', status: 'preparing')),
+    );
+    expect(notifier.state.orders.single.orderType, 'takeout');
+
+    notifier.addOrUpdateOrder(
+      OrderModel.fromJson(
+        _orderJson(id: '501', status: 'preparing', orderType: 'dine_in'),
+      ),
+    );
+    expect(notifier.state.orders.single.orderType, 'dine_in');
+  });
+
   test(
     'acceptOrder does not optimistically succeed when readback is unresolved',
     () async {
@@ -255,11 +276,13 @@ class _FakeApiClient implements ApiClient {
 Map<String, dynamic> _orderJson({
   required String id,
   required String status,
+  String orderType = '',
   String? fulfillmentStatus,
 }) {
   return <String, dynamic>{
     'id': id,
     'order_no': 'ORD-$id',
+    'order_type': orderType,
     'total_amount': 1800,
     'status': status,
     'fulfillment_status': ?fulfillmentStatus,

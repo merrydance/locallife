@@ -1713,6 +1713,47 @@ type retryMerchantOrderPrintJobResponse struct {
 	Trigger    string `json:"trigger"`
 }
 
+type recordMerchantLocalPrintEventRequest struct {
+	ID int64 `uri:"id" binding:"required,min=1" example:"100001"`
+}
+
+type recordMerchantLocalPrintEventBody struct {
+	EventKey     string  `json:"event_key" binding:"required,max=160"`
+	Status       string  `json:"status" binding:"required,oneof=started success failed"`
+	PrinterName  *string `json:"printer_name" binding:"omitempty,max=100"`
+	ErrorMessage *string `json:"error_message" binding:"omitempty,max=500"`
+}
+
+type merchantLocalPrintEventResponse struct {
+	ID           int64      `json:"id"`
+	MerchantID   int64      `json:"merchant_id"`
+	OrderID      int64      `json:"order_id"`
+	EventKey     string     `json:"event_key"`
+	Source       string     `json:"source"`
+	Status       string     `json:"status"`
+	PrinterName  *string    `json:"printer_name,omitempty"`
+	ErrorMessage *string    `json:"error_message,omitempty"`
+	PrintedAt    *time.Time `json:"printed_at,omitempty"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    *time.Time `json:"updated_at,omitempty"`
+}
+
+func toMerchantLocalPrintEventResponse(event db.MerchantLocalPrintEvent) merchantLocalPrintEventResponse {
+	return merchantLocalPrintEventResponse{
+		ID:           event.ID,
+		MerchantID:   event.MerchantID,
+		OrderID:      event.OrderID,
+		EventKey:     event.EventKey,
+		Source:       event.Source,
+		Status:       event.Status,
+		PrinterName:  pgTextToPtr(event.PrinterName),
+		ErrorMessage: pgTextToPtr(event.ErrorMessage),
+		PrintedAt:    pgTimeToPtr(event.PrintedAt),
+		CreatedAt:    event.CreatedAt,
+		UpdatedAt:    pgTimeToPtr(event.UpdatedAt),
+	}
+}
+
 func toMerchantOrderPrintJobResponse(item db.ListPrintLogsByOrderRow) merchantOrderPrintJobResponse {
 	responseItem := merchantOrderPrintJobResponse{
 		ID:          item.ID,
@@ -2290,6 +2331,83 @@ func (server *Server) retryMerchantOrderPrintJob(ctx *gin.Context) {
 		PrintLogID: printLog.ID,
 		Trigger:    "retry",
 	})
+}
+
+// recordMerchantLocalPrintEvent godoc
+// @Summary 记录商户端本地打印事件
+// @Description 商户 App 记录本地蓝牙小票打印的 started/success/failed 状态；服务端按商户和事件键幂等收敛，并校验订单归属
+// @Tags 商户订单管理
+// @Accept json
+// @Produce json
+// @Param id path int true "订单ID" minimum(1)
+// @Param request body recordMerchantLocalPrintEventBody true "本地打印事件"
+// @Success 200 {object} merchantLocalPrintEventResponse "事件已记录"
+// @Failure 400 {object} ErrorResponse "请求参数错误"
+// @Failure 401 {object} ErrorResponse "未授权"
+// @Failure 404 {object} ErrorResponse "订单不存在或不属于当前商户"
+// @Failure 500 {object} ErrorResponse "服务器内部错误"
+// @Router /v1/merchant/orders/{id}/local-print-events [post]
+// @Security BearerAuth
+func (server *Server) recordMerchantLocalPrintEvent(ctx *gin.Context) {
+	var uri recordMerchantLocalPrintEventRequest
+	if err := ctx.ShouldBindUri(&uri); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	var body recordMerchantLocalPrintEventBody
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	eventKey := strings.TrimSpace(body.EventKey)
+	if eventKey == "" {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("event_key is required")))
+		return
+	}
+	if eventKey != fmt.Sprintf("accepted-receipt:%d", uri.ID) {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("event_key does not match order")))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	merchant, ok := server.requireMerchantForOrder(ctx, authPayload.UserID)
+	if !ok {
+		return
+	}
+
+	params := db.UpsertMerchantLocalPrintEventParams{
+		MerchantID: merchant.ID,
+		OrderID:    uri.ID,
+		EventKey:   eventKey,
+		Source:     db.MerchantLocalPrintEventSourceBle,
+		Status:     body.Status,
+	}
+	if body.PrinterName != nil {
+		params.PrinterName = pgtype.Text{
+			String: strings.TrimSpace(*body.PrinterName),
+			Valid:  strings.TrimSpace(*body.PrinterName) != "",
+		}
+	}
+	if body.ErrorMessage != nil {
+		params.ErrorMessage = pgtype.Text{
+			String: strings.TrimSpace(*body.ErrorMessage),
+			Valid:  strings.TrimSpace(*body.ErrorMessage) != "",
+		}
+	}
+
+	event, err := server.store.UpsertMerchantLocalPrintEvent(ctx, params)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("order not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, toMerchantLocalPrintEventResponse(event))
 }
 
 // printMerchantOrder godoc

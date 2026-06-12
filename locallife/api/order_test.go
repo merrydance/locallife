@@ -4145,6 +4145,155 @@ func TestRetryMerchantOrderPrintJobAPI(t *testing.T) {
 	}
 }
 
+func TestRecordMerchantLocalPrintEventAPI(t *testing.T) {
+	merchantOwner, _ := randomUser(t)
+	merchant := randomMerchant(merchantOwner.ID)
+	otherMerchantOwner, _ := randomUser(t)
+	otherMerchant := randomMerchant(otherMerchantOwner.ID)
+	otherMerchant.ID = merchant.ID + 1
+	customer, _ := randomUser(t)
+
+	order := randomOrder(customer.ID, merchant.ID)
+	order.Status = db.OrderStatusPreparing
+	event := db.MerchantLocalPrintEvent{
+		ID:          9001,
+		MerchantID:  merchant.ID,
+		OrderID:     order.ID,
+		EventKey:    fmt.Sprintf("accepted-receipt:%d", order.ID),
+		Source:      db.MerchantLocalPrintEventSourceBle,
+		Status:      db.MerchantLocalPrintEventStatusStarted,
+		PrinterName: pgtype.Text{String: "前台蓝牙打印机", Valid: true},
+		CreatedAt:   time.Now(),
+	}
+
+	testCases := []struct {
+		name          string
+		orderID       int64
+		body          gin.H
+		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
+		buildStubs    func(store *mockdb.MockStore)
+		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+	}{
+		{
+			name:    "OK",
+			orderID: order.ID,
+			body: gin.H{
+				"event_key":    event.EventKey,
+				"status":       db.MerchantLocalPrintEventStatusStarted,
+				"printer_name": "前台蓝牙打印机",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+				store.EXPECT().
+					UpsertMerchantLocalPrintEvent(gomock.Any(), db.UpsertMerchantLocalPrintEventParams{
+						MerchantID:   merchant.ID,
+						OrderID:      order.ID,
+						EventKey:     event.EventKey,
+						Source:       db.MerchantLocalPrintEventSourceBle,
+						Status:       db.MerchantLocalPrintEventStatusStarted,
+						PrinterName:  pgtype.Text{String: "前台蓝牙打印机", Valid: true},
+						ErrorMessage: pgtype.Text{},
+					}).
+					Times(1).
+					Return(event, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp merchantLocalPrintEventResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, event.ID, resp.ID)
+				require.Equal(t, event.OrderID, resp.OrderID)
+				require.Equal(t, event.EventKey, resp.EventKey)
+				require.Equal(t, event.Status, resp.Status)
+				require.NotNil(t, resp.PrinterName)
+				require.Equal(t, "前台蓝牙打印机", *resp.PrinterName)
+			},
+		},
+		{
+			name:    "OrderNotBelongToMerchant",
+			orderID: order.ID,
+			body: gin.H{
+				"event_key": event.EventKey,
+				"status":    db.MerchantLocalPrintEventStatusStarted,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, otherMerchantOwner.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, otherMerchantOwner.ID, otherMerchant)
+				store.EXPECT().
+					UpsertMerchantLocalPrintEvent(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.MerchantLocalPrintEvent{}, db.ErrRecordNotFound)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusNotFound, recorder.Code)
+			},
+		},
+		{
+			name:    "InvalidStatus",
+			orderID: order.ID,
+			body: gin.H{
+				"event_key": event.EventKey,
+				"status":    "printed",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name:    "EventKeyDoesNotMatchOrder",
+			orderID: order.ID,
+			body: gin.H{
+				"event_key": "accepted-receipt:999999",
+				"status":    db.MerchantLocalPrintEventStatusStarted,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			tc.buildStubs(store)
+
+			server := newTestServer(t, store)
+			recorder := httptest.NewRecorder()
+
+			data, err := json.Marshal(tc.body)
+			require.NoError(t, err)
+			url := fmt.Sprintf("/v1/merchant/orders/%d/local-print-events", tc.orderID)
+			request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(data))
+			require.NoError(t, err)
+			tc.setupAuth(t, request, server.tokenMaker)
+
+			server.router.ServeHTTP(recorder, request)
+			tc.checkResponse(t, recorder)
+		})
+	}
+}
+
 func TestCancelOrderAPI_ReasonTooLong(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)

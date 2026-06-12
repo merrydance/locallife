@@ -21,6 +21,7 @@ import 'package:merchant_app/features/order/order_acceptance_coordinator.dart';
 import 'package:merchant_app/features/order/order_alert_page.dart';
 import 'package:merchant_app/features/order/order_alert_coordinator.dart';
 import 'package:merchant_app/features/order/order_detail_page.dart';
+import 'package:merchant_app/features/printer/local_print_event_repository.dart';
 import 'package:merchant_app/models/order.dart';
 import 'package:merchant_app/models/push_message.dart';
 import 'package:merchant_app/features/settings/notification_settings_provider.dart';
@@ -802,6 +803,7 @@ void main() {
         final localNotificationService = _BlockingLocalNotificationService();
         final apiClient = _AutoAcceptApiClient();
         final receiptPrinter = _CountingAcceptedOrderReceiptPrinter();
+        final localPrintEvents = _CountingLocalPrintEventRepository();
         final container = ProviderContainer(
           overrides: [
             apiClientProvider.overrideWithValue(apiClient),
@@ -813,6 +815,9 @@ void main() {
             ),
             acceptedOrderReceiptPrinterProvider.overrideWithValue(
               receiptPrinter,
+            ),
+            localPrintEventRepositoryProvider.overrideWithValue(
+              localPrintEvents,
             ),
             notificationSettingsProvider.overrideWith(
               (ref) => _FakeNotificationSettingsNotifier(
@@ -870,6 +875,10 @@ void main() {
 
         expect(apiClient.acceptPostCalls, 1);
         expect(receiptPrinter.printedOrderIds, ['514']);
+        expect(localPrintEvents.statusesForOrder('514'), [
+          'started',
+          'success',
+        ]);
       },
     );
   });
@@ -1532,12 +1541,44 @@ class _CountingAcceptedOrderReceiptPrinter
   bool get hasConnectedPrinter => true;
 
   @override
-  Future<void> printAcceptedOrder(
+  String get printerName => '测试蓝牙打印机';
+
+  @override
+  Future<bool> printAcceptedOrder(
     OrderModel order, {
     required String shopName,
   }) async {
     printedOrderIds.add(order.id);
+    return true;
   }
+}
+
+class _CountingLocalPrintEventRepository implements LocalPrintEventRepository {
+  final List<_LocalPrintEventRecord> records = <_LocalPrintEventRecord>[];
+
+  @override
+  Future<void> recordAcceptedReceiptEvent(
+    OrderModel order, {
+    required String status,
+    String? printerName,
+    String? errorMessage,
+  }) async {
+    records.add(_LocalPrintEventRecord(order.id, status));
+  }
+
+  List<String> statusesForOrder(String orderId) {
+    return records
+        .where((record) => record.orderId == orderId)
+        .map((record) => record.status)
+        .toList();
+  }
+}
+
+class _LocalPrintEventRecord {
+  const _LocalPrintEventRecord(this.orderId, this.status);
+
+  final String orderId;
+  final String status;
 }
 
 class _FakeOrderDisplayConfigRepository
@@ -1713,10 +1754,15 @@ OrderModel _buildOrder({
   );
 }
 
-Map<String, dynamic> _orderJson({required String id, required String status}) {
+Map<String, dynamic> _orderJson({
+  required String id,
+  required String status,
+  String orderType = 'takeout',
+}) {
   return <String, dynamic>{
     'id': id,
     'order_no': 'ORD$id',
+    'order_type': orderType,
     'total_amount': 1850,
     'status': status,
     'created_at': '2026-04-12T08:00:00Z',

@@ -4,6 +4,7 @@ class PushMessage {
   final String messageId;
   final String orderId;
   final String orderNumber;
+  final String orderType;
   final String? pickupCode;
   final String? pickupCodeMasked;
   final String title;
@@ -20,6 +21,7 @@ class PushMessage {
     required this.messageId,
     required this.orderId,
     this.orderNumber = '',
+    this.orderType = '',
     this.pickupCode,
     this.pickupCodeMasked,
     required this.title,
@@ -42,6 +44,7 @@ class PushMessage {
       orderNumber: order.orderNum.isNotEmpty
           ? order.orderNum
           : normalized['order_id']?.toString() ?? '',
+      orderType: order.orderType,
       pickupCode: order.pickupCode,
       pickupCodeMasked: order.pickupCodeMasked,
       title: normalized['title'] ?? '',
@@ -62,6 +65,7 @@ class PushMessage {
       messageId: 'polled-${order.id}',
       orderId: order.id,
       orderNumber: order.orderNum,
+      orderType: order.orderType,
       pickupCode: order.pickupCode,
       pickupCodeMasked: order.pickupCodeMasked,
       title: '您有新的订单',
@@ -81,6 +85,7 @@ class PushMessage {
       messageId: messageId,
       orderId: orderId,
       orderNumber: nextOrderNumber,
+      orderType: orderType,
       pickupCode: pickupCode,
       pickupCodeMasked: pickupCodeMasked,
       title: title,
@@ -100,6 +105,7 @@ class PushMessage {
       messageId: messageId,
       orderId: order.id.isNotEmpty ? order.id : orderId,
       orderNumber: order.orderNum.isNotEmpty ? order.orderNum : orderNumber,
+      orderType: order.orderType.isNotEmpty ? order.orderType : orderType,
       pickupCode: order.pickupCode ?? pickupCode,
       pickupCodeMasked: order.pickupCodeMasked ?? pickupCodeMasked,
       title: title,
@@ -119,6 +125,7 @@ class PushMessage {
       'message_id': messageId,
       'order_id': orderId,
       'order_num': orderNumber,
+      'order_type': orderType,
       'pickup_code': pickupCode,
       'pickup_code_masked': pickupCodeMasked,
       'title': title,

@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:merchant_app/core/network/api_client.dart';
 import 'package:merchant_app/core/network/api_provider.dart';
+import 'package:merchant_app/features/display_config/display_config_provider.dart';
 import 'package:merchant_app/features/order/order_acceptance_coordinator.dart';
+import 'package:merchant_app/features/printer/local_print_event_repository.dart';
 import 'package:merchant_app/features/settings/notification_settings_provider.dart';
 import 'package:merchant_app/models/order.dart';
 
@@ -15,10 +17,24 @@ void main() {
         detailOrders: {'501': _orderJson(id: '501', status: 'preparing')},
       );
       final receiptPrinter = _CountingAcceptedOrderReceiptPrinter();
+      final localPrintEvents = _CountingLocalPrintEventRepository();
       final container = ProviderContainer(
         overrides: [
           apiClientProvider.overrideWithValue(apiClient),
           acceptedOrderReceiptPrinterProvider.overrideWithValue(receiptPrinter),
+          localPrintEventRepositoryProvider.overrideWithValue(localPrintEvents),
+          orderDisplayConfigRepositoryProvider.overrideWithValue(
+            _FakeOrderDisplayConfigRepository(
+              const OrderDisplayConfig(
+                enablePrint: true,
+                printTakeout: true,
+                printDineIn: true,
+                printReservation: true,
+                printTriggerMode: 'accepted',
+                autoAcceptPaidOrders: false,
+              ),
+            ),
+          ),
           notificationSettingsProvider.overrideWith(
             (ref) => _AutoPrintNotificationSettingsNotifier(),
           ),
@@ -45,24 +61,282 @@ void main() {
       expect(await Future.wait([first, second]), [true, true]);
       expect(apiClient.acceptPostCalls, 1);
       expect(receiptPrinter.printedOrderIds, ['501']);
+      expect(localPrintEvents.statusesForOrder('501'), ['started', 'success']);
+    },
+  );
+
+  test(
+    'does not print accepted receipt when backend disables local receipt printing',
+    () async {
+      final apiClient = _AcceptApiClient(
+        detailOrders: {
+          '502': _orderJson(
+            id: '502',
+            status: 'preparing',
+            orderType: 'takeout',
+          ),
+        },
+      );
+      final receiptPrinter = _CountingAcceptedOrderReceiptPrinter();
+      final localPrintEvents = _CountingLocalPrintEventRepository();
+      final container = ProviderContainer(
+        overrides: [
+          apiClientProvider.overrideWithValue(apiClient),
+          acceptedOrderReceiptPrinterProvider.overrideWithValue(receiptPrinter),
+          localPrintEventRepositoryProvider.overrideWithValue(localPrintEvents),
+          orderDisplayConfigRepositoryProvider.overrideWithValue(
+            _FakeOrderDisplayConfigRepository(
+              const OrderDisplayConfig(
+                enablePrint: false,
+                printTakeout: true,
+                printDineIn: true,
+                printReservation: true,
+                printTriggerMode: 'accepted',
+                autoAcceptPaidOrders: false,
+              ),
+            ),
+          ),
+          notificationSettingsProvider.overrideWith(
+            (ref) => _AutoPrintNotificationSettingsNotifier(),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final accepted = await container
+          .read(orderAcceptanceCoordinatorProvider)
+          .acceptOrder('502', shopName: '测试门店');
+
+      expect(accepted, isTrue);
+      expect(apiClient.acceptPostCalls, 1);
+      expect(receiptPrinter.printedOrderIds, isEmpty);
+      expect(localPrintEvents.records, isEmpty);
+    },
+  );
+
+  test(
+    'does not print accepted receipt when backend disables the order type',
+    () async {
+      final apiClient = _AcceptApiClient(
+        detailOrders: {
+          '503': _orderJson(
+            id: '503',
+            status: 'preparing',
+            orderType: 'dine_in',
+          ),
+        },
+      );
+      final receiptPrinter = _CountingAcceptedOrderReceiptPrinter();
+      final localPrintEvents = _CountingLocalPrintEventRepository();
+      final container = ProviderContainer(
+        overrides: [
+          apiClientProvider.overrideWithValue(apiClient),
+          acceptedOrderReceiptPrinterProvider.overrideWithValue(receiptPrinter),
+          localPrintEventRepositoryProvider.overrideWithValue(localPrintEvents),
+          orderDisplayConfigRepositoryProvider.overrideWithValue(
+            _FakeOrderDisplayConfigRepository(
+              const OrderDisplayConfig(
+                enablePrint: true,
+                printTakeout: true,
+                printDineIn: false,
+                printReservation: true,
+                printTriggerMode: 'accepted',
+                autoAcceptPaidOrders: false,
+              ),
+            ),
+          ),
+          notificationSettingsProvider.overrideWith(
+            (ref) => _AutoPrintNotificationSettingsNotifier(),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final accepted = await container
+          .read(orderAcceptanceCoordinatorProvider)
+          .acceptOrder('503', shopName: '测试门店');
+
+      expect(accepted, isTrue);
+      expect(apiClient.acceptPostCalls, 1);
+      expect(receiptPrinter.printedOrderIds, isEmpty);
+      expect(localPrintEvents.records, isEmpty);
+    },
+  );
+
+  test(
+    'does not print accepted receipt when backend trigger mode is not accepted',
+    () async {
+      final apiClient = _AcceptApiClient(
+        detailOrders: {
+          '504': _orderJson(
+            id: '504',
+            status: 'preparing',
+            orderType: 'takeout',
+          ),
+        },
+      );
+      final receiptPrinter = _CountingAcceptedOrderReceiptPrinter();
+      final localPrintEvents = _CountingLocalPrintEventRepository();
+      final container = ProviderContainer(
+        overrides: [
+          apiClientProvider.overrideWithValue(apiClient),
+          acceptedOrderReceiptPrinterProvider.overrideWithValue(receiptPrinter),
+          localPrintEventRepositoryProvider.overrideWithValue(localPrintEvents),
+          orderDisplayConfigRepositoryProvider.overrideWithValue(
+            _FakeOrderDisplayConfigRepository(
+              const OrderDisplayConfig(
+                enablePrint: true,
+                printTakeout: true,
+                printDineIn: true,
+                printReservation: true,
+                printTriggerMode: 'ready',
+                autoAcceptPaidOrders: false,
+              ),
+            ),
+          ),
+          notificationSettingsProvider.overrideWith(
+            (ref) => _AutoPrintNotificationSettingsNotifier(),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final accepted = await container
+          .read(orderAcceptanceCoordinatorProvider)
+          .acceptOrder('504', shopName: '测试门店');
+
+      expect(accepted, isTrue);
+      expect(apiClient.acceptPostCalls, 1);
+      expect(receiptPrinter.printedOrderIds, isEmpty);
+      expect(localPrintEvents.records, isEmpty);
+    },
+  );
+
+  test(
+    'records failed local receipt event without failing confirmed accept',
+    () async {
+      final apiClient = _AcceptApiClient(
+        detailOrders: {
+          '505': _orderJson(
+            id: '505',
+            status: 'preparing',
+            orderType: 'takeout',
+          ),
+        },
+      );
+      final receiptPrinter = _CountingAcceptedOrderReceiptPrinter(
+        printResult: false,
+      );
+      final localPrintEvents = _CountingLocalPrintEventRepository();
+      final container = ProviderContainer(
+        overrides: [
+          apiClientProvider.overrideWithValue(apiClient),
+          acceptedOrderReceiptPrinterProvider.overrideWithValue(receiptPrinter),
+          localPrintEventRepositoryProvider.overrideWithValue(localPrintEvents),
+          orderDisplayConfigRepositoryProvider.overrideWithValue(
+            _FakeOrderDisplayConfigRepository(
+              const OrderDisplayConfig(
+                enablePrint: true,
+                printTakeout: true,
+                printDineIn: true,
+                printReservation: true,
+                printTriggerMode: 'accepted',
+                autoAcceptPaidOrders: false,
+              ),
+            ),
+          ),
+          notificationSettingsProvider.overrideWith(
+            (ref) => _AutoPrintNotificationSettingsNotifier(),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final accepted = await container
+          .read(orderAcceptanceCoordinatorProvider)
+          .acceptOrder('505', shopName: '测试门店');
+
+      expect(accepted, isTrue);
+      expect(apiClient.acceptPostCalls, 1);
+      expect(receiptPrinter.printedOrderIds, ['505']);
+      expect(localPrintEvents.statusesForOrder('505'), ['started', 'failed']);
     },
   );
 }
 
 class _CountingAcceptedOrderReceiptPrinter
     implements AcceptedOrderReceiptPrinter {
+  _CountingAcceptedOrderReceiptPrinter({this.printResult = true});
+
+  final bool printResult;
   final List<String> printedOrderIds = <String>[];
 
   @override
   bool get hasConnectedPrinter => true;
 
   @override
-  Future<void> printAcceptedOrder(
+  String get printerName => '测试蓝牙打印机';
+
+  @override
+  Future<bool> printAcceptedOrder(
     OrderModel order, {
     required String shopName,
   }) async {
     printedOrderIds.add(order.id);
+    return printResult;
   }
+}
+
+class _CountingLocalPrintEventRepository implements LocalPrintEventRepository {
+  final List<LocalPrintEventRecord> records = <LocalPrintEventRecord>[];
+
+  @override
+  Future<void> recordAcceptedReceiptEvent(
+    OrderModel order, {
+    required String status,
+    String? printerName,
+    String? errorMessage,
+  }) async {
+    records.add(
+      LocalPrintEventRecord(
+        orderId: order.id,
+        status: status,
+        printerName: printerName,
+        errorMessage: errorMessage,
+      ),
+    );
+  }
+
+  List<String> statusesForOrder(String orderId) {
+    return records
+        .where((record) => record.orderId == orderId)
+        .map((record) => record.status)
+        .toList();
+  }
+}
+
+class LocalPrintEventRecord {
+  const LocalPrintEventRecord({
+    required this.orderId,
+    required this.status,
+    this.printerName,
+    this.errorMessage,
+  });
+
+  final String orderId;
+  final String status;
+  final String? printerName;
+  final String? errorMessage;
+}
+
+class _FakeOrderDisplayConfigRepository
+    implements OrderDisplayConfigRepository {
+  const _FakeOrderDisplayConfigRepository(this.config);
+
+  final OrderDisplayConfig config;
+
+  @override
+  Future<OrderDisplayConfig> fetchDisplayConfig() async => config;
 }
 
 class _AutoPrintNotificationSettingsNotifier
@@ -178,10 +452,15 @@ class _AcceptApiClient implements ApiClient {
   }
 }
 
-Map<String, dynamic> _orderJson({required String id, required String status}) {
+Map<String, dynamic> _orderJson({
+  required String id,
+  required String status,
+  String orderType = 'takeout',
+}) {
   return <String, dynamic>{
     'id': id,
     'order_no': 'ORD$id',
+    'order_type': orderType,
     'total_amount': 1850,
     'status': status,
     'created_at': '2026-04-12T08:00:00Z',

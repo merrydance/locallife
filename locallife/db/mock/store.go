@@ -9717,6 +9717,21 @@ func (mr *MockStoreMockRecorder) GetMerchantIsOpen(ctx, id any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMerchantIsOpen", reflect.TypeOf((*MockStore)(nil).GetMerchantIsOpen), ctx, id)
 }
 
+// GetMerchantLocalPrintEventByKey mocks base method.
+func (m *MockStore) GetMerchantLocalPrintEventByKey(ctx context.Context, arg db.GetMerchantLocalPrintEventByKeyParams) (db.MerchantLocalPrintEvent, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMerchantLocalPrintEventByKey", ctx, arg)
+	ret0, _ := ret[0].(db.MerchantLocalPrintEvent)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMerchantLocalPrintEventByKey indicates an expected call of GetMerchantLocalPrintEventByKey.
+func (mr *MockStoreMockRecorder) GetMerchantLocalPrintEventByKey(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMerchantLocalPrintEventByKey", reflect.TypeOf((*MockStore)(nil).GetMerchantLocalPrintEventByKey), ctx, arg)
+}
+
 // GetMerchantMembership mocks base method.
 func (m *MockStore) GetMerchantMembership(ctx context.Context, id int64) (db.MerchantMembership, error) {
 	m.ctrl.T.Helper()
@@ -23640,6 +23655,21 @@ func (m *MockStore) UpsertMerchantCapabilitiesDefaults(ctx context.Context, merc
 func (mr *MockStoreMockRecorder) UpsertMerchantCapabilitiesDefaults(ctx, merchantID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertMerchantCapabilitiesDefaults", reflect.TypeOf((*MockStore)(nil).UpsertMerchantCapabilitiesDefaults), ctx, merchantID)
+}
+
+// UpsertMerchantLocalPrintEvent mocks base method.
+func (m *MockStore) UpsertMerchantLocalPrintEvent(ctx context.Context, arg db.UpsertMerchantLocalPrintEventParams) (db.MerchantLocalPrintEvent, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpsertMerchantLocalPrintEvent", ctx, arg)
+	ret0, _ := ret[0].(db.MerchantLocalPrintEvent)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpsertMerchantLocalPrintEvent indicates an expected call of UpsertMerchantLocalPrintEvent.
+func (mr *MockStoreMockRecorder) UpsertMerchantLocalPrintEvent(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertMerchantLocalPrintEvent", reflect.TypeOf((*MockStore)(nil).UpsertMerchantLocalPrintEvent), ctx, arg)
 }
 
 // UpsertMerchantMembershipSettings mocks base method.

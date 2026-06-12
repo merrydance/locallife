@@ -4803,6 +4803,31 @@ definitions:
       status:
         type: string
     type: object
+  api.merchantLocalPrintEventResponse:
+    properties:
+      created_at:
+        type: string
+      error_message:
+        type: string
+      event_key:
+        type: string
+      id:
+        type: integer
+      merchant_id:
+        type: integer
+      order_id:
+        type: integer
+      printed_at:
+        type: string
+      printer_name:
+        type: string
+      source:
+        type: string
+      status:
+        type: string
+      updated_at:
+        type: string
+    type: object
   api.merchantMemberDetailResponse:
     properties:
       avatar_url:
@@ -7582,6 +7607,27 @@ definitions:
         type: integer
     required:
     - recharge_amount
+    type: object
+  api.recordMerchantLocalPrintEventBody:
+    properties:
+      error_message:
+        maxLength: 500
+        type: string
+      event_key:
+        maxLength: 160
+        type: string
+      printer_name:
+        maxLength: 100
+        type: string
+      status:
+        enum:
+        - started
+        - success
+        - failed
+        type: string
+    required:
+    - event_key
+    - status
     type: object
   api.recoveryDisputeResponse:
     properties:
@@ -18664,6 +18710,52 @@ paths:
       security:
       - BearerAuth: []
       summary: 完成订单
+      tags:
+      - 商户订单管理
+  /v1/merchant/orders/{id}/local-print-events:
+    post:
+      consumes:
+      - application/json
+      description: 商户 App 记录本地蓝牙小票打印的 started/success/failed 状态；服务端按商户和事件键幂等收敛，并校验订单归属
+      parameters:
+      - description: 订单ID
+        in: path
+        minimum: 1
+        name: id
+        required: true
+        type: integer
+      - description: 本地打印事件
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.recordMerchantLocalPrintEventBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 事件已记录
+          schema:
+            $ref: '#/definitions/api.merchantLocalPrintEventResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 订单不存在或不属于当前商户
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 记录商户端本地打印事件
       tags:
       - 商户订单管理
   /v1/merchant/orders/{id}/print-jobs:

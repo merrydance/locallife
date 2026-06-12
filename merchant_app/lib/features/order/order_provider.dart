@@ -242,6 +242,9 @@ class OrderNotifier extends StateNotifier<OrderState> {
       orderNum: incoming.orderNum.isNotEmpty
           ? incoming.orderNum
           : existing.orderNum,
+      orderType: incoming.orderType.isNotEmpty
+          ? incoming.orderType
+          : existing.orderType,
       pickupCode: incoming.pickupCode ?? existing.pickupCode,
       pickupCodeMasked: incoming.pickupCodeMasked ?? existing.pickupCodeMasked,
       amount: incoming.amount > 0 ? incoming.amount : existing.amount,
