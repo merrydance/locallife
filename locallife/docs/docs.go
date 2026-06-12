@@ -34543,6 +34543,10 @@ const docTemplate = `{
                     "description": "代取费（分）",
                     "type": "integer"
                 },
+                "delivery_fee_discount": {
+                    "description": "代取费优惠（分）",
+                    "type": "integer"
+                },
                 "merchant_id": {
                     "description": "商户ID",
                     "type": "integer"
@@ -34560,7 +34564,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "total_amount": {
-                    "description": "小计+代取费（分）",
+                    "description": "小计+代取费-代取费优惠（分）",
                     "type": "integer"
                 }
             }
@@ -34606,6 +34610,9 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "total_delivery_fee": {
+                    "type": "integer"
+                },
+                "total_delivery_fee_discount": {
                     "type": "integer"
                 },
                 "total_subtotal": {

@@ -108,24 +108,26 @@ func CalculateCartPreview(
 			if !address.Latitude.Valid || !address.Longitude.Valid || !merchant.Latitude.Valid || !merchant.Longitude.Valid {
 				return result, NewRequestError(http.StatusBadRequest, errors.New("无法获取距离，请重新选择地址"))
 			}
-			distance, durationSec, feeComp := resolveRouteAndFee(ctx, merchant, mapClient, feeFn, pgNumericToFloat64(address.Latitude), pgNumericToFloat64(address.Longitude), subtotal)
+			distance, durationSec, feeComp, err := resolveRouteAndFee(ctx, merchant, mapClient, feeFn, pgNumericToFloat64(address.Latitude), pgNumericToFloat64(address.Longitude), subtotal)
+			if err != nil {
+				return result, err
+			}
 			result.DeliveryDistance = distance
 			result.RouteDurationSec = durationSec
-			if !feeComp.Suspended {
-				result.DeliveryFee = feeComp.Fee
-				result.DeliveryFeeDiscount = feeComp.Discount
-			}
+			result.DeliveryFee = feeComp.Fee
+			result.DeliveryFeeDiscount = feeComp.Discount
 		} else if input.Latitude != nil && input.Longitude != nil {
 			if !merchant.Latitude.Valid || !merchant.Longitude.Valid {
 				return result, NewRequestError(http.StatusBadRequest, errors.New("无法获取距离，请重新选择位置"))
 			}
-			distance, durationSec, feeComp := resolveRouteAndFee(ctx, merchant, mapClient, feeFn, *input.Latitude, *input.Longitude, subtotal)
+			distance, durationSec, feeComp, err := resolveRouteAndFee(ctx, merchant, mapClient, feeFn, *input.Latitude, *input.Longitude, subtotal)
+			if err != nil {
+				return result, err
+			}
 			result.DeliveryDistance = distance
 			result.RouteDurationSec = durationSec
-			if !feeComp.Suspended {
-				result.DeliveryFee = feeComp.Fee
-				result.DeliveryFeeDiscount = feeComp.Discount
-			}
+			result.DeliveryFee = feeComp.Fee
+			result.DeliveryFeeDiscount = feeComp.Discount
 		}
 
 		result.ETA = ComputeDeliveryETA(ctx, store, merchant.ID, result.DeliveryDistance, result.RouteDurationSec)
@@ -157,9 +159,9 @@ func CalculateCartPreview(
 }
 
 // resolveRouteAndFee computes the cycling route between merchant and the delivery
-// location, then calculates the delivery fee. It always returns a result — if the
-// route call fails it falls back to a straight-line Haversine estimate; if the fee
-// calculator fails the returned DeliveryFeeComputation has zero values.
+// location, then calculates the delivery fee. If the route call fails it falls back
+// to a straight-line Haversine estimate. Fee calculation failures and suspensions
+// are returned to the caller so preview paths stay fail-closed.
 func resolveRouteAndFee(
 	ctx context.Context,
 	merchant db.Merchant,
@@ -167,7 +169,7 @@ func resolveRouteAndFee(
 	feeFn DeliveryFeeCalculator,
 	userLat, userLng float64,
 	subtotal int64,
-) (distance int32, durationSec int, fee DeliveryFeeComputation) {
+) (distance int32, durationSec int, fee DeliveryFeeComputation, err error) {
 	merchantLat := pgNumericToFloat64(merchant.Latitude)
 	merchantLng := pgNumericToFloat64(merchant.Longitude)
 
@@ -184,13 +186,26 @@ func resolveRouteAndFee(
 	if distance == 0 {
 		distance = fallbackTakeoutDistance(userLat, userLng, merchantLat, merchantLng)
 	}
-
-	if feeFn != nil {
-		if comp, err := feeFn(ctx, merchant.RegionID, merchant.ID, distance, subtotal); err == nil {
-			fee = comp
-		}
+	if distance < minDeliveryDistanceMeters {
+		distance = minDeliveryDistanceMeters
 	}
-	return distance, durationSec, fee
+
+	if feeFn == nil {
+		return distance, durationSec, fee, errors.New("delivery fee calculator is required")
+	}
+
+	if fee, err = feeFn(ctx, merchant.RegionID, merchant.ID, distance, subtotal); err != nil {
+		return distance, durationSec, DeliveryFeeComputation{}, err
+	}
+	if fee.Suspended {
+		reason := fee.SuspendReason
+		if reason == "" {
+			reason = "delivery suspended"
+		}
+		return distance, durationSec, DeliveryFeeComputation{}, NewRequestError(http.StatusForbidden, errors.New(reason))
+	}
+
+	return distance, durationSec, fee, nil
 }
 
 // pgNumericToFloat64 converts a pgtype.Numeric to float64, returning 0 on error.

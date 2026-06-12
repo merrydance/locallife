@@ -2,7 +2,7 @@ import { Dish, DishResponse } from '../models/dish'
 import { DishSummary as ApiDishSummary } from '../api/dish'
 
 import { getPublicImageUrl } from '../utils/image'
-import { formatPrice } from '../utils/util'
+import { formatPrice, formatPriceTrimmed } from '../utils/util'
 
 
 export class DishAdapter {
@@ -117,7 +117,7 @@ export class DishAdapter {
       return '免代取费'
     }
     // 添加"起"表示这是起步价，实际费用可能因订单金额而更高
-    return `代取${(fee / 100).toFixed(0)}元起`
+    return `代取${formatPriceTrimmed(fee, false)}元起`
   }
 
   static formatDiscountRule(threshold: number, discountAmount?: number): string {

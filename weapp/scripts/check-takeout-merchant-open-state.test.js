@@ -42,8 +42,16 @@ const merchantLabelStub = {
   }
 }
 
+const utilModule = loadTsModule('miniprogram/utils/util.ts')
+const dishModule = loadTsModule('miniprogram/adapters/dish.ts', {
+  '../utils/image': { getPublicImageUrl: (url) => url || '' },
+  '../utils/util': utilModule
+})
+
+const { DishAdapter } = dishModule
 const consumerDiscovery = loadTsModule('miniprogram/adapters/consumer-discovery.ts', {
   '../utils/image': { getPublicImageUrl: (url) => url || '' },
+  '../utils/util': utilModule,
   './dish': { DishAdapter: { formatDistance: (distance) => `${distance}m` } },
   './merchant-labels': merchantLabelStub
 })
@@ -83,6 +91,33 @@ assert.strictEqual(
   ConsumerDiscoveryAdapter.toMerchantSummaryViewModel(merchantSummary({})).isOpen,
   false,
   'search summaries must not treat a missing is_open contract field as open'
+)
+assert.strictEqual(
+  ConsumerDiscoveryAdapter.toMerchantSummaryViewModel(merchantSummary({ estimated_delivery_fee: 550 })).deliveryFeeDisplay,
+  '代取费¥5.5起',
+  'merchant list delivery fee should not round 5.5 yuan up to 6 yuan'
+)
+assert.strictEqual(
+  ConsumerDiscoveryAdapter.toMerchantSummaryViewModel(merchantSummary({ estimated_delivery_fee: 599 })).deliveryFeeDisplay,
+  '代取费¥5.99起',
+  'merchant list delivery fee should preserve cents instead of integer rounding'
+)
+assert.strictEqual(
+  ConsumerDiscoveryAdapter.toMerchantSummaryViewModel(merchantSummary({ estimated_delivery_fee: 500 })).deliveryFeeDisplay,
+  '代取费¥5起',
+  'merchant list delivery fee should omit redundant decimals for whole yuan'
+)
+assert.strictEqual(utilModule.formatPriceTrimmed(599), '¥5.99')
+assert.strictEqual(utilModule.formatPriceTrimmed(550, false), '5.5')
+assert.strictEqual(
+  DishAdapter.formatDeliveryFee(599),
+  '代取5.99元起',
+  'dish cards should preserve cents for estimated delivery fees'
+)
+assert.strictEqual(
+  DishAdapter.formatDeliveryFee(500),
+  '代取5元起',
+  'dish cards should omit redundant decimals for whole-yuan delivery fees'
 )
 
 const takeoutSupport = loadTsModule('miniprogram/utils/takeout-index-support.ts', {

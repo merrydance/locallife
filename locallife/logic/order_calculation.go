@@ -158,14 +158,19 @@ func CalculateOrderPreview(
 			if err != nil {
 				return result, err
 			}
+			if !address.Latitude.Valid || !address.Longitude.Valid || !merchant.Latitude.Valid || !merchant.Longitude.Valid {
+				return result, NewRequestError(http.StatusBadRequest, errors.New("invalid address or merchant location"))
+			}
 			if address.Latitude.Valid && address.Longitude.Valid {
 				lat, _ := address.Latitude.Float64Value()
 				lng, _ := address.Longitude.Float64Value()
 				userLat = lat.Float64
 				userLng = lng.Float64
 			}
-			regionID = address.RegionID
 		} else if input.Latitude != nil && input.Longitude != nil {
+			if !merchant.Latitude.Valid || !merchant.Longitude.Valid {
+				return result, NewRequestError(http.StatusBadRequest, errors.New("invalid address or merchant location"))
+			}
 			userLat = *input.Latitude
 			userLng = *input.Longitude
 		}
@@ -188,21 +193,32 @@ func CalculateOrderPreview(
 				deliveryDistance = fallbackTakeoutDistance(userLat, userLng, merchantLat.Float64, merchantLng.Float64)
 			}
 		}
+		if deliveryDistance < minDeliveryDistanceMeters {
+			deliveryDistance = minDeliveryDistanceMeters
+		}
 
 		if calculateFee == nil {
 			return result, fmt.Errorf("delivery fee calculator: not configured")
 		}
 		feeResult, err := calculateFee(ctx, regionID, input.MerchantID, deliveryDistance, result.Subtotal)
-		if err == nil {
-			result.DeliveryFee = feeResult.Fee
-			if feeResult.Discount > 0 {
-				result.DeliveryFeeDiscount = feeResult.Discount
-				result.Promotions = append(result.Promotions, OrderPromotion{
-					Type:   "delivery_fee_return",
-					Title:  "满额返运费",
-					Amount: feeResult.Discount,
-				})
+		if err != nil {
+			return result, err
+		}
+		if feeResult.Suspended {
+			reason := feeResult.SuspendReason
+			if reason == "" {
+				reason = "delivery suspended"
 			}
+			return result, NewRequestError(http.StatusForbidden, errors.New(reason))
+		}
+		result.DeliveryFee = feeResult.Fee
+		if feeResult.Discount > 0 {
+			result.DeliveryFeeDiscount = feeResult.Discount
+			result.Promotions = append(result.Promotions, OrderPromotion{
+				Type:   "delivery_fee_return",
+				Title:  "满额返运费",
+				Amount: feeResult.Discount,
+			})
 		}
 	}
 

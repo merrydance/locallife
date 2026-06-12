@@ -5403,8 +5403,9 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 					Return([]db.DiscountRule{}, nil)
 
 				// 代取费计算相关mock
+				feeRegionID := merchantWithLocation.RegionID
 				store.EXPECT().
-					GetDeliveryFeeConfigByRegion(gomock.Any(), region.ID).
+					GetDeliveryFeeConfigByRegion(gomock.Any(), feeRegionID).
 					Times(1).
 					Return(db.DeliveryFeeConfig{}, db.ErrRecordNotFound)
 				store.EXPECT().
@@ -5416,11 +5417,11 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 					Times(1).
 					Return(db.PlatformConfig{}, db.ErrRecordNotFound)
 				store.EXPECT().
-					GetLatestWeatherCoefficient(gomock.Any(), region.ID).
+					GetLatestWeatherCoefficient(gomock.Any(), feeRegionID).
 					Times(1).
 					Return(db.WeatherCoefficient{}, db.ErrRecordNotFound)
 				store.EXPECT().
-					ListPeakHourConfigsByRegion(gomock.Any(), region.ID).
+					ListPeakHourConfigsByRegion(gomock.Any(), feeRegionID).
 					Times(1).
 					Return([]db.PeakHourConfig{}, nil)
 				store.EXPECT().

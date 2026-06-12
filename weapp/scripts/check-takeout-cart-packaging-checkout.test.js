@@ -4,7 +4,16 @@ const path = require('path')
 const ts = require('typescript')
 const vm = require('vm')
 
-const sourcePath = path.join(__dirname, '..', 'miniprogram', 'utils', 'takeout-cart-view.ts')
+const sourcePath = path.join(
+  __dirname,
+  '..',
+  'miniprogram',
+  'pages',
+  'takeout',
+  'cart',
+  '_utils',
+  'takeout-cart-view.ts'
+)
 
 function loadModule() {
   const source = fs.readFileSync(sourcePath, 'utf8')
@@ -33,7 +42,11 @@ function loadModule() {
   return sandbox.module.exports
 }
 
-const { getPackagingCheckoutBlocker } = loadModule()
+const {
+  buildRecalculatedGroup,
+  buildUpdatedGroupWithDeliveryFee,
+  getPackagingCheckoutBlocker
+} = loadModule()
 
 const baseGroup = {
   cartId: 1,
@@ -70,5 +83,31 @@ assert.strictEqual(getPackagingCheckoutBlocker([
     packagingRequired: false
   }
 ], [1]), '')
+
+const updatedWithDeliveryDiscount = buildUpdatedGroupWithDeliveryFee({
+  cartId: 2,
+  orderType: 'takeout',
+  subtotal: 2000,
+  deliveryFee: 0,
+  deliveryFeeDiscount: 0,
+  items: [],
+  packagingRequired: false
+}, 520, 200)
+
+assert.strictEqual(updatedWithDeliveryDiscount.deliveryFee, 520)
+assert.strictEqual(updatedWithDeliveryDiscount.deliveryFeeDiscount, 200)
+assert.strictEqual(updatedWithDeliveryDiscount.deliveryFeeDisplay, '¥3.20')
+assert.strictEqual(updatedWithDeliveryDiscount.totalAmount, 2320)
+assert.strictEqual(updatedWithDeliveryDiscount.totalAmountDisplay, '¥23.20')
+
+const recalculatedWithDeliveryDiscount = buildRecalculatedGroup({
+  ...updatedWithDeliveryDiscount,
+  items: [
+    { unitPrice: 1000, quantity: 3 }
+  ]
+})
+
+assert.strictEqual(recalculatedWithDeliveryDiscount.subtotal, 3000)
+assert.strictEqual(recalculatedWithDeliveryDiscount.totalAmount, 3320)
 
 console.log('check-takeout-cart-packaging-checkout tests passed')

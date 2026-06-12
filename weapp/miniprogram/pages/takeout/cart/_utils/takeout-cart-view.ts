@@ -38,6 +38,7 @@ export interface MerchantCartGroup {
   subtotal: number
   subtotalDisplay: string
   deliveryFee: number
+  deliveryFeeDiscount: number
   deliveryFeeLabel: string
   deliveryFeeDisplay: string
   totalAmount: number
@@ -139,6 +140,7 @@ export function buildMerchantGroup(merchantCart: MerchantCartResponse, cartDetai
     subtotal,
     subtotalDisplay: formatCurrency(subtotal),
     deliveryFee: 0,
+    deliveryFeeDiscount: 0,
     deliveryFeeLabel: getDeliveryFeeLabel({ orderType }),
     deliveryFeeDisplay: '待计算',
     totalAmount: subtotal,
@@ -150,15 +152,21 @@ export function buildMerchantGroup(merchantCart: MerchantCartResponse, cartDetai
   }
 }
 
-export function buildUpdatedGroupWithDeliveryFee(group: MerchantCartGroup, deliveryFee: number): MerchantCartGroup {
-  const totalAmount = group.subtotal + deliveryFee
+export function buildUpdatedGroupWithDeliveryFee(
+  group: MerchantCartGroup,
+  deliveryFee: number,
+  deliveryFeeDiscount: number = 0
+): MerchantCartGroup {
+  const payableDeliveryFee = Math.max(0, deliveryFee - deliveryFeeDiscount)
+  const totalAmount = group.subtotal + payableDeliveryFee
   return {
     ...group,
     deliveryFee,
+    deliveryFeeDiscount,
     deliveryFeeLabel: getDeliveryFeeLabel(group),
     deliveryFeeDisplay: isTakeawayCartGroup(group)
       ? '无需代取费'
-      : (deliveryFee > 0 ? formatCurrency(deliveryFee) : '免代取费'),
+      : (payableDeliveryFee > 0 ? formatCurrency(payableDeliveryFee) : '免代取费'),
     totalAmount,
     totalAmountDisplay: formatCurrency(totalAmount),
     errorStatus: ''
@@ -168,7 +176,7 @@ export function buildUpdatedGroupWithDeliveryFee(group: MerchantCartGroup, deliv
 export function buildRecalculatedGroup(group: MerchantCartGroup): MerchantCartGroup {
   const subtotal = group.items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0)
   const itemCount = group.items.reduce((sum, item) => sum + item.quantity, 0)
-  const totalAmount = subtotal + (group.deliveryFee || 0)
+  const totalAmount = subtotal + Math.max(0, (group.deliveryFee || 0) - (group.deliveryFeeDiscount || 0))
   return {
     ...group,
     subtotal,

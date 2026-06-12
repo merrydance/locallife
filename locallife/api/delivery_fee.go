@@ -251,6 +251,25 @@ func validateMinMaxFee(minFee int64, maxFee *int64) error {
 	return nil
 }
 
+func validateDeliveryFeeConfigValues(baseFee *int64, baseDistance *int32, extraFeePerKm *int64, valueRatio *float64, minFee *int64) error {
+	if baseFee != nil && *baseFee < 0 {
+		return ErrAmountNegative
+	}
+	if baseDistance != nil && *baseDistance <= 0 {
+		return ErrDistanceNegative
+	}
+	if extraFeePerKm != nil && *extraFeePerKm < 0 {
+		return ErrAmountNegative
+	}
+	if valueRatio != nil && (*valueRatio < 0 || *valueRatio > 1) {
+		return ErrValueRateOutOfRange
+	}
+	if minFee != nil && *minFee < 0 {
+		return ErrAmountNegative
+	}
+	return nil
+}
+
 func newDeliveryFeeConfigResponse(config db.DeliveryFeeConfig) deliveryFeeConfigResponse {
 	rsp := deliveryFeeConfigResponse{
 		ID:            config.ID,
@@ -303,6 +322,11 @@ func (server *Server) createDeliveryFeeConfig(ctx *gin.Context) {
 	}
 
 	if err := validateMinMaxFee(req.MinFee, req.MaxFee); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	if err := validateDeliveryFeeConfigValues(&req.BaseFee, &req.BaseDistance, &req.ExtraFeePerKm, req.ValueRatio, &req.MinFee); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
@@ -505,6 +529,11 @@ func (server *Server) updateDeliveryFeeConfig(ctx *gin.Context) {
 	}
 
 	if err := validateMinMaxFee(effectiveMinFee, effectiveMaxFee); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	if err := validateDeliveryFeeConfigValues(req.BaseFee, req.BaseDistance, req.ExtraFeePerKm, req.ValueRatio, req.MinFee); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
@@ -1552,6 +1581,9 @@ func (server *Server) calculateDeliveryFeeWithConfig(ctx context.Context, config
 				}
 			}
 		}
+	}
+	if promotionDiscount > subtotal {
+		promotionDiscount = subtotal
 	}
 
 	// 9. 最终运费：不扣减商户满返，骑手费保持完整；满返折扣由上层在订单总价中抵扣

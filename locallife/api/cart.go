@@ -14,7 +14,6 @@ import (
 
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
-	"github.com/merrydance/locallife/maps"
 	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/token"
 )
@@ -1008,17 +1007,20 @@ type combinedCheckoutItem struct {
 	Subtotal int64 `json:"subtotal"`
 	// 代取费（分）
 	DeliveryFee int64 `json:"delivery_fee"`
-	// 小计+代取费（分）
+	// 代取费优惠（分）
+	DeliveryFeeDiscount int64 `json:"delivery_fee_discount"`
+	// 小计+代取费-代取费优惠（分）
 	TotalAmount int64 `json:"total_amount"`
 }
 
 type combinedCheckoutResponse struct {
-	Items            []combinedCheckoutItem `json:"items"`
-	TotalSubtotal    int64                  `json:"total_subtotal"`
-	TotalDeliveryFee int64                  `json:"total_delivery_fee"`
-	TotalAmount      int64                  `json:"total_amount"`
-	CanCombinePay    bool                   `json:"can_combine_pay"`
-	Message          string                 `json:"message,omitempty"`
+	Items                    []combinedCheckoutItem `json:"items"`
+	TotalSubtotal            int64                  `json:"total_subtotal"`
+	TotalDeliveryFee         int64                  `json:"total_delivery_fee"`
+	TotalDeliveryFeeDiscount int64                  `json:"total_delivery_fee_discount"`
+	TotalAmount              int64                  `json:"total_amount"`
+	CanCombinePay            bool                   `json:"can_combine_pay"`
+	Message                  string                 `json:"message,omitempty"`
 }
 
 // previewCombinedCheckout godoc
@@ -1059,6 +1061,7 @@ func (server *Server) previewCombinedCheckout(ctx *gin.Context) {
 	items := make([]combinedCheckoutItem, 0, len(carts))
 	var totalSubtotal int64
 	var totalDeliveryFee int64
+	var totalDeliveryFeeDiscount int64
 	var totalAmount int64
 	canCombinePay := true
 	message := ""
@@ -1093,6 +1096,7 @@ func (server *Server) previewCombinedCheckout(ctx *gin.Context) {
 		}
 
 		var deliveryFee int64
+		var deliveryFeeDiscount int64
 		if cartDetail.OrderType == "takeout" {
 			if req.AddressID == nil {
 				ctx.JSON(http.StatusBadRequest, errorResponse(ErrDeliveryAddressRequired))
@@ -1107,45 +1111,65 @@ func (server *Server) previewCombinedCheckout(ctx *gin.Context) {
 				ctx.JSON(http.StatusBadRequest, errorResponse(ErrDeliveryDistanceUnavailable))
 				return
 			}
-			if server.mapClient == nil {
-				ctx.JSON(http.StatusBadRequest, errorResponse(ErrDeliveryDistanceCalcFailed))
+
+			quote, err := logic.ComputeDeliveryQuote(ctx, logic.DeliveryQuoteInput{
+				UserID:    authPayload.UserID,
+				OrderType: db.OrderTypeTakeout,
+				Subtotal:  subtotal,
+				Merchant: db.Merchant{
+					ID:        cart.MerchantID,
+					RegionID:  cart.RegionID,
+					Latitude:  cart.MerchantLatitude,
+					Longitude: cart.MerchantLongitude,
+				},
+				Address: address,
+			}, server.mapClient, func(ctx context.Context, regionID, merchantID int64, distance int32, orderAmount int64) (logic.DeliveryFeeComputation, error) {
+				feeResult, err := server.calculateDeliveryFeeInternal(ctx, regionID, merchantID, distance, orderAmount)
+				if err != nil {
+					return logic.DeliveryFeeComputation{}, err
+				}
+				return logic.DeliveryFeeComputation{
+					Fee:           feeResult.FinalFee,
+					Discount:      feeResult.PromotionDiscount,
+					Suspended:     feeResult.DeliverySuspended,
+					SuspendReason: feeResult.SuspendReason,
+				}, nil
+			})
+			if err != nil {
+				if writeLogicRequestError(ctx, err) {
+					return
+				}
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 				return
 			}
-			fromLoc := maps.Location{Lat: pgNumericToFloat64(cart.MerchantLatitude), Lng: pgNumericToFloat64(cart.MerchantLongitude)}
-			toLoc := maps.Location{Lat: pgNumericToFloat64(address.Latitude), Lng: pgNumericToFloat64(address.Longitude)}
-			routeResult, err := server.mapClient.GetBicyclingRoute(ctx, fromLoc, toLoc)
-			if err != nil || routeResult == nil {
-				ctx.JSON(http.StatusBadRequest, errorResponse(ErrDeliveryDistanceUnavailable))
-				return
-			}
-			distance := int32(routeResult.Distance)
-			feeResult, err := server.calculateDeliveryFeeInternal(ctx, cart.RegionID, cart.MerchantID, distance, subtotal)
-			if err == nil && feeResult != nil && !feeResult.DeliverySuspended {
-				deliveryFee = feeResult.FinalFee
-			}
+			deliveryFee = quote.Fee
+			deliveryFeeDiscount = quote.Discount
 		}
 
 		items = append(items, combinedCheckoutItem{
-			MerchantID:   cart.MerchantID,
-			MerchantName: cart.MerchantName,
-			OrderType:    cartDetail.OrderType,
-			Subtotal:     subtotal,
-			DeliveryFee:  deliveryFee,
-			TotalAmount:  subtotal + deliveryFee,
+			MerchantID:          cart.MerchantID,
+			MerchantName:        cart.MerchantName,
+			OrderType:           cartDetail.OrderType,
+			Subtotal:            subtotal,
+			DeliveryFee:         deliveryFee,
+			DeliveryFeeDiscount: deliveryFeeDiscount,
+			TotalAmount:         subtotal + deliveryFee - deliveryFeeDiscount,
 		})
 
 		totalSubtotal += subtotal
 		totalDeliveryFee += deliveryFee
-		totalAmount += subtotal + deliveryFee
+		totalDeliveryFeeDiscount += deliveryFeeDiscount
+		totalAmount += subtotal + deliveryFee - deliveryFeeDiscount
 	}
 
 	ctx.JSON(http.StatusOK, combinedCheckoutResponse{
-		Items:            items,
-		TotalSubtotal:    totalSubtotal,
-		TotalDeliveryFee: totalDeliveryFee,
-		TotalAmount:      totalAmount,
-		CanCombinePay:    canCombinePay,
-		Message:          message,
+		Items:                    items,
+		TotalSubtotal:            totalSubtotal,
+		TotalDeliveryFee:         totalDeliveryFee,
+		TotalDeliveryFeeDiscount: totalDeliveryFeeDiscount,
+		TotalAmount:              totalAmount,
+		CanCombinePay:            canCombinePay,
+		Message:                  message,
 	})
 }
 

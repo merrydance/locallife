@@ -197,7 +197,11 @@ Page({
         }, { loading: !silent })
 
         // 更新代取费信息
-        updatedGroups[i] = buildUpdatedGroupWithDeliveryFee(group, result.delivery_fee || 0)
+        updatedGroups[i] = buildUpdatedGroupWithDeliveryFee(
+          group,
+          result.delivery_fee || 0,
+          result.delivery_fee_discount || 0
+        )
       } catch (error: unknown) {
         const userMessage =
           typeof error === 'object' && error !== null && 'userMessage' in error

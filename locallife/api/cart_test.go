@@ -2,9 +2,11 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -14,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/maps"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
 	"github.com/stretchr/testify/require"
@@ -63,6 +66,35 @@ func randomListCartItemsRow(cartItem db.CartItem, dish db.Dish) db.ListCartItems
 		ComboImageMediaAssetID: pgtype.Int8{},
 		ComboIsAvailable:       pgtype.Bool{Valid: false},
 	}
+}
+
+type combinedCheckoutMapClientStub struct {
+	route *maps.RouteResult
+	err   error
+}
+
+func (s combinedCheckoutMapClientStub) GetBicyclingRoute(ctx context.Context, from, to maps.Location) (*maps.RouteResult, error) {
+	return s.route, s.err
+}
+
+func (s combinedCheckoutMapClientStub) GetWalkingRoute(ctx context.Context, from, to maps.Location) (*maps.RouteResult, error) {
+	return nil, s.err
+}
+
+func (s combinedCheckoutMapClientStub) GetDrivingRoute(ctx context.Context, from, to maps.Location) (*maps.RouteResult, error) {
+	return nil, s.err
+}
+
+func (s combinedCheckoutMapClientStub) GetDistanceMatrix(ctx context.Context, froms, tos []maps.Location, mode string) (*maps.DistanceMatrixResult, error) {
+	return nil, s.err
+}
+
+func (s combinedCheckoutMapClientStub) Geocode(ctx context.Context, address string) (*maps.GeocodeResult, error) {
+	return nil, s.err
+}
+
+func (s combinedCheckoutMapClientStub) ReverseGeocode(ctx context.Context, location maps.Location) (*maps.ReverseGeocodeResult, error) {
+	return nil, s.err
 }
 
 // ==================== GetCart Tests ====================
@@ -1435,4 +1467,263 @@ func TestCombinedCheckoutAPI(t *testing.T) {
 			tc.checkResponse(t, recorder)
 		})
 	}
+}
+
+func TestCombinedCheckoutAPI_TakeoutAppliesDeliveryFeeDiscount(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	merchant.IsOpen = true
+	merchant.Latitude = pgtype.Numeric{Int: big.NewInt(300000000), Exp: -7, Valid: true}
+	merchant.Longitude = pgtype.Numeric{Int: big.NewInt(1200000000), Exp: -7, Valid: true}
+	cartID := int64(11)
+	addressID := int64(22)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetUserCartsByCartIDs(gomock.Any(), db.GetUserCartsByCartIDsParams{
+			UserID:  user.ID,
+			Column2: []int64{cartID},
+		}).
+		Times(1).
+		Return([]db.GetUserCartsByCartIDsRow{{
+			ID:                cartID,
+			UserID:            user.ID,
+			MerchantID:        merchant.ID,
+			MerchantName:      merchant.Name,
+			RegionID:          merchant.RegionID,
+			SubMchid:          pgtype.Text{String: "sub_mch_001", Valid: true},
+			MerchantStatus:    "active",
+			MerchantLatitude:  merchant.Latitude,
+			MerchantLongitude: merchant.Longitude,
+		}}, nil)
+	store.EXPECT().
+		GetCart(gomock.Any(), cartID).
+		Times(1).
+		Return(db.Cart{ID: cartID, UserID: user.ID, MerchantID: merchant.ID, OrderType: db.OrderTypeTakeout}, nil)
+	store.EXPECT().
+		ListCartItems(gomock.Any(), cartID).
+		Times(1).
+		Return([]db.ListCartItemsRow{{
+			DishID:    pgtype.Int8{Int64: 5, Valid: true},
+			DishName:  pgtype.Text{String: "Dish", Valid: true},
+			DishPrice: pgtype.Int8{Int64: 1000, Valid: true},
+			Quantity:  2,
+		}}, nil)
+	store.EXPECT().
+		GetUserAddress(gomock.Any(), addressID).
+		Times(1).
+		Return(db.UserAddress{
+			ID:        addressID,
+			UserID:    user.ID,
+			Latitude:  merchant.Latitude,
+			Longitude: merchant.Longitude,
+		}, nil)
+	store.EXPECT().
+		GetDeliveryFeeConfigByRegion(gomock.Any(), merchant.RegionID).
+		Times(1).
+		Return(db.DeliveryFeeConfig{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetPlatformConfig(gomock.Any(), db.GetPlatformConfigParams{
+			ConfigKey: deliveryFeeDefaultConfigKey,
+			ScopeType: db.PlatformConfigScopeGlobal,
+			ScopeID:   pgtype.Int8{Valid: false},
+		}).
+		Times(1).
+		Return(db.PlatformConfig{ConfigValue: mustMarshalDeliveryFeeDefaultConfig(t, deliveryFeeDefaultConfigValue{
+			BaseFee:       500,
+			BaseDistance:  3000,
+			ExtraFeePerKm: 100,
+			ValueRatio:    0.01,
+			MinFee:        300,
+		})}, nil)
+	store.EXPECT().
+		GetLatestWeatherCoefficient(gomock.Any(), merchant.RegionID).
+		Times(1).
+		Return(db.WeatherCoefficient{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		ListPeakHourConfigsByRegion(gomock.Any(), merchant.RegionID).
+		Times(1).
+		Return([]db.PeakHourConfig{}, nil)
+	store.EXPECT().
+		ListActiveDeliveryPromotionsByMerchant(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.MerchantDeliveryPromotion{{
+			MerchantID:     merchant.ID,
+			MinOrderAmount: 1000,
+			DiscountAmount: 200,
+			ValidFrom:      time.Now().Add(-time.Hour),
+			ValidUntil:     time.Now().Add(time.Hour),
+			IsActive:       true,
+		}}, nil)
+
+	server := newTestServer(t, store)
+	server.mapClient = combinedCheckoutMapClientStub{
+		route: &maps.RouteResult{Distance: 2500, Duration: 600},
+	}
+
+	recorder := httptest.NewRecorder()
+	body, err := json.Marshal(gin.H{
+		"cart_ids":   []int64{cartID},
+		"address_id": addressID,
+	})
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/cart/combined-checkout/preview", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var response struct {
+		Code int `json:"code"`
+		Data struct {
+			Items []struct {
+				Subtotal            int64 `json:"subtotal"`
+				DeliveryFee         int64 `json:"delivery_fee"`
+				DeliveryFeeDiscount int64 `json:"delivery_fee_discount"`
+				TotalAmount         int64 `json:"total_amount"`
+			} `json:"items"`
+			TotalSubtotal            int64 `json:"total_subtotal"`
+			TotalDeliveryFee         int64 `json:"total_delivery_fee"`
+			TotalDeliveryFeeDiscount int64 `json:"total_delivery_fee_discount"`
+			TotalAmount              int64 `json:"total_amount"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+	require.Equal(t, 0, response.Code)
+	require.Len(t, response.Data.Items, 1)
+	require.Equal(t, int64(2000), response.Data.Items[0].Subtotal)
+	require.Equal(t, int64(520), response.Data.Items[0].DeliveryFee)
+	require.Equal(t, int64(200), response.Data.Items[0].DeliveryFeeDiscount)
+	require.Equal(t, int64(2320), response.Data.Items[0].TotalAmount)
+	require.Equal(t, int64(2000), response.Data.TotalSubtotal)
+	require.Equal(t, int64(520), response.Data.TotalDeliveryFee)
+	require.Equal(t, int64(200), response.Data.TotalDeliveryFeeDiscount)
+	require.Equal(t, int64(2320), response.Data.TotalAmount)
+}
+
+func TestCombinedCheckoutAPI_TakeoutFallsBackWhenMapUnavailable(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	merchant.IsOpen = true
+	merchant.Latitude = pgtype.Numeric{Int: big.NewInt(300000000), Exp: -7, Valid: true}
+	merchant.Longitude = pgtype.Numeric{Int: big.NewInt(1200000000), Exp: -7, Valid: true}
+	cartID := int64(12)
+	addressID := int64(23)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetUserCartsByCartIDs(gomock.Any(), db.GetUserCartsByCartIDsParams{
+			UserID:  user.ID,
+			Column2: []int64{cartID},
+		}).
+		Times(1).
+		Return([]db.GetUserCartsByCartIDsRow{{
+			ID:                cartID,
+			UserID:            user.ID,
+			MerchantID:        merchant.ID,
+			MerchantName:      merchant.Name,
+			RegionID:          merchant.RegionID,
+			SubMchid:          pgtype.Text{String: "sub_mch_001", Valid: true},
+			MerchantStatus:    "active",
+			MerchantLatitude:  merchant.Latitude,
+			MerchantLongitude: merchant.Longitude,
+		}}, nil)
+	store.EXPECT().
+		GetCart(gomock.Any(), cartID).
+		Times(1).
+		Return(db.Cart{ID: cartID, UserID: user.ID, MerchantID: merchant.ID, OrderType: db.OrderTypeTakeout}, nil)
+	store.EXPECT().
+		ListCartItems(gomock.Any(), cartID).
+		Times(1).
+		Return([]db.ListCartItemsRow{{
+			DishID:    pgtype.Int8{Int64: 5, Valid: true},
+			DishName:  pgtype.Text{String: "Dish", Valid: true},
+			DishPrice: pgtype.Int8{Int64: 1000, Valid: true},
+			Quantity:  2,
+		}}, nil)
+	store.EXPECT().
+		GetUserAddress(gomock.Any(), addressID).
+		Times(1).
+		Return(db.UserAddress{
+			ID:        addressID,
+			UserID:    user.ID,
+			Latitude:  merchant.Latitude,
+			Longitude: merchant.Longitude,
+		}, nil)
+	store.EXPECT().
+		GetDeliveryFeeConfigByRegion(gomock.Any(), merchant.RegionID).
+		AnyTimes().
+		Return(db.DeliveryFeeConfig{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetPlatformConfig(gomock.Any(), db.GetPlatformConfigParams{
+			ConfigKey: deliveryFeeDefaultConfigKey,
+			ScopeType: db.PlatformConfigScopeGlobal,
+			ScopeID:   pgtype.Int8{Valid: false},
+		}).
+		AnyTimes().
+		Return(db.PlatformConfig{ConfigValue: mustMarshalDeliveryFeeDefaultConfig(t, deliveryFeeDefaultConfigValue{
+			BaseFee:       500,
+			BaseDistance:  3000,
+			ExtraFeePerKm: 100,
+			ValueRatio:    0,
+			MinFee:        300,
+		})}, nil)
+	store.EXPECT().
+		GetLatestWeatherCoefficient(gomock.Any(), merchant.RegionID).
+		AnyTimes().
+		Return(db.WeatherCoefficient{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		ListPeakHourConfigsByRegion(gomock.Any(), merchant.RegionID).
+		AnyTimes().
+		Return([]db.PeakHourConfig{}, nil)
+	store.EXPECT().
+		ListActiveDeliveryPromotionsByMerchant(gomock.Any(), merchant.ID).
+		AnyTimes().
+		Return([]db.MerchantDeliveryPromotion{}, nil)
+
+	server := newTestServer(t, store)
+	server.mapClient = nil
+
+	recorder := httptest.NewRecorder()
+	body, err := json.Marshal(gin.H{
+		"cart_ids":   []int64{cartID},
+		"address_id": addressID,
+	})
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/cart/combined-checkout/preview", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var response struct {
+		Code int `json:"code"`
+		Data struct {
+			Items []struct {
+				DeliveryFee int64 `json:"delivery_fee"`
+				TotalAmount int64 `json:"total_amount"`
+			} `json:"items"`
+			TotalDeliveryFee int64 `json:"total_delivery_fee"`
+			TotalAmount      int64 `json:"total_amount"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+	require.Equal(t, 0, response.Code)
+	require.Len(t, response.Data.Items, 1)
+	require.Equal(t, int64(500), response.Data.Items[0].DeliveryFee)
+	require.Equal(t, int64(2500), response.Data.Items[0].TotalAmount)
+	require.Equal(t, int64(500), response.Data.TotalDeliveryFee)
+	require.Equal(t, int64(2500), response.Data.TotalAmount)
 }

@@ -2837,8 +2837,10 @@ func (server *Server) calculateOrder(ctx *gin.Context) {
 				return logic.DeliveryFeeComputation{}, err
 			}
 			return logic.DeliveryFeeComputation{
-				Fee:      feeResult.FinalFee,
-				Discount: feeResult.PromotionDiscount,
+				Fee:           feeResult.FinalFee,
+				Discount:      feeResult.PromotionDiscount,
+				Suspended:     feeResult.DeliverySuspended,
+				SuspendReason: feeResult.SuspendReason,
 			}, nil
 		},
 	})

@@ -1,6 +1,7 @@
 import type { MerchantSummary } from '../api/merchant'
 import type { RoomSearchResult } from '../api/search'
 import { getPublicImageUrl } from '../utils/image'
+import { formatPriceTrimmed } from '../utils/util'
 import { DishAdapter } from './dish'
 import { buildMerchantDisplayTags } from './merchant-labels'
 
@@ -50,7 +51,7 @@ export class ConsumerDiscoveryAdapter {
       monthlySales: source.total_orders ?? source.monthly_sales ?? 0,
       deliveryFee,
       deliveryFeeDisplay: deliveryFee !== undefined
-        ? `代取费¥${(deliveryFee / 100).toFixed(0)}起`
+        ? `代取费${formatPriceTrimmed(deliveryFee)}起`
         : '',
       isOpen: source.is_open === true,
       label: source.label || ''

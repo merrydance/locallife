@@ -29,6 +29,14 @@ export const formatPrice = (amount: number, withSymbol: boolean = true): string 
 }
 
 /**
+ * 格式化价格（分转元，去掉无意义的小数 0）
+ */
+export const formatPriceTrimmed = (amount: number, withSymbol: boolean = true): string => {
+  const yuan = (amount / 100).toFixed(2).replace(/\.?0+$/, '')
+  return withSymbol ? `¥${yuan}` : yuan
+}
+
+/**
  * 格式化价格（不带符号，用于 WXML）
  */
 export const formatPriceNoSymbol = (amount: number): string => {

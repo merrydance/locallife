@@ -129,6 +129,30 @@ func TestComputeDeliveryQuote(t *testing.T) {
 			},
 		},
 		{
+			name: "UsesMerchantRegionForFeeConfig",
+			input: DeliveryQuoteInput{
+				UserID:    address.UserID,
+				OrderType: "takeout",
+				Subtotal:  1000,
+				Merchant:  merchant,
+				Address: db.UserAddress{
+					UserID:    address.UserID,
+					RegionID:  99,
+					Latitude:  address.Latitude,
+					Longitude: address.Longitude,
+				},
+			},
+			mapc: &fakeMapClient{route: &maps.RouteResult{Distance: 2000, Duration: 600}},
+			calc: func(ctx context.Context, regionID, merchantID int64, distance int32, orderAmount int64) (DeliveryFeeComputation, error) {
+				require.Equal(t, merchant.RegionID, regionID)
+				return DeliveryFeeComputation{Fee: 500}, nil
+			},
+			check: func(t *testing.T, result DeliveryQuoteResult, err error) {
+				require.NoError(t, err)
+				require.Equal(t, int64(500), result.Fee)
+			},
+		},
+		{
 			name:  "FallbackMinDistance",
 			input: DeliveryQuoteInput{UserID: address.UserID, OrderType: "takeout", Subtotal: 1000, Merchant: merchant, Address: address},
 			calc: func(ctx context.Context, regionID, merchantID int64, distance int32, orderAmount int64) (DeliveryFeeComputation, error) {

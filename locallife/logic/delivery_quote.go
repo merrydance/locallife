@@ -90,7 +90,7 @@ func ComputeDeliveryQuote(ctx context.Context, input DeliveryQuoteInput, mapClie
 		return result, errors.New("delivery fee calculator is required")
 	}
 
-	feeResult, err := calc(ctx, input.Address.RegionID, input.Merchant.ID, calculatedDistance, input.Subtotal)
+	feeResult, err := calc(ctx, input.Merchant.RegionID, input.Merchant.ID, calculatedDistance, input.Subtotal)
 	if err != nil {
 		return result, err
 	}

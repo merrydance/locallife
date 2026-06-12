@@ -727,6 +727,145 @@ func TestUpdateDeliveryFeeConfigAPI_ClearsMaxFeeWhenNull(t *testing.T) {
 	require.Nil(t, response.MaxFee)
 }
 
+func TestUpdateDeliveryFeeConfigAPI_RejectsInvalidBaseDistance(t *testing.T) {
+	user, _ := randomUser(t)
+	regionID := util.RandomInt(1, 100)
+	config := randomDeliveryFeeConfig(regionID)
+	operator := randomOperator(user.ID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		ListUserRoles(gomock.Any(), user.ID).
+		Times(1).
+		Return([]db.UserRole{{UserID: user.ID, Role: "operator", Status: "active"}}, nil)
+	store.EXPECT().
+		GetOperatorByUser(gomock.Any(), user.ID).
+		Times(1).
+		Return(operator, nil)
+	store.EXPECT().
+		CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
+			OperatorID: operator.ID,
+			RegionID:   regionID,
+		}).
+		Times(1).
+		Return(true, nil)
+	store.EXPECT().
+		GetDeliveryFeeConfigByRegion(gomock.Any(), regionID).
+		Times(1).
+		Return(config, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	body := gin.H{"base_distance": 0}
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPatch, fmt.Sprintf("/v1/delivery-fee/regions/%d/config", regionID), bytes.NewReader(data))
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+}
+
+func TestUpdateDeliveryFeeConfigAPI_RejectsInvalidValueRatio(t *testing.T) {
+	user, _ := randomUser(t)
+	regionID := util.RandomInt(1, 100)
+	config := randomDeliveryFeeConfig(regionID)
+	operator := randomOperator(user.ID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		ListUserRoles(gomock.Any(), user.ID).
+		Times(1).
+		Return([]db.UserRole{{UserID: user.ID, Role: "operator", Status: "active"}}, nil)
+	store.EXPECT().
+		GetOperatorByUser(gomock.Any(), user.ID).
+		Times(1).
+		Return(operator, nil)
+	store.EXPECT().
+		CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
+			OperatorID: operator.ID,
+			RegionID:   regionID,
+		}).
+		Times(1).
+		Return(true, nil)
+	store.EXPECT().
+		GetDeliveryFeeConfigByRegion(gomock.Any(), regionID).
+		Times(1).
+		Return(config, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	body := gin.H{"value_ratio": 1.1}
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPatch, fmt.Sprintf("/v1/delivery-fee/regions/%d/config", regionID), bytes.NewReader(data))
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+}
+
+func TestUpdateDeliveryFeeConfigAPI_RejectsInvalidMinFee(t *testing.T) {
+	user, _ := randomUser(t)
+	regionID := util.RandomInt(1, 100)
+	config := randomDeliveryFeeConfig(regionID)
+	operator := randomOperator(user.ID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		ListUserRoles(gomock.Any(), user.ID).
+		Times(1).
+		Return([]db.UserRole{{UserID: user.ID, Role: "operator", Status: "active"}}, nil)
+	store.EXPECT().
+		GetOperatorByUser(gomock.Any(), user.ID).
+		Times(1).
+		Return(operator, nil)
+	store.EXPECT().
+		CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
+			OperatorID: operator.ID,
+			RegionID:   regionID,
+		}).
+		Times(1).
+		Return(true, nil)
+	store.EXPECT().
+		GetDeliveryFeeConfigByRegion(gomock.Any(), regionID).
+		Times(1).
+		Return(config, nil)
+	store.EXPECT().
+		UpdateDeliveryFeeConfig(gomock.Any(), gomock.Any()).
+		AnyTimes().
+		Return(config, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	body := gin.H{"min_fee": -1}
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPatch, fmt.Sprintf("/v1/delivery-fee/regions/%d/config", regionID), bytes.NewReader(data))
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+}
+
 // ==================== 运费计算测试 ====================
 
 func TestCalculateDeliveryFeeAPI(t *testing.T) {
@@ -1021,6 +1160,53 @@ func TestCalculateDeliveryFeeInternal_ConsumesRegionWeatherAndPeakRules(t *testi
 	require.InDelta(t, 1.5, result.PeakHourCoefficient, 0.0001)
 	require.Equal(t, int64(1440), result.FinalFee)
 	require.False(t, result.DeliverySuspended)
+}
+
+func TestCalculateDeliveryFeeInternal_CapsPromotionDiscountAtFinalFee(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	regionID := int64(18)
+	merchantID := int64(9)
+
+	config := db.DeliveryFeeConfig{
+		ID:            88,
+		RegionID:      regionID,
+		BaseFee:       500,
+		BaseDistance:  3000,
+		ExtraFeePerKm: 100,
+		ValueRatio:    numericFromFloat(0),
+		MinFee:        300,
+		IsActive:      true,
+	}
+
+	store.EXPECT().
+		GetDeliveryFeeConfigByRegion(gomock.Any(), regionID).
+		Return(config, nil)
+	store.EXPECT().
+		GetLatestWeatherCoefficient(gomock.Any(), regionID).
+		Return(db.WeatherCoefficient{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		ListPeakHourConfigsByRegion(gomock.Any(), regionID).
+		Return([]db.PeakHourConfig{}, nil)
+	store.EXPECT().
+		ListActiveDeliveryPromotionsByMerchant(gomock.Any(), merchantID).
+		Return([]db.MerchantDeliveryPromotion{{
+			MerchantID:     merchantID,
+			MinOrderAmount: 1000,
+			DiscountAmount: 800,
+			ValidFrom:      time.Now().Add(-time.Hour),
+			ValidUntil:     time.Now().Add(time.Hour),
+			IsActive:       true,
+		}}, nil)
+
+	result, err := server.calculateDeliveryFeeInternal(context.Background(), regionID, merchantID, 2500, 2000)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, int64(500), result.FinalFee)
+	require.Equal(t, result.FinalFee, result.PromotionDiscount)
 }
 
 // ==================== 高峰时段配置测试 ====================
