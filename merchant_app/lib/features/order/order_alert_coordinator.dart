@@ -13,10 +13,10 @@ import 'package:merchant_app/core/service/order_alert_checkpoint_store.dart';
 import 'package:merchant_app/core/service/pending_order_alert_store.dart';
 import 'package:merchant_app/features/auth/auth_provider.dart';
 import 'package:merchant_app/features/display_config/display_config_provider.dart';
+import 'package:merchant_app/features/order/order_acceptance_coordinator.dart';
 import 'package:merchant_app/features/order/order_alert_page.dart';
 import 'package:merchant_app/features/order/order_detail_page.dart';
 import 'package:merchant_app/features/order/order_provider.dart';
-import 'package:merchant_app/features/printer/printer_provider.dart';
 import 'package:merchant_app/features/settings/notification_settings_provider.dart';
 import 'package:merchant_app/models/order.dart';
 import 'package:merchant_app/models/push_message.dart';
@@ -396,26 +396,13 @@ class OrderAlertCoordinator {
   }
 
   Future<bool> _acceptAndPrint(PushMessage message) async {
-    final accepted = await _ref
-        .read(orderProvider.notifier)
-        .acceptOrder(message.orderId);
-    if (!accepted) {
-      return false;
-    }
-
-    await _ref.read(orderProvider.notifier).fetchOrders();
-
-    final notificationSettings = _ref.read(notificationSettingsProvider);
-    if (!notificationSettings.autoPrintAfterAcceptEnabled) {
-      return true;
-    }
-
-    final printerState = _ref.read(printerProvider);
-    if (printerState.connectedDevice != null) {
-      await _ref.read(printerProvider.notifier).printReceipt(message);
-    }
-
-    return true;
+    return _ref
+        .read(orderAcceptanceCoordinatorProvider)
+        .acceptOrder(
+          message.orderId,
+          messageSnapshot: message,
+          shopName: message.shopName,
+        );
   }
 
   Future<bool> _presentAlert(PushMessage message) async {

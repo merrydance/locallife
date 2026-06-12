@@ -1,6 +1,6 @@
 # Merchant Order Operations Slice
 
-Status: merchant-state flow slice created; manual refund idempotency and pending order-refund recovery repaired 2026-05-31; reject refund submission truth repaired 2026-06-01; Mini Program `order_update` realtime contract and Baofu refund-create failure classification repaired 2026-06-02; platform Baofu daily reconciliation now exposes evidence-backed historical failed-refund candidates 2026-06-11
+Status: merchant-state flow slice created; manual refund idempotency and pending order-refund recovery repaired 2026-05-31; reject refund submission truth repaired 2026-06-01; Mini Program `order_update` realtime contract and Baofu refund-create failure classification repaired 2026-06-02; platform Baofu daily reconciliation now exposes evidence-backed historical failed-refund candidates 2026-06-11; Flutter duplicate accept/BLE receipt print proof repaired 2026-06-12
 Risk class: G3 where merchant actions create or recover refunds; G2 for non-money order status and print transitions
 Scope: merchant order list/detail/kitchen/print anomaly pages -> merchant and kitchen order APIs -> order status/refund/print durable state -> notification, websocket, worker, callback, and recovery paths
 
@@ -82,8 +82,8 @@ Merchant order operations must converge from merchant action to durable order/re
 16. Fixed 2026-06-10: Flutter App alert-driven auto-accept reads backend display-config truth before calling the shared merchant accept endpoint. If `GET /v1/merchant/display-config` does not authorize effective `enable_print && auto_accept_paid_orders`, or if the config read fails/times out, the App skips auto-accept and continues the ordinary alert/pending flow.
     Evidence: `merchant_app/lib/features/display_config/display_config_provider.dart`, `merchant_app/lib/features/order/order_alert_coordinator.dart`, `merchant_app/test/display_config_provider_test.dart`, `merchant_app/test/order_alert_coordinator_test.dart`.
 
-17. Flutter App can print a local Bluetooth receipt after manual or automatic accept when local `autoPrintAfterAcceptEnabled` is true and a BLE printer is connected. This does not create backend `print_logs`.
-    Evidence: `merchant_app/lib/features/order/order_alert_coordinator.dart:388`, `merchant_app/lib/features/order/order_alert_coordinator.dart:390`, `merchant_app/lib/features/order/order_detail_page.dart:513`, `merchant_app/lib/features/order/order_detail_page.dart:521`, `merchant_app/lib/features/order/order_list_page.dart:724`, `merchant_app/lib/features/order/order_list_page.dart:735`, `merchant_app/lib/features/printer/printer_provider.dart:146`, `merchant_app/lib/features/printer/printer_provider.dart:198`.
+17. Fixed 2026-06-12: Flutter App manual accept and backend-authorized alert auto-accept now share `OrderAcceptanceCoordinator` for the backend accept call, backend readback/list refresh, and optional local BLE receipt print. Concurrent duplicate accept attempts for the same order coalesce by order id, so push/websocket/polling races and multiple UI surfaces cannot double-submit the accept call or double-print the local receipt during the same accept window. BLE receipt printing remains a local side effect and does not create backend `print_logs`; printing failures are caught locally and do not turn a backend-confirmed accept into a failed accept.
+    Evidence: `merchant_app/lib/features/order/order_acceptance_coordinator.dart`, `merchant_app/lib/features/order/order_alert_coordinator.dart`, `merchant_app/lib/features/order/order_alert_page.dart`, `merchant_app/lib/features/order/order_detail_page.dart`, `merchant_app/lib/features/order/order_list_page.dart`, `merchant_app/lib/features/printer/printer_provider.dart`, `merchant_app/test/order_acceptance_coordinator_test.dart`, `merchant_app/test/order_alert_coordinator_test.dart`.
 
 16. Backend merchant order routes are protected for `owner`, `manager`, and `cashier`; kitchen routes are protected for `owner`, `manager`, and `chef`; refund routes are under authenticated routes and rely on service ownership checks.
     Evidence: `locallife/api/server.go:988`, `locallife/api/server.go:989`, `locallife/api/server.go:992`, `locallife/api/server.go:999`, `locallife/api/server.go:1000`, `locallife/api/server.go:1001`, `locallife/api/server.go:1002`, `locallife/api/server.go:1003`, `locallife/api/server.go:1016`, `locallife/api/server.go:1017`, `locallife/api/server.go:1022`, `locallife/api/server.go:1023`, `locallife/api/server.go:1086`, `locallife/api/server.go:1088`.
@@ -187,7 +187,7 @@ Merchant order operations must converge from merchant action to durable order/re
 ## Recovery And Async Convergence Paths
 
 - Same-terminal merchant actions rehydrate through HTTP: list reloads orders, detail reloads detail/print/refund state, kitchen reloads board state.
-- Flutter App rehydrates with order list/detail HTTP reads and updates local rows from mutation responses; backend-authorized alert auto-accept fetches orders after accept before optional BLE printing.
+- Flutter App rehydrates with order list/detail HTTP reads and updates local rows from mutation responses; backend-authorized alert auto-accept and manual App accept now pass through the shared acceptance coordinator, which fetches detail/orders after accept before optional BLE printing.
 - Backend sends customer notifications for accept/reject/ready/complete and publishes merchant order snapshots for merchant realtime refresh.
 - Takeout accept can publish a delivery-pool event for rider-side flows.
 - Accepted/ready status transitions enqueue print tasks according to display/printer config; manual print can create a task only when manual trigger mode is enabled.
@@ -245,7 +245,7 @@ Async branches:
 Failure and retry branches:
 
 - Mini Program status actions have local duplicate-tap guards and rehydrate through HTTP reload; backend duplicate/replay behavior is state-conditional rather than idempotency-keyed.
-- Flutter status actions have per-order single-flight futures; incoming alerts have message/order dedupe and pending-alert stores. Cross-channel duplicate proof still needs tests because push, websocket, and polling can race.
+- Fixed 2026-06-12: Flutter status actions keep `OrderNotifier` per-order single-flight for backend mutation, and all accept-after-print callers now share `OrderAcceptanceCoordinator` so concurrent duplicate accept attempts coalesce before the local BLE print side effect. Incoming alerts still have message/order dedupe and pending-alert stores for sequential/retry delivery.
 - Fixed 2026-05-31 in `6a19a9c0`: manual refund retry reuses the same idempotency key for the same unchanged refund draft.
 - Fixed 2026-06-01: reject refund ambiguous/provider failures still leave `orders.status=cancelled`, but the API/UI now exposes pending-recovery or manual-required refund submission state.
 - Fixed 2026-06-02: retryable Baofu create errors keep new refund rows `pending` for retry/recovery, while queryable duplicate/unknown provider-created errors move to `processing` for callback/query convergence.
@@ -280,7 +280,7 @@ Test-proof gaps:
 - Fixed 2026-06-01: logic/API tests prove merchant reject reports pending-recovery and manual-required refund submission states while preserving durable order cancellation success.
 - Fixed for `pending` on 2026-05-31 in `d3e84050`: worker and sqlc tests prove recovery includes existing normal-order refund rows stuck in `pending`. Fixed 2026-06-11: sqlc/API tests prove platform Baofu reconciliation counts only evidence-backed historical `failed` order-refund candidates and excludes rows without command evidence, non-order refunds, non-`failed` rows, terminal business errors, and unprovable `HTTP_STATUS` history.
 - Fixed 2026-06-02: `check-merchant-order-update-websocket-contract.test.js` proves backend `order_update` is declared and Mini Program order list/detail plus kitchen board/detail subscribe through dedicated refresh handlers.
-- Prove Flutter push/websocket/polling duplicate alerts cannot double-accept or double-print local BLE receipts.
+- Fixed 2026-06-12: `order_acceptance_coordinator_test.dart` proves concurrent duplicate accept-and-print attempts for the same order issue one accept POST and one local receipt print; `order_alert_coordinator_test.dart` proves two duplicate auto-accept deliveries with different message ids but the same order id still produce one backend accept and one local receipt print.
 - Fixed 2026-06-10 in `merchant-device-display-config`: Flutter alert auto-accept now reads backend display-config truth and fails closed when config read fails/times out.
 
 ## Test Coverage Signals
@@ -302,7 +302,7 @@ Missing high-value tests:
 - Fixed 2026-06-11: historical failed-refund reconciliation proof exists for read-only platform aggregate visibility. A future state-changing migration or retry job would still need a separate design, approval, and proof that each promoted row is safe to mutate.
 - Fixed 2026-06-02: Mini Program contract test proves `order_update` is declared and wired to order list/detail plus kitchen board/detail refresh handlers.
 - Kitchen realtime degradation test for open-status refresh failure.
-- Flutter App contract tests proving push/poll/websocket duplicates cannot double-accept and do not double-print BLE receipts after retries. Backend-truth auto-accept convergence is covered in `merchant-device-display-config`.
+- Fixed 2026-06-12: Flutter App tests now prove duplicate accept/auto-accept delivery cannot double-submit accept or double-print local BLE receipts during the same accept window. Backend-truth auto-accept convergence remains covered in `merchant-device-display-config`.
 
 ## Gaps And Refactor Notes
 
@@ -311,4 +311,4 @@ Missing high-value tests:
 - Fixed for new writes 2026-06-02: refund recovery covers order refund rows stuck in `pending` and uses original `out_refund_no`; Baofu create/provider errors now classify retryable, queryable, and terminal outcomes before writing refund state. Fixed 2026-06-11: historical terminal `failed` retry remains non-automatic, but platform reconciliation now gives operators a read-only, command-evidence-backed candidate count/amount for manual review.
 - Fixed 2026-06-02: websocket message types were aligned by adding `order_update` handling in Mini Program order/kitchen flows and a durable contract script.
 - Keep `CompleteOrderTx` broad only if all callers deliberately guard it before use. If refactoring, rename or split it to avoid accidental merchant-like use without ready-state checks.
-- Fixed 2026-06-10 in `merchant-device-display-config`: the App local auto-accept control was removed; alert-driven auto-accept reads backend display-config truth before calling the ordinary accept endpoint. Remaining App print-policy work is BLE observability/deduplication and backend display-config enforcement for local receipt printing.
+- Fixed 2026-06-10 in `merchant-device-display-config`: the App local auto-accept control was removed; alert-driven auto-accept reads backend display-config truth before calling the ordinary accept endpoint. Fixed 2026-06-12 in this slice: accept-after-print duplicate side effects now coalesce through `OrderAcceptanceCoordinator`. Remaining App print-policy work belongs to `merchant-device-display-config`: BLE observability and backend display-config enforcement for local receipt printing.

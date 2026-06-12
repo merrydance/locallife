@@ -17,6 +17,7 @@ import 'package:merchant_app/features/display_config/display_config_provider.dar
 import 'package:merchant_app/features/auth/auth_provider.dart';
 import 'package:merchant_app/features/auth/auth_service.dart';
 import 'package:merchant_app/features/auth/auth_state.dart';
+import 'package:merchant_app/features/order/order_acceptance_coordinator.dart';
 import 'package:merchant_app/features/order/order_alert_page.dart';
 import 'package:merchant_app/features/order/order_alert_coordinator.dart';
 import 'package:merchant_app/features/order/order_detail_page.dart';
@@ -792,6 +793,85 @@ void main() {
         expect(pendingAlerts.map((alert) => alert.orderId), ['508']);
       },
     );
+
+    test(
+      'coalesces duplicate auto-accept delivery without double printing receipts',
+      () async {
+        TestWidgetsFlutterBinding.ensureInitialized();
+        SharedPreferences.setMockInitialValues(<String, Object>{});
+        final localNotificationService = _BlockingLocalNotificationService();
+        final apiClient = _AutoAcceptApiClient();
+        final receiptPrinter = _CountingAcceptedOrderReceiptPrinter();
+        final container = ProviderContainer(
+          overrides: [
+            apiClientProvider.overrideWithValue(apiClient),
+            messageDeduplicatorProvider.overrideWithValue(
+              MessageDeduplicator.memoryOnly(),
+            ),
+            localNotificationServiceProvider.overrideWithValue(
+              localNotificationService,
+            ),
+            acceptedOrderReceiptPrinterProvider.overrideWithValue(
+              receiptPrinter,
+            ),
+            notificationSettingsProvider.overrideWith(
+              (ref) => _FakeNotificationSettingsNotifier(
+                autoPrintAfterAcceptEnabled: true,
+              ),
+            ),
+            orderDisplayConfigRepositoryProvider.overrideWithValue(
+              _FakeOrderDisplayConfigRepository(
+                const OrderDisplayConfig(
+                  enablePrint: true,
+                  autoAcceptPaidOrders: true,
+                ),
+              ),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final coordinator = container.read(orderAlertCoordinatorProvider);
+        final websocketMessage = PushMessage(
+          messageId: 'ws:new_order:514',
+          orderId: '514',
+          orderNumber: 'ORD514',
+          title: '新订单',
+          content: '您有一笔新订单',
+          amount: 18.5,
+          shopName: '测试门店',
+        );
+        final polledDuplicate = PushMessage(
+          messageId: 'poll:new_order:514',
+          orderId: '514',
+          orderNumber: 'ORD514',
+          title: '新订单',
+          content: '您有一笔新订单',
+          amount: 18.5,
+          shopName: '测试门店',
+        );
+
+        final first = coordinator.handleIncomingOrder(
+          websocketMessage,
+          showLocalNotification: true,
+        );
+        await Future<void>.delayed(Duration.zero);
+
+        final second = coordinator.handleIncomingOrder(
+          polledDuplicate,
+          showLocalNotification: true,
+        );
+        await Future<void>.delayed(Duration.zero);
+
+        expect(localNotificationService.showCount, 1);
+
+        localNotificationService.complete();
+        await Future.wait([first, second]);
+
+        expect(apiClient.acceptPostCalls, 1);
+        expect(receiptPrinter.printedOrderIds, ['514']);
+      },
+    );
   });
 
   group('PendingOrderAlertDrainManager', () {
@@ -1426,13 +1506,12 @@ class _OrderDetailApiClient implements ApiClient {
 class _FakeNotificationSettingsNotifier
     extends StateNotifier<NotificationSettingsState>
     implements NotificationSettingsNotifier {
-  _FakeNotificationSettingsNotifier()
+  _FakeNotificationSettingsNotifier({bool autoPrintAfterAcceptEnabled = false})
     : super(
         const NotificationSettingsState(
           soundEnabled: false,
           voiceEnabled: false,
-          autoPrintAfterAcceptEnabled: false,
-        ),
+        ).copyWith(autoPrintAfterAcceptEnabled: autoPrintAfterAcceptEnabled),
       );
 
   @override
@@ -1443,6 +1522,22 @@ class _FakeNotificationSettingsNotifier
 
   @override
   Future<void> setVoiceEnabled(bool enabled) async {}
+}
+
+class _CountingAcceptedOrderReceiptPrinter
+    implements AcceptedOrderReceiptPrinter {
+  final List<String> printedOrderIds = <String>[];
+
+  @override
+  bool get hasConnectedPrinter => true;
+
+  @override
+  Future<void> printAcceptedOrder(
+    OrderModel order, {
+    required String shopName,
+  }) async {
+    printedOrderIds.add(order.id);
+  }
 }
 
 class _FakeOrderDisplayConfigRepository

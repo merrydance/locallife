@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:merchant_app/config/theme.dart';
 import 'package:merchant_app/features/auth/auth_provider.dart';
+import 'package:merchant_app/features/order/order_acceptance_coordinator.dart';
 import 'package:merchant_app/features/order/order_provider.dart';
-import 'package:merchant_app/features/printer/printer_provider.dart';
-import 'package:merchant_app/features/settings/notification_settings_provider.dart';
 import 'package:merchant_app/models/order.dart';
 import 'package:merchant_app/widgets/merchant_content_shell.dart';
 import 'package:merchant_app/widgets/merchant_primary_button.dart';
@@ -516,22 +515,8 @@ class OrderDetailPage extends ConsumerWidget {
                 ? null
                 : () async {
                     final success = await ref
-                        .read(orderProvider.notifier)
-                        .acceptOrder(order.id);
-                    if (success) {
-                      final notificationSettings = ref.read(
-                        notificationSettingsProvider,
-                      );
-                      final printerState = ref.read(printerProvider);
-                      final merchantName =
-                          ref.read(authProvider).merchantName ?? '商户工作台';
-                      if (notificationSettings.autoPrintAfterAcceptEnabled &&
-                          printerState.connectedDevice != null) {
-                        await ref
-                            .read(printerProvider.notifier)
-                            .printAcceptedOrder(order, shopName: merchantName);
-                      }
-                    }
+                        .read(orderAcceptanceCoordinatorProvider)
+                        .acceptOrder(order.id, orderSnapshot: order);
                     if (context.mounted && !success) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(

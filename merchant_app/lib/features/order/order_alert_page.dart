@@ -3,9 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:merchant_app/config/theme.dart';
 import 'package:merchant_app/models/order.dart';
 import 'package:merchant_app/models/push_message.dart';
+import 'package:merchant_app/features/order/order_acceptance_coordinator.dart';
 import 'package:merchant_app/features/order/order_provider.dart';
-import 'package:merchant_app/features/printer/printer_provider.dart';
-import 'package:merchant_app/features/settings/notification_settings_provider.dart';
 import 'package:merchant_app/widgets/merchant_primary_button.dart';
 
 class OrderAlertPage extends ConsumerWidget {
@@ -164,41 +163,14 @@ class OrderAlertPage extends ConsumerWidget {
                                       ? null
                                       : () async {
                                           final success = await ref
-                                              .read(orderProvider.notifier)
-                                              .acceptOrder(message.orderId);
-                                          if (success) {
-                                            final notificationSettings = ref
-                                                .read(
-                                                  notificationSettingsProvider,
-                                                );
-                                            final printerState = ref.read(
-                                              printerProvider,
-                                            );
-                                            final hydratedOrder = await ref
-                                                .read(orderProvider.notifier)
-                                                .fetchOrderDetail(
-                                                  message.orderId,
-                                                );
-                                            await ref
-                                                .read(orderProvider.notifier)
-                                                .fetchOrders();
-                                            if (notificationSettings
-                                                    .autoPrintAfterAcceptEnabled &&
-                                                printerState.connectedDevice !=
-                                                    null) {
-                                              if (hydratedOrder != null) {
-                                                await ref
-                                                    .read(
-                                                      printerProvider.notifier,
-                                                    )
-                                                    .printAcceptedOrder(
-                                                      hydratedOrder,
-                                                      shopName:
-                                                          message.shopName,
-                                                    );
-                                              }
-                                            }
-                                          }
+                                              .read(
+                                                orderAcceptanceCoordinatorProvider,
+                                              )
+                                              .acceptOrder(
+                                                message.orderId,
+                                                messageSnapshot: message,
+                                                shopName: message.shopName,
+                                              );
                                           if (context.mounted) {
                                             ScaffoldMessenger.of(
                                               context,
