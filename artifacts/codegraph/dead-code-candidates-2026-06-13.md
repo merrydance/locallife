@@ -54,6 +54,7 @@
 | `locallife/logic/combined_payment_service.go:16` | `combinedOrderMaxCount` | 原合单支付子订单数量上限 | 当前合单支付服务 fail-closed，没有创建路径使用。已删除；`go build ./logic` 通过；`go test ./api -run 'TestCreateCombinedPaymentOrderAPI_BaofuMainBusinessFailsClosed' -count=1` 通过 |
 | `locallife/logic/baofu_payment_readiness.go:47` | `ensureMerchantBaofuReadyForPayment` | 单商户宝付支付 readiness 校验 wrapper | 只被同文件未接入的 `ensureCombinedPaymentMerchantsBaofuReady` 调用；生产支付创建路径直接使用 `merchantBaofuReadinessForPayment`，该函数仍在 `baofu_payment_order_route.go` 使用并保留。已删除；`go build ./logic` 通过；`go test ./logic -run 'TestPaymentOrderServiceCreatePaymentOrder_RequiresMerchantBaofuReadiness|TestPaymentOrderServiceCreatePaymentOrder_BaofuWechatChannelNotReadyFailsBeforeClientCall|TestBaofuPaymentReadiness' -count=1` 通过 |
 | `locallife/logic/baofu_payment_readiness.go:65` | `ensureCombinedPaymentMerchantsBaofuReady` | 创建合单支付前逐商户检查宝付账户和微信通道 readiness | 生产和测试均无调用；当前合单支付服务已 fail-closed，不进入合单创建 readiness 校验。已删除；底层 `merchantBaofuReadinessForPayment` 仍服务单商户宝付支付创建路径。`go build ./logic` 通过；`go test ./logic -run 'TestPaymentOrderServiceCreatePaymentOrder_RequiresMerchantBaofuReadiness|TestPaymentOrderServiceCreatePaymentOrder_BaofuWechatChannelNotReadyFailsBeforeClientCall|TestBaofuPaymentReadiness' -count=1` 通过 |
+| `locallife/logic/rider_onboarding_review_service.go:571` | `onboardingReviewRunID` | 把 rider onboarding review run 转为 `*int64` | 逻辑层生产和测试均无调用；API 层同名 helper 仍在商户/骑手申请提交入口使用并保留。已删除；`go build ./logic` 通过；`go test ./logic -run 'TestEvaluateRiderApplication|TestRiderOnboardingReviewServiceProcessSubmittedApplication_UsesDurableApprovalTx' -count=1` 通过 |
 
 ## 可优先清理候选
 
@@ -69,7 +70,6 @@
 | `locallife/logic/payment_order_service.go:547` | `PaymentOrderService.markPaymentOrderFailedForCleanup` | 预支付失败后把支付单标记为 failed 并记录日志 | 生产无调用 |
 | `locallife/logic/refund_service.go:58` | `RefundService.maybeMarkPaymentOrderRefunded` | 累计退款额达到支付金额后，把支付单置为 refunded | 生产无调用；worker 和 PaymentFactService 各有独立在用实现 |
 | `locallife/logic/replace_order.go:332` | `markReplaceReservationPaymentOrderFailedForCleanup` | 替换预订支付失败后把支付单置为 failed | 生产和测试均无调用 |
-| `locallife/logic/rider_onboarding_review_service.go:571` | `onboardingReviewRunID` | 把 rider onboarding review run 转为 `*int64` | 生产无调用；API 层已有同名在用 helper |
 | `locallife/worker/order_payment_fact.go:36` | `recoveredOrderPaymentFactResource` | 为“已支付但未处理”恢复扫描构造 payment fact 资源快照 JSON | 生产和测试均无调用 |
 | `locallife/worker/task_payment_timeout.go:264` | `paymentTimeoutSubMchIDFromAttach` | 超时关闭支付单时从 attach 解析 `sub_mchid` | 生产和测试均无调用 |
 | `locallife/worker/task_process_payment.go:97` | `withProfitSharingEnqueueDedup` | 给分账 enqueue 追加 asynq unique 去重窗口 | 生产和测试均无调用 |
