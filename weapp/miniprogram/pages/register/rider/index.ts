@@ -23,6 +23,7 @@ import {
   DEFAULT_RIDER_OCR_DISPLAY_STATE,
   DEFAULT_RIDER_OCR_PANEL_STATE,
   DEFAULT_RIDER_UPLOAD_FEEDBACK,
+  hasRiderUploadAssetId,
   isDocumentCorrectionError,
   isRejectedRiderApplication,
   type UploadField,
@@ -408,7 +409,11 @@ Page({
     }
 
     if (currentStep === 1) {
-      if (!idFront.url || !idBack.url || !healthCert.url) {
+      if (
+        !hasRiderUploadAssetId(idFront.assetId) ||
+        !hasRiderUploadAssetId(idBack.assetId) ||
+        !hasRiderUploadAssetId(healthCert.assetId)
+      ) {
         return wx.showToast({ title: '请上传所有必需证照', icon: 'none' })
       }
     }

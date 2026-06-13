@@ -155,6 +155,7 @@ export function createRiderDocumentOCRWorkflow(field: UploadField, path: string)
       startPatch: {
         'idFront.url': path,
         'idFront.rawUrl': path,
+        'idFront.assetId': undefined,
         'ocrDisplayState.identity': 'processing',
         'uploadFeedback.idFront': createUploadFeedback('processing', '证照识别中', '请稍候，识别结果会显示在当前卡片中')
       },
@@ -170,6 +171,7 @@ export function createRiderDocumentOCRWorkflow(field: UploadField, path: string)
       startPatch: {
         'idBack.url': path,
         'idBack.rawUrl': path,
+        'idBack.assetId': undefined,
         'ocrDisplayState.identity': 'processing',
         'uploadFeedback.idBack': createUploadFeedback('processing', '证照识别中', '请稍候，识别结果会显示在当前卡片中')
       },
@@ -184,6 +186,7 @@ export function createRiderDocumentOCRWorkflow(field: UploadField, path: string)
     startPatch: {
       'healthCert.url': path,
       'healthCert.rawUrl': path,
+      'healthCert.assetId': undefined,
       'ocrDisplayState.health': 'processing',
       'uploadFeedback.healthCert': createUploadFeedback('processing', '证照识别中', '请稍候，识别结果会显示在当前卡片中')
     },

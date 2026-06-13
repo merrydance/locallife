@@ -95,6 +95,10 @@ export function pickOCRText(payload: Record<string, unknown> | undefined, ...key
   return ''
 }
 
+export function hasRiderUploadAssetId(assetId?: number): boolean {
+  return typeof assetId === 'number' && assetId > 0
+}
+
 function hasOCRText(payload: Record<string, unknown> | undefined, ...keys: string[]): boolean {
   return keys.some((key) => {
     const value = payload?.[key]
@@ -130,10 +134,10 @@ export function buildRiderOcrDisplayState(
   uploads: RiderUploadSnapshot
 ): RiderOCRDisplayState {
   const identityUploaded = Boolean(
-    (res?.id_card_front_asset_id || uploads.idFront?.assetId || uploads.idFront?.url)
-    && (res?.id_card_back_asset_id || uploads.idBack?.assetId || uploads.idBack?.url)
+    (hasRiderUploadAssetId(res?.id_card_front_asset_id) || hasRiderUploadAssetId(uploads.idFront?.assetId))
+    && (hasRiderUploadAssetId(res?.id_card_back_asset_id) || hasRiderUploadAssetId(uploads.idBack?.assetId))
   )
-  const healthUploaded = Boolean(res?.health_cert_asset_id || uploads.healthCert?.assetId || uploads.healthCert?.url)
+  const healthUploaded = hasRiderUploadAssetId(res?.health_cert_asset_id) || hasRiderUploadAssetId(uploads.healthCert?.assetId)
   const idCardOCR = res?.id_card_ocr as Record<string, unknown> | undefined
   const healthCertOCR = res?.health_cert_ocr as Record<string, unknown> | undefined
   const idCardStatusView = buildMerchantApplicationOCRStatusView(pickOCRText(idCardOCR, 'status'))
@@ -167,9 +171,9 @@ export function buildRiderUploadFeedback(
   const idStatusView = buildMerchantApplicationOCRStatusView(idStatus)
   const healthStatusView = buildMerchantApplicationOCRStatusView(healthStatus)
 
-  const idFrontUploaded = Boolean(res?.id_card_front_asset_id || uploads.idFront?.assetId || uploads.idFront?.url)
-  const idBackUploaded = Boolean(res?.id_card_back_asset_id || uploads.idBack?.assetId || uploads.idBack?.url)
-  const healthUploaded = Boolean(res?.health_cert_asset_id || uploads.healthCert?.assetId || uploads.healthCert?.url)
+  const idFrontUploaded = hasRiderUploadAssetId(res?.id_card_front_asset_id) || hasRiderUploadAssetId(uploads.idFront?.assetId)
+  const idBackUploaded = hasRiderUploadAssetId(res?.id_card_back_asset_id) || hasRiderUploadAssetId(uploads.idBack?.assetId)
+  const healthUploaded = hasRiderUploadAssetId(res?.health_cert_asset_id) || hasRiderUploadAssetId(uploads.healthCert?.assetId)
 
   const idFrontReady = Boolean(
     pickOCRText(idCardOCR, 'name')
