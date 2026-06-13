@@ -39,7 +39,7 @@ DELETE FROM delivery_pool
 WHERE order_id = $1;
 
 -- name: RemoveExpiredFromDeliveryPool :exec
--- 清理已过期订单池项（用于订单取消等情况，expires_at不再用于可见性过滤）
+-- 清理已过期订单池项（用于订单取消等情况，推荐入口仍按未过期池项计数）
 DELETE FROM delivery_pool
 WHERE expires_at < now();
 
@@ -71,6 +71,16 @@ WHERE (6371000 * acos(LEAST(1, GREATEST(-1,
     )))) < sqlc.arg(max_distance)::float8
 ORDER BY distance_to_rider ASC
 LIMIT sqlc.arg(result_limit)::int;
+
+-- name: CountDeliveryPoolNearby :one
+-- 按骑手位置统计附近未过期的可推荐代取池订单
+SELECT COUNT(*) FROM delivery_pool
+WHERE expires_at >= now()
+  AND (6371000 * acos(LEAST(1, GREATEST(-1,
+        cos(radians(sqlc.arg(rider_lat)::float8)) * cos(radians(pickup_latitude::float8)) *
+        cos(radians(pickup_longitude::float8) - radians(sqlc.arg(rider_lng)::float8)) +
+        sin(radians(sqlc.arg(rider_lat)::float8)) * sin(radians(pickup_latitude::float8))
+    )))) < sqlc.arg(max_distance)::float8;
 
 -- name: CountDeliveryPool :one
 SELECT COUNT(*) FROM delivery_pool;

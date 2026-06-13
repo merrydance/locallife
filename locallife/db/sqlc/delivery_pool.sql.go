@@ -92,6 +92,30 @@ func (q *Queries) CountDeliveryPool(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const countDeliveryPoolNearby = `-- name: CountDeliveryPoolNearby :one
+SELECT COUNT(*) FROM delivery_pool
+WHERE expires_at >= now()
+  AND (6371000 * acos(LEAST(1, GREATEST(-1,
+        cos(radians($1::float8)) * cos(radians(pickup_latitude::float8)) *
+        cos(radians(pickup_longitude::float8) - radians($2::float8)) +
+        sin(radians($1::float8)) * sin(radians(pickup_latitude::float8))
+    )))) < $3::float8
+`
+
+type CountDeliveryPoolNearbyParams struct {
+	RiderLat    float64 `json:"rider_lat"`
+	RiderLng    float64 `json:"rider_lng"`
+	MaxDistance float64 `json:"max_distance"`
+}
+
+// 按骑手位置统计附近未过期的可推荐代取池订单
+func (q *Queries) CountDeliveryPoolNearby(ctx context.Context, arg CountDeliveryPoolNearbyParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countDeliveryPoolNearby, arg.RiderLat, arg.RiderLng, arg.MaxDistance)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const getDeliveryPoolByOrderID = `-- name: GetDeliveryPoolByOrderID :one
 SELECT id, order_id, merchant_id, pickup_longitude, pickup_latitude, delivery_longitude, delivery_latitude, distance, delivery_fee, expected_pickup_at, expires_at, priority, created_at, expected_delivery_at FROM delivery_pool
 WHERE order_id = $1 LIMIT 1
@@ -365,7 +389,7 @@ DELETE FROM delivery_pool
 WHERE expires_at < now()
 `
 
-// 清理已过期订单池项（用于订单取消等情况，expires_at不再用于可见性过滤）
+// 清理已过期订单池项（用于订单取消等情况，推荐入口仍按未过期池项计数）
 func (q *Queries) RemoveExpiredFromDeliveryPool(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, removeExpiredFromDeliveryPool)
 	return err

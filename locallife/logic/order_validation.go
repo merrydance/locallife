@@ -61,7 +61,11 @@ func GetTakeoutSuspension(ctx context.Context, store db.Store, merchantID int64)
 }
 
 // GetRiderSuspension returns rider suspension info if delivery intake is suspended.
-func GetRiderSuspension(ctx context.Context, store db.Store, riderID int64) (*RiderSuspensionInfo, error) {
+type riderProfileReader interface {
+	GetRiderProfile(ctx context.Context, riderID int64) (db.RiderProfile, error)
+}
+
+func GetRiderSuspension(ctx context.Context, store riderProfileReader, riderID int64) (*RiderSuspensionInfo, error) {
 	profile, err := store.GetRiderProfile(ctx, riderID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {

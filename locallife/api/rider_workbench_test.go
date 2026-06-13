@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +17,25 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+func expectVisibleRiderOrderPoolCount(t *testing.T, store *mockdb.MockStore, rider db.Rider, count int64) {
+	t.Helper()
+	store.EXPECT().
+		GetRiderProfile(gomock.Any(), rider.ID).
+		Return(db.RiderProfile{RiderID: rider.ID, IsSuspended: false}, nil)
+	expectActiveRiderBaofuAccount(store, rider.ID)
+	store.EXPECT().
+		GetActiveRecommendConfig(gomock.Any()).
+		Return(db.RecommendConfig{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		CountDeliveryPoolNearby(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.CountDeliveryPoolNearbyParams) (int64, error) {
+			require.InEpsilon(t, 39.920, arg.RiderLat, 0.000001)
+			require.InEpsilon(t, 116.410, arg.RiderLng, 0.000001)
+			require.Equal(t, float64(5000), arg.MaxDistance)
+			return count, nil
+		})
+}
+
 func TestGetRiderWorkbenchSummaryAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	rider := randomRider(user.ID)
@@ -23,6 +43,8 @@ func TestGetRiderWorkbenchSummaryAPI(t *testing.T) {
 	rider.IsOnline = true
 	rider.DepositAmount = 30000
 	rider.FrozenDeposit = 1000
+	rider.CurrentLongitude = numericFromFloat(116.410)
+	rider.CurrentLatitude = numericFromFloat(39.920)
 	riderID := pgtype.Int8{Int64: rider.ID, Valid: true}
 	activeDelivery := db.Delivery{ID: 11, OrderID: 22, Status: "delivering", DeliveryFee: 800, RiderEarnings: 720, PickupAddress: "取餐地址", DeliveryAddress: "送达地址", CreatedAt: time.Now().UTC()}
 	pickingDelivery := db.Delivery{ID: 12, OrderID: 23, Status: db.DeliveryStatusPicking, DeliveryFee: 800, RiderEarnings: 720, PickupAddress: "取餐地址", DeliveryAddress: "送达地址", CreatedAt: time.Now().UTC()}
@@ -77,7 +99,7 @@ func TestGetRiderWorkbenchSummaryAPI(t *testing.T) {
 				store.EXPECT().GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(profitSharingOrder, nil)
 				store.EXPECT().GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), user.ID).Return(int64(0), nil)
 				expectRiderThresholdFromRegionRule(store, rider, 200*fenPerYuan)
-				store.EXPECT().CountDeliveryPool(gomock.Any()).Return(int64(3), nil)
+				expectVisibleRiderOrderPoolCount(t, store, rider, 2)
 				store.EXPECT().CountRiderCompletedDeliveriesInRange(gomock.Any(), gomock.Any()).Return(int64(2), nil)
 				store.EXPECT().GetRiderProfitSharingStats(gomock.Any(), gomock.Any()).Return(db.GetRiderProfitSharingStatsRow{TotalDeliveries: 2, TotalRiderIncome: 1800, TotalDeliveryFee: 2000}, nil)
 				store.EXPECT().GetRiderProfitSharingStatusSummary(gomock.Any(), gomock.Any()).Return([]db.GetRiderProfitSharingStatusSummaryRow{{Status: db.ProfitSharingOrderStatusPending, OrderCount: 1, RiderAmount: 600}}, nil)
@@ -92,7 +114,7 @@ func TestGetRiderWorkbenchSummaryAPI(t *testing.T) {
 				require.Equal(t, "delivering", response.RiderStatus.OnlineStatus)
 				require.True(t, response.RiderStatus.CanGoOnline)
 				require.Equal(t, 1, response.CurrentDeliveries.ActiveCount)
-				require.Equal(t, int64(3), response.OrderPool.AvailableCount)
+				require.Equal(t, int64(2), response.OrderPool.AvailableCount)
 				require.Equal(t, int64(1800), response.Income.TotalRiderIncome)
 				require.Equal(t, int64(4), response.Claims.PendingActionCount)
 				require.Equal(t, int64(5), response.Notifications.UnreadCount)
@@ -131,7 +153,7 @@ func TestGetRiderWorkbenchSummaryAPI(t *testing.T) {
 					Return(db.PaymentOrder{}, db.ErrRecordNotFound)
 				store.EXPECT().GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), user.ID).Return(int64(0), nil)
 				expectRiderThresholdFromRegionRule(store, rider, 200*fenPerYuan)
-				store.EXPECT().CountDeliveryPool(gomock.Any()).Return(int64(3), nil)
+				expectVisibleRiderOrderPoolCount(t, store, rider, 3)
 				store.EXPECT().CountRiderCompletedDeliveriesInRange(gomock.Any(), gomock.Any()).Return(int64(2), nil)
 				store.EXPECT().GetRiderProfitSharingStats(gomock.Any(), gomock.Any()).Return(db.GetRiderProfitSharingStatsRow{}, nil)
 				store.EXPECT().GetRiderProfitSharingStatusSummary(gomock.Any(), gomock.Any()).Return(nil, nil)
@@ -162,7 +184,7 @@ func TestGetRiderWorkbenchSummaryAPI(t *testing.T) {
 				store.EXPECT().ListRiderActiveDeliveries(gomock.Any(), riderID).Return(nil, errors.New("delivery unavailable"))
 				store.EXPECT().GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), user.ID).Return(int64(0), nil)
 				expectRiderThresholdFromRegionRule(store, rider, 200*fenPerYuan)
-				store.EXPECT().CountDeliveryPool(gomock.Any()).Return(int64(3), nil)
+				expectVisibleRiderOrderPoolCount(t, store, rider, 3)
 				store.EXPECT().CountRiderCompletedDeliveriesInRange(gomock.Any(), gomock.Any()).Return(int64(2), nil)
 				store.EXPECT().GetRiderProfitSharingStats(gomock.Any(), gomock.Any()).Return(db.GetRiderProfitSharingStatsRow{}, nil)
 				store.EXPECT().GetRiderProfitSharingStatusSummary(gomock.Any(), gomock.Any()).Return(nil, nil)

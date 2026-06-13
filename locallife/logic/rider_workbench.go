@@ -26,10 +26,13 @@ const (
 type RiderWorkbenchStore interface {
 	GetRiderByUserID(ctx context.Context, userID int64) (db.Rider, error)
 	ListRiderActiveDeliveries(ctx context.Context, riderID pgtype.Int8) ([]db.Delivery, error)
+	GetRiderProfile(ctx context.Context, riderID int64) (db.RiderProfile, error)
 	GetOrder(ctx context.Context, id int64) (db.Order, error)
 	GetLatestPaymentOrderByOrder(ctx context.Context, arg db.GetLatestPaymentOrderByOrderParams) (db.PaymentOrder, error)
 	GetProfitSharingOrderByPaymentOrder(ctx context.Context, paymentOrderID int64) (db.ProfitSharingOrder, error)
-	CountDeliveryPool(ctx context.Context) (int64, error)
+	GetBaofuAccountBindingByOwner(ctx context.Context, arg db.GetBaofuAccountBindingByOwnerParams) (db.BaofuAccountBinding, error)
+	GetActiveRecommendConfig(ctx context.Context) (db.RecommendConfig, error)
+	CountDeliveryPoolNearby(ctx context.Context, arg db.CountDeliveryPoolNearbyParams) (int64, error)
 	CountRiderCompletedDeliveriesInRange(ctx context.Context, arg db.CountRiderCompletedDeliveriesInRangeParams) (int64, error)
 	GetRiderProfitSharingStats(ctx context.Context, arg db.GetRiderProfitSharingStatsParams) (db.GetRiderProfitSharingStatsRow, error)
 	GetRiderProfitSharingStatusSummary(ctx context.Context, arg db.GetRiderProfitSharingStatusSummaryParams) ([]db.GetRiderProfitSharingStatusSummaryRow, error)
@@ -188,7 +191,7 @@ func (service *RiderWorkbenchService) GetSummary(ctx context.Context, userID int
 	}
 
 	service.loadDeposit(ctx, userID, rider, &result)
-	service.loadOrderPool(ctx, rider.ID, &result)
+	service.loadOrderPool(ctx, rider, &result)
 	service.loadToday(ctx, riderID, startAt, endAt, &result)
 	service.loadIncome(ctx, riderID, startAt, endAt, &result)
 	service.loadClaims(ctx, riderID, rider.ID, &result)
@@ -226,11 +229,32 @@ func (service *RiderWorkbenchService) loadDeposit(ctx context.Context, userID in
 	applyRiderWorkbenchOnlineEligibility(&result.RiderStatus, rider, availability.AvailableDeposit, threshold)
 }
 
-func (service *RiderWorkbenchService) loadOrderPool(ctx context.Context, riderID int64, result *RiderWorkbenchSummary) {
-	count, err := service.store.CountDeliveryPool(ctx)
+func (service *RiderWorkbenchService) loadOrderPool(ctx context.Context, rider db.Rider, result *RiderWorkbenchSummary) {
+	if err := ensureRiderRecommendationEligible(ctx, service.store, rider); err != nil {
+		var reqErr *RequestError
+		if errors.As(err, &reqErr) {
+			result.OrderPool.AvailableCount = 0
+			return
+		}
+		result.degrade(RiderWorkbenchSectionOrderPool, "订单池暂不可用")
+		log.Warn().Err(err).Int64("rider_id", rider.ID).Msg("rider workbench order pool eligibility degraded")
+		return
+	}
+
+	if result.RiderStatus.CurrentLatitude == nil || result.RiderStatus.CurrentLongitude == nil {
+		result.degrade(RiderWorkbenchSectionOrderPool, "订单池定位暂不可用")
+		return
+	}
+
+	config := activeRecommendConfig(ctx, service.store)
+	count, err := service.store.CountDeliveryPoolNearby(ctx, db.CountDeliveryPoolNearbyParams{
+		RiderLat:    *result.RiderStatus.CurrentLatitude,
+		RiderLng:    *result.RiderStatus.CurrentLongitude,
+		MaxDistance: float64(config.MaxDistance),
+	})
 	if err != nil {
 		result.degrade(RiderWorkbenchSectionOrderPool, "订单池暂不可用")
-		log.Warn().Err(err).Int64("rider_id", riderID).Msg("rider workbench order pool degraded")
+		log.Warn().Err(err).Int64("rider_id", rider.ID).Msg("rider workbench order pool degraded")
 		return
 	}
 	result.OrderPool.AvailableCount = count

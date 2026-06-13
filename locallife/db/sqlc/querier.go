@@ -168,6 +168,8 @@ type Querier interface {
 	CountComboSetsByMerchant(ctx context.Context, arg CountComboSetsByMerchantParams) (int64, error)
 	CountDeliveriesByRiderHistory(ctx context.Context, arg CountDeliveriesByRiderHistoryParams) (int64, error)
 	CountDeliveryPool(ctx context.Context) (int64, error)
+	// 按骑手位置统计附近未过期的可推荐代取池订单
+	CountDeliveryPoolNearby(ctx context.Context, arg CountDeliveryPoolNearbyParams) (int64, error)
 	CountDishesByMerchant(ctx context.Context, arg CountDishesByMerchantParams) (int64, error)
 	// 统计时间窗口内发起索赔的不同用户数
 	CountDistinctUsersInClaimWindow(ctx context.Context, arg CountDistinctUsersInClaimWindowParams) (int64, error)
@@ -1700,7 +1702,7 @@ type Querier interface {
 	RemoveDishFromAllCombos(ctx context.Context, dishID int64) error
 	RemoveDishIngredient(ctx context.Context, arg RemoveDishIngredientParams) error
 	RemoveDishTag(ctx context.Context, arg RemoveDishTagParams) error
-	// 清理已过期订单池项（用于订单取消等情况，expires_at不再用于可见性过滤）
+	// 清理已过期订单池项（用于订单取消等情况，推荐入口仍按未过期池项计数）
 	RemoveExpiredFromDeliveryPool(ctx context.Context) error
 	RemoveFavoriteDish(ctx context.Context, arg RemoveFavoriteDishParams) error
 	RemoveFavoriteMerchant(ctx context.Context, arg RemoveFavoriteMerchantParams) error

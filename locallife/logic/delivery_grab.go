@@ -267,7 +267,11 @@ func buildBaofuRiderProfitSharingBillUpdate(ctx context.Context, store db.Store,
 	}, nil
 }
 
-func riderBaofuSettlementReadiness(ctx context.Context, store db.Store, rider db.Rider) (BaofuAccountReadiness, error) {
+type riderBaofuBindingReader interface {
+	GetBaofuAccountBindingByOwner(ctx context.Context, arg db.GetBaofuAccountBindingByOwnerParams) (db.BaofuAccountBinding, error)
+}
+
+func riderBaofuSettlementReadiness(ctx context.Context, store riderBaofuBindingReader, rider db.Rider) (BaofuAccountReadiness, error) {
 	service := NewBaofuAccountService(nil, nil)
 	binding, err := store.GetBaofuAccountBindingByOwner(ctx, db.GetBaofuAccountBindingByOwnerParams{
 		OwnerType: db.BaofuAccountOwnerTypeRider,

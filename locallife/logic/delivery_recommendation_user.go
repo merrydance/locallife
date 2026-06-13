@@ -21,6 +21,35 @@ type RecommendDeliveryForUserResult struct {
 	Recommendations RecommendDeliveryResult
 }
 
+type riderRecommendationEligibilityStore interface {
+	riderProfileReader
+	riderBaofuBindingReader
+}
+
+func ensureRiderRecommendationEligible(ctx context.Context, store riderRecommendationEligibilityStore, rider db.Rider) error {
+	if !rider.IsOnline {
+		return NewRequestError(http.StatusBadRequest, errors.New("请先上线"))
+	}
+	if rider.Status != db.RiderStatusActive {
+		return NewRequestError(http.StatusBadRequest, errors.New("押金不足或账号未激活，暂不可接单"))
+	}
+	suspension, err := GetRiderSuspension(ctx, store, rider.ID)
+	if err != nil {
+		return err
+	}
+	if suspension != nil {
+		return NewRequestError(http.StatusForbidden, errors.New("骑手接单已暂停"))
+	}
+	settlementReadiness, err := riderBaofuSettlementReadiness(ctx, store, rider)
+	if err != nil {
+		return err
+	}
+	if !settlementReadiness.PaymentReady {
+		return NewRequestError(http.StatusBadRequest, errors.New("骑手结算账户未开通，暂不能接收代取费分账订单"))
+	}
+	return nil
+}
+
 // RecommendDeliveryOrdersForUser loads rider info and returns delivery recommendations.
 func RecommendDeliveryOrdersForUser(
 	ctx context.Context,
@@ -37,25 +66,8 @@ func RecommendDeliveryOrdersForUser(
 		}
 		return result, err
 	}
-	if !rider.IsOnline {
-		return result, NewRequestError(http.StatusBadRequest, errors.New("请先上线"))
-	}
-	if rider.Status != db.RiderStatusActive {
-		return result, NewRequestError(http.StatusBadRequest, errors.New("押金不足或账号未激活，暂不可接单"))
-	}
-	suspension, err := GetRiderSuspension(ctx, store, rider.ID)
-	if err != nil {
+	if err := ensureRiderRecommendationEligible(ctx, store, rider); err != nil {
 		return result, err
-	}
-	if suspension != nil {
-		return result, NewRequestError(http.StatusForbidden, errors.New("骑手接单已暂停"))
-	}
-	settlementReadiness, err := riderBaofuSettlementReadiness(ctx, store, rider)
-	if err != nil {
-		return result, err
-	}
-	if !settlementReadiness.PaymentReady {
-		return result, NewRequestError(http.StatusBadRequest, errors.New("骑手结算账户未开通，暂不能接收代取费分账订单"))
 	}
 
 	recommendations, err := RecommendDeliveryOrders(ctx, store, routeService, RecommendDeliveryInput{

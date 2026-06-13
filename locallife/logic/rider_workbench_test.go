@@ -3,6 +3,7 @@ package logic
 import (
 	"context"
 	"errors"
+	"math/big"
 	"testing"
 	"time"
 
@@ -18,8 +19,15 @@ type riderWorkbenchStoreStub struct {
 	activeDeliveriesErr      error
 	ordersByID               map[int64]db.Order
 	orderErr                 error
-	deliveryPoolCount        int64
-	deliveryPoolErr          error
+	nearbyDeliveryPoolCount  int64
+	nearbyDeliveryPoolErr    error
+	nearbyDeliveryPoolParams db.CountDeliveryPoolNearbyParams
+	riderProfile             db.RiderProfile
+	riderProfileErr          error
+	baofuBinding             db.BaofuAccountBinding
+	baofuBindingErr          error
+	recommendConfig          db.RecommendConfig
+	recommendConfigErr       error
 	completedCount           int64
 	completedCountErr        error
 	incomeStats              db.GetRiderProfitSharingStatsRow
@@ -89,8 +97,31 @@ func (stub *riderWorkbenchStoreStub) GetProfitSharingOrderByPaymentOrder(ctx con
 	return db.ProfitSharingOrder{}, db.ErrRecordNotFound
 }
 
-func (stub *riderWorkbenchStoreStub) CountDeliveryPool(ctx context.Context) (int64, error) {
-	return stub.deliveryPoolCount, stub.deliveryPoolErr
+func (stub *riderWorkbenchStoreStub) CountDeliveryPoolNearby(ctx context.Context, arg db.CountDeliveryPoolNearbyParams) (int64, error) {
+	stub.nearbyDeliveryPoolParams = arg
+	return stub.nearbyDeliveryPoolCount, stub.nearbyDeliveryPoolErr
+}
+
+func (stub *riderWorkbenchStoreStub) GetRiderProfile(ctx context.Context, riderID int64) (db.RiderProfile, error) {
+	if stub.riderProfile.RiderID == 0 {
+		stub.riderProfile.RiderID = riderID
+	}
+	return stub.riderProfile, stub.riderProfileErr
+}
+
+func (stub *riderWorkbenchStoreStub) GetBaofuAccountBindingByOwner(ctx context.Context, arg db.GetBaofuAccountBindingByOwnerParams) (db.BaofuAccountBinding, error) {
+	if stub.baofuBinding.OwnerID == 0 {
+		stub.baofuBinding.OwnerType = arg.OwnerType
+		stub.baofuBinding.OwnerID = arg.OwnerID
+		stub.baofuBinding.AccountType = db.BaofuAccountTypePersonal
+		stub.baofuBinding.OpenState = db.BaofuAccountOpenStateActive
+		stub.baofuBinding.SharingMerID = pgtype.Text{String: "CP123", Valid: true}
+	}
+	return stub.baofuBinding, stub.baofuBindingErr
+}
+
+func (stub *riderWorkbenchStoreStub) GetActiveRecommendConfig(ctx context.Context) (db.RecommendConfig, error) {
+	return stub.recommendConfig, stub.recommendConfigErr
 }
 
 func (stub *riderWorkbenchStoreStub) CountRiderCompletedDeliveriesInRange(ctx context.Context, arg db.CountRiderCompletedDeliveriesInRangeParams) (int64, error) {
@@ -130,16 +161,22 @@ func (stub *riderWorkbenchStoreStub) CountUnreadNotifications(ctx context.Contex
 	return stub.unreadNotificationCount, stub.unreadNotificationErr
 }
 
+func riderWorkbenchNumericFromFloat(f float64) pgtype.Numeric {
+	return pgtype.Numeric{Int: big.NewInt(int64(f * 1000000)), Exp: -6, Valid: true}
+}
+
 func TestRiderWorkbenchServiceGetSummary(t *testing.T) {
 	now := time.Date(2026, 4, 28, 14, 30, 0, 0, time.UTC)
 	rider := db.Rider{
-		ID:            7,
-		UserID:        9,
-		Status:        db.RiderStatusActive,
-		IsOnline:      true,
-		DepositAmount: 30000,
-		FrozenDeposit: 5000,
-		RegionID:      pgtype.Int8{Int64: 1, Valid: true},
+		ID:               7,
+		UserID:           9,
+		Status:           db.RiderStatusActive,
+		IsOnline:         true,
+		DepositAmount:    30000,
+		FrozenDeposit:    5000,
+		RegionID:         pgtype.Int8{Int64: 1, Valid: true},
+		CurrentLongitude: riderWorkbenchNumericFromFloat(116.410),
+		CurrentLatitude:  riderWorkbenchNumericFromFloat(39.920),
 	}
 	deliveryCreatedAt := now.Add(-time.Hour)
 	paymentOrder := db.PaymentOrder{
@@ -169,7 +206,8 @@ func TestRiderWorkbenchServiceGetSummary(t *testing.T) {
 				FulfillmentStatus: db.FulfillmentStatusReady,
 			},
 		},
-		deliveryPoolCount:       3,
+		nearbyDeliveryPoolCount: 2,
+		recommendConfigErr:      db.ErrRecordNotFound,
 		completedCount:          2,
 		incomeStats:             db.GetRiderProfitSharingStatsRow{TotalDeliveries: 1, TotalRiderIncome: 900, TotalDeliveryFee: 1000},
 		incomeStatusRows:        []db.GetRiderProfitSharingStatusSummaryRow{{Status: db.ProfitSharingOrderStatusPending, OrderCount: 1, RiderAmount: 600}, {Status: db.ProfitSharingOrderStatusFailed, OrderCount: 1, RiderAmount: 300}},
@@ -206,7 +244,7 @@ func TestRiderWorkbenchServiceGetSummary(t *testing.T) {
 	require.Equal(t, int64(795), result.CurrentDeliveries.Items[0].RiderNetEarnings)
 	require.Equal(t, int64(41), result.CurrentDeliveries.Items[0].ProfitSharingOrderID)
 	require.Equal(t, db.ProfitSharingOrderStatusPending, result.CurrentDeliveries.Items[0].ProfitSharingStatus)
-	require.Equal(t, int64(3), result.OrderPool.AvailableCount)
+	require.Equal(t, int64(2), result.OrderPool.AvailableCount)
 	require.Equal(t, "2026-04-28", result.Today.Date)
 	require.Equal(t, int64(2), result.Today.CompletedDeliveries)
 	require.Equal(t, int64(900), result.Income.TotalRiderIncome)
@@ -216,6 +254,9 @@ func TestRiderWorkbenchServiceGetSummary(t *testing.T) {
 	require.Equal(t, int64(4), result.Claims.PendingActionCount)
 	require.Equal(t, int64(5), result.Notifications.UnreadCount)
 	require.Equal(t, pgtype.Timestamptz{Time: time.Date(2026, 4, 28, 0, 0, 0, 0, time.UTC), Valid: true}, store.completedDeliveriesRange.StartAt)
+	require.InEpsilon(t, 39.920, store.nearbyDeliveryPoolParams.RiderLat, 0.000001)
+	require.InEpsilon(t, 116.410, store.nearbyDeliveryPoolParams.RiderLng, 0.000001)
+	require.Equal(t, float64(5000), store.nearbyDeliveryPoolParams.MaxDistance)
 	require.True(t, sectionAvailable(result.Sections, RiderWorkbenchSectionIncome))
 }
 
@@ -249,7 +290,6 @@ func TestRiderWorkbenchServiceCurrentDeliveryCarriesPickupReadiness(t *testing.T
 				FulfillmentStatus: db.FulfillmentStatusPreparing,
 			},
 		},
-		deliveryPoolCount:       3,
 		completedCount:          2,
 		incomeStats:             db.GetRiderProfitSharingStatsRow{TotalRiderIncome: 900},
 		pendingRefundAmount:     0,
@@ -305,7 +345,6 @@ func TestRiderWorkbenchServiceDegradesCurrentDeliveriesWhenOrderStatusUnavailabl
 			CreatedAt:       now.Add(-time.Hour),
 		}},
 		orderErr:                errors.New("order read failed"),
-		deliveryPoolCount:       3,
 		completedCount:          2,
 		incomeStats:             db.GetRiderProfitSharingStatsRow{TotalRiderIncome: 900},
 		pendingRefundAmount:     0,
@@ -354,6 +393,37 @@ func TestRiderWorkbenchServiceGetSummary_NonActiveUsesAccountStatusReason(t *tes
 	require.Equal(t, "账号尚未激活，暂不可上线", result.RiderStatus.OnlineBlockReason)
 }
 
+func TestRiderWorkbenchServiceOrderPoolBusinessIneligibleKeepsSectionAvailable(t *testing.T) {
+	now := time.Date(2026, 4, 28, 14, 30, 0, 0, time.UTC)
+	rider := db.Rider{
+		ID:               7,
+		UserID:           9,
+		Status:           db.RiderStatusActive,
+		IsOnline:         false,
+		DepositAmount:    30000,
+		RegionID:         pgtype.Int8{Int64: 1, Valid: true},
+		CurrentLongitude: riderWorkbenchNumericFromFloat(116.410),
+		CurrentLatitude:  riderWorkbenchNumericFromFloat(39.920),
+	}
+	store := &riderWorkbenchStoreStub{
+		rider:                 rider,
+		nearbyDeliveryPoolErr: errors.New("nearby count should not be called"),
+		completedCount:        2,
+		incomeStats:           db.GetRiderProfitSharingStatsRow{TotalRiderIncome: 900},
+		regionRuleConfig:      db.RegionRuleConfig{RegionID: rider.RegionID.Int64, RiderDeposit: 20000},
+		operator:              db.Operator{ID: 1, RiderDeposit: 20000},
+	}
+	service := NewRiderWorkbenchService(store)
+	service.now = func() time.Time { return now }
+
+	result, err := service.GetSummary(context.Background(), rider.UserID)
+	require.NoError(t, err)
+	require.True(t, sectionAvailable(result.Sections, RiderWorkbenchSectionOrderPool))
+	require.Empty(t, sectionMessage(result.Sections, RiderWorkbenchSectionOrderPool))
+	require.Equal(t, int64(0), result.OrderPool.AvailableCount)
+	require.Zero(t, store.nearbyDeliveryPoolParams)
+}
+
 func TestApplyRiderWorkbenchOnlineEligibility_NonActiveUsesAccountStatusReason(t *testing.T) {
 	status := RiderWorkbenchRiderStatus{}
 	rider := db.Rider{Status: db.RiderStatusApproved}
@@ -370,7 +440,6 @@ func TestRiderWorkbenchServiceDegradesOptionalSection(t *testing.T) {
 	store := &riderWorkbenchStoreStub{
 		rider:                   rider,
 		activeDeliveriesErr:     errors.New("delivery read failed"),
-		deliveryPoolCount:       3,
 		completedCount:          2,
 		incomeStats:             db.GetRiderProfitSharingStatsRow{TotalRiderIncome: 900},
 		pendingRefundAmount:     0,
@@ -385,8 +454,9 @@ func TestRiderWorkbenchServiceDegradesOptionalSection(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, sectionAvailable(result.Sections, RiderWorkbenchSectionCurrentDeliveries))
 	require.False(t, sectionAvailable(result.Sections, RiderWorkbenchSectionRiderStatus))
-	require.True(t, sectionAvailable(result.Sections, RiderWorkbenchSectionOrderPool))
-	require.Equal(t, int64(3), result.OrderPool.AvailableCount)
+	require.False(t, sectionAvailable(result.Sections, RiderWorkbenchSectionOrderPool))
+	require.Equal(t, "订单池定位暂不可用", sectionMessage(result.Sections, RiderWorkbenchSectionOrderPool))
+	require.Equal(t, int64(0), result.OrderPool.AvailableCount)
 }
 
 func TestRiderWorkbenchServiceDegradesCurrentDeliveriesWhenBillMissing(t *testing.T) {
@@ -426,7 +496,6 @@ func TestRiderWorkbenchServiceDegradesCurrentDeliveriesWhenBillMissing(t *testin
 				FulfillmentStatus: db.FulfillmentStatusReady,
 			},
 		},
-		deliveryPoolCount:       3,
 		completedCount:          2,
 		incomeStats:             db.GetRiderProfitSharingStatsRow{TotalRiderIncome: 900},
 		pendingRefundAmount:     0,

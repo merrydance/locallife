@@ -22,6 +22,30 @@ type RecommendDeliveryResult struct {
 	RealDistances map[int64]*maps.RouteResult
 }
 
+type recommendConfigReader interface {
+	GetActiveRecommendConfig(ctx context.Context) (db.RecommendConfig, error)
+}
+
+func activeRecommendConfig(ctx context.Context, store recommendConfigReader) algorithm.RecommendConfig {
+	config := algorithm.DefaultConfig()
+	dbConfig, err := store.GetActiveRecommendConfig(ctx)
+	if err != nil {
+		return config
+	}
+
+	dw, _ := dbConfig.DistanceWeight.Float64Value()
+	rw, _ := dbConfig.RouteWeight.Float64Value()
+	uw, _ := dbConfig.UrgencyWeight.Float64Value()
+	pw, _ := dbConfig.ProfitWeight.Float64Value()
+	config.DistanceWeight = dw.Float64
+	config.RouteWeight = rw.Float64
+	config.UrgencyWeight = uw.Float64
+	config.ProfitWeight = pw.Float64
+	config.MaxDistance = int(dbConfig.MaxDistance)
+	config.MaxResults = int(dbConfig.MaxResults)
+	return config
+}
+
 // RecommendDeliveryOrders builds recommended orders for a rider.
 func RecommendDeliveryOrders(
 	ctx context.Context,
@@ -33,19 +57,7 @@ func RecommendDeliveryOrders(
 		RealDistances: map[int64]*maps.RouteResult{},
 	}
 
-	config := algorithm.DefaultConfig()
-	if dbConfig, err := store.GetActiveRecommendConfig(ctx); err == nil {
-		dw, _ := dbConfig.DistanceWeight.Float64Value()
-		rw, _ := dbConfig.RouteWeight.Float64Value()
-		uw, _ := dbConfig.UrgencyWeight.Float64Value()
-		pw, _ := dbConfig.ProfitWeight.Float64Value()
-		config.DistanceWeight = dw.Float64
-		config.RouteWeight = rw.Float64
-		config.UrgencyWeight = uw.Float64
-		config.ProfitWeight = pw.Float64
-		config.MaxDistance = int(dbConfig.MaxDistance)
-		config.MaxResults = int(dbConfig.MaxResults)
-	}
+	config := activeRecommendConfig(ctx, store)
 
 	poolItems, err := store.ListDeliveryPoolNearby(ctx, db.ListDeliveryPoolNearbyParams{
 		RiderLat:    input.RiderLat,

@@ -1982,6 +1982,21 @@ func (mr *MockStoreMockRecorder) CountDeliveryPool(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountDeliveryPool", reflect.TypeOf((*MockStore)(nil).CountDeliveryPool), ctx)
 }
 
+// CountDeliveryPoolNearby mocks base method.
+func (m *MockStore) CountDeliveryPoolNearby(ctx context.Context, arg db.CountDeliveryPoolNearbyParams) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountDeliveryPoolNearby", ctx, arg)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountDeliveryPoolNearby indicates an expected call of CountDeliveryPoolNearby.
+func (mr *MockStoreMockRecorder) CountDeliveryPoolNearby(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountDeliveryPoolNearby", reflect.TypeOf((*MockStore)(nil).CountDeliveryPoolNearby), ctx, arg)
+}
+
 // CountDishesByMerchant mocks base method.
 func (m *MockStore) CountDishesByMerchant(ctx context.Context, arg db.CountDishesByMerchantParams) (int64, error) {
 	m.ctrl.T.Helper()

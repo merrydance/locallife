@@ -619,6 +619,56 @@ func TestListDeliveryPoolNearby(t *testing.T) {
 	}
 }
 
+func TestCountDeliveryPoolNearbyFiltersDistanceAndExpiry(t *testing.T) {
+	now := time.Now()
+	seedOrder := createRandomOrder(t)
+	coordOffset := float64(seedOrder.ID%1000) / 1000000.0
+	riderLat := 10.876543 + coordOffset
+	riderLng := 20.123456 + coordOffset
+
+	addPoolItem := func(t *testing.T, lng, lat float64, expiresAt time.Time) DeliveryPool {
+		order := createRandomOrder(t)
+		pool, err := testStore.AddToDeliveryPool(context.Background(), AddToDeliveryPoolParams{
+			OrderID:           order.ID,
+			MerchantID:        order.MerchantID,
+			PickupLongitude:   numericFromFloat(lng),
+			PickupLatitude:    numericFromFloat(lat),
+			DeliveryLongitude: numericFromFloat(lng + 0.001),
+			DeliveryLatitude:  numericFromFloat(lat + 0.001),
+			Distance:          800,
+			DeliveryFee:       600,
+			ExpectedPickupAt:  now.Add(20 * time.Minute),
+			ExpiresAt:         expiresAt,
+			Priority:          1,
+		})
+		require.NoError(t, err)
+		return pool
+	}
+
+	baseline, err := testStore.CountDeliveryPoolNearby(context.Background(), CountDeliveryPoolNearbyParams{
+		RiderLat:    riderLat,
+		RiderLng:    riderLng,
+		MaxDistance: 5,
+	})
+	require.NoError(t, err)
+
+	nearActive := addPoolItem(t, riderLng, riderLat, now.Add(10*time.Minute))
+	addPoolItem(t, riderLng+1, riderLat+1, now.Add(10*time.Minute))
+	addPoolItem(t, riderLng, riderLat, now.Add(-10*time.Minute))
+
+	count, err := testStore.CountDeliveryPoolNearby(context.Background(), CountDeliveryPoolNearbyParams{
+		RiderLat:    riderLat,
+		RiderLng:    riderLng,
+		MaxDistance: 5,
+	})
+	require.NoError(t, err)
+	require.Equal(t, baseline+1, count)
+
+	found, err := testStore.GetDeliveryPoolItem(context.Background(), nearActive.ID)
+	require.NoError(t, err)
+	require.Equal(t, nearActive.ID, found.ID)
+}
+
 func TestCountDeliveryPool(t *testing.T) {
 	createRandomDeliveryPoolItem(t)
 
