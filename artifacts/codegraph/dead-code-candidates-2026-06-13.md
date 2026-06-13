@@ -56,6 +56,7 @@
 | `locallife/logic/baofu_payment_readiness.go:65` | `ensureCombinedPaymentMerchantsBaofuReady` | 创建合单支付前逐商户检查宝付账户和微信通道 readiness | 生产和测试均无调用；当前合单支付服务已 fail-closed，不进入合单创建 readiness 校验。已删除；底层 `merchantBaofuReadinessForPayment` 仍服务单商户宝付支付创建路径。`go build ./logic` 通过；`go test ./logic -run 'TestPaymentOrderServiceCreatePaymentOrder_RequiresMerchantBaofuReadiness|TestPaymentOrderServiceCreatePaymentOrder_BaofuWechatChannelNotReadyFailsBeforeClientCall|TestBaofuPaymentReadiness' -count=1` 通过 |
 | `locallife/logic/rider_onboarding_review_service.go:571` | `onboardingReviewRunID` | 把 rider onboarding review run 转为 `*int64` | 逻辑层生产和测试均无调用；API 层同名 helper 仍在商户/骑手申请提交入口使用并保留。已删除；`go build ./logic` 通过；`go test ./logic -run 'TestEvaluateRiderApplication|TestRiderOnboardingReviewServiceProcessSubmittedApplication_UsesDurableApprovalTx' -count=1` 通过 |
 | `locallife/worker/task_payment_timeout.go:264` | `paymentTimeoutSubMchIDFromAttach` | 超时关闭支付单时从 attach 解析 `sub_mchid` | 生产和测试均无调用；当前宝付支付超时查询/关闭使用 collect merchant/terminal 配置与支付单号，不通过 attach 解析子商户号。已删除；`go build ./worker` 通过；`go test ./worker -run 'TestProcessTaskPaymentOrderTimeout|TestProcessTaskOrderPaymentTimeout_DelegatesPendingBaofuPaymentOrder' -count=1` 通过 |
+| `locallife/worker/task_process_payment.go:97` | `withProfitSharingEnqueueDedup` / `profitSharingEnqueueDedupWindow` | 给分账 enqueue 追加 asynq unique 去重窗口 | 生产和测试均无调用；当前分账任务调度由 API/logic 调用方直接传入去重选项，分账结果通知仍保留 `profitSharingResultNotificationDedupWindow`。已删除；`go build ./worker` 通过；`go test ./worker -run 'TestProcessTaskBaofuProfitSharing|TestProcessTaskPaymentDomainOutbox_PublishesProfitSharingResultReady|TestProcessTaskPaymentDomainOutbox_PublishesRiderProfitSharingResultReady|TestWorkerPaymentCommandErrorFields|TestShouldDispatchOrderProfitSharing' -count=1` 通过 |
 
 ## 可优先清理候选
 
@@ -72,7 +73,6 @@
 | `locallife/logic/refund_service.go:58` | `RefundService.maybeMarkPaymentOrderRefunded` | 累计退款额达到支付金额后，把支付单置为 refunded | 生产无调用；worker 和 PaymentFactService 各有独立在用实现 |
 | `locallife/logic/replace_order.go:332` | `markReplaceReservationPaymentOrderFailedForCleanup` | 替换预订支付失败后把支付单置为 failed | 生产和测试均无调用 |
 | `locallife/worker/order_payment_fact.go:36` | `recoveredOrderPaymentFactResource` | 为“已支付但未处理”恢复扫描构造 payment fact 资源快照 JSON | 生产和测试均无调用 |
-| `locallife/worker/task_process_payment.go:97` | `withProfitSharingEnqueueDedup` | 给分账 enqueue 追加 asynq unique 去重窗口 | 生产和测试均无调用 |
 
 ## 整组遗留候选
 

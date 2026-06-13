@@ -46,7 +46,6 @@ const (
 )
 
 const (
-	profitSharingEnqueueDedupWindow             = 12 * time.Minute
 	profitSharingResultNotificationDedupWindow  = 24 * time.Hour
 	profitSharingResultNotificationExpireWindow = 7 * 24 * time.Hour
 	riderNotificationEntityType                 = "rider"
@@ -92,13 +91,6 @@ func shouldDispatchOrderProfitSharing(order db.Order) bool {
 	default:
 		return true
 	}
-}
-
-func withProfitSharingEnqueueDedup(opts ...asynq.Option) []asynq.Option {
-	merged := make([]asynq.Option, 0, len(opts)+1)
-	merged = append(merged, opts...)
-	merged = append(merged, asynq.Unique(profitSharingEnqueueDedupWindow))
-	return merged
 }
 
 func profitSharingResultNotificationExpiresAt(order db.ProfitSharingOrder) time.Time {
