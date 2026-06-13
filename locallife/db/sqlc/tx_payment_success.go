@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -255,13 +256,35 @@ func (store *SQLStore) ProcessPaymentSuccessTx(ctx context.Context, arg ProcessP
 			if attach.ClaimID == 0 {
 				return fmt.Errorf("claim recovery attach claim_id is required")
 			}
+			recoveryTarget := strings.TrimSpace(attach.RecoveryTarget)
 
-			recovery, err := q.GetClaimRecoveryByClaimID(ctx, attach.ClaimID)
-			if err != nil {
-				return fmt.Errorf("get claim recovery by claim id: %w", err)
+			var recovery ClaimRecovery
+			var err error
+			switch {
+			case attach.RecoveryID != 0:
+				recovery, err = q.GetClaimRecoveryByID(ctx, attach.RecoveryID)
+				if err != nil {
+					return fmt.Errorf("get claim recovery by id: %w", err)
+				}
+			case recoveryTarget != "":
+				recovery, err = q.GetClaimRecoveryByClaimIDAndTarget(ctx, GetClaimRecoveryByClaimIDAndTargetParams{
+					ClaimID:        attach.ClaimID,
+					RecoveryTarget: pgtype.Text{String: recoveryTarget, Valid: true},
+				})
+				if err != nil {
+					return fmt.Errorf("get claim recovery by claim id and target: %w", err)
+				}
+			default:
+				recovery, err = q.GetClaimRecoveryByClaimID(ctx, attach.ClaimID)
+				if err != nil {
+					return fmt.Errorf("get claim recovery by claim id: %w", err)
+				}
 			}
-			if attach.RecoveryID != 0 && recovery.ID != attach.RecoveryID {
-				return fmt.Errorf("claim recovery id mismatch")
+			if recovery.ClaimID != attach.ClaimID {
+				return fmt.Errorf("claim recovery claim id mismatch")
+			}
+			if recoveryTarget != "" && (!recovery.RecoveryTarget.Valid || recovery.RecoveryTarget.String != recoveryTarget) {
+				return fmt.Errorf("claim recovery target mismatch")
 			}
 
 			if recovery.Status == "paid" {

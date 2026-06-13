@@ -357,3 +357,72 @@ func TestProcessPaymentSuccessTx_ClaimRecoveryKeepsMerchantSuspendedWhenAnotherB
 	require.True(t, updatedMerchant.TakeoutSuspendReason.Valid)
 	require.Equal(t, "claim recovery overdue", updatedMerchant.TakeoutSuspendReason.String)
 }
+
+func TestProcessPaymentSuccessTx_ClaimRecoveryUsesRecoveryIDFromAttach(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	user := createRandomUser(t)
+
+	order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, OrderTypeTakeout, time.Now())
+	claim := createRandomClaim(t, user.ID, order.ID)
+
+	decision := createClaimRecoveryDecisionForTest(t, claim.ID, order.ID)
+	targetRecovery := createClaimRecoveryWithTargetAndDecision(t, claim.ID, order.ID, "pending", "merchant", decision.ID)
+	otherRecovery := createClaimRecoveryWithTargetAndDecision(t, claim.ID, order.ID, "pending", "rider", decision.ID)
+	require.Greater(t, otherRecovery.ID, targetRecovery.ID)
+
+	attach, err := json.Marshal(map[string]any{
+		"claim_id":        claim.ID,
+		"recovery_id":     targetRecovery.ID,
+		"recovery_target": "merchant",
+	})
+	require.NoError(t, err)
+
+	paymentOrder, err := testStore.CreatePaymentOrder(context.Background(), CreatePaymentOrderParams{
+		OrderID:               pgtype.Int8{Int64: order.ID, Valid: true},
+		UserID:                owner.ID,
+		PaymentType:           "miniprogram",
+		PaymentChannel:        PaymentChannelDirect,
+		RequiresProfitSharing: false,
+		BusinessType:          "claim_recovery",
+		Amount:                targetRecovery.RecoveryAmount,
+		OutTradeNo:            "CR" + util.RandomString(30),
+		ExpiresAt:             pgtype.Timestamptz{Time: time.Now().Add(15 * time.Minute), Valid: true},
+		Attach:                pgtype.Text{String: string(attach), Valid: true},
+	})
+	require.NoError(t, err)
+
+	paymentOrder, err = testStore.UpdatePaymentOrderToPaid(context.Background(), UpdatePaymentOrderToPaidParams{
+		ID:            paymentOrder.ID,
+		TransactionID: pgtype.Text{String: "TX" + util.RandomString(28), Valid: true},
+	})
+	require.NoError(t, err)
+
+	result, err := testStore.(*SQLStore).ProcessPaymentSuccessTx(context.Background(), ProcessPaymentSuccessTxParams{
+		PaymentOrderID: paymentOrder.ID,
+	})
+	require.NoError(t, err)
+	require.True(t, result.Processed)
+	require.NotNil(t, result.ReleaseAction)
+	require.Equal(t, "merchant", result.ReleaseAction.TargetEntity)
+	var releaseDetail map[string]any
+	require.NoError(t, json.Unmarshal(result.ReleaseAction.Detail, &releaseDetail))
+	require.Equal(t, float64(targetRecovery.ID), releaseDetail["recovery_id"])
+
+	updatedTarget, err := testStore.GetClaimRecoveryByID(context.Background(), targetRecovery.ID)
+	require.NoError(t, err)
+	require.Equal(t, ClaimRecoveryStatusPaid, updatedTarget.Status)
+
+	updatedOther, err := testStore.GetClaimRecoveryByID(context.Background(), otherRecovery.ID)
+	require.NoError(t, err)
+	require.Equal(t, ClaimRecoveryStatusPending, updatedOther.Status)
+
+	targetEvents, err := testStore.ListClaimRecoveryEventsByRecovery(context.Background(), targetRecovery.ID)
+	require.NoError(t, err)
+	require.Len(t, targetEvents, 1)
+	require.Equal(t, ClaimRecoveryEventTypePaid, targetEvents[0].EventType)
+
+	otherEvents, err := testStore.ListClaimRecoveryEventsByRecovery(context.Background(), otherRecovery.ID)
+	require.NoError(t, err)
+	require.Empty(t, otherEvents)
+}
