@@ -538,24 +538,6 @@ func (server *Server) releaseNotificationWithReason(ctx context.Context, id, cal
 	}
 }
 
-func (server *Server) requireTaskDistributorForNotification(ctx *gin.Context, notificationID, callbackType, responseMessage string) bool {
-	if server.taskDistributor != nil {
-		return true
-	}
-
-	paymentCallbackFailuresTotal.WithLabelValues(callbackType, "task_distributor_missing").Inc()
-	log.Error().
-		Str("notification_id", notificationID).
-		Str("callback_type", callbackType).
-		Msg("callback cannot be acknowledged because task distributor is not configured")
-	server.releaseNotification(ctx, notificationID, callbackType)
-	ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
-		Code:    "FAIL",
-		Message: responseMessage,
-	})
-	return false
-}
-
 // handleMerchantTransferNotify 处理商家转账回调通知。
 // POST /v1/webhooks/wechat-pay/merchant-transfer-notify
 func (server *Server) handleMerchantTransferNotify(ctx *gin.Context) {

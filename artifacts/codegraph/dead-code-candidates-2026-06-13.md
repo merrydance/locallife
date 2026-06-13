@@ -49,12 +49,12 @@
 | `locallife/api/payment_order.go:1127` | `applyAbnormalRefundURIRequest` | 异常退款申请 URI 参数 DTO | 未见 handler 绑定、路由注册、Swagger 注释或 `docs` 生成物引用。已删除；`go build ./api` 通过；`go test ./api -run '^$' -count=1` 通过 |
 | `locallife/api/payment_order.go:1131` | `applyAbnormalRefundBodyRequest` | 异常退款申请 body DTO | 未见 handler 绑定、路由注册、Swagger 注释或 `docs` 生成物引用。已删除；`go build ./api` 通过；`go test ./api -run '^$' -count=1` 通过 |
 | `locallife/api/payment_callback.go:78` | `Server.enqueueProfitSharingPaymentFactApplication` | 从支付回调触发分账 payment fact application task | 生产和测试均无调用；当前宝付分账 callback 路径在 `baofu_callback.go` 记录并派发 application。已删除；相邻的 direct payment、骑手押金退款、预订退款、订单退款 enqueue helper 仍在用，保留。`go build ./api` 通过；`go test ./api -run 'TestBaofuShareCallback|TestHandlePaymentNotify|TestHandleRefundNotify|TestHandleMerchantTransferNotify' -count=1` 通过 |
+| `locallife/api/payment_callback.go:564` | `Server.requireTaskDistributorForNotification` | 回调处理前检查 task distributor，缺失时释放通知 claim 并返回失败 | 生产和测试均无调用；当前回调路径已在各自 handler 内直接处理缺失分支。已删除；`go build ./api` 通过；`go test ./api -run 'TestBaofuShareCallback|TestHandlePaymentNotify|TestHandleRefundNotify|TestHandleMerchantTransferNotify' -count=1` 通过 |
 
 ## 可优先清理候选
 
 | 位置 | 符号 | 作用 | 核对结论 |
 | --- | --- | --- | --- |
-| `locallife/api/payment_callback.go:564` | `Server.requireTaskDistributorForNotification` | 回调处理前检查 task distributor，缺失时释放通知 claim 并返回失败 | 生产无调用；现在回调路径直接处理各自的缺失分支 |
 | `locallife/db/sqlc/tx_claim_behavior.go:135` | `behaviorDecisionScoreBreakdown` | 索赔行为决策评分详情 JSON 结构 | 生产无引用；测试 helper 仍可解码该类型，属于测试辅助引用 |
 | `locallife/db/sqlc/tx_claim_behavior.go:143` | `behaviorDecisionScoreDetail` | 单项评分与命中信号结构 | 只被上面的未使用评分结构嵌套引用 |
 | `locallife/db/sqlc/tx_claim_behavior.go:148` | `behaviorDecisionSignal` | 评分信号 code/weight/count/active | 只被上面的未使用评分结构嵌套引用 |
