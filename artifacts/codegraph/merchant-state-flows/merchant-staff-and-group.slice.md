@@ -177,7 +177,7 @@ Observed tests:
 
 Missing high-value tests:
 
-- No remaining high-value invite-code revoke/rotation proof gap after the 2026-06-10 API/sqlc regressions. Remaining staff/group gaps are tracked as separate group contract drift candidates below.
+- No remaining high-value invite-code revoke/rotation proof gap after the 2026-06-10 API/sqlc regressions. Remaining staff/group contract-drift candidates are tracked in `README.md`.
 
 ## Gaps And Refactor Notes
 

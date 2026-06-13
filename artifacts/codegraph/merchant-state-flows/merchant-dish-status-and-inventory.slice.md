@@ -165,7 +165,7 @@ Observed tests:
 
 Missing high-value tests:
 
-- Backend single-workflow transaction coverage if dish base, featured tags, and customizations are later moved behind one endpoint.
+- Optional future candidate, not current core backlog: backend single-workflow transaction coverage if dish base, featured tags, and customizations are later moved behind one endpoint.
 
 ## Gaps And Refactor Notes
 

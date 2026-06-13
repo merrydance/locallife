@@ -135,18 +135,20 @@ Observed tests:
 - `locallife/api/security_authz_test.go` denies unauthorized business-hours PUT.
 - `locallife/db/sqlc/merchant_test.go` now checks `SyncMerchantOpenStatusByBusinessHours` with multiple same-day slots: the merchant opens inside a matching slot and closes outside all slots.
 - `locallife/db/sqlc/merchant_test.go` now checks special-date precedence: special-date rows override weekly rows in both close-over-weekly-open and open-over-weekly-closed cases.
+- `locallife/api/merchant_status_change_test.go` checks automatic mode plus manual open/close interaction: manual close is bounded by the next business-hours switch, and no future switch creates an infinite manual override.
+- `locallife/db/sqlc/merchant_test.go` checks scheduler behavior around manual overrides: future manual overrides are preserved, expired overrides are cleared at the scheduler boundary, invalid payment config can still close the merchant, and expired manual overrides are cleared only for auto-open merchants.
 
 Missing high-value tests:
 
-- Test for automatic mode plus manual state interaction, likely in the neighboring manual open/close flow.
-- Product-contract test for mixed special-date rows if the intended behavior is not "any closed row closes the whole day".
+- Fixed 2026-06-12: automatic mode plus manual state interaction is covered by API and SQL tests in the neighboring manual open/close flow.
+- Product decision 2026-06-13: same-day partial close/open special-date support is not current scope. Current contract remains "any closed special-date row closes the whole day"; add product-contract tests only if that feature is promoted later.
 
 ## Gaps And Refactor Notes
 
 - Single-row helper queries for day/date business hours are drift candidates under multi-slot semantics.
 - Handler fallback comment for `ListMerchantBusinessHoursAll` appears stale because the query exists in sqlc.
-- Special-date mixed rows may have coarse semantics: any `is_closed=true` effective row closes the entire day.
-- Manual open/close and automatic scheduler share `is_open`; audit them together before changing overwrite behavior.
+- Product decision 2026-06-13: special-date close rows intentionally use coarse whole-day-close semantics for now. Same-day partial close/open support is a future product feature, not current repair backlog.
+- Fixed 2026-06-12: manual open/close and automatic scheduler overwrite behavior is covered by `manual_open_status_until` tests; audit together again only if the product contract changes.
 
 ## Branch Exhaustion
 
@@ -154,8 +156,8 @@ Missing high-value tests:
 - Request branches checked: `GET/PUT /v1/merchants/me/business-hours`, frontend wrappers, backend transaction replace-all, merchant status GET/PATCH adjacency, scheduler SQL, and reservation/table readers using business-hour lists.
 - Backend state branches checked: weekly rows, special-date rows, closed rows, multiple same-day slots, replace-all transaction, `auto_open_by_business_hours`, derived `merchants.is_open`, `auto_close_at` clearing, payment-readiness gate during scheduler open, and websocket publish after scheduler change.
 - Async branches checked: one-minute scheduler loop, post-update status reload, websocket merchant-status publish, dashboard/kitchen/App readers of status. There is no frontend async write after save besides normal re-entry/refresh.
-- Failure/retry branches checked: duplicate save guard, silent refresh fallback, dirty draft pull-refresh block, last-write-wins PUT, scheduler idempotent distinct update, mixed special-date closed/open semantics, missing payment config blocking automatic open, and manual writer race.
+- Failure/retry branches checked: duplicate save guard, silent refresh fallback, dirty draft pull-refresh block, last-write-wins PUT, scheduler idempotent distinct update, current whole-day-close special-date semantics, missing payment config blocking automatic open, and manual writer race.
 - Reader/consumer branches checked: settings page, dashboard status, kitchen status, public merchant status, order validation, reservation/table time slots, and Flutter App working status via shared `is_open`.
 - Authorization/tenant branches checked: merchant console access, backend current-merchant resolution, owner/manager profile-write middleware, and scheduler reading durable merchant rows without client input.
 - Zombie/unreachable branches checked: single-row business-hour helpers are unsafe for multi-slot reuse; stale handler comment references missing query even though sqlc query exists; no App editing entry was found.
-- Test-proof gaps checked: existing tests cover GET/PUT flag persistence, scheduler publish, multi-slot scheduler open/close, and special-date precedence with multiple rows. Missing proof remains for mixed closed/open special-date semantics if product rejects the current whole-day-close behavior, and explicit manual-vs-automatic overwrite contract.
+- Test-proof gaps checked: existing tests cover GET/PUT flag persistence, scheduler publish, multi-slot scheduler open/close, special-date precedence with multiple rows, and manual-vs-automatic overwrite contract. No current proof gap remains for business-hours auto-open; same-day partial close/open special-date behavior is a future product feature if merchant demand appears.

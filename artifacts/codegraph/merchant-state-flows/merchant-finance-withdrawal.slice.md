@@ -35,6 +35,7 @@ Merchant finance state must separate read-only financial reporting from money mo
 - Implemented 2026-06-12: provider `CreateWithdraw` dispatch is outside the HTTP request. New submitted commands carry `response_snapshot.dispatch_mode="async_worker"` and are picked up by the recovery scheduler; the worker claims a submitted command to `unknown` before calling Baofu, records accepted/rejected/unknown outcome on that command, can repair a claimed `unknown` command outcome from the persisted withdrawal order when the order update already succeeded, and does not blindly replay already claimed unknown commands.
 - Implemented 2026-06-10: withdrawal provider callbacks first persist a durable `external_payment_facts` callback fact, then asynchronously enqueue terminal withdrawal-state application.
 - Provider callback, query recovery, and task application must converge `baofu_withdrawal_orders` from `processing` to a terminal state without regressing already terminal rows.
+- Withdrawal terminal truth must be evidence-driven. Once Baofu accepts a withdrawal, callback or query should converge it to a terminal state in near real time. A local timeout, worker crash, HTTP request result, or merchant page polling result is not terminal financial truth; ambiguous cases without provider evidence should route to abnormal/failed/manual handling rather than being treated as success.
 - Implemented 2026-06-11: provider `returned` remains a terminal withdrawal state with no automatic retry or local money movement. Merchant-facing API/Mini Program copy presents it as "提现已退回" and tells the merchant that funds returned to the Baofu settlement account, so they should refresh withdrawable balance before reapplying if needed.
 - A merchant-visible "withdrawal submitted" result must mean there is a durable local withdrawal row the merchant can later inspect. New create requests return HTTP `202 Accepted` plus stable "结果正在确认" guidance when the local intent and submitted command have committed.
 - Implemented 2026-06-10: Mini Program accepted/unknown withdrawal create results redirect with the backend-returned durable withdrawal id, the detail page reloads that id, polls non-terminal states while visible, and stops polling once terminal truth is observed.
@@ -175,6 +176,7 @@ Merchant finance state must separate read-only financial reporting from money mo
 - Account-opening recovery scheduler scans recoverable opening/report/app-auth states every five minutes.
 - Payment fact application can continue account opening after verify-fee payment for roles that require it; merchant onboarding does not depend on verify-fee payment in the current Mini Program path.
 - Withdrawal creation now commits the durable order intent and submitted command before provider dispatch; withdrawal callback persists a durable callback fact first, then enqueue/applies asynchronously. Withdrawal recovery scheduler enqueues submitted async-worker commands for dispatch, then queries provider for old processing rows and enqueues the same terminal-application task. After a dispatch worker claims a command to `unknown`, it is not blindly requeued for create; if the process crashes before the provider call, recovery/query/manual handling must resolve the ambiguous row.
+- Manual recovery must be evidence-appending rather than silent local terminalization: operators need provider-side proof, reconciliation proof, or a documented provider support conclusion, then write an auditable recovery fact/record before the local withdrawal row is terminalized. If the provider never accepted the withdrawal or the query proves no provider order exists after the SLA window, the operational closure should be abnormal/failed/manual handling with merchant retry guidance, not indefinite "no terminal" ambiguity.
 - Withdrawal detail page polls non-terminal rows while visible and stops once terminal status is observed. Withdrawal list still has no realtime subscription; list recovery is refresh/re-entry.
 - There is no discovered local wallet/freeze reconciliation path for merchant withdrawals because available balance is provider-owned.
 
@@ -191,7 +193,8 @@ Merchant finance state must separate read-only financial reporting from money mo
 
 Observed tests:
 
-- `locallife/api/merchant_finance_test.go` covers merchant finance overview response fields and invalid date handling for owner.
+- `locallife/api/merchant_finance_test.go` covers merchant finance overview response fields and invalid date handling for owner; since 2026-06-12 it also covers manager selected-merchant finance reads across overview, orders, service fees, promotions, daily finance, settlements, and settlement timeline, plus settlement-timeline adjustment response mapping.
+- `locallife/db/sqlc/baofu_fee_breakdown_finance_test.go` covers Baofu v2 fee fields in merchant finance SQL, including daily total deduction fee behavior.
 - `locallife/api/baofu_settlement_account_test.go` covers merchant owner read/write, manager denial, safe masks/defaults, provider failures, sanitized provider failure-reason display, active binding readiness, applet auth, and many request-validation branches.
 - `locallife/logic/baofu_account_onboarding_service_test.go` covers onboarding profile validation, provider errors, duplicate/recovery branches, merchant report continuation, failed-flow recovery, provider failure-reason persistence, and sensitive snapshot behavior.
 - `locallife/worker/baofu_account_opening_recovery_scheduler_test.go` covers account-opening recovery, merchant-report recovery, failed/processing/noop branches, and safe logging.
@@ -206,9 +209,9 @@ Observed tests:
 
 Missing high-value tests:
 
-- Manager finance read test across all finance list/detail/balance routes, including selected-merchant header behavior.
-- End-to-end withdrawal ambiguity test from submitted command dispatch/provider timeout -> recovery query or manual resolution -> terminal detail/list update.
-- Cross-check finance overview/timeline totals against settlement adjustments and Baofu v2 fee fields after refunds/returns.
+- Fixed 2026-06-12: manager selected-merchant finance-read API coverage now spans the merchant finance surface.
+- Fixed 2026-06-12: finance overview/timeline settlement-adjustment response proof is covered in API tests, and Baofu v2 fee field finance proof is covered in sqlc tests.
+- External evidence candidate, not core code/test backlog: broader provider-timeout/manual-recovery drill from ambiguous withdrawal create through provider-authoritative callback/query terminalization, or abnormal/failed/manual handling when no provider acceptance evidence exists, then list/detail observation.
 
 ## Gaps And Refactor Notes
 
@@ -218,10 +221,11 @@ Missing high-value tests:
 - Fixed 2026-06-10: managers may operate withdrawal create/list/detail/balance while settlement-account onboarding stays owner-only.
 - Fixed 2026-06-10: withdrawal callbacks persist durable callback facts before asynchronous fact application, matching the account-open/payment/refund callback audit model.
 - Fixed 2026-06-10: provider withdrawable balance versus local finance-report reconciliation is documented as an intentional split truth boundary and covered by `TestMerchantFinanceOverviewAndBaofuWithdrawalBalanceUseSeparateTruthSources`.
+- Fixed 2026-06-12: `TestMerchantFinanceRoutesHonorSelectedStaffMerchant` proves selected-merchant header behavior across the finance read surface for managers, and `TestMerchantSettlementTimelineIncludesAdjustments` proves settlement adjustments remain visible in the timeline response.
 - Fixed 2026-06-10: Mini Program withdrawal accepted/unknown create response -> durable detail redirect -> non-terminal polling -> terminal refresh behavior is covered by `check:baofu-withdrawal-workflow`.
 - Fixed/current 2026-06-11: Mini Program settlement-account submit/status long-wait UI contract is covered by `check:baofu-onboarding-long-wait`, which is included in `quality:check`.
 - Fixed 2026-06-11: provider `returned` merchant-facing behavior is clarified as a terminal "提现已退回" state with balance-refresh-and-reapply guidance only; no auto-retry, scheduler write, or local fund movement was introduced.
-- Residual risk after 2026-06-12: if the command-dispatch worker claims a submitted command to `unknown` and then crashes before the provider `CreateWithdraw` request reaches Baofu, the command will not be blindly replayed because duplicate withdrawal risk is higher than delayed manual recovery. The row remains visible as processing/unknown and requires query evidence, alerting, or manual recovery.
+- Residual risk after 2026-06-12: if the command-dispatch worker claims a submitted command to `unknown` and then crashes before the provider `CreateWithdraw` request reaches Baofu, the command will not be blindly replayed because duplicate withdrawal risk is higher than delayed manual recovery. With Baofu's near-real-time terminal behavior, accepted withdrawals should converge by callback or query; rows without provider acceptance evidence after the SLA window should move through abnormal/failed/manual handling with an audit trail and merchant retry guidance.
 
 ## Branch Exhaustion
 
@@ -233,4 +237,4 @@ Missing high-value tests:
 - Reader/consumer branches checked: finance reports, dashboard settlement readiness, manual open-status readiness, withdrawal list/detail, settlement-account status, and provider balance versus local finance totals. Fixed 2026-06-10: the intentionally split boundary is proof-covered; provider balance is withdrawable truth and local finance tables are reporting truth.
 - Authorization/tenant branches checked: owner/manager finance reads, owner-only settlement-account submission, owner/manager withdrawal reads and creates, selected merchant resolution, callback provider identity checks, and cross-owner withdrawal detail denial.
 - Zombie/unreachable branches checked: shared Baofu verify-fee payment recovery exists but merchant settlement status config disables payment recovery; role-agnostic wrappers exist beyond merchant scope; App finance/withdrawal entries were not found; no local wallet/freeze repair path was found because merchant withdrawal balance is provider-owned.
-- Test-proof gaps checked: backend coverage is broad for settlement onboarding, withdrawal create/callback/recovery, required withdrawal `Idempotency-Key` semantics, async command dispatch, callback durable fact parity, manager create permission, finance overview, and finance-report-vs-provider-balance boundary proof. Mini Program withdrawal page-level unknown-result recovery and settlement-account submit/status long-wait UI contract are proof-covered; remaining optional proof gap is broader end-to-end provider-timeout/manual-recovery coverage across real provider ambiguity.
+- Test-proof gaps checked: backend coverage is broad for settlement onboarding, withdrawal create/callback/recovery, required withdrawal `Idempotency-Key` semantics, async command dispatch, callback durable fact parity, manager create permission, selected-merchant finance reads, finance overview/timeline adjustment proof, Baofu v2 fee finance SQL, and finance-report-vs-provider-balance boundary proof. Mini Program withdrawal page-level unknown-result recovery and settlement-account submit/status long-wait UI contract are proof-covered; remaining optional/external evidence gap is broader end-to-end provider-timeout/manual-recovery coverage across real provider ambiguity.

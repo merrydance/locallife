@@ -164,7 +164,7 @@ Observed tests:
 Missing high-value tests:
 
 - Fixed/current 2026-06-11: App bind verify deletion-order tests cover no code burn on user-lookup failure, session-creation failure restoration, no expired-code revival, and duplicate successful consumption rejection.
-- Flutter/contract test for unsupported native-push provider copy if product wants client-side preflight before backend rejection.
+- Optional contract candidate, not core code/test backlog: Flutter/contract test for unsupported native-push provider copy if product wants client-side preflight before backend rejection.
 - Fixed/current 2026-06-11: Flutter logout unregister coverage proves active logout attempts backend device unregister before clearing local auth, continues logout on unregister failure, clears the local registered-token marker for rebind, and skips backend DELETE when no local device id exists.
 - Fixed/current 2026-06-11: stale-device cleanup proof covers active devices with old `last_active_at` becoming inactive while recent active and already inactive devices are left alone.
 - Fixed/current 2026-06-11: native-push terminal-failure policy tests cover provider reason/failure count recording, the affected registered device/push token being marked degraded first, third clear terminal failure deactivating only that row, heartbeat clearing degradation, success clearing degradation, and migration `000266` clean/incremental schema proof.
