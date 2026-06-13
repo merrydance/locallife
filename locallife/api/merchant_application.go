@@ -1953,62 +1953,6 @@ func extractAddressKeywords(addr string) []string {
 	return keywords
 }
 
-// parseFlexibleDate 灵活解析多种日期格式
-func parseFlexibleDate(dateStr string) (time.Time, bool) {
-	// 移除空白和常见无关字符
-	dateStr = strings.TrimSpace(dateStr)
-	dateStr = strings.ReplaceAll(dateStr, " ", "")
-
-	// 尝试提取纯数字（年月日）
-	var year, month, day string
-
-	// 格式1: 中文格式 2030年01月01日
-	if strings.Contains(dateStr, "年") && strings.Contains(dateStr, "月") && strings.Contains(dateStr, "日") {
-		re := regexp.MustCompile(`(\d{4})年(\d{1,2})月(\d{1,2})日`)
-		if matches := re.FindStringSubmatch(dateStr); len(matches) == 4 {
-			year, month, day = matches[1], matches[2], matches[3]
-		}
-	}
-
-	// 格式2: 点分隔 2030.01.01
-	if year == "" && strings.Count(dateStr, ".") >= 2 {
-		parts := strings.Split(dateStr, ".")
-		if len(parts) >= 3 {
-			year, month, day = parts[0], parts[1], parts[2]
-		}
-	}
-
-	// 格式3: 纯数字 20300101
-	if year == "" && len(dateStr) >= 8 {
-		// 尝试匹配 YYYYMMDD
-		re := regexp.MustCompile(`^(\d{4})(\d{2})(\d{2})`)
-		if matches := re.FindStringSubmatch(dateStr); len(matches) == 4 {
-			year, month, day = matches[1], matches[2], matches[3]
-		}
-	}
-
-	// 格式4: 横线分隔 2030-01-01（但要注意不要误匹配有效期范围分隔符）
-	if year == "" && strings.Count(dateStr, "-") == 2 {
-		parts := strings.Split(dateStr, "-")
-		if len(parts) == 3 && len(parts[0]) == 4 {
-			year, month, day = parts[0], parts[1], parts[2]
-		}
-	}
-
-	if year == "" || month == "" || day == "" {
-		return time.Time{}, false
-	}
-
-	// 构建日期字符串
-	dateFormatted := fmt.Sprintf("%s-%02s-%02s", year, month, day)
-	t, err := parseISODate(dateFormatted, "")
-	if err != nil {
-		return time.Time{}, false
-	}
-
-	return t, true
-}
-
 // ==================== 重置申请 ====================
 
 // resetMerchantApplication godoc
