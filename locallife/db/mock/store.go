@@ -507,6 +507,21 @@ func (mr *MockStoreMockRecorder) ApproveRiderApplicationTx(ctx, arg any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApproveRiderApplicationTx", reflect.TypeOf((*MockStore)(nil).ApproveRiderApplicationTx), ctx, arg)
 }
 
+// ApproveRiderApplicationWithReviewTx mocks base method.
+func (m *MockStore) ApproveRiderApplicationWithReviewTx(ctx context.Context, arg db.ApproveRiderApplicationWithReviewTxParams) (db.ApproveRiderApplicationWithReviewTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ApproveRiderApplicationWithReviewTx", ctx, arg)
+	ret0, _ := ret[0].(db.ApproveRiderApplicationWithReviewTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ApproveRiderApplicationWithReviewTx indicates an expected call of ApproveRiderApplicationWithReviewTx.
+func (mr *MockStoreMockRecorder) ApproveRiderApplicationWithReviewTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApproveRiderApplicationWithReviewTx", reflect.TypeOf((*MockStore)(nil).ApproveRiderApplicationWithReviewTx), ctx, arg)
+}
+
 // AssignDelivery mocks base method.
 func (m *MockStore) AssignDelivery(ctx context.Context, arg db.AssignDeliveryParams) (db.Delivery, error) {
 	m.ctrl.T.Helper()

@@ -15,6 +15,7 @@ import (
 type riderOnboardingReviewStore interface {
 	GetRiderApplication(ctx context.Context, id int64) (db.RiderApplication, error)
 	ApproveRiderApplicationTx(ctx context.Context, arg db.ApproveRiderApplicationTxParams) (db.ApproveRiderApplicationTxResult, error)
+	ApproveRiderApplicationWithReviewTx(ctx context.Context, arg db.ApproveRiderApplicationWithReviewTxParams) (db.ApproveRiderApplicationWithReviewTxResult, error)
 	ReturnRiderApplicationToDraft(ctx context.Context, arg db.ReturnRiderApplicationToDraftParams) (db.RiderApplication, error)
 }
 
@@ -99,19 +100,65 @@ func (service *RiderOnboardingReviewService) ProcessSubmittedApplication(ctx con
 	}
 
 	if result.Approved {
-		approvedResult, err := service.store.ApproveRiderApplicationTx(ctx, db.ApproveRiderApplicationTxParams{
-			ApplicationID: application.ID,
-			ReviewedBy:    pgtype.Int8{},
-			RiderRealName: application.RealName.String,
-			RiderIDCardNo: idCardOCR.IDNumber,
-			RiderPhone:    application.Phone.String,
-			RegionID:      pgtype.Int8{},
-		})
+		if service.credentialGovernanceService == nil {
+			approvedResult, err := service.store.ApproveRiderApplicationTx(ctx, db.ApproveRiderApplicationTxParams{
+				ApplicationID: application.ID,
+				ReviewedBy:    pgtype.Int8{},
+				RiderRealName: application.RealName.String,
+				RiderIDCardNo: idCardOCR.IDNumber,
+				RiderPhone:    application.Phone.String,
+				RegionID:      pgtype.Int8{},
+			})
+			if err != nil {
+				return RiderOnboardingReviewResult{}, fmt.Errorf("approve rider application tx: %w", err)
+			}
+			result.Application = approvedResult.Application
+			result.Rider = &approvedResult.Rider
+			return result, nil
+		}
+
+		entries, err := buildRiderCredentialActivationInputs(application)
 		if err != nil {
-			return RiderOnboardingReviewResult{}, fmt.Errorf("approve rider application tx: %w", err)
+			return RiderOnboardingReviewResult{}, fmt.Errorf("build rider credential activation inputs: %w", err)
+		}
+		if len(entries) == 0 {
+			return RiderOnboardingReviewResult{}, fmt.Errorf("rider credential activation entries missing")
+		}
+		reviewCreation, err := buildRiderReviewRunCreationParams(application.ID, decision)
+		if err != nil {
+			return RiderOnboardingReviewResult{}, fmt.Errorf("build rider review run creation params: %w", err)
+		}
+		reviewCompletion, err := buildRiderReviewRunCompletionParams(optionalReviewRunID(existingRunID), decision)
+		if err != nil {
+			return RiderOnboardingReviewResult{}, fmt.Errorf("build rider review run completion params: %w", err)
+		}
+		approvalArg := db.ApproveRiderApplicationWithReviewTxParams{
+			Approval: db.ApproveRiderApplicationTxParams{
+				ApplicationID: application.ID,
+				ReviewedBy:    pgtype.Int8{},
+				RiderRealName: application.RealName.String,
+				RiderIDCardNo: idCardOCR.IDNumber,
+				RiderPhone:    application.Phone.String,
+				RegionID:      pgtype.Int8{},
+			},
+			ReviewRunID:           optionalReviewRunID(existingRunID),
+			ReviewCreation:        reviewCreation,
+			ReviewCompletion:      reviewCompletion,
+			CredentialActivatedAt: pgtype.Timestamptz{Time: service.credentialGovernanceService.now().UTC(), Valid: true},
+		}
+		approvalArg.CredentialEntries, err = buildRiderCredentialLedgerEntries(application.ID, existingRunID, entries)
+		if err != nil {
+			return RiderOnboardingReviewResult{}, fmt.Errorf("build rider credential ledger entries: %w", err)
+		}
+
+		approvedResult, err := service.store.ApproveRiderApplicationWithReviewTx(ctx, approvalArg)
+		if err != nil {
+			return RiderOnboardingReviewResult{}, fmt.Errorf("approve rider application with review tx: %w", err)
 		}
 		result.Application = approvedResult.Application
 		result.Rider = &approvedResult.Rider
+		result.ReviewRun = &approvedResult.ReviewRun
+		result.CredentialEntries = entries
 	} else {
 		returnedApplication, err := service.store.ReturnRiderApplicationToDraft(ctx, db.ReturnRiderApplicationToDraftParams{
 			ID:           application.ID,
@@ -124,7 +171,7 @@ func (service *RiderOnboardingReviewService) ProcessSubmittedApplication(ctx con
 		result.Application = returnedApplication
 	}
 
-	if service.onboardingReviewService != nil {
+	if service.onboardingReviewService != nil && !result.Approved {
 		var reviewRun db.OnboardingReviewRun
 		if existingRunID != nil {
 			reviewRun, err = service.onboardingReviewService.CompleteRiderReviewRun(ctx, *existingRunID, result.Application.ID, decision)
@@ -143,21 +190,7 @@ func (service *RiderOnboardingReviewService) ProcessSubmittedApplication(ctx con
 	}
 
 	if result.Approved && service.credentialGovernanceService != nil && result.Rider != nil {
-		entries, err := buildRiderCredentialActivationInputs(result.Application)
-		if err != nil {
-			return RiderOnboardingReviewResult{}, fmt.Errorf("build rider credential activation inputs: %w", err)
-		}
-		result.CredentialEntries = entries
-		if len(entries) > 0 {
-			_, err = service.credentialGovernanceService.ActivateRiderCredentials(ctx, ActivateRiderCredentialsInput{
-				RiderID:            result.Rider.ID,
-				RiderApplicationID: result.Application.ID,
-				ReviewRunID:        onboardingReviewRunID(result.ReviewRun),
-				Entries:            entries,
-			})
-			if err != nil {
-				return RiderOnboardingReviewResult{}, fmt.Errorf("activate rider credentials: %w", err)
-			}
+		if len(result.CredentialEntries) > 0 {
 			restoreResult, err := service.credentialGovernanceService.RestoreRiderIfEligible(ctx, result.Rider.ID)
 			if err != nil {
 				return RiderOnboardingReviewResult{}, fmt.Errorf("restore rider credential governance: %w", err)
@@ -442,6 +475,82 @@ func buildRiderCredentialActivationInputs(application db.RiderApplication) ([]Cr
 			"valid_end":   strings.TrimSpace(decodedHealthCert.ValidEnd),
 		},
 	}}, nil
+}
+
+func optionalReviewRunID(value *int64) int64 {
+	if value == nil {
+		return 0
+	}
+	return *value
+}
+
+func buildRiderReviewRunCreationParams(applicationID int64, decision OnboardingReviewDecision) (db.CreateRiderOnboardingReviewRunParams, error) {
+	evidenceJSON, snapshotJSON, err := marshalOnboardingReviewPayloads(decision)
+	if err != nil {
+		return db.CreateRiderOnboardingReviewRunParams{}, err
+	}
+	return db.CreateRiderOnboardingReviewRunParams{
+		RiderApplicationID: pgtype.Int8{Int64: applicationID, Valid: true},
+		RunStatus:          db.OnboardingReviewRunStatusQueued,
+		Stage:              normalizeReviewStage(decision.Stage),
+		Evidence:           evidenceJSON,
+		RuleHits:           dedupeStrings(decision.RuleHits),
+		OcrJobRefs:         dedupeInt64s(decision.OCRJobRefs),
+		Snapshot:           snapshotJSON,
+		RequestedBy:        optionalInt8(decision.RequestedBy),
+	}, nil
+}
+
+func buildRiderReviewRunCompletionParams(runID int64, decision OnboardingReviewDecision) (db.CompleteOnboardingReviewRunParams, error) {
+	evidenceJSON, snapshotJSON, err := marshalOnboardingReviewPayloads(decision)
+	if err != nil {
+		return db.CompleteOnboardingReviewRunParams{}, err
+	}
+	return db.CompleteOnboardingReviewRunParams{
+		Stage:         normalizeReviewStage(decision.Stage),
+		Outcome:       pgtype.Text{String: decision.Outcome, Valid: decision.Outcome != ""},
+		ReasonCode:    pgtype.Text{String: decision.ReasonCode, Valid: decision.ReasonCode != ""},
+		ReasonMessage: pgtype.Text{String: decision.ReasonMessage, Valid: decision.ReasonMessage != ""},
+		Evidence:      evidenceJSON,
+		RuleHits:      dedupeStrings(decision.RuleHits),
+		OcrJobRefs:    dedupeInt64s(decision.OCRJobRefs),
+		Snapshot:      snapshotJSON,
+		ReviewedBy:    optionalInt8(decision.ReviewedBy),
+		ID:            runID,
+	}, nil
+}
+
+func buildRiderCredentialLedgerEntries(applicationID int64, reviewRunID *int64, inputs []CredentialActivationInput) ([]db.ActivateRiderCredentialLedgerEntry, error) {
+	if applicationID <= 0 {
+		return nil, fmt.Errorf("rider application id must be positive")
+	}
+	entries := make([]db.ActivateRiderCredentialLedgerEntry, 0, len(inputs))
+	seenDocumentTypes := make(map[string]struct{}, len(inputs))
+	for _, input := range inputs {
+		if input.DocumentType == "" {
+			return nil, fmt.Errorf("rider credential document type is required")
+		}
+		if input.MediaAssetID <= 0 {
+			return nil, fmt.Errorf("rider credential media asset id must be positive")
+		}
+		if _, exists := seenDocumentTypes[input.DocumentType]; exists {
+			return nil, fmt.Errorf("duplicate rider credential document type: %s", input.DocumentType)
+		}
+		seenDocumentTypes[input.DocumentType] = struct{}{}
+		encodedPayload, err := marshalCredentialActivationPayload(input.NormalizedPayload)
+		if err != nil {
+			return nil, err
+		}
+		entries = append(entries, db.ActivateRiderCredentialLedgerEntry{
+			DocumentType:       input.DocumentType,
+			RiderApplicationID: applicationID,
+			ReviewRunID:        optionalInt8(reviewRunID),
+			MediaAssetID:       input.MediaAssetID,
+			NormalizedPayload:  encodedPayload,
+			ExpiresAt:          optionalTimestamptz(input.ExpiresAt),
+		})
+	}
+	return entries, nil
 }
 
 func parseRiderCredentialExpiry(raw string) (*time.Time, error) {

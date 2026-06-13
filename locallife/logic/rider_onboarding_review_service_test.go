@@ -1,13 +1,16 @@
 package logic
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/stretchr/testify/require"
+	gomock "go.uber.org/mock/gomock"
 )
 
 func riderReviewTestApplication() db.RiderApplication {
@@ -121,4 +124,68 @@ func TestEvaluateRiderApplication_RejectsMissingIDNumber(t *testing.T) {
 
 	require.False(t, approved)
 	require.Equal(t, "身份证号未识别，请重新上传清晰的身份证正面照片", rejectReason)
+}
+
+func TestRiderOnboardingReviewServiceProcessSubmittedApplication_UsesDurableApprovalTx(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	service := &RiderOnboardingReviewService{
+		store:                       store,
+		credentialGovernanceService: &CredentialGovernanceService{now: riderReviewFixedNow},
+		now:                         riderReviewFixedNow,
+	}
+
+	application := riderReviewTestApplication()
+	reviewRun := db.OnboardingReviewRun{
+		ID:                 77,
+		ApplicationType:    "rider",
+		RiderApplicationID: pgtype.Int8{Int64: application.ID, Valid: true},
+		RunStatus:          db.OnboardingReviewRunStatusCompleted,
+		Stage:              "review",
+		Outcome:            pgtype.Text{String: db.OnboardingReviewOutcomeApproved, Valid: true},
+		ReasonCode:         pgtype.Text{String: "auto_approved", Valid: true},
+		CreatedAt:          riderReviewFixedNow(),
+	}
+	expectedLedger, _ := json.Marshal(map[string]any{
+		"name":        "张三",
+		"id_number":   "110101199001011234",
+		"cert_number": "",
+		"valid_start": "",
+		"valid_end":   "2030年12月31日",
+	})
+
+	store.EXPECT().
+		ApproveRiderApplicationWithReviewTx(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.ApproveRiderApplicationWithReviewTxParams) (db.ApproveRiderApplicationWithReviewTxResult, error) {
+			require.Equal(t, application.ID, arg.Approval.ApplicationID)
+			require.Equal(t, reviewRun.ID, arg.ReviewRunID)
+			require.Equal(t, application.ID, arg.ReviewCreation.RiderApplicationID.Int64)
+			require.True(t, arg.ReviewCreation.RiderApplicationID.Valid)
+			require.Equal(t, db.OnboardingReviewRunStatusQueued, arg.ReviewCreation.RunStatus)
+			require.Equal(t, "review", arg.ReviewCreation.Stage)
+			require.Equal(t, reviewRun.ID, arg.ReviewCompletion.ID)
+			require.Equal(t, db.OnboardingReviewOutcomeApproved, arg.ReviewCompletion.Outcome.String)
+			require.True(t, arg.ReviewCompletion.Outcome.Valid)
+			require.Len(t, arg.CredentialEntries, 1)
+			require.Equal(t, db.CredentialDocumentTypeHealthCert, arg.CredentialEntries[0].DocumentType)
+			require.Equal(t, application.ID, arg.CredentialEntries[0].RiderApplicationID)
+			require.Equal(t, reviewRun.ID, arg.CredentialEntries[0].ReviewRunID.Int64)
+			require.True(t, arg.CredentialEntries[0].ReviewRunID.Valid)
+			require.JSONEq(t, string(expectedLedger), string(arg.CredentialEntries[0].NormalizedPayload))
+			return db.ApproveRiderApplicationWithReviewTxResult{
+				Application:       db.RiderApplication{ID: application.ID, UserID: application.UserID, Status: db.RiderApplicationStatusApproved},
+				Rider:             db.Rider{ID: 501, UserID: application.UserID, Status: db.RiderStatusApproved},
+				ReviewRun:         reviewRun,
+				CredentialLedgers: []db.CredentialLedger{{ID: 601}},
+			}, nil
+		})
+
+	result, err := service.ProcessSubmittedApplication(context.Background(), application, application.UserID, &reviewRun.ID)
+	require.NoError(t, err)
+	require.True(t, result.Approved)
+	require.Equal(t, reviewRun.ID, result.ReviewRun.ID)
+	require.Equal(t, db.RiderApplicationStatusApproved, result.Application.Status)
+	require.Len(t, result.CredentialEntries, 1)
 }
