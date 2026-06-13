@@ -50,6 +50,8 @@
 | `locallife/api/payment_order.go:1131` | `applyAbnormalRefundBodyRequest` | 异常退款申请 body DTO | 未见 handler 绑定、路由注册、Swagger 注释或 `docs` 生成物引用。已删除；`go build ./api` 通过；`go test ./api -run '^$' -count=1` 通过 |
 | `locallife/api/payment_callback.go:78` | `Server.enqueueProfitSharingPaymentFactApplication` | 从支付回调触发分账 payment fact application task | 生产和测试均无调用；当前宝付分账 callback 路径在 `baofu_callback.go` 记录并派发 application。已删除；相邻的 direct payment、骑手押金退款、预订退款、订单退款 enqueue helper 仍在用，保留。`go build ./api` 通过；`go test ./api -run 'TestBaofuShareCallback|TestHandlePaymentNotify|TestHandleRefundNotify|TestHandleMerchantTransferNotify' -count=1` 通过 |
 | `locallife/api/payment_callback.go:564` | `Server.requireTaskDistributorForNotification` | 回调处理前检查 task distributor，缺失时释放通知 claim 并返回失败 | 生产和测试均无调用；当前回调路径已在各自 handler 内直接处理缺失分支。已删除；`go build ./api` 通过；`go test ./api -run 'TestBaofuShareCallback|TestHandlePaymentNotify|TestHandleRefundNotify|TestHandleMerchantTransferNotify' -count=1` 通过 |
+| `locallife/logic/combined_payment_service.go:15` | `combinedOutTradePrefix` | 原合单支付 out_trade_no 前缀 | 当前合单支付服务 fail-closed，没有创建路径使用。已删除；`go build ./logic` 通过；`go test ./api -run 'TestCreateCombinedPaymentOrderAPI_BaofuMainBusinessFailsClosed' -count=1` 通过 |
+| `locallife/logic/combined_payment_service.go:16` | `combinedOrderMaxCount` | 原合单支付子订单数量上限 | 当前合单支付服务 fail-closed，没有创建路径使用。已删除；`go build ./logic` 通过；`go test ./api -run 'TestCreateCombinedPaymentOrderAPI_BaofuMainBusinessFailsClosed' -count=1` 通过 |
 
 ## 可优先清理候选
 
@@ -60,8 +62,6 @@
 | `locallife/db/sqlc/tx_claim_behavior.go:148` | `behaviorDecisionSignal` | 评分信号 code/weight/count/active | 只被上面的未使用评分结构嵌套引用 |
 | `locallife/logic/baofu_account_onboarding_profile.go:168` | `BaofuAccountOnboardingService.getOrCreateFlow` | 为宝付开户 profile 获取或创建开户 flow | 生产无调用；下层 `getOrCreateFlowWithExisting` / `createBaofuAccountOpeningFlow` 仍在同文件使用 |
 | `locallife/logic/baofu_payment_readiness.go:65` | `ensureCombinedPaymentMerchantsBaofuReady` | 创建合单支付前逐商户检查宝付账户和微信通道 readiness | 生产无调用；当前合单支付已 fail-closed，不走该 readiness helper |
-| `locallife/logic/combined_payment_service.go:15` | `combinedOutTradePrefix` | 原合单支付 out_trade_no 前缀 | 当前合单支付服务 fail-closed，没有创建路径使用 |
-| `locallife/logic/combined_payment_service.go:16` | `combinedOrderMaxCount` | 原合单支付子订单数量上限 | 当前合单支付服务 fail-closed，没有创建路径使用 |
 | `locallife/logic/payment_order_service.go:273` | `PaymentOrderService.resolveConcurrentOrderPayment` | 并发创建订单支付单冲突时，轮询并复用/关闭已有待支付单 | 生产无调用；同组 `sleepWithContext` 被它调用 |
 | `locallife/logic/payment_order_service.go:303` | `PaymentOrderService.resolveConcurrentReservationPayment` | 并发创建预订支付单冲突时，按 attach 判断是否复用已有待支付单 | 生产无调用；同组 `sleepWithContext` 被它调用 |
 | `locallife/logic/payment_order_service.go:536` | `sleepWithContext` | 并发支付冲突重试时的 context-aware sleep | 只被未使用的并发解析 helper 调用 |
