@@ -44,13 +44,13 @@
 | `locallife/worker/task_process_payment.go:1544` | `workerStringValue` | 把 `*string` 转成空字符串兜底 | 生产和测试均无调用。已删除；相邻 `workerStringPtrIfNotEmpty` 仍被错误字段映射使用，保留。`go build ./worker` 通过；`go test ./worker -run 'TestWorkerPaymentCommandErrorFields|TestShouldDispatchOrderProfitSharing' -count=1` 通过 |
 | `locallife/worker/task_process_payment.go:1619` | `workerProfitSharingCommandSnapshot` | 过滤空字段后序列化分账 command snapshot | 生产和测试均无调用。已删除；相邻 `workerBaofuRefundCommandSnapshot` 仍在退款命令记录路径使用，保留。`go build ./worker` 通过；`go test ./worker -run 'TestWorkerPaymentCommandErrorFields|TestShouldDispatchOrderProfitSharing' -count=1` 通过 |
 | `locallife/api/merchant_application.go:35` | `loggingReader` / `Read` / `Close` | 包装上传 body，按读取进度记录商户 OCR 上传日志 | 类型和方法生产、测试均无调用；上传链路已不使用这个 wrapper。已删除，同时移除随之未使用的 `io` import；`go build ./api` 通过；`go test ./api -run '^$' -count=1` 通过 |
+| `locallife/api/applyment_contact_info.go:21` | `pgTextValue` | 把 `pgtype.Text` 转成普通字符串，用于取用户手机号兜底 | 只被同文件未使用的 `resolveApplymentContactPhone` 调用。已随上层 helper 一起删除；`firstNonEmptyTrimmed` 仍被 `baofu_callback.go` 使用，保留。`go build ./api` 通过；`go test ./api -run '^$' -count=1` 通过 |
+| `locallife/api/applyment_contact_info.go:28` | `Server.resolveApplymentContactPhone` | 商户进件联系人手机号解析：候选值优先，否则从用户手机号兜底 | 生产和测试均无调用；当前商户申请提交路径在 `merchant_application.go` 自行从用户手机号兜底。已删除；`go build ./api` 通过；`go test ./api -run '^$' -count=1` 通过 |
 
 ## 可优先清理候选
 
 | 位置 | 符号 | 作用 | 核对结论 |
 | --- | --- | --- | --- |
-| `locallife/api/applyment_contact_info.go:21` | `pgTextValue` | 把 `pgtype.Text` 转成普通字符串，用于取用户手机号兜底 | 只被同文件未使用的 `resolveApplymentContactPhone` 调用；随该 helper 一起复核 |
-| `locallife/api/applyment_contact_info.go:28` | `Server.resolveApplymentContactPhone` | 商户进件联系人手机号解析：候选值优先，否则从用户手机号兜底 | 生产无调用；像是宝付进件联系人字段迁移后遗留 |
 | `locallife/api/payment_callback.go:78` | `Server.enqueueProfitSharingPaymentFactApplication` | 从支付回调触发分账 payment fact application task | 生产无调用；相邻的骑手押金退款 enqueue helper 仍在用 |
 | `locallife/api/payment_callback.go:564` | `Server.requireTaskDistributorForNotification` | 回调处理前检查 task distributor，缺失时释放通知 claim 并返回失败 | 生产无调用；现在回调路径直接处理各自的缺失分支 |
 | `locallife/db/sqlc/tx_claim_behavior.go:135` | `behaviorDecisionScoreBreakdown` | 索赔行为决策评分详情 JSON 结构 | 生产无引用；测试 helper 仍可解码该类型，属于测试辅助引用 |
@@ -164,7 +164,7 @@
 
 ## 建议顺序
 
-1. 纯孤立 helper 第一批已清理；下一轮建议先复核 `resolveApplymentContactPhone`、`applyAbnormalRefundURIRequest` / `applyAbnormalRefundBodyRequest` 这类仍在 `可优先清理候选` 中、但需要稍多上下文判断的 API 层候选。
+1. 纯孤立 helper 第一批已清理；下一轮建议先复核 `applyAbnormalRefundURIRequest` / `applyAbnormalRefundBodyRequest` 这类仍在 `可优先清理候选` 中、但需要稍多上下文判断的 API 层候选。
 2. 再按功能成组确认：`internal/wechatdoc/alignment_helpers.go`、旧 `listRiders` handler、店铺码生成、并发支付冲突 helper、refund recovery 子商户解析。
 3. 对“测试仍在引用”的项，先决定测试是否还代表有效业务规则；若规则已经迁移，应同步删除或改写测试。
 4. 对 `merchant_finance.go` 的 `SA4006`，如果进入修复阶段，建议只做局部可读性调整，不当作死代码删除。
