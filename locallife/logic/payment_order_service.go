@@ -424,13 +424,6 @@ func buildReservationAddonPaymentAttach(reservationID int64) string {
 	return fmt.Sprintf("reservation_id:%d;payment_mode:%s;addon:true", reservationID, paymentModeFull)
 }
 
-func subMchIDFromPaymentAttach(paymentOrder db.PaymentOrder) string {
-	if !paymentOrder.Attach.Valid {
-		return ""
-	}
-	return parsePaymentAttach(paymentOrder.Attach.String)["sub_mchid"]
-}
-
 func parsePaymentAttach(attach string) map[string]string {
 	parts := map[string]string{}
 	for _, segment := range strings.Split(strings.TrimSpace(attach), ";") {
@@ -461,15 +454,6 @@ func shouldReuseReservationPendingPayment(paymentOrder db.PaymentOrder, expected
 		return false
 	}
 	return existing["addon"] == expected["addon"]
-}
-
-func shouldEnableOrderProfitSharing(orderType string) bool {
-	switch orderType {
-	case orderTypeDineIn, orderTypeTakeaway:
-		return false
-	default:
-		return true
-	}
 }
 
 func mapBaofuPaymentOrderCreateError(err error) error {

@@ -39,6 +39,8 @@
 | `locallife/api/server.go:1815` | `attachedServerError` | 将错误挂到 Gin context，同时返回公开错误文案 | 生产和测试均无调用；常用路径使用 `internalError` / `loggedServerError`。已删除；`go build ./api` 通过。`go test ./api` 被当前工作区已有的 `api/rider_test.go` WIP 编译错误挡住，未作为本项通过依据 |
 | `locallife/api/baofu_settlement_account_profile_defaults_merge.go:410` | `pgInt8Value` | 把 `pgtype.Int8` 转成 `int64`，原本用于结算账户默认值响应或合并 | 生产和测试均无调用。已删除，同时移除随之未使用的 `pgtype` import；`go build ./api` 通过。`go test ./api` 仍被当前工作区已有的 `api/rider_test.go` WIP 编译错误挡住，未作为本项通过依据 |
 | `locallife/api/merchant_application.go:1957` | `parseFlexibleDate` | 解析中文、点分隔、纯数字、横线分隔的营业执照日期字符串 | 生产和测试均无调用；OCR 日期解析逻辑已转移到 worker/helper。已删除；`go build ./api` 通过。`go test ./api` 仍被当前工作区已有的 `api/rider_test.go` WIP 编译错误挡住，未作为本项通过依据 |
+| `locallife/logic/payment_order_service.go:427` | `subMchIDFromPaymentAttach` | 从支付单 attach 里解析 `sub_mchid` | 生产和测试均无调用。已删除；`parsePaymentAttach` 仍被预订待支付单复用判断使用，保留。`go build ./logic` 通过。`go test ./logic -run 'TestPaymentOrderService|TestCreateBaofuPaymentOrder|TestCreatePaymentOrder|TestClosePaymentOrder' -count=1` 被当前工作区已有的 `logic/rider_deposit_refund_service_test.go` WIP 编译错误挡住，未作为本项通过依据 |
+| `locallife/logic/payment_order_service.go:466` | `shouldEnableOrderProfitSharing` | 按订单类型判断是否启用订单分账 | 生产和测试均无调用；worker 里有另一套 `shouldDispatchOrderProfitSharing` 测试覆盖。已删除；`orderTypeDineIn` / `orderTypeTakeaway` 仍被同包其他文件和测试使用，保留。`go build ./logic` 通过。`go test ./logic -run 'TestPaymentOrderService|TestCreateBaofuPaymentOrder|TestCreatePaymentOrder|TestClosePaymentOrder' -count=1` 被当前工作区已有的 `logic/rider_deposit_refund_service_test.go` WIP 编译错误挡住，未作为本项通过依据 |
 
 ## 可优先清理候选
 
@@ -58,8 +60,6 @@
 | `locallife/logic/combined_payment_service.go:16` | `combinedOrderMaxCount` | 原合单支付子订单数量上限 | 当前合单支付服务 fail-closed，没有创建路径使用 |
 | `locallife/logic/payment_order_service.go:273` | `PaymentOrderService.resolveConcurrentOrderPayment` | 并发创建订单支付单冲突时，轮询并复用/关闭已有待支付单 | 生产无调用；同组 `sleepWithContext` 被它调用 |
 | `locallife/logic/payment_order_service.go:303` | `PaymentOrderService.resolveConcurrentReservationPayment` | 并发创建预订支付单冲突时，按 attach 判断是否复用已有待支付单 | 生产无调用；同组 `sleepWithContext` 被它调用 |
-| `locallife/logic/payment_order_service.go:427` | `subMchIDFromPaymentAttach` | 从支付单 attach 里解析 `sub_mchid` | 生产和测试均无调用 |
-| `locallife/logic/payment_order_service.go:466` | `shouldEnableOrderProfitSharing` | 按订单类型判断是否启用订单分账 | 生产和测试均无调用；worker 里有另一套 `shouldDispatchOrderProfitSharing` 测试覆盖 |
 | `locallife/logic/payment_order_service.go:536` | `sleepWithContext` | 并发支付冲突重试时的 context-aware sleep | 只被未使用的并发解析 helper 调用 |
 | `locallife/logic/payment_order_service.go:547` | `PaymentOrderService.markPaymentOrderFailedForCleanup` | 预支付失败后把支付单标记为 failed 并记录日志 | 生产无调用 |
 | `locallife/logic/refund_service.go:58` | `RefundService.maybeMarkPaymentOrderRefunded` | 累计退款额达到支付金额后，把支付单置为 refunded | 生产无调用；worker 和 PaymentFactService 各有独立在用实现 |
@@ -164,7 +164,7 @@
 
 ## 建议顺序
 
-1. 先清理纯孤立 helper：`subMchIDFromPaymentAttach`、`shouldEnableOrderProfitSharing`、`workerStringValue`、`workerProfitSharingCommandSnapshot`。
+1. 先清理纯孤立 helper：`workerStringValue`、`workerProfitSharingCommandSnapshot`。
 2. 再按功能成组确认：`internal/wechatdoc/alignment_helpers.go`、旧 `listRiders` handler、店铺码生成、并发支付冲突 helper、refund recovery 子商户解析。
 3. 对“测试仍在引用”的项，先决定测试是否还代表有效业务规则；若规则已经迁移，应同步删除或改写测试。
 4. 对 `merchant_finance.go` 的 `SA4006`，如果进入修复阶段，建议只做局部可读性调整，不当作死代码删除。
