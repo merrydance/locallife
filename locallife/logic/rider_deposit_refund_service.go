@@ -192,15 +192,28 @@ func (s *RiderDepositRefundService) SubmitWithdrawal(ctx context.Context, input 
 				continue
 			}
 
-			resolveErr := s.ResolveRefund(ctx, plan.RefundOrder.ID, plan.SourcePaymentOrder, riderDepositRefundStatusFailed, "")
-			if resolveErr != nil {
-				return result, fmt.Errorf("request rider deposit refund failed: %w; compensation failed: %v", LoggableError(refundErr), resolveErr)
+			disposition := ClassifyDirectRefundCreateFailure(refundErr)
+			if disposition.MarkFailed {
+				resolveErr := s.ResolveRefund(ctx, plan.RefundOrder.ID, plan.SourcePaymentOrder, riderDepositRefundStatusFailed, "")
+				if resolveErr != nil {
+					return result, fmt.Errorf("request rider deposit refund failed: %w; compensation failed: %v", LoggableError(refundErr), resolveErr)
+				}
+				s.recordRiderDepositRefundCommandRejected(ctx, plan, refundErr)
+				if firstRefundSubmissionErr == nil {
+					firstRefundSubmissionErr = mapDirectRefundCreateError(refundErr)
+				}
+				log.Warn().Err(LoggableError(refundErr)).Int64("refund_order_id", plan.RefundOrder.ID).Msg("rider deposit refund request failed, compensation applied")
+				continue
 			}
-			s.recordRiderDepositRefundCommandRejected(ctx, plan, refundErr)
-			if firstRefundSubmissionErr == nil {
-				firstRefundSubmissionErr = mapDirectRefundCreateError(refundErr)
-			}
-			log.Warn().Err(LoggableError(refundErr)).Int64("refund_order_id", plan.RefundOrder.ID).Msg("rider deposit refund request failed, compensation applied")
+
+			s.recordRiderDepositRefundCommandUnknown(ctx, plan, refundErr)
+			result.AcceptedAmount += plan.RefundOrder.RefundAmount
+			result.Refunds = append(result.Refunds, RiderDepositWithdrawalRefundItem{
+				RefundOrder:  plan.RefundOrder,
+				PaymentOrder: plan.SourcePaymentOrder,
+				Status:       riderDepositWithdrawStatusProcessing,
+			})
+			log.Warn().Err(LoggableError(refundErr)).Int64("refund_order_id", plan.RefundOrder.ID).Str("out_refund_no", plan.RefundOrder.OutRefundNo).Msg("rider deposit refund create result is uncertain, keeping refund pending for query/retry")
 			continue
 		}
 
@@ -354,6 +367,25 @@ func (s *RiderDepositRefundService) recordRiderDepositRefundCommandRejected(ctx 
 			Int64("refund_order_id", plan.RefundOrder.ID).
 			Str("out_refund_no", plan.RefundOrder.OutRefundNo).
 			Msg("record rider deposit refund command rejected failed")
+	}
+}
+
+func (s *RiderDepositRefundService) recordRiderDepositRefundCommandUnknown(ctx context.Context, plan db.RiderDepositRefundPlan, refundErr error) {
+	if s.paymentCommandSvc == nil {
+		return
+	}
+
+	errorCode, errorMessage := directRefundCommandErrorFields(refundErr)
+	_, err := s.paymentCommandSvc.RecordExternalPaymentCommand(ctx, dbRiderDepositRefundCommandInput(plan, db.ExternalPaymentCommandStatusUnknown, nil, errorCode, errorMessage, riderDepositRefundCommandSnapshot(map[string]string{
+		"out_refund_no": plan.RefundOrder.OutRefundNo,
+		"error_code":    stringValue(errorCode),
+		"error_message": stringValue(errorMessage),
+	})))
+	if err != nil {
+		log.Error().Err(err).
+			Int64("refund_order_id", plan.RefundOrder.ID).
+			Str("out_refund_no", plan.RefundOrder.OutRefundNo).
+			Msg("record rider deposit refund command unknown failed")
 	}
 }
 
