@@ -381,12 +381,43 @@
   color: #333;
   margin-top: 32rpx;
   font-weight: bold;
+  text-align: center;
 }
 
 .polling-tips {
   font-size: 24rpx;
   color: #999;
   margin-top: 16rpx;
+  line-height: 1.6;
+  text-align: center;
+  max-width: 560rpx;
+  word-break: break-word;
+}
+
+.polling-status-icon {
+  width: 88rpx;
+  height: 88rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 48rpx;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.polling-status-icon.success {
+  color: #fff;
+  background: var(--td-success-color, #00a870);
+}
+
+.polling-status-icon.warning {
+  color: #fff;
+  background: var(--td-warning-color, #ed7b2f);
+}
+
+.polling-action {
+  margin-top: 32rpx;
 }
 
 .form-group {

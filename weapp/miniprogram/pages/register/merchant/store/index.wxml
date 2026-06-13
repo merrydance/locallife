@@ -178,9 +178,23 @@
     <!-- Step 5: 提交后轮询 -->
     <view class="step-content" wx:if="{{currentStep === 5}}">
         <view class="polling-container">
-             <t-loading theme="circular" size="80rpx" text="正在提交并审核..." layout="vertical" />
-             <view class="polling-text">请稍候，系统正在处理您的入驻申请</view>
-             <view class="polling-tips">预计需要 5-10 秒</view>
+             <block wx:if="{{submissionStatus === 'approved'}}">
+                 <view class="polling-status-icon success">✓</view>
+                 <view class="polling-text">入驻已通过</view>
+                 <view class="polling-tips">{{submissionStatusMessage || '正在进入商户工作台'}}</view>
+                 <t-button class="polling-action" theme="primary" size="small" bindtap="onEnterMerchantDashboard">进入工作台</t-button>
+             </block>
+             <block wx:elif="{{submissionStatus === 'unknown'}}">
+                 <view class="polling-status-icon warning">!</view>
+                 <view class="polling-text">结果待确认</view>
+                 <view class="polling-tips">{{submissionStatusMessage || '请重新查询入驻结果'}}</view>
+                 <t-button class="polling-action" theme="primary" size="small" bindtap="onRetryMerchantApplicationStatus">重新查询</t-button>
+             </block>
+             <block wx:else>
+                 <t-loading theme="circular" size="80rpx" text="正在提交并审核..." layout="vertical" />
+                 <view class="polling-text">请稍候，系统正在处理您的入驻申请</view>
+                 <view class="polling-tips">{{submissionStatusMessage || '预计需要 5-10 秒'}}</view>
+             </block>
         </view>
     </view>
 

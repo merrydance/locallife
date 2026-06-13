@@ -107,6 +107,8 @@ export type UploadField = MerchantRegistrationUploadField
 
 type OCRFieldKey = 'business_license_ocr' | 'food_permit_ocr' | 'id_card_front_ocr' | 'id_card_back_ocr'
 
+const MERCHANT_DASHBOARD_URL = '/pages/merchant/dashboard/index'
+
 function buildPrivateAssetKey(assetId?: number | null): string | undefined {
   return assetId && assetId > 0 ? `asset:${assetId}` : undefined
 }
@@ -247,6 +249,16 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
     await this.initApplication()
   },
 
+  onShow() {
+    if (
+      this.data.currentStep === 5 &&
+      this.data.submissionStatus === 'processing' &&
+      !this.data.merchantApplicationPollingIntervalId
+    ) {
+      this.startPollingStatus()
+    }
+  },
+
   async initApplication() {
     wx.showLoading({ title: '加载中...' })
     console.log('[DEBUG] initApplication 开始')
@@ -268,12 +280,19 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
 
       const statusView = buildMerchantApplicationStatusView(data.status)
       if (statusView.isApproved) {
-        wx.reLaunch({ url: '/pages/merchant/dashboard/index' })
+        wx.hideLoading()
+        this.completeMerchantOnboardingApproval()
         return
       }
       if (statusView.isSubmitted) {
+        wx.hideLoading()
         wx.showToast({ title: '申请审核中', icon: 'none' })
-        this.setData({ currentStep: 5 })
+        this.setData({
+          currentStep: 5,
+          isSubmitting: true,
+          submissionStatus: 'processing',
+          submissionStatusMessage: '系统正在确认入驻结果'
+        })
         this.startPollingStatus()
         return
       }
@@ -1511,12 +1530,7 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
 
       const resultStatusView = buildMerchantApplicationStatusView(result.status)
       if (resultStatusView.isApproved) {
-        DraftStorage.clear(DRAFT_KEY)
-
-        const app = getApp<IAppOption>()
-        app.globalData.userRole = 'merchant'
-
-        wx.reLaunch({ url: '/pages/merchant/dashboard/index' })
+        this.completeMerchantOnboardingApproval()
         return
       } else if (resultStatusView.isRejected) {
         this.setData({
@@ -1554,34 +1568,81 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
     }
   },
 
+  completeMerchantOnboardingApproval() {
+    this.stopPollingStatus()
+    DraftStorage.clear(DRAFT_KEY)
+
+    const app = getApp<IAppOption>()
+    app.globalData.userRole = 'merchant'
+
+    this.setData({
+      currentStep: 5,
+      isSubmitting: false,
+      submissionStatus: 'approved',
+      submissionStatusMessage: '入驻已通过，正在进入商户工作台'
+    })
+
+    wx.showToast({ title: '入驻成功', icon: 'success', duration: 1200 })
+    wx.reLaunch({
+      url: MERCHANT_DASHBOARD_URL,
+      fail: (error) => {
+        logger.error('[MerchantRegister] 进入商户工作台失败', error, 'merchant-register-approved-navigation')
+        this.setData({
+          submissionStatus: 'approved',
+          submissionStatusMessage: '入驻已通过，但暂时无法进入工作台，请稍后重试'
+        })
+        wx.showToast({ title: '进入工作台失败，请重试', icon: 'none', duration: 3000 })
+      }
+    })
+  },
+
+  stopPollingStatus() {
+    const intervalId = this.data.merchantApplicationPollingIntervalId
+    if (intervalId !== null && intervalId !== undefined) {
+      clearInterval(intervalId)
+    }
+    this.setData({
+      merchantApplicationPollingIntervalId: null,
+      merchantApplicationPollingSessionId: Number(this.data.merchantApplicationPollingSessionId || 0) + 1
+    })
+  },
+
   startPollingStatus() {
+    this.stopPollingStatus()
     let attempts = 0
     const maxAttempts = 20
+    const sessionId = Number(this.data.merchantApplicationPollingSessionId || 0) + 1
+    this.setData({
+      currentStep: 5,
+      isSubmitting: true,
+      submissionStatus: 'processing',
+      submissionStatusMessage: '系统正在确认入驻结果',
+      merchantApplicationPollingSessionId: sessionId
+    })
+
     const intervalId = setInterval(async () => {
+      if (this.data.merchantApplicationPollingSessionId !== sessionId) {
+        clearInterval(intervalId)
+        return
+      }
+
       attempts++
       try {
         const res = await getMyApplication()
+        if (this.data.merchantApplicationPollingSessionId !== sessionId) {
+          return
+        }
         const pollingStatusView = buildMerchantApplicationStatusView(res.status)
         if (pollingStatusView.isApproved) {
-          clearInterval(intervalId)
-          DraftStorage.clear(DRAFT_KEY)
-
-          const app = getApp<IAppOption>()
-          app.globalData.userRole = 'merchant'
-
-          wx.showModal({
-            title: '入驻成功 🎉',
-            content: '恭喜您入驻成功！您的店铺现已开通。默认状态为「打烊」，请在商户工作台手动开店。',
-            showCancel: false,
-            confirmText: '进入工作台',
-            success: () => {
-              wx.reLaunch({ url: '/pages/merchant/dashboard/index' })
-            }
-          })
+          this.completeMerchantOnboardingApproval()
+          return
         } else if (pollingStatusView.isRejected) {
-          clearInterval(intervalId)
+          this.stopPollingStatus()
           this.setData({
             currentStep: 4,
+            isSubmitting: false,
+            submissionStatus: 'idle',
+            submissionStatusMessage: '',
             'formData.rejectReason': res.reject_reason || ''
           })
           wx.showModal({
@@ -1591,17 +1652,53 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
           })
         }
       } catch (e) {
-        console.error('Polling error', e)
+        logger.warn('[MerchantRegister] 轮询入驻审核状态失败', e, 'merchant-register-polling')
       }
 
+      if (this.data.merchantApplicationPollingSessionId !== sessionId) {
+        return
+      }
       if (attempts >= maxAttempts) {
-        clearInterval(intervalId)
-        wx.showToast({ title: '提交成功，请稍后查看审核结果', icon: 'none' })
+        this.stopPollingStatus()
+        this.setData({
+          isSubmitting: false,
+          submissionStatus: 'unknown',
+          submissionStatusMessage: '申请已提交，暂时未确认最终结果'
+        })
+        wx.showToast({ title: '提交成功，请稍后查看审核结果', icon: 'none', duration: 3000 })
         setTimeout(() => {
-          wx.reLaunch({ url: '/pages/merchant/dashboard/index' })
+          wx.reLaunch({
+            url: MERCHANT_DASHBOARD_URL,
+            fail: (error) => {
+              logger.warn('[MerchantRegister] 轮询超时后进入工作台失败', error, 'merchant-register-polling-timeout-navigation')
+            }
+          })
         }, 1500)
       }
     }, 2000)
+    this.setData({ merchantApplicationPollingIntervalId: intervalId })
+  },
+
+  onEnterMerchantDashboard() {
+    wx.reLaunch({
+      url: MERCHANT_DASHBOARD_URL,
+      fail: (error) => {
+        logger.warn('[MerchantRegister] 手动进入商户工作台失败', error, 'merchant-register-manual-dashboard-navigation')
+        wx.showToast({ title: '进入工作台失败，请稍后重试', icon: 'none', duration: 3000 })
+      }
+    })
+  },
+
+  onRetryMerchantApplicationStatus() {
+    this.startPollingStatus()
+  },
+
+  onHide() {
+    this.stopPollingStatus()
+  },
+
+  onUnload() {
+    this.stopPollingStatus()
   },
 
   async onResetApplication() {
