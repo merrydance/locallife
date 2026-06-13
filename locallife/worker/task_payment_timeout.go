@@ -261,24 +261,6 @@ func normalizePaymentTimeoutTradeState(tradeState string) string {
 	return strings.ToUpper(strings.TrimSpace(tradeState))
 }
 
-func paymentTimeoutSubMchIDFromAttach(attach string, valid bool) string {
-	if !valid {
-		return ""
-	}
-	for _, segment := range strings.Split(strings.TrimSpace(attach), ";") {
-		segment = strings.TrimSpace(segment)
-		if segment == "" {
-			continue
-		}
-		key, value, ok := strings.Cut(segment, ":")
-		if !ok || strings.TrimSpace(key) != "sub_mchid" {
-			continue
-		}
-		return strings.TrimSpace(value)
-	}
-	return ""
-}
-
 func wechatPayErrorCodeIs(err error, code string) bool {
 	var wxErr *wechat.WechatPayError
 	if !errors.As(err, &wxErr) {
