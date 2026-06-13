@@ -108,6 +108,8 @@ func TestGetRecommendedOrdersAPI(t *testing.T) {
 					Times(1).
 					Return(db.RiderProfile{RiderID: rider.ID, IsSuspended: false}, nil)
 
+				expectActiveRiderBaofuAccountForDelivery(store, rider.ID)
+
 				// GetActiveRecommendConfig - may return error for default config
 				store.EXPECT().
 					GetActiveRecommendConfig(gomock.Any()).
