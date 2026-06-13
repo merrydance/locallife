@@ -46,6 +46,8 @@
 | `locallife/api/merchant_application.go:35` | `loggingReader` / `Read` / `Close` | 包装上传 body，按读取进度记录商户 OCR 上传日志 | 类型和方法生产、测试均无调用；上传链路已不使用这个 wrapper。已删除，同时移除随之未使用的 `io` import；`go build ./api` 通过；`go test ./api -run '^$' -count=1` 通过 |
 | `locallife/api/applyment_contact_info.go:21` | `pgTextValue` | 把 `pgtype.Text` 转成普通字符串，用于取用户手机号兜底 | 只被同文件未使用的 `resolveApplymentContactPhone` 调用。已随上层 helper 一起删除；`firstNonEmptyTrimmed` 仍被 `baofu_callback.go` 使用，保留。`go build ./api` 通过；`go test ./api -run '^$' -count=1` 通过 |
 | `locallife/api/applyment_contact_info.go:28` | `Server.resolveApplymentContactPhone` | 商户进件联系人手机号解析：候选值优先，否则从用户手机号兜底 | 生产和测试均无调用；当前商户申请提交路径在 `merchant_application.go` 自行从用户手机号兜底。已删除；`go build ./api` 通过；`go test ./api -run '^$' -count=1` 通过 |
+| `locallife/api/payment_order.go:1127` | `applyAbnormalRefundURIRequest` | 异常退款申请 URI 参数 DTO | 未见 handler 绑定、路由注册、Swagger 注释或 `docs` 生成物引用。已删除；`go build ./api` 通过；`go test ./api -run '^$' -count=1` 通过 |
+| `locallife/api/payment_order.go:1131` | `applyAbnormalRefundBodyRequest` | 异常退款申请 body DTO | 未见 handler 绑定、路由注册、Swagger 注释或 `docs` 生成物引用。已删除；`go build ./api` 通过；`go test ./api -run '^$' -count=1` 通过 |
 
 ## 可优先清理候选
 
@@ -121,8 +123,6 @@
 | 位置 | 符号 | 作用 | 核对结论 |
 | --- | --- | --- | --- |
 | `locallife/api/merchant_application_ocr_correction.go:39` | `patchMerchantDocumentOCRFieldsRequest` | Swagger 文档里的 OCR 更正统一请求体 | 代码实际按证照类型绑定更具体 DTO；该结构只被 Swagger 注释和 `docs/docs.go` 引用 |
-| `locallife/api/payment_order.go:1127` | `applyAbnormalRefundURIRequest` | 异常退款申请 URI 参数 DTO | 未见 handler 使用；也未见 Swagger 引用，偏清理候选 |
-| `locallife/api/payment_order.go:1131` | `applyAbnormalRefundBodyRequest` | 异常退款申请 body DTO | 未见 handler 使用；也未见 Swagger 引用，偏清理候选 |
 
 ## 测试仍在引用，先别直接删
 
@@ -164,7 +164,7 @@
 
 ## 建议顺序
 
-1. 纯孤立 helper 第一批已清理；下一轮建议先复核 `applyAbnormalRefundURIRequest` / `applyAbnormalRefundBodyRequest` 这类仍在 `可优先清理候选` 中、但需要稍多上下文判断的 API 层候选。
+1. 纯孤立 helper 第一批已清理；下一轮建议先复核支付 callback、合单支付 fail-closed 遗留 helper、并发支付冲突 helper 这类需要按高风险域逐项确认的候选。
 2. 再按功能成组确认：`internal/wechatdoc/alignment_helpers.go`、旧 `listRiders` handler、店铺码生成、并发支付冲突 helper、refund recovery 子商户解析。
 3. 对“测试仍在引用”的项，先决定测试是否还代表有效业务规则；若规则已经迁移，应同步删除或改写测试。
 4. 对 `merchant_finance.go` 的 `SA4006`，如果进入修复阶段，建议只做局部可读性调整，不当作死代码删除。
