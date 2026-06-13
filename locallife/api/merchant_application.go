@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"regexp"
 	"strings"
@@ -30,30 +29,6 @@ const (
 	merchantApplicationDuplicateLocationHardRejectMeters = 5
 	merchantOnboardingReviewTaskUniqueTTL                = 30 * time.Second
 )
-
-// loggingReader wraps io.ReadCloser to log progress
-type loggingReader struct {
-	r       io.ReadCloser
-	total   int64
-	lastLog time.Time
-	reqID   string
-}
-
-func (l *loggingReader) Read(p []byte) (n int, err error) {
-	n, err = l.r.Read(p)
-	l.total += int64(n)
-	// Log every 1 second or on error/EOF
-	if time.Since(l.lastLog) > 1*time.Second || err != nil {
-		log.Info().Str("request_id", l.reqID).Int64("bytes_read", l.total).Msg("merchant OCR: upload progress")
-		l.lastLog = time.Now()
-	}
-	return
-}
-
-func (l *loggingReader) Close() error {
-	log.Info().Str("request_id", l.reqID).Int64("total_bytes", l.total).Msg("merchant OCR: upload body closed")
-	return l.r.Close()
-}
 
 // ==================== 商户申请数据结构 ====================
 
