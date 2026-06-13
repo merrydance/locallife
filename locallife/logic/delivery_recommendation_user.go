@@ -50,6 +50,13 @@ func RecommendDeliveryOrdersForUser(
 	if suspension != nil {
 		return result, NewRequestError(http.StatusForbidden, errors.New("骑手接单已暂停"))
 	}
+	settlementReadiness, err := riderBaofuSettlementReadiness(ctx, store, rider)
+	if err != nil {
+		return result, err
+	}
+	if !settlementReadiness.PaymentReady {
+		return result, NewRequestError(http.StatusBadRequest, errors.New("骑手结算账户未开通，暂不能接收代取费分账订单"))
+	}
 
 	recommendations, err := RecommendDeliveryOrders(ctx, store, routeService, RecommendDeliveryInput{
 		RiderID:  rider.ID,

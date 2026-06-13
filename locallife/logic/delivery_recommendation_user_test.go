@@ -20,6 +20,23 @@ func numericFromFloatRecommendUser(v float64) pgtype.Numeric {
 	return pgtype.Numeric{Int: intVal, Exp: -scale, Valid: true}
 }
 
+func expectActiveRiderBaofuBindingForRecommendation(store *mockdb.MockStore, riderID int64) {
+	store.EXPECT().
+		GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeRider,
+			OwnerID:   riderID,
+		}).
+		Times(1).
+		Return(db.BaofuAccountBinding{
+			OwnerType:    db.BaofuAccountOwnerTypeRider,
+			OwnerID:      riderID,
+			AccountType:  db.BaofuAccountTypePersonal,
+			OpenState:    db.BaofuAccountOpenStateActive,
+			ContractNo:   pgtype.Text{String: "CP123", Valid: true},
+			SharingMerID: pgtype.Text{String: "CP123", Valid: true},
+		}, nil)
+}
+
 func TestRecommendDeliveryOrdersForUser(t *testing.T) {
 	userID := int64(10)
 
@@ -110,6 +127,7 @@ func TestRecommendDeliveryOrdersForUser(t *testing.T) {
 					GetRiderProfile(gomock.Any(), rider.ID).
 					Times(1).
 					Return(db.RiderProfile{RiderID: rider.ID, IsSuspended: false}, nil)
+				expectActiveRiderBaofuBindingForRecommendation(store, rider.ID)
 				store.EXPECT().
 					GetActiveRecommendConfig(gomock.Any()).
 					Times(1).
@@ -146,6 +164,33 @@ func TestRecommendDeliveryOrdersForUser(t *testing.T) {
 			},
 		},
 		{
+			name:  "MissingBaofuReadiness",
+			input: RecommendDeliveryForUserInput{UserID: userID, RiderLat: 30, RiderLng: 120},
+			buildStubs: func(store *mockdb.MockStore) {
+				rider := db.Rider{ID: 4, UserID: userID, IsOnline: true, Status: db.RiderStatusActive}
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), userID).
+					Times(1).
+					Return(rider, nil)
+				store.EXPECT().
+					GetRiderProfile(gomock.Any(), rider.ID).
+					Times(1).
+					Return(db.RiderProfile{RiderID: rider.ID, IsSuspended: false}, nil)
+				store.EXPECT().
+					GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
+						OwnerType: db.BaofuAccountOwnerTypeRider,
+						OwnerID:   rider.ID,
+					}).
+					Times(1).
+					Return(db.BaofuAccountBinding{}, db.ErrRecordNotFound)
+			},
+			check: func(t *testing.T, _ RecommendDeliveryForUserResult, err error) {
+				reqErr := assertRequestError(t, err)
+				require.Equal(t, 400, reqErr.Status)
+				require.Equal(t, "骑手结算账户未开通，暂不能接收代取费分账订单", reqErr.Err.Error())
+			},
+		},
+		{
 			name:  "SuccessWithoutRegion",
 			input: RecommendDeliveryForUserInput{UserID: userID, RiderLat: 30, RiderLng: 120},
 			buildStubs: func(store *mockdb.MockStore) {
@@ -158,6 +203,7 @@ func TestRecommendDeliveryOrdersForUser(t *testing.T) {
 					GetRiderProfile(gomock.Any(), rider.ID).
 					Times(1).
 					Return(db.RiderProfile{RiderID: rider.ID, IsSuspended: false}, nil)
+				expectActiveRiderBaofuBindingForRecommendation(store, rider.ID)
 				store.EXPECT().
 					GetActiveRecommendConfig(gomock.Any()).
 					Times(1).
