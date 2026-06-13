@@ -48,6 +48,32 @@ func randomRiderApplicationWithData(userID int64) db.RiderApplication {
 	}
 }
 
+type riderApplicationCredentialGovernanceStoreStub struct{}
+
+func (riderApplicationCredentialGovernanceStoreStub) ActivateMerchantCredentialLedgersTx(context.Context, db.ActivateMerchantCredentialLedgersTxParams) ([]db.CredentialLedger, error) {
+	return nil, fmt.Errorf("unexpected ActivateMerchantCredentialLedgersTx call")
+}
+
+func (riderApplicationCredentialGovernanceStoreStub) ActivateRiderCredentialLedgersTx(context.Context, db.ActivateRiderCredentialLedgersTxParams) ([]db.CredentialLedger, error) {
+	return nil, fmt.Errorf("unexpected ActivateRiderCredentialLedgersTx call")
+}
+
+func (riderApplicationCredentialGovernanceStoreStub) GetActiveMerchantCredentialLedgers(context.Context, pgtype.Int8) ([]db.CredentialLedger, error) {
+	return nil, fmt.Errorf("unexpected GetActiveMerchantCredentialLedgers call")
+}
+
+func (riderApplicationCredentialGovernanceStoreStub) GetActiveRiderCredentialLedgers(context.Context, pgtype.Int8) ([]db.CredentialLedger, error) {
+	return []db.CredentialLedger{}, nil
+}
+
+func (riderApplicationCredentialGovernanceStoreStub) RestoreMerchantCredentialGovernanceTx(context.Context, db.RestoreMerchantCredentialGovernanceTxParams) (int64, error) {
+	return 0, fmt.Errorf("unexpected RestoreMerchantCredentialGovernanceTx call")
+}
+
+func (riderApplicationCredentialGovernanceStoreStub) RestoreRiderCredentialGovernanceTx(context.Context, db.RestoreRiderCredentialGovernanceTxParams) (int64, error) {
+	return 0, fmt.Errorf("unexpected RestoreRiderCredentialGovernanceTx call")
+}
+
 func TestValidateRiderApplicationSubmissionReadiness_UsesIDCardReadiness(t *testing.T) {
 	app := randomRiderApplicationWithData(1)
 	app.IDCardOcr = []byte(`{"name":"张三","id_number":"110101199001011234","readiness":{"state":"partial","reason_code":"required_field_missing","missing_fields":["valid_end"]}}`)
@@ -1035,6 +1061,14 @@ func TestSubmitRiderApplication_QueuesOnboardingReviewWhenAsyncAvailable(t *test
 			return db.RiderApplication{ID: submitted.ID, ReviewSummary: arg.ReviewSummary}, nil
 		})
 
+	rider := randomRider(user.ID)
+	store.EXPECT().
+		GetRiderByUserID(gomock.Any(), user.ID).
+		Return(rider, nil)
+	store.EXPECT().
+		GetActiveRiderCredentialLedgers(gomock.Any(), pgtype.Int8{Int64: rider.ID, Valid: true}).
+		Return([]db.CredentialLedger{}, nil)
+
 	distributor.EXPECT().
 		DistributeTaskOnboardingReview(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, payload *worker.OnboardingReviewPayload, _ ...asynq.Option) error {
@@ -1047,6 +1081,7 @@ func TestSubmitRiderApplication_QueuesOnboardingReviewWhenAsyncAvailable(t *test
 
 	server := newTestServerWithTaskDistributor(t, store, distributor)
 	server.onboardingReviewService = logic.NewOnboardingReviewService(store)
+	server.credentialGovernanceService = logic.NewCredentialGovernanceService(riderApplicationCredentialGovernanceStoreStub{})
 
 	recorder := httptest.NewRecorder()
 	request, err := http.NewRequest(http.MethodPost, "/v1/rider/application/submit", nil)
@@ -1094,66 +1129,60 @@ func TestSubmitRiderApplication_FallsBackToSyncReviewWhenEnqueueFails(t *testing
 
 	store.EXPECT().
 		UpdateRiderApplicationReviewSummary(gomock.Any(), gomock.Any()).
-		Times(2).
-		DoAndReturn(func() func(context.Context, db.UpdateRiderApplicationReviewSummaryParams) (db.RiderApplication, error) {
-			callCount := 0
-			return func(_ context.Context, arg db.UpdateRiderApplicationReviewSummaryParams) (db.RiderApplication, error) {
-				callCount++
-				var summary map[string]any
-				require.NoError(t, json.Unmarshal(arg.ReviewSummary, &summary))
-				require.Equal(t, submitted.ID, arg.ID)
-				switch callCount {
-				case 1:
-					require.Equal(t, float64(901), summary["run_id"])
-					require.Equal(t, "", summary["outcome"])
-				case 2:
-					require.Equal(t, float64(901), summary["run_id"])
-					require.Equal(t, "approved", summary["outcome"])
-					require.Equal(t, "auto_approved", summary["reason_code"])
-				default:
-					t.Fatalf("unexpected review summary update call %d", callCount)
-				}
-				return db.RiderApplication{ID: submitted.ID, ReviewSummary: arg.ReviewSummary}, nil
-			}
-		}())
+		DoAndReturn(func(_ context.Context, arg db.UpdateRiderApplicationReviewSummaryParams) (db.RiderApplication, error) {
+			require.Equal(t, submitted.ID, arg.ID)
+			var summary map[string]any
+			require.NoError(t, json.Unmarshal(arg.ReviewSummary, &summary))
+			require.Equal(t, float64(901), summary["run_id"])
+			require.Equal(t, "", summary["outcome"])
+			require.Equal(t, "", summary["reason_code"])
+			return db.RiderApplication{ID: submitted.ID, ReviewSummary: arg.ReviewSummary}, nil
+		})
+
+	rider := randomRider(user.ID)
+	store.EXPECT().
+		GetRiderByUserID(gomock.Any(), user.ID).
+		Return(rider, nil)
+	store.EXPECT().
+		GetActiveRiderCredentialLedgers(gomock.Any(), pgtype.Int8{Int64: rider.ID, Valid: true}).
+		Return([]db.CredentialLedger{}, nil)
 
 	distributor.EXPECT().
 		DistributeTaskOnboardingReview(gomock.Any(), gomock.Any()).
 		Return(errors.New("redis unavailable"))
 
-	approved := submitted
-	approved.Status = db.RiderApplicationStatusApproved
-	rider := randomRider(user.ID)
 	store.EXPECT().
-		ApproveRiderApplicationTx(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, arg db.ApproveRiderApplicationTxParams) (db.ApproveRiderApplicationTxResult, error) {
-			require.Equal(t, submitted.ID, arg.ApplicationID)
-			return db.ApproveRiderApplicationTxResult{Application: approved, Rider: rider}, nil
-		})
-
-	store.EXPECT().
-		MarkOnboardingReviewRunProcessing(gomock.Any(), int64(901)).
-		Return(db.OnboardingReviewRun{ID: 901, ApplicationType: "rider", RunStatus: "processing", Stage: "review", CreatedAt: queuedAt}, nil)
-
-	store.EXPECT().
-		CompleteOnboardingReviewRun(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, arg db.CompleteOnboardingReviewRunParams) (db.OnboardingReviewRun, error) {
-			require.Equal(t, int64(901), arg.ID)
-			require.Equal(t, "approved", arg.Outcome.String)
-			require.Equal(t, "auto_approved", arg.ReasonCode.String)
-			return db.OnboardingReviewRun{
-				ID:         901,
-				Stage:      "review",
-				RunStatus:  "completed",
-				Outcome:    pgtype.Text{String: "approved", Valid: true},
-				ReasonCode: pgtype.Text{String: "auto_approved", Valid: true},
-				CreatedAt:  queuedAt,
-				UpdatedAt:  queuedAt,
+		ApproveRiderApplicationWithReviewTx(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.ApproveRiderApplicationWithReviewTxParams) (db.ApproveRiderApplicationWithReviewTxResult, error) {
+			require.Equal(t, submitted.ID, arg.Approval.ApplicationID)
+			require.Equal(t, int64(901), arg.ReviewRunID)
+			require.Len(t, arg.CredentialEntries, 1)
+			return db.ApproveRiderApplicationWithReviewTxResult{
+				Application: db.RiderApplication{ID: submitted.ID, UserID: submitted.UserID, Status: db.RiderApplicationStatusApproved, ReviewSummary: onboardingReviewSummaryPayload(&db.OnboardingReviewRun{
+					ID:         901,
+					Stage:      "review",
+					RunStatus:  "completed",
+					Outcome:    pgtype.Text{String: "approved", Valid: true},
+					ReasonCode: pgtype.Text{String: "auto_approved", Valid: true},
+					CreatedAt:  queuedAt,
+				})},
+				Rider: randomRider(user.ID),
+				ReviewRun: db.OnboardingReviewRun{
+					ID:         901,
+					Stage:      "review",
+					RunStatus:  "completed",
+					Outcome:    pgtype.Text{String: "approved", Valid: true},
+					ReasonCode: pgtype.Text{String: "auto_approved", Valid: true},
+					CreatedAt:  queuedAt,
+					UpdatedAt:  queuedAt,
+				},
+				CredentialLedgers: []db.CredentialLedger{{ID: 301}},
 			}, nil
 		})
 
 	server := newTestServerWithTaskDistributor(t, store, distributor)
 	server.onboardingReviewService = logic.NewOnboardingReviewService(store)
+	server.credentialGovernanceService = logic.NewCredentialGovernanceService(riderApplicationCredentialGovernanceStoreStub{})
 
 	recorder := httptest.NewRecorder()
 	request, err := http.NewRequest(http.MethodPost, "/v1/rider/application/submit", nil)
