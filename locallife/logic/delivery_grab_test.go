@@ -494,3 +494,49 @@ func TestGrabDeliveryOrder_GrabTxError(t *testing.T) {
 	_, err := GrabDeliveryOrder(context.Background(), store, GrabOrderInput{UserID: 1, OrderID: 2})
 	require.Error(t, err)
 }
+
+func TestGrabDeliveryOrder_MapsRiderEligibilityChangedFromTx(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	rider := db.Rider{ID: 10, UserID: 1, Status: db.RiderStatusActive, IsOnline: true, DepositAmount: 1000}
+	merchant := db.Merchant{ID: 20, RegionID: 9}
+	delivery := db.Delivery{ID: 30, OrderID: 2}
+	order := db.Order{ID: 2, Status: db.OrderStatusReady, TotalAmount: 500}
+
+	store.EXPECT().
+		GetRiderByUserID(gomock.Any(), int64(1)).
+		Times(1).
+		Return(rider, nil)
+	store.EXPECT().
+		GetRiderProfile(gomock.Any(), rider.ID).
+		Times(1).
+		Return(db.RiderProfile{RiderID: rider.ID, IsSuspended: false}, nil)
+	expectActiveRiderBaofuBindingForGrab(store, rider.ID)
+	store.EXPECT().
+		GetDeliveryPoolByOrderID(gomock.Any(), int64(2)).
+		Times(1).
+		Return(db.DeliveryPool{OrderID: 2, MerchantID: merchant.ID, ExpiresAt: time.Now().Add(time.Hour), DeliveryFee: 500}, nil)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(merchant, nil)
+	store.EXPECT().
+		GetDeliveryByOrderID(gomock.Any(), int64(2)).
+		Times(1).
+		Return(delivery, nil)
+	store.EXPECT().
+		GetOrder(gomock.Any(), int64(2)).
+		Times(1).
+		Return(order, nil)
+	store.EXPECT().
+		GrabOrderTx(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.GrabOrderTxResult{}, db.ErrRiderDeliveryEligibilityChanged)
+
+	_, err := GrabDeliveryOrder(context.Background(), store, GrabOrderInput{UserID: 1, OrderID: 2})
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, http.StatusConflict, reqErr.Status)
+	require.Equal(t, "骑手接单资格已变化，请刷新后重试", reqErr.Err.Error())
+}

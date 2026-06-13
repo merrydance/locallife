@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -11,6 +12,7 @@ import (
 var ErrDeliveryStateTransitionConflict = errors.New("delivery state changed concurrently")
 var ErrTakeoutOrderPausedByFoodSafety = errors.New("takeout order is paused due to food safety suspension")
 var ErrBaofuProfitSharingBillNotPending = errors.New("baofu profit sharing bill is not pending")
+var ErrRiderDeliveryEligibilityChanged = errors.New("骑手接单资格已变化，请刷新后重试")
 
 // ==================== 骑手抢单事务 ====================
 
@@ -208,6 +210,9 @@ func (store *SQLStore) GrabOrderTx(ctx context.Context, arg GrabOrderTxParams) (
 		if err != nil {
 			return fmt.Errorf("get rider for update: %w", err)
 		}
+		if err := q.ensureRiderCanGrabDelivery(ctx, rider); err != nil {
+			return err
+		}
 
 		// 2. 锁定并检查订单池（关键修复 P0-001：防止并发抢单）
 		_, err = q.GetDeliveryPoolByOrderIDForUpdate(ctx, arg.OrderID)
@@ -296,6 +301,37 @@ func (store *SQLStore) GrabOrderTx(ctx context.Context, arg GrabOrderTxParams) (
 	return result, err
 }
 
+func (q *Queries) ensureRiderCanGrabDelivery(ctx context.Context, rider Rider) error {
+	if rider.Status != RiderStatusActive || !rider.IsOnline {
+		return ErrRiderDeliveryEligibilityChanged
+	}
+
+	profile, err := q.GetRiderProfileForUpdate(ctx, rider.ID)
+	if err != nil {
+		if !errors.Is(err, ErrRecordNotFound) {
+			return fmt.Errorf("get rider profile for update: %w", err)
+		}
+	} else if profile.IsSuspended {
+		return ErrRiderDeliveryEligibilityChanged
+	}
+
+	binding, err := q.GetBaofuAccountBindingByOwnerForUpdate(ctx, GetBaofuAccountBindingByOwnerForUpdateParams{
+		OwnerType: BaofuAccountOwnerTypeRider,
+		OwnerID:   rider.ID,
+	})
+	if err != nil {
+		if errors.Is(err, ErrRecordNotFound) {
+			return ErrRiderDeliveryEligibilityChanged
+		}
+		return fmt.Errorf("get rider baofu binding for update: %w", err)
+	}
+	if strings.TrimSpace(binding.OpenState) != BaofuAccountOpenStateActive || strings.TrimSpace(binding.SharingMerID.String) == "" {
+		return ErrRiderDeliveryEligibilityChanged
+	}
+
+	return nil
+}
+
 // ==================== 确认送达事务 ====================
 
 // CompleteDeliveryTxParams contains the input parameters for completing a delivery
@@ -338,15 +374,19 @@ func (store *SQLStore) CompleteDeliveryTx(ctx context.Context, arg CompleteDeliv
 			RiderID: pgtype.Int8{Int64: arg.RiderID, Valid: true},
 		})
 		if err != nil {
+			if errors.Is(err, ErrRecordNotFound) {
+				return ErrDeliveryStateTransitionConflict
+			}
 			return fmt.Errorf("update delivery to delivered: %w", err)
 		}
 
 		// 2.1 同步订单状态为 rider_delivered（允许幂等）
 		result.Order, err = q.UpdateOrderToRiderDelivered(ctx, arg.OrderID)
 		if err != nil {
-			if !errors.Is(err, ErrRecordNotFound) {
-				return fmt.Errorf("update order to rider_delivered: %w", err)
+			if errors.Is(err, ErrRecordNotFound) {
+				return ErrDeliveryStateTransitionConflict
 			}
+			return fmt.Errorf("update order to rider_delivered: %w", err)
 		}
 
 		// 3. 解冻押金（使用事务内获取的最新值）

@@ -44,6 +44,13 @@ FROM baofu_account_bindings
 WHERE owner_type = $1 AND owner_id = $2
 LIMIT 1;
 
+-- name: GetBaofuAccountBindingByOwnerForUpdate :one
+SELECT id, owner_type, owner_id, account_type, contract_no, sharing_mer_id, login_no, open_state, wechat_sub_mch_id, bank_card_last4, last_open_trans_serial_no, raw_snapshot, created_at, updated_at, opening_mode
+FROM baofu_account_bindings
+WHERE owner_type = $1 AND owner_id = $2
+LIMIT 1
+FOR UPDATE;
+
 -- name: GetBaofuAccountBindingByContractNo :one
 SELECT id, owner_type, owner_id, account_type, contract_no, sharing_mer_id, login_no, open_state, wechat_sub_mch_id, bank_card_last4, last_open_trans_serial_no, raw_snapshot, created_at, updated_at, opening_mode
 FROM baofu_account_bindings

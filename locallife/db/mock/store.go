@@ -7107,6 +7107,21 @@ func (mr *MockStoreMockRecorder) GetBaofuAccountBindingByOwner(ctx, arg any) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaofuAccountBindingByOwner", reflect.TypeOf((*MockStore)(nil).GetBaofuAccountBindingByOwner), ctx, arg)
 }
 
+// GetBaofuAccountBindingByOwnerForUpdate mocks base method.
+func (m *MockStore) GetBaofuAccountBindingByOwnerForUpdate(ctx context.Context, arg db.GetBaofuAccountBindingByOwnerForUpdateParams) (db.BaofuAccountBinding, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBaofuAccountBindingByOwnerForUpdate", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuAccountBinding)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetBaofuAccountBindingByOwnerForUpdate indicates an expected call of GetBaofuAccountBindingByOwnerForUpdate.
+func (mr *MockStoreMockRecorder) GetBaofuAccountBindingByOwnerForUpdate(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaofuAccountBindingByOwnerForUpdate", reflect.TypeOf((*MockStore)(nil).GetBaofuAccountBindingByOwnerForUpdate), ctx, arg)
+}
+
 // GetBaofuAccountOpeningFlow mocks base method.
 func (m *MockStore) GetBaofuAccountOpeningFlow(ctx context.Context, id int64) (db.BaofuAccountOpeningFlow, error) {
 	m.ctrl.T.Helper()

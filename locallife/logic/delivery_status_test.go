@@ -207,6 +207,37 @@ func TestStartDelivery_Success(t *testing.T) {
 	require.Equal(t, "delivering", result.Order.Status)
 }
 
+func TestStartDelivery_BlocksWhenOrderStatusCannotAdvance(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	rider := db.Rider{ID: 10, UserID: 1}
+	delivery := db.Delivery{ID: 20, OrderID: 2, Status: "picked", RiderID: pgtype.Int8{Int64: 10, Valid: true}}
+	order := db.Order{ID: 2, Status: "courier_accepted"}
+
+	store.EXPECT().
+		GetRiderByUserID(gomock.Any(), int64(1)).
+		Times(1).
+		Return(rider, nil)
+	store.EXPECT().
+		GetDelivery(gomock.Any(), int64(2)).
+		Times(1).
+		Return(delivery, nil)
+	store.EXPECT().
+		GetOrder(gomock.Any(), int64(2)).
+		Times(1).
+		Return(order, nil)
+	store.EXPECT().
+		UpdateDeliveryToDeliveringTx(gomock.Any(), gomock.Any()).
+		Times(0)
+
+	_, err := StartDelivery(context.Background(), store, DeliveryStatusInput{UserID: 1, DeliveryID: 2})
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 400, reqErr.Status)
+	require.Equal(t, "当前订单状态(courier_accepted)不允许开始代取", reqErr.Err.Error())
+}
+
 func TestConfirmDelivery_DistanceTooFar(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -360,4 +391,43 @@ func TestConfirmDelivery_Success(t *testing.T) {
 	result, err := ConfirmDelivery(context.Background(), store, ConfirmDeliveryInput{UserID: 1, DeliveryID: 2, ConfirmRadiusMeters: 1000, LocationMaxAgeSec: 120})
 	require.NoError(t, err)
 	require.Equal(t, "rider_delivered", result.Order.Status)
+}
+
+func TestConfirmDelivery_BlocksWhenOrderStatusCannotAdvance(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	rider := db.Rider{ID: 10, UserID: 1,
+		CurrentLongitude:  numericFromFloatStatus(120.0),
+		CurrentLatitude:   numericFromFloatStatus(30.0),
+		LocationUpdatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	}
+	delivery := db.Delivery{ID: 20, OrderID: 2, Status: "delivering", RiderID: pgtype.Int8{Int64: 10, Valid: true},
+		DeliveryLongitude: numericFromFloatStatus(120.0),
+		DeliveryLatitude:  numericFromFloatStatus(30.0),
+		DeliveryFee:       500,
+	}
+	order := db.Order{ID: 2, Status: "picked", TotalAmount: 1000}
+
+	store.EXPECT().
+		GetRiderByUserID(gomock.Any(), int64(1)).
+		Times(1).
+		Return(rider, nil)
+	store.EXPECT().
+		GetDelivery(gomock.Any(), int64(2)).
+		Times(1).
+		Return(delivery, nil)
+	store.EXPECT().
+		GetOrder(gomock.Any(), int64(2)).
+		Times(1).
+		Return(order, nil)
+	store.EXPECT().
+		CompleteDeliveryTx(gomock.Any(), gomock.Any()).
+		Times(0)
+
+	_, err := ConfirmDelivery(context.Background(), store, ConfirmDeliveryInput{UserID: 1, DeliveryID: 2, ConfirmRadiusMeters: 1000, LocationMaxAgeSec: 120})
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 400, reqErr.Status)
+	require.Equal(t, "当前订单状态(picked)不允许确认送达", reqErr.Err.Error())
 }

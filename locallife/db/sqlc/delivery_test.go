@@ -76,6 +76,30 @@ func createAssignedDelivery(t *testing.T, riderID int64) Delivery {
 	return updated
 }
 
+func createActiveRiderBaofuBindingForDeliveryTest(t *testing.T, riderID int64) BaofuAccountBinding {
+	binding, err := testStore.UpsertBaofuAccountBinding(context.Background(), UpsertBaofuAccountBindingParams{
+		OwnerType:   BaofuAccountOwnerTypeRider,
+		OwnerID:     riderID,
+		AccountType: BaofuAccountTypePersonal,
+		OpeningMode: BaofuAccountOpeningModePersonal,
+		OpenState:   BaofuAccountOpenStateProcessing,
+		RawSnapshot: []byte(`{"state":"processing"}`),
+	})
+	require.NoError(t, err)
+
+	active, err := testStore.MarkBaofuAccountBindingActive(context.Background(), MarkBaofuAccountBindingActiveParams{
+		ID:           binding.ID,
+		ContractNo:   pgtype.Text{String: "CP" + util.RandomString(16), Valid: true},
+		SharingMerID: pgtype.Text{String: "CP_SHARE" + util.RandomString(12), Valid: true},
+		RawSnapshot:  []byte(`{"state":"active"}`),
+	})
+	require.NoError(t, err)
+	require.Equal(t, BaofuAccountOpenStateActive, active.OpenState)
+	require.True(t, active.SharingMerID.Valid)
+
+	return active
+}
+
 // ==================== Delivery Tests ====================
 
 func TestCreateDelivery(t *testing.T) {
@@ -703,6 +727,7 @@ func TestAddToDeliveryPool_DuplicateOrder(t *testing.T) {
 func TestGrabOrderTx(t *testing.T) {
 	// 创建在线骑手（需要有足够的押金）
 	rider := createOnlineRider(t)
+	createActiveRiderBaofuBindingForDeliveryTest(t, rider.ID)
 
 	// 确保骑手有足够押金
 	_, err := testStore.UpdateRiderDeposit(context.Background(), UpdateRiderDepositParams{
@@ -753,6 +778,7 @@ func TestGrabOrderTx(t *testing.T) {
 
 func TestGrabOrderTx_PreparingPooledOrder(t *testing.T) {
 	rider := createOnlineRider(t)
+	createActiveRiderBaofuBindingForDeliveryTest(t, rider.ID)
 	_, err := testStore.UpdateRiderDeposit(context.Background(), UpdateRiderDepositParams{
 		ID:            rider.ID,
 		DepositAmount: 10000,
@@ -793,6 +819,7 @@ func TestGrabOrderTx_PreparingPooledOrder(t *testing.T) {
 
 func TestUpdateDeliveryToPickedTx_CourierAcceptedButNotReadyRejected(t *testing.T) {
 	rider := createOnlineRider(t)
+	createActiveRiderBaofuBindingForDeliveryTest(t, rider.ID)
 	_, err := testStore.UpdateRiderDeposit(context.Background(), UpdateRiderDepositParams{
 		ID:            rider.ID,
 		DepositAmount: 10000,
@@ -859,6 +886,7 @@ func TestUpdateDeliveryToPickupTx_RollsBackWhenOrderSyncFails(t *testing.T) {
 // TestGrabOrderTx_InsufficientDeposit 测试押金不足时抢单失败
 func TestGrabOrderTx_InsufficientDeposit(t *testing.T) {
 	rider := createOnlineRider(t)
+	createActiveRiderBaofuBindingForDeliveryTest(t, rider.ID)
 
 	// 设置骑手押金为0
 	_, err := testStore.UpdateRiderDeposit(context.Background(), UpdateRiderDepositParams{
@@ -883,11 +911,100 @@ func TestGrabOrderTx_InsufficientDeposit(t *testing.T) {
 	require.Contains(t, err.Error(), "押金余额不足")
 }
 
+func TestGrabOrderTx_RechecksRiderOnlineStatusInTransaction(t *testing.T) {
+	rider := createOnlineRider(t)
+	createActiveRiderBaofuBindingForDeliveryTest(t, rider.ID)
+	_, err := testStore.UpdateRiderOnlineStatus(context.Background(), UpdateRiderOnlineStatusParams{
+		ID:       rider.ID,
+		IsOnline: false,
+	})
+	require.NoError(t, err)
+
+	poolItem := createRandomDeliveryPoolItem(t)
+	delivery := createRandomDeliveryWithOrder(t, poolItem.OrderID)
+
+	_, err = testStore.GrabOrderTx(context.Background(), GrabOrderTxParams{
+		DeliveryID:   delivery.ID,
+		RiderID:      rider.ID,
+		RiderUserID:  rider.UserID,
+		OrderID:      poolItem.OrderID,
+		FreezeAmount: 500,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "骑手接单资格已变化")
+}
+
+func TestGrabOrderTx_RechecksRiderActiveStatusInTransaction(t *testing.T) {
+	rider := createOnlineRider(t)
+	createActiveRiderBaofuBindingForDeliveryTest(t, rider.ID)
+	_, err := testStore.UpdateRiderStatus(context.Background(), UpdateRiderStatusParams{
+		ID:     rider.ID,
+		Status: RiderStatusApproved,
+	})
+	require.NoError(t, err)
+
+	poolItem := createRandomDeliveryPoolItem(t)
+	delivery := createRandomDeliveryWithOrder(t, poolItem.OrderID)
+
+	_, err = testStore.GrabOrderTx(context.Background(), GrabOrderTxParams{
+		DeliveryID:   delivery.ID,
+		RiderID:      rider.ID,
+		RiderUserID:  rider.UserID,
+		OrderID:      poolItem.OrderID,
+		FreezeAmount: 500,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "骑手接单资格已变化")
+}
+
+func TestGrabOrderTx_RechecksRiderSuspensionInTransaction(t *testing.T) {
+	rider := createOnlineRider(t)
+	createActiveRiderBaofuBindingForDeliveryTest(t, rider.ID)
+	err := testStore.SuspendRider(context.Background(), SuspendRiderParams{
+		RiderID:       rider.ID,
+		SuspendReason: pgtype.Text{String: "manual pause", Valid: true},
+		SuspendUntil:  pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
+	})
+	require.NoError(t, err)
+
+	poolItem := createRandomDeliveryPoolItem(t)
+	delivery := createRandomDeliveryWithOrder(t, poolItem.OrderID)
+
+	_, err = testStore.GrabOrderTx(context.Background(), GrabOrderTxParams{
+		DeliveryID:   delivery.ID,
+		RiderID:      rider.ID,
+		RiderUserID:  rider.UserID,
+		OrderID:      poolItem.OrderID,
+		FreezeAmount: 500,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "骑手接单资格已变化")
+}
+
+func TestGrabOrderTx_RechecksRiderBaofuReadinessInTransaction(t *testing.T) {
+	rider := createOnlineRider(t)
+
+	poolItem := createRandomDeliveryPoolItem(t)
+	delivery := createRandomDeliveryWithOrder(t, poolItem.OrderID)
+
+	_, err := testStore.GrabOrderTx(context.Background(), GrabOrderTxParams{
+		DeliveryID:   delivery.ID,
+		RiderID:      rider.ID,
+		RiderUserID:  rider.UserID,
+		OrderID:      poolItem.OrderID,
+		FreezeAmount: 500,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "骑手接单资格已变化")
+}
+
 // TestGrabOrderTx_Concurrent 测试并发抢单
 func TestGrabOrderTx_Concurrent(t *testing.T) {
 	// 创建两个有足够押金的骑手
 	rider1 := createOnlineRider(t)
 	rider2 := createOnlineRider(t)
+	createActiveRiderBaofuBindingForDeliveryTest(t, rider1.ID)
+	createActiveRiderBaofuBindingForDeliveryTest(t, rider2.ID)
 
 	for _, rider := range []Rider{rider1, rider2} {
 		_, err := testStore.UpdateRiderDeposit(context.Background(), UpdateRiderDepositParams{
@@ -943,6 +1060,8 @@ func TestGrabOrderTx_Concurrent(t *testing.T) {
 func TestGrabOrderTx_AlreadyAssignedDelivery(t *testing.T) {
 	rider1 := createOnlineRider(t)
 	rider2 := createOnlineRider(t)
+	createActiveRiderBaofuBindingForDeliveryTest(t, rider1.ID)
+	createActiveRiderBaofuBindingForDeliveryTest(t, rider2.ID)
 
 	// 两个骑手都有足够押金
 	for _, rider := range []Rider{rider1, rider2} {
@@ -982,6 +1101,7 @@ func TestGrabOrderTx_AlreadyAssignedDelivery(t *testing.T) {
 // TestGrabOrderTx_NotFoundDelivery 测试抢不存在的代取单
 func TestGrabOrderTx_NotFoundDelivery(t *testing.T) {
 	rider := createOnlineRider(t)
+	createActiveRiderBaofuBindingForDeliveryTest(t, rider.ID)
 
 	_, err := testStore.UpdateRiderDeposit(context.Background(), UpdateRiderDepositParams{
 		ID:            rider.ID,
@@ -1056,6 +1176,14 @@ func TestCompleteDeliveryTx(t *testing.T) {
 	// 获取关联订单
 	deliveryData, err := testStore.GetDelivery(context.Background(), delivery.ID)
 	require.NoError(t, err)
+	order, err := testStore.GetOrder(context.Background(), deliveryData.OrderID)
+	require.NoError(t, err)
+	_, err = testStore.UpdateOrderStatus(context.Background(), UpdateOrderStatusParams{
+		ID:             order.ID,
+		Status:         OrderStatusDelivering,
+		ExpectedStatus: order.Status,
+	})
+	require.NoError(t, err)
 
 	// 执行完成代取事务
 	result, err := testStore.CompleteDeliveryTx(context.Background(), CompleteDeliveryTxParams{
@@ -1122,6 +1250,14 @@ func TestCompleteDeliveryTx_AutoOfflineNonActiveRiderAfterLastDelivery(t *testin
 
 	deliveryData, err := testStore.GetDelivery(context.Background(), delivery.ID)
 	require.NoError(t, err)
+	order, err := testStore.GetOrder(context.Background(), deliveryData.OrderID)
+	require.NoError(t, err)
+	_, err = testStore.UpdateOrderStatus(context.Background(), UpdateOrderStatusParams{
+		ID:             order.ID,
+		Status:         OrderStatusDelivering,
+		ExpectedStatus: order.Status,
+	})
+	require.NoError(t, err)
 
 	_, err = testStore.CompleteDeliveryTx(context.Background(), CompleteDeliveryTxParams{
 		DeliveryID:     delivery.ID,
@@ -1163,6 +1299,68 @@ func TestCompleteDeliveryTx_WrongStatus(t *testing.T) {
 		DeliveryFee:    800,
 	})
 	require.Error(t, err, "应该因为状态不是delivering而失败")
+	require.ErrorIs(t, err, ErrDeliveryStateTransitionConflict)
+}
+
+func TestCompleteDeliveryTx_RollsBackWhenOrderSyncFails(t *testing.T) {
+	rider := createOnlineRider(t)
+
+	_, err := testStore.UpdateRiderDeposit(context.Background(), UpdateRiderDepositParams{
+		ID:            rider.ID,
+		DepositAmount: 10000,
+		FrozenDeposit: 500,
+	})
+	require.NoError(t, err)
+
+	delivery := createAssignedDelivery(t, rider.ID)
+
+	_, err = testStore.UpdateDeliveryToPickup(context.Background(), UpdateDeliveryToPickupParams{
+		ID:      delivery.ID,
+		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.UpdateDeliveryToPicked(context.Background(), UpdateDeliveryToPickedParams{
+		ID:      delivery.ID,
+		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.UpdateDeliveryToDelivering(context.Background(), UpdateDeliveryToDeliveringParams{
+		ID:      delivery.ID,
+		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	deliveryData, err := testStore.GetDelivery(context.Background(), delivery.ID)
+	require.NoError(t, err)
+
+	order, err := testStore.GetOrder(context.Background(), deliveryData.OrderID)
+	require.NoError(t, err)
+	_, err = testStore.UpdateOrderStatus(context.Background(), UpdateOrderStatusParams{
+		ID:             order.ID,
+		Status:         OrderStatusPicked,
+		ExpectedStatus: order.Status,
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.CompleteDeliveryTx(context.Background(), CompleteDeliveryTxParams{
+		DeliveryID:     delivery.ID,
+		RiderID:        rider.ID,
+		OrderID:        deliveryData.OrderID,
+		UnfreezeAmount: 500,
+		DeliveryFee:    800,
+	})
+	require.ErrorIs(t, err, ErrDeliveryStateTransitionConflict)
+
+	latestDelivery, err := testStore.GetDelivery(context.Background(), delivery.ID)
+	require.NoError(t, err)
+	require.Equal(t, "delivering", latestDelivery.Status)
+
+	latestRider, err := testStore.GetRider(context.Background(), rider.ID)
+	require.NoError(t, err)
+	require.Equal(t, int64(500), latestRider.FrozenDeposit)
+	require.Equal(t, int32(0), latestRider.TotalOrders)
 }
 
 // ==================== Recommend Config Tests ====================

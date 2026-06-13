@@ -285,6 +285,9 @@ func StartDelivery(ctx context.Context, store db.Store, input DeliveryStatusInpu
 		return result, err
 	}
 	oldStatus := order.Status
+	if !IsOrderStatusAllowedForDeliveryAction(order.Status, "start_delivery") {
+		return result, NewRequestError(http.StatusBadRequest, fmt.Errorf("当前订单状态(%s)不允许开始代取", order.Status))
+	}
 
 	updated, err := store.UpdateDeliveryToDeliveringTx(ctx, db.UpdateDeliveryToDeliveringTxParams{
 		DeliveryID: input.DeliveryID,
@@ -350,6 +353,9 @@ func ConfirmDelivery(ctx context.Context, store db.Store, input ConfirmDeliveryI
 		return result, err
 	}
 	oldStatus := order.Status
+	if !IsOrderStatusAllowedForDeliveryAction(order.Status, "confirm_delivery") {
+		return result, NewRequestError(http.StatusBadRequest, fmt.Errorf("当前订单状态(%s)不允许确认送达", order.Status))
+	}
 
 	unfreezeAmount := OrderFreezeAmount(order)
 	updated, err := store.CompleteDeliveryTx(ctx, db.CompleteDeliveryTxParams{
@@ -360,7 +366,7 @@ func ConfirmDelivery(ctx context.Context, store db.Store, input ConfirmDeliveryI
 		DeliveryFee:    delivery.DeliveryFee,
 	})
 	if err != nil {
-		return result, err
+		return result, mapDeliveryStateTransitionError(err)
 	}
 
 	if oldStatus != "rider_delivered" {

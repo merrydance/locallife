@@ -158,6 +158,9 @@ func GrabDeliveryOrder(ctx context.Context, store db.Store, input GrabOrderInput
 		if errors.Is(err, db.ErrBaofuProfitSharingBillNotPending) {
 			return result, NewRequestError(http.StatusConflict, errors.New("订单结算已进入处理，不能重新接单"))
 		}
+		if errors.Is(err, db.ErrRiderDeliveryEligibilityChanged) {
+			return result, NewRequestError(http.StatusConflict, db.ErrRiderDeliveryEligibilityChanged)
+		}
 		return result, err
 	}
 	order = txResult.Order

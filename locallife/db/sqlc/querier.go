@@ -654,6 +654,7 @@ type Querier interface {
 	GetBaofuAccountBinding(ctx context.Context, id int64) (BaofuAccountBinding, error)
 	GetBaofuAccountBindingByContractNo(ctx context.Context, contractNo pgtype.Text) (BaofuAccountBinding, error)
 	GetBaofuAccountBindingByOwner(ctx context.Context, arg GetBaofuAccountBindingByOwnerParams) (BaofuAccountBinding, error)
+	GetBaofuAccountBindingByOwnerForUpdate(ctx context.Context, arg GetBaofuAccountBindingByOwnerForUpdateParams) (BaofuAccountBinding, error)
 	GetBaofuAccountOpeningFlow(ctx context.Context, id int64) (BaofuAccountOpeningFlow, error)
 	GetBaofuAccountOpeningFlowByOpenTransSerialNo(ctx context.Context, openTransSerialNo pgtype.Text) (BaofuAccountOpeningFlow, error)
 	GetBaofuAccountOpeningFlowByPaymentOrder(ctx context.Context, verifyFeePaymentOrderID pgtype.Int8) (BaofuAccountOpeningFlow, error)

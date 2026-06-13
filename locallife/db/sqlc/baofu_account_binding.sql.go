@@ -107,6 +107,42 @@ func (q *Queries) GetBaofuAccountBindingByOwner(ctx context.Context, arg GetBaof
 	return i, err
 }
 
+const getBaofuAccountBindingByOwnerForUpdate = `-- name: GetBaofuAccountBindingByOwnerForUpdate :one
+SELECT id, owner_type, owner_id, account_type, contract_no, sharing_mer_id, login_no, open_state, wechat_sub_mch_id, bank_card_last4, last_open_trans_serial_no, raw_snapshot, created_at, updated_at, opening_mode
+FROM baofu_account_bindings
+WHERE owner_type = $1 AND owner_id = $2
+LIMIT 1
+FOR UPDATE
+`
+
+type GetBaofuAccountBindingByOwnerForUpdateParams struct {
+	OwnerType string `json:"owner_type"`
+	OwnerID   int64  `json:"owner_id"`
+}
+
+func (q *Queries) GetBaofuAccountBindingByOwnerForUpdate(ctx context.Context, arg GetBaofuAccountBindingByOwnerForUpdateParams) (BaofuAccountBinding, error) {
+	row := q.db.QueryRow(ctx, getBaofuAccountBindingByOwnerForUpdate, arg.OwnerType, arg.OwnerID)
+	var i BaofuAccountBinding
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerType,
+		&i.OwnerID,
+		&i.AccountType,
+		&i.ContractNo,
+		&i.SharingMerID,
+		&i.LoginNo,
+		&i.OpenState,
+		&i.WechatSubMchID,
+		&i.BankCardLast4,
+		&i.LastOpenTransSerialNo,
+		&i.RawSnapshot,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.OpeningMode,
+	)
+	return i, err
+}
+
 const listProcessingBaofuAccountBindings = `-- name: ListProcessingBaofuAccountBindings :many
 SELECT id, owner_type, owner_id, account_type, contract_no, sharing_mer_id, login_no, open_state, wechat_sub_mch_id, bank_card_last4, last_open_trans_serial_no, raw_snapshot, created_at, updated_at, opening_mode
 FROM baofu_account_bindings

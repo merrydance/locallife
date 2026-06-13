@@ -239,6 +239,7 @@ func TestMarkTakeoutOrderReadyTx_CourierAcceptedKeepsDeliveryStatus(t *testing.T
 	require.NoError(t, err)
 
 	rider := createOnlineRider(t)
+	createActiveRiderBaofuBindingForDeliveryTest(t, rider.ID)
 	_, err = testStore.UpdateRiderDeposit(context.Background(), UpdateRiderDepositParams{
 		ID:            rider.ID,
 		DepositAmount: 10000,
