@@ -117,6 +117,58 @@ func (q *Queries) CreateRefundRequestIdempotency(ctx context.Context, arg Create
 	return i, err
 }
 
+const createRiderDepositWithdrawalRequest = `-- name: CreateRiderDepositWithdrawalRequest :one
+INSERT INTO rider_deposit_withdrawal_requests (
+    user_id,
+    idempotency_key,
+    request_hash,
+    requested_amount,
+    accepted_amount,
+    refund_order_ids
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    COALESCE($5, 0),
+    COALESCE($6, '[]'::jsonb)
+)
+RETURNING id, user_id, idempotency_key, request_hash, requested_amount, accepted_amount, refund_order_ids, created_at, updated_at
+`
+
+type CreateRiderDepositWithdrawalRequestParams struct {
+	UserID          int64       `json:"user_id"`
+	IdempotencyKey  string      `json:"idempotency_key"`
+	RequestHash     string      `json:"request_hash"`
+	RequestedAmount int64       `json:"requested_amount"`
+	AcceptedAmount  interface{} `json:"accepted_amount"`
+	RefundOrderIds  interface{} `json:"refund_order_ids"`
+}
+
+func (q *Queries) CreateRiderDepositWithdrawalRequest(ctx context.Context, arg CreateRiderDepositWithdrawalRequestParams) (RiderDepositWithdrawalRequest, error) {
+	row := q.db.QueryRow(ctx, createRiderDepositWithdrawalRequest,
+		arg.UserID,
+		arg.IdempotencyKey,
+		arg.RequestHash,
+		arg.RequestedAmount,
+		arg.AcceptedAmount,
+		arg.RefundOrderIds,
+	)
+	var i RiderDepositWithdrawalRequest
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.IdempotencyKey,
+		&i.RequestHash,
+		&i.RequestedAmount,
+		&i.AcceptedAmount,
+		&i.RefundOrderIds,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getBaofuPaymentOrderRefundGuardForUpdate = `-- name: GetBaofuPaymentOrderRefundGuardForUpdate :one
 SELECT po.id,
        po.status,
@@ -329,6 +381,37 @@ func (q *Queries) GetRefundRequestIdempotencyForUpdate(ctx context.Context, arg 
 		&i.IdempotencyKey,
 		&i.RequestHash,
 		&i.RefundOrderID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getRiderDepositWithdrawalRequestForUpdate = `-- name: GetRiderDepositWithdrawalRequestForUpdate :one
+SELECT id, user_id, idempotency_key, request_hash, requested_amount, accepted_amount, refund_order_ids, created_at, updated_at
+FROM rider_deposit_withdrawal_requests
+WHERE user_id = $1
+  AND idempotency_key = $2
+LIMIT 1
+FOR UPDATE
+`
+
+type GetRiderDepositWithdrawalRequestForUpdateParams struct {
+	UserID         int64  `json:"user_id"`
+	IdempotencyKey string `json:"idempotency_key"`
+}
+
+func (q *Queries) GetRiderDepositWithdrawalRequestForUpdate(ctx context.Context, arg GetRiderDepositWithdrawalRequestForUpdateParams) (RiderDepositWithdrawalRequest, error) {
+	row := q.db.QueryRow(ctx, getRiderDepositWithdrawalRequestForUpdate, arg.UserID, arg.IdempotencyKey)
+	var i RiderDepositWithdrawalRequest
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.IdempotencyKey,
+		&i.RequestHash,
+		&i.RequestedAmount,
+		&i.AcceptedAmount,
+		&i.RefundOrderIds,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -885,6 +968,38 @@ func (q *Queries) UpdateRefundOrderToSuccess(ctx context.Context, id int64) (Ref
 		&i.Status,
 		&i.RefundedAt,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const updateRiderDepositWithdrawalRequestRefundOrders = `-- name: UpdateRiderDepositWithdrawalRequestRefundOrders :one
+UPDATE rider_deposit_withdrawal_requests
+SET accepted_amount = $1,
+    refund_order_ids = $2,
+    updated_at = now()
+WHERE id = $3
+RETURNING id, user_id, idempotency_key, request_hash, requested_amount, accepted_amount, refund_order_ids, created_at, updated_at
+`
+
+type UpdateRiderDepositWithdrawalRequestRefundOrdersParams struct {
+	AcceptedAmount int64  `json:"accepted_amount"`
+	RefundOrderIds []byte `json:"refund_order_ids"`
+	ID             int64  `json:"id"`
+}
+
+func (q *Queries) UpdateRiderDepositWithdrawalRequestRefundOrders(ctx context.Context, arg UpdateRiderDepositWithdrawalRequestRefundOrdersParams) (RiderDepositWithdrawalRequest, error) {
+	row := q.db.QueryRow(ctx, updateRiderDepositWithdrawalRequestRefundOrders, arg.AcceptedAmount, arg.RefundOrderIds, arg.ID)
+	var i RiderDepositWithdrawalRequest
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.IdempotencyKey,
+		&i.RequestHash,
+		&i.RequestedAmount,
+		&i.AcceptedAmount,
+		&i.RefundOrderIds,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }

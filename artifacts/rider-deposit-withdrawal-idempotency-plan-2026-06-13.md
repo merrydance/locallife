@@ -122,13 +122,12 @@ CREATE TABLE rider_deposit_withdrawal_requests (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT rider_deposit_withdrawal_requests_user_key_uq UNIQUE (user_id, idempotency_key),
+    CONSTRAINT rider_deposit_withdrawal_requests_idempotency_key_check CHECK (length(btrim(idempotency_key)) BETWEEN 1 AND 256),
+    CONSTRAINT rider_deposit_withdrawal_requests_request_hash_check CHECK (btrim(request_hash) <> ''),
     CONSTRAINT rider_deposit_withdrawal_requests_requested_amount_check CHECK (requested_amount > 0),
-    CONSTRAINT rider_deposit_withdrawal_requests_accepted_amount_check CHECK (accepted_amount >= 0),
+    CONSTRAINT rider_deposit_withdrawal_requests_accepted_amount_check CHECK (accepted_amount >= 0 AND accepted_amount <= requested_amount),
     CONSTRAINT rider_deposit_withdrawal_requests_refund_order_ids_array_check CHECK (jsonb_typeof(refund_order_ids) = 'array')
 );
-
-CREATE INDEX rider_deposit_withdrawal_requests_user_id_idx
-    ON rider_deposit_withdrawal_requests(user_id);
 ```
 
 Queries to add to `locallife/db/query/refund_order.sql`:
@@ -150,7 +149,7 @@ INSERT INTO rider_deposit_withdrawal_requests (
     COALESCE(sqlc.narg(accepted_amount), 0),
     COALESCE(sqlc.narg(refund_order_ids), '[]'::jsonb)
 )
-RETURNING *;
+RETURNING id, user_id, idempotency_key, request_hash, requested_amount, accepted_amount, refund_order_ids, created_at, updated_at;
 
 -- name: GetRiderDepositWithdrawalRequestForUpdate :one
 SELECT id, user_id, idempotency_key, request_hash, requested_amount, accepted_amount, refund_order_ids, created_at, updated_at
@@ -166,14 +165,13 @@ SET accepted_amount = sqlc.arg(accepted_amount),
     refund_order_ids = sqlc.arg(refund_order_ids),
     updated_at = now()
 WHERE id = sqlc.arg(id)
-RETURNING *;
+RETURNING id, user_id, idempotency_key, request_hash, requested_amount, accepted_amount, refund_order_ids, created_at, updated_at;
 ```
 
 Steps:
 
 - [ ] Add the migration and SQL queries.
 - [ ] Run `cd locallife && make sqlc`.
-- [ ] Add a focused migration/query smoke test only if sqlc generation or migration coverage needs it.
 - [ ] Commit the migration, query source, and generated code only after `make sqlc` succeeds.
 
 Validation:
