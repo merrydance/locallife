@@ -52,6 +52,8 @@
 | `locallife/api/payment_callback.go:564` | `Server.requireTaskDistributorForNotification` | 回调处理前检查 task distributor，缺失时释放通知 claim 并返回失败 | 生产和测试均无调用；当前回调路径已在各自 handler 内直接处理缺失分支。已删除；`go build ./api` 通过；`go test ./api -run 'TestBaofuShareCallback|TestHandlePaymentNotify|TestHandleRefundNotify|TestHandleMerchantTransferNotify' -count=1` 通过 |
 | `locallife/logic/combined_payment_service.go:15` | `combinedOutTradePrefix` | 原合单支付 out_trade_no 前缀 | 当前合单支付服务 fail-closed，没有创建路径使用。已删除；`go build ./logic` 通过；`go test ./api -run 'TestCreateCombinedPaymentOrderAPI_BaofuMainBusinessFailsClosed' -count=1` 通过 |
 | `locallife/logic/combined_payment_service.go:16` | `combinedOrderMaxCount` | 原合单支付子订单数量上限 | 当前合单支付服务 fail-closed，没有创建路径使用。已删除；`go build ./logic` 通过；`go test ./api -run 'TestCreateCombinedPaymentOrderAPI_BaofuMainBusinessFailsClosed' -count=1` 通过 |
+| `locallife/logic/baofu_payment_readiness.go:47` | `ensureMerchantBaofuReadyForPayment` | 单商户宝付支付 readiness 校验 wrapper | 只被同文件未接入的 `ensureCombinedPaymentMerchantsBaofuReady` 调用；生产支付创建路径直接使用 `merchantBaofuReadinessForPayment`，该函数仍在 `baofu_payment_order_route.go` 使用并保留。已删除；`go build ./logic` 通过；`go test ./logic -run 'TestPaymentOrderServiceCreatePaymentOrder_RequiresMerchantBaofuReadiness|TestPaymentOrderServiceCreatePaymentOrder_BaofuWechatChannelNotReadyFailsBeforeClientCall|TestBaofuPaymentReadiness' -count=1` 通过 |
+| `locallife/logic/baofu_payment_readiness.go:65` | `ensureCombinedPaymentMerchantsBaofuReady` | 创建合单支付前逐商户检查宝付账户和微信通道 readiness | 生产和测试均无调用；当前合单支付服务已 fail-closed，不进入合单创建 readiness 校验。已删除；底层 `merchantBaofuReadinessForPayment` 仍服务单商户宝付支付创建路径。`go build ./logic` 通过；`go test ./logic -run 'TestPaymentOrderServiceCreatePaymentOrder_RequiresMerchantBaofuReadiness|TestPaymentOrderServiceCreatePaymentOrder_BaofuWechatChannelNotReadyFailsBeforeClientCall|TestBaofuPaymentReadiness' -count=1` 通过 |
 
 ## 可优先清理候选
 
@@ -61,7 +63,6 @@
 | `locallife/db/sqlc/tx_claim_behavior.go:143` | `behaviorDecisionScoreDetail` | 单项评分与命中信号结构 | 只被上面的未使用评分结构嵌套引用 |
 | `locallife/db/sqlc/tx_claim_behavior.go:148` | `behaviorDecisionSignal` | 评分信号 code/weight/count/active | 只被上面的未使用评分结构嵌套引用 |
 | `locallife/logic/baofu_account_onboarding_profile.go:168` | `BaofuAccountOnboardingService.getOrCreateFlow` | 为宝付开户 profile 获取或创建开户 flow | 生产无调用；下层 `getOrCreateFlowWithExisting` / `createBaofuAccountOpeningFlow` 仍在同文件使用 |
-| `locallife/logic/baofu_payment_readiness.go:65` | `ensureCombinedPaymentMerchantsBaofuReady` | 创建合单支付前逐商户检查宝付账户和微信通道 readiness | 生产无调用；当前合单支付已 fail-closed，不走该 readiness helper |
 | `locallife/logic/payment_order_service.go:273` | `PaymentOrderService.resolveConcurrentOrderPayment` | 并发创建订单支付单冲突时，轮询并复用/关闭已有待支付单 | 生产无调用；同组 `sleepWithContext` 被它调用 |
 | `locallife/logic/payment_order_service.go:303` | `PaymentOrderService.resolveConcurrentReservationPayment` | 并发创建预订支付单冲突时，按 attach 判断是否复用已有待支付单 | 生产无调用；同组 `sleepWithContext` 被它调用 |
 | `locallife/logic/payment_order_service.go:536` | `sleepWithContext` | 并发支付冲突重试时的 context-aware sleep | 只被未使用的并发解析 helper 调用 |
@@ -146,7 +147,6 @@
 
 | 位置 | 符号 | 作用 | 核对结论 |
 | --- | --- | --- | --- |
-| `locallife/logic/baofu_payment_readiness.go:47` | `ensureMerchantBaofuReadyForPayment` | 单商户宝付支付 readiness 校验 | 被同文件 `ensureCombinedPaymentMerchantsBaofuReady` 调用；如果上层 helper 保留，它也必须保留 |
 | `locallife/worker/order_payment_fact.go:89` | `orderPaymentInt8Value` | 将 `pgtype.Int8` 转成 JSON 可序列化值 | 被 `recoveredOrderPaymentFactResource` 调用；随上层 helper 成组判断 |
 | `locallife/worker/order_profit_sharing_snapshot.go:13` | `wechatProfitSharingPaymentFeeRateBps` | 微信分账手续费估算费率 | 被同文件 `estimatedWechatProfitSharingPaymentFee` 调用 |
 | `locallife/worker/order_profit_sharing_snapshot.go:15` | `estimatedWechatProfitSharingPaymentFee` | 估算微信分账手续费 | 被 `ensureOrderProfitSharingSnapshot` 调用 |
