@@ -37,6 +37,7 @@
 | 位置 | 符号 | 原作用 | 复核与验证 |
 | --- | --- | --- | --- |
 | `locallife/api/server.go:1815` | `attachedServerError` | 将错误挂到 Gin context，同时返回公开错误文案 | 生产和测试均无调用；常用路径使用 `internalError` / `loggedServerError`。已删除；`go build ./api` 通过。`go test ./api` 被当前工作区已有的 `api/rider_test.go` WIP 编译错误挡住，未作为本项通过依据 |
+| `locallife/api/baofu_settlement_account_profile_defaults_merge.go:410` | `pgInt8Value` | 把 `pgtype.Int8` 转成 `int64`，原本用于结算账户默认值响应或合并 | 生产和测试均无调用。已删除，同时移除随之未使用的 `pgtype` import；`go build ./api` 通过。`go test ./api` 仍被当前工作区已有的 `api/rider_test.go` WIP 编译错误挡住，未作为本项通过依据 |
 
 ## 可优先清理候选
 
@@ -44,7 +45,6 @@
 | --- | --- | --- | --- |
 | `locallife/api/applyment_contact_info.go:21` | `pgTextValue` | 把 `pgtype.Text` 转成普通字符串，用于取用户手机号兜底 | 只被同文件未使用的 `resolveApplymentContactPhone` 调用；随该 helper 一起复核 |
 | `locallife/api/applyment_contact_info.go:28` | `Server.resolveApplymentContactPhone` | 商户进件联系人手机号解析：候选值优先，否则从用户手机号兜底 | 生产无调用；像是宝付进件联系人字段迁移后遗留 |
-| `locallife/api/baofu_settlement_account_profile_defaults_merge.go:410` | `pgInt8Value` | 把 `pgtype.Int8` 转成 `int64`，原本用于结算账户默认值响应或合并 | 生产和测试均无调用 |
 | `locallife/api/merchant_application.go:35` | `loggingReader` / `Read` / `Close` | 包装上传 body，按读取进度记录商户 OCR 上传日志 | 类型和方法都无调用；上传链路已不使用这个 wrapper |
 | `locallife/api/merchant_application.go:1957` | `parseFlexibleDate` | 解析中文、点分隔、纯数字等营业执照日期字符串 | 生产无调用；OCR 日期解析逻辑已转移到其他 worker/helper |
 | `locallife/api/payment_callback.go:78` | `Server.enqueueProfitSharingPaymentFactApplication` | 从支付回调触发分账 payment fact application task | 生产无调用；相邻的骑手押金退款 enqueue helper 仍在用 |
@@ -164,7 +164,7 @@
 
 ## 建议顺序
 
-1. 先清理纯孤立 helper：`pgInt8Value`、`parseFlexibleDate`、`subMchIDFromPaymentAttach`、`shouldEnableOrderProfitSharing`、`workerStringValue`、`workerProfitSharingCommandSnapshot`。
+1. 先清理纯孤立 helper：`parseFlexibleDate`、`subMchIDFromPaymentAttach`、`shouldEnableOrderProfitSharing`、`workerStringValue`、`workerProfitSharingCommandSnapshot`。
 2. 再按功能成组确认：`internal/wechatdoc/alignment_helpers.go`、旧 `listRiders` handler、店铺码生成、并发支付冲突 helper、refund recovery 子商户解析。
 3. 对“测试仍在引用”的项，先决定测试是否还代表有效业务规则；若规则已经迁移，应同步删除或改写测试。
 4. 对 `merchant_finance.go` 的 `SA4006`，如果进入修复阶段，建议只做局部可读性调整，不当作死代码删除。

@@ -3,7 +3,6 @@ package api
 import (
 	"strings"
 
-	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
 )
@@ -405,13 +404,6 @@ func (defaults baofuSettlementAccountProfileDefaults) isZero() bool {
 		!defaults.HasBankAccountNo &&
 		!defaults.HasContactMobile &&
 		!defaults.SelfEmployed
-}
-
-func pgInt8Value(value pgtype.Int8) int64 {
-	if !value.Valid {
-		return 0
-	}
-	return value.Int64
 }
 
 func maskMobileForBaofuResponse(value string) string {
