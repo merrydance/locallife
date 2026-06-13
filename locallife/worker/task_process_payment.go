@@ -1541,13 +1541,6 @@ func workerStringPtrIfNotEmpty(value string) *string {
 	return &value
 }
 
-func workerStringValue(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
-}
-
 func workerPaymentCommandErrorFields(err error) (*string, *string) {
 	var wxErr *wechat.WechatPayError
 	if errors.As(err, &wxErr) {
@@ -1614,23 +1607,6 @@ func workerBaofuRefundCommandSnapshot(values map[string]string) []byte {
 		return []byte(`{"provider":"baofu","operation":"order_refund"}`)
 	}
 	return raw
-}
-
-func workerProfitSharingCommandSnapshot(values map[string]string) []byte {
-	filtered := make(map[string]string, len(values))
-	for key, value := range values {
-		if value != "" {
-			filtered[key] = value
-		}
-	}
-	if len(filtered) == 0 {
-		return []byte(`{}`)
-	}
-	data, err := json.Marshal(filtered)
-	if err != nil {
-		return []byte(`{}`)
-	}
-	return data
 }
 
 func (processor *RedisTaskProcessor) processProfitSharingResultPayload(ctx context.Context, payload ProfitSharingResultPayload, requireEnqueueSuccess bool) error {
