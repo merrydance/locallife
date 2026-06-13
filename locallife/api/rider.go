@@ -856,7 +856,7 @@ func (server *Server) getRiderStatus(ctx *gin.Context) {
 		resp.OnlineBlockReason = "账号已停用"
 	} else if !isRiderOnlineEligibleStatus(rider.Status) {
 		resp.CanGoOnline = false
-		resp.OnlineBlockReason = fmt.Sprintf("押金不足，需要至少%s元", fenToYuanString(threshold, 0))
+		resp.OnlineBlockReason = "账号尚未激活，暂不可上线"
 	} else if availableDeposit < threshold {
 		resp.CanGoOnline = false
 		resp.OnlineBlockReason = fmt.Sprintf("可用押金不足，需要至少%s元", fenToYuanString(threshold, 0))

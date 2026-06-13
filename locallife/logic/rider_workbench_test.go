@@ -331,6 +331,39 @@ func TestRiderWorkbenchServiceRiderNotFound(t *testing.T) {
 	requireRequestErrorStatus(t, err, 404)
 }
 
+func TestRiderWorkbenchServiceGetSummary_NonActiveUsesAccountStatusReason(t *testing.T) {
+	now := time.Date(2026, 4, 28, 14, 30, 0, 0, time.UTC)
+	rider := db.Rider{
+		ID:            7,
+		UserID:        9,
+		Status:        db.RiderStatusApproved,
+		IsOnline:      false,
+		DepositAmount: 30000,
+		RegionID:      pgtype.Int8{Int64: 1, Valid: true},
+	}
+	store := &riderWorkbenchStoreStub{
+		rider:            rider,
+		regionRuleConfig: db.RegionRuleConfig{RegionID: rider.RegionID.Int64, RiderDeposit: 20000},
+	}
+	service := NewRiderWorkbenchService(store)
+	service.now = func() time.Time { return now }
+
+	result, err := service.GetSummary(context.Background(), rider.UserID)
+	require.NoError(t, err)
+	require.False(t, result.RiderStatus.CanGoOnline)
+	require.Equal(t, "账号尚未激活，暂不可上线", result.RiderStatus.OnlineBlockReason)
+}
+
+func TestApplyRiderWorkbenchOnlineEligibility_NonActiveUsesAccountStatusReason(t *testing.T) {
+	status := RiderWorkbenchRiderStatus{}
+	rider := db.Rider{Status: db.RiderStatusApproved}
+
+	applyRiderWorkbenchOnlineEligibility(&status, rider, 30000, 20000)
+
+	require.False(t, status.CanGoOnline)
+	require.Equal(t, "账号尚未激活，暂不可上线", status.OnlineBlockReason)
+}
+
 func TestRiderWorkbenchServiceDegradesOptionalSection(t *testing.T) {
 	now := time.Date(2026, 4, 28, 14, 30, 0, 0, time.UTC)
 	rider := db.Rider{ID: 7, UserID: 9, Status: db.RiderStatusActive, IsOnline: true, DepositAmount: 30000, RegionID: pgtype.Int8{Int64: 1, Valid: true}}

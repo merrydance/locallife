@@ -367,7 +367,7 @@ func applyRiderWorkbenchOnlineEligibility(status *RiderWorkbenchRiderStatus, rid
 	}
 	if rider.Status != db.RiderStatusActive {
 		status.CanGoOnline = false
-		status.OnlineBlockReason = fmt.Sprintf("押金不足，需要至少%s元", riderWorkbenchFenToYuanString(threshold))
+		status.OnlineBlockReason = "账号尚未激活，暂不可上线"
 		return
 	}
 	if availableDeposit < threshold {

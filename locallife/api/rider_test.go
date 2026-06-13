@@ -2094,7 +2094,7 @@ func TestGetRiderStatusAPI(t *testing.T) {
 				var resp riderStatusResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.False(t, resp.CanGoOnline)
-				require.Contains(t, resp.OnlineBlockReason, "押金不足")
+				require.Equal(t, "可用押金不足，需要至少200元", resp.OnlineBlockReason)
 			},
 		},
 		{
@@ -2154,7 +2154,7 @@ func TestGetRiderStatusAPI(t *testing.T) {
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, "approved", resp.Status)
 				require.False(t, resp.CanGoOnline)
-				require.Contains(t, resp.OnlineBlockReason, "押金不足")
+				require.Equal(t, "账号尚未激活，暂不可上线", resp.OnlineBlockReason)
 				require.NotNil(t, resp.SettlementAccount)
 				require.Equal(t, "资料待提交", resp.SettlementAccount.Label)
 			},
