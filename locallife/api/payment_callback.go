@@ -75,29 +75,6 @@ func (server *Server) sendPaymentSuccessNotification(ctx context.Context, paymen
 	}
 }
 
-func (server *Server) enqueueProfitSharingPaymentFactApplication(ctx context.Context, application *db.ExternalPaymentFactApplication) {
-	if application == nil || server.taskDistributor == nil {
-		return
-	}
-	distributor, ok := server.taskDistributor.(worker.PaymentFactApplicationTaskDistributor)
-	if !ok {
-		return
-	}
-	if err := distributor.DistributeTaskProcessPaymentFactApplication(
-		ctx,
-		&worker.PaymentFactApplicationPayload{ApplicationID: application.ID},
-		asynq.MaxRetry(5),
-		asynq.Queue(worker.QueueCritical),
-		asynq.Unique(paymentFactApplicationTaskUnique),
-	); err != nil {
-		log.Warn().Err(err).
-			Int64("payment_fact_application_id", application.ID).
-			Int64("payment_fact_id", application.FactID).
-			Int64("profit_sharing_order_id", application.BusinessObjectID).
-			Msg("enqueue profit sharing payment fact application from callback failed; scheduler will retry")
-	}
-}
-
 func (server *Server) enqueueRiderDepositRefundPaymentFactApplication(ctx context.Context, application *db.ExternalPaymentFactApplication) {
 	if application == nil || server.taskDistributor == nil {
 		return
