@@ -165,6 +165,7 @@
         label="金额(元)"
         value="{{withdrawAmount}}"
         data-field="withdrawAmount"
+        disabled="{{withdrawSubmitting || withdrawalIdempotencyKeySubmitted}}"
         bind:change="onInputAmount"
         t-class="amount-input"
       />

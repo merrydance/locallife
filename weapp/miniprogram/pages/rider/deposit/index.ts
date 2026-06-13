@@ -45,6 +45,18 @@ const FINANCE_REFRESH_DELAY_MS = [1200, 4000] as const
 let financeRefreshPromise: Promise<void> | null = null
 let financeRefreshTimerIds: number[] = []
 
+function buildDepositWithdrawalIdempotencyKey() {
+    return `rider-deposit-withdrawal:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`
+}
+
+function formatFenDraftAmount(amount: number | undefined): string {
+    if (!Number.isFinite(amount)) {
+        return ''
+    }
+
+    return (Math.max(amount || 0, 0) / 100).toFixed(2)
+}
+
 function showDepositLoadingToast(context: WechatMiniprogram.Page.TrivialInstance, message: string) {
     void context
     wx.showLoading({ title: message, mask: true })
@@ -119,6 +131,9 @@ Page({
         isWithdrawVisible: false,
         withdrawAmount: '',
         withdrawErrorMessage: '',
+        withdrawalIdempotencyKey: '',
+        withdrawalIdempotencyKeySubmitted: false,
+        withdrawalSubmittedAmount: '',
         rechargeSubmitting: false,
         withdrawSubmitting: false
     },
@@ -187,6 +202,21 @@ Page({
 
     applyWithdrawalStatusView(view: RiderDepositWithdrawalStatusView | null) {
         this.setData(buildRiderDepositWithdrawalStatusData(view))
+    },
+
+    clearWithdrawalDraftIdempotencyKey(idempotencyKey?: string) {
+        if (!this.data.withdrawalIdempotencyKey) {
+            return
+        }
+        if (idempotencyKey && this.data.withdrawalIdempotencyKey !== idempotencyKey) {
+            return
+        }
+
+        this.setData({
+            withdrawalIdempotencyKey: '',
+            withdrawalIdempotencyKeySubmitted: false,
+            withdrawalSubmittedAmount: ''
+        })
     },
 
     async refreshFinanceSurfaces() {
@@ -303,11 +333,21 @@ Page({
             }
 
             this.applyWithdrawalStatusView(result.view)
+            if (result.idempotencyKey && !this.data.withdrawalIdempotencyKey) {
+                const requestedAmount = formatFenDraftAmount(result.requestedAmount)
+                this.setData({
+                    withdrawalIdempotencyKey: result.idempotencyKey,
+                    withdrawalIdempotencyKeySubmitted: true,
+                    withdrawalSubmittedAmount: requestedAmount,
+                    withdrawAmount: requestedAmount || this.data.withdrawAmount
+                })
+            }
             if (!options.silent) {
                 this.setActionFeedback(result.view.feedbackMessage, result.view.feedbackTheme)
             }
 
             if (result.isTerminal) {
+                this.clearWithdrawalDraftIdempotencyKey(result.idempotencyKey)
                 if (options.refreshIfTerminal !== false && result.shouldRefreshFinance) {
                     await this.refreshFinanceSurfaces()
                 }
@@ -430,7 +470,18 @@ Page({
         }
 
         this.clearActionFeedback()
-        this.setData({ isWithdrawVisible: true, withdrawAmount: '', withdrawErrorMessage: '' })
+        const submittedIdempotencyKey = this.data.withdrawalIdempotencyKeySubmitted
+            ? this.data.withdrawalIdempotencyKey
+            : ''
+        const submittedAmount = submittedIdempotencyKey ? this.data.withdrawalSubmittedAmount : ''
+        this.setData({
+            isWithdrawVisible: true,
+            withdrawAmount: submittedAmount,
+            withdrawErrorMessage: '',
+            withdrawalIdempotencyKey: submittedIdempotencyKey || buildDepositWithdrawalIdempotencyKey(),
+            withdrawalIdempotencyKeySubmitted: Boolean(submittedIdempotencyKey),
+            withdrawalSubmittedAmount: submittedAmount
+        })
     },
 
     onInputAmount(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
@@ -440,6 +491,11 @@ Page({
         }
 
         this.clearActionFeedback()
+        if (field === 'withdrawAmount' && this.data.withdrawalIdempotencyKeySubmitted) {
+            this.setData({ withdrawErrorMessage: '本次提现已提交，请等待结果同步后再重新填写金额' })
+            return
+        }
+
         const nextState: Record<string, string> = { [field]: e.detail.value }
         if (field === 'withdrawAmount' && this.data.withdrawErrorMessage) {
             nextState.withdrawErrorMessage = ''
@@ -452,7 +508,26 @@ Page({
     },
 
     onCloseWithdrawDialog() {
-        this.setData({ isWithdrawVisible: false, withdrawAmount: '', withdrawErrorMessage: '' })
+        if (this.data.withdrawSubmitting) {
+            return
+        }
+
+        if (this.data.withdrawalIdempotencyKeySubmitted) {
+            this.setData({
+                isWithdrawVisible: false,
+                withdrawErrorMessage: ''
+            })
+            return
+        }
+
+        this.setData({
+            isWithdrawVisible: false,
+            withdrawAmount: '',
+            withdrawErrorMessage: '',
+            withdrawalIdempotencyKey: '',
+            withdrawalIdempotencyKeySubmitted: false,
+            withdrawalSubmittedAmount: ''
+        })
     },
 
     scheduleFinanceRefresh() {
@@ -560,12 +635,21 @@ Page({
         }
 
         this.clearActionFeedback()
-        this.setData({ withdrawSubmitting: true, withdrawErrorMessage: '' })
+        const idempotencyKey = this.data.withdrawalIdempotencyKey || buildDepositWithdrawalIdempotencyKey()
+        this.setData({
+            withdrawSubmitting: true,
+            withdrawErrorMessage: '',
+            withdrawalIdempotencyKey: idempotencyKey,
+            withdrawalIdempotencyKeySubmitted: true,
+            withdrawalSubmittedAmount: this.data.withdrawAmount
+        })
         showDepositLoadingToast(this, '正在提交提现...')
         try {
             const result = await RiderService.withdrawDeposit({
                 amount: amountFen,
                 remark: '骑手押金提现'
+            }, {
+                idempotencyKey
             })
             hideDepositToast(this)
             const withdrawStatusView = getRiderDepositWithdrawStatusView(result.status)
@@ -573,7 +657,7 @@ Page({
 
             if (hasPendingWithdrawal) {
                 showDepositLoadingToast(this, '提现已受理，正在等待微信确认...')
-                const terminalResult = await waitForSubmittedRiderDepositWithdrawalTerminalStatus(result)
+                const terminalResult = await waitForSubmittedRiderDepositWithdrawalTerminalStatus(result, { idempotencyKey })
                 hideDepositToast(this)
                 if (!terminalResult) {
                     throw new Error('提现状态同步失败')
@@ -592,12 +676,15 @@ Page({
                 }
                 if (!terminalResult.isTerminal) {
                     this.scheduleFinanceRefresh()
+                } else {
+                    this.clearWithdrawalDraftIdempotencyKey(idempotencyKey)
                 }
                 return
             } else {
                 clearPendingRiderDepositWithdrawal()
                 this.applyWithdrawalStatusView(null)
                 this.setActionFeedback(withdrawStatusView.feedbackMessage, withdrawStatusView.feedbackTheme)
+                this.clearWithdrawalDraftIdempotencyKey()
             }
 
             this.setData({ isWithdrawVisible: false, withdrawAmount: '' })
