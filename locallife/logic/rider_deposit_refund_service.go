@@ -2,10 +2,13 @@ package logic
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -23,13 +26,14 @@ var (
 )
 
 const (
-	riderDepositWithdrawStatusSuccess    = "success"
-	riderDepositWithdrawStatusProcessing = "processing"
-	riderDepositRefundStatusSuccess      = "SUCCESS"
-	riderDepositRefundStatusFailed       = "FAILED"
-	riderDepositRefundStatusAbnormal     = "ABNORMAL"
-	riderDepositRefundStatusClosed       = "CLOSED"
-	riderDepositRefundOrderObjectType    = "refund_order"
+	riderDepositWithdrawalIdempotencyScope = "rider_deposit_withdrawal"
+	riderDepositWithdrawStatusSuccess      = "success"
+	riderDepositWithdrawStatusProcessing   = "processing"
+	riderDepositRefundStatusSuccess        = "SUCCESS"
+	riderDepositRefundStatusFailed         = "FAILED"
+	riderDepositRefundStatusAbnormal       = "ABNORMAL"
+	riderDepositRefundStatusClosed         = "CLOSED"
+	riderDepositRefundOrderObjectType      = "refund_order"
 )
 
 type RiderDepositRefundService struct {
@@ -39,9 +43,10 @@ type RiderDepositRefundService struct {
 }
 
 type SubmitRiderDepositWithdrawalInput struct {
-	UserID int64
-	Amount int64
-	Remark string
+	UserID         int64
+	Amount         int64
+	Remark         string
+	IdempotencyKey string
 }
 
 type RiderDepositWithdrawalRefundItem struct {
@@ -71,6 +76,12 @@ func NewRiderDepositRefundService(
 func (s *RiderDepositRefundService) SubmitWithdrawal(ctx context.Context, input SubmitRiderDepositWithdrawalInput) (SubmitRiderDepositWithdrawalResult, error) {
 	var result SubmitRiderDepositWithdrawalResult
 
+	idempotencyKey := strings.TrimSpace(input.IdempotencyKey)
+	if idempotencyKey == "" {
+		return result, NewRequestError(http.StatusBadRequest, errors.New("Idempotency-Key header is required"))
+	}
+	requestHash := riderDepositWithdrawalRequestHash(input)
+
 	if s.paymentClient == nil {
 		return result, fmt.Errorf("payment client not configured")
 	}
@@ -86,33 +97,41 @@ func (s *RiderDepositRefundService) SubmitWithdrawal(ctx context.Context, input 
 	if rider.Status != db.RiderStatusApproved && rider.Status != db.RiderStatusActive {
 		return result, NewRequestError(http.StatusBadRequest, ErrRiderAccountNotActivated)
 	}
-	if rider.FrozenDeposit > 0 {
-		return result, NewRequestError(http.StatusConflict, ErrRiderDepositFrozen)
-	}
-
 	withdrawalProcessingAmount, err := s.store.GetPendingRiderDepositRefundAmountByUserID(ctx, input.UserID)
 	if err != nil {
 		return result, fmt.Errorf("get pending rider deposit refund amount: %w", err)
 	}
 	availability := db.CalculateRiderDepositAvailability(rider, withdrawalProcessingAmount)
-	if input.Amount > availability.AvailableDeposit {
+	if rider.FrozenDeposit == 0 && input.Amount > availability.AvailableDeposit {
 		return result, NewRequestError(http.StatusBadRequest, ErrRiderAvailableDepositInsufficient)
 	}
 
-	activeDeliveries, err := s.store.ListRiderActiveDeliveries(ctx, pgtype.Int8{Int64: rider.ID, Valid: true})
-	if err != nil {
-		return result, fmt.Errorf("list rider active deliveries: %w", err)
-	}
-	if len(activeDeliveries) > 0 {
-		return result, NewRequestError(http.StatusBadRequest, ErrRiderHasActiveDeliveries)
+	if rider.FrozenDeposit == 0 {
+		activeDeliveries, err := s.store.ListRiderActiveDeliveries(ctx, pgtype.Int8{Int64: rider.ID, Valid: true})
+		if err != nil {
+			return result, fmt.Errorf("list rider active deliveries: %w", err)
+		}
+		if len(activeDeliveries) > 0 {
+			return result, NewRequestError(http.StatusBadRequest, ErrRiderHasActiveDeliveries)
+		}
 	}
 
 	prepareResult, err := s.store.PrepareRiderDepositRefundTx(ctx, db.PrepareRiderDepositRefundTxParams{
-		RiderID: rider.ID,
-		Amount:  input.Amount,
-		Remark:  input.Remark,
+		RiderID:                rider.ID,
+		UserID:                 input.UserID,
+		Amount:                 input.Amount,
+		Remark:                 input.Remark,
+		IdempotencyKey:         idempotencyKey,
+		IdempotencyRequestHash: requestHash,
 	})
 	if err != nil {
+		if statusCode, ok := db.IsRefundRequestError(err); ok {
+			unwrapped := errors.Unwrap(err)
+			if unwrapped == nil {
+				unwrapped = err
+			}
+			return result, NewRequestError(statusCode, unwrapped)
+		}
 		if errors.Is(err, db.ErrRiderDepositFrozen) {
 			return result, NewRequestError(http.StatusConflict, ErrRiderDepositFrozen)
 		}
@@ -130,6 +149,20 @@ func (s *RiderDepositRefundService) SubmitWithdrawal(ctx context.Context, input 
 	var firstRefundSubmissionErr error
 
 	for _, plan := range prepareResult.RefundPlans {
+		if prepareResult.IdempotencyReplayed && plan.RefundOrder.Status != "pending" {
+			itemStatus := riderDepositWithdrawStatusProcessing
+			if plan.RefundOrder.Status == "success" {
+				itemStatus = riderDepositWithdrawStatusSuccess
+			}
+			result.AcceptedAmount += plan.RefundOrder.RefundAmount
+			result.Refunds = append(result.Refunds, RiderDepositWithdrawalRefundItem{
+				RefundOrder:  plan.RefundOrder,
+				PaymentOrder: plan.SourcePaymentOrder,
+				Status:       itemStatus,
+			})
+			continue
+		}
+
 		wxRefund, refundErr := createDirectRefundContract(ctx, s.paymentClient, &wechatcontracts.DirectRefundRequest{
 			OutTradeNo:  plan.SourcePaymentOrder.OutTradeNo,
 			OutRefundNo: plan.RefundOrder.OutRefundNo,
@@ -230,6 +263,18 @@ func (s *RiderDepositRefundService) SubmitWithdrawal(ctx context.Context, input 
 	}
 
 	return result, nil
+}
+
+func riderDepositWithdrawalRequestHash(input SubmitRiderDepositWithdrawalInput) string {
+	parts := []string{
+		"v1",
+		riderDepositWithdrawalIdempotencyScope,
+		strconv.FormatInt(input.UserID, 10),
+		strconv.FormatInt(input.Amount, 10),
+		strings.TrimSpace(input.Remark),
+	}
+	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
+	return fmt.Sprintf("sha256:%x", sum[:])
 }
 
 func (s *RiderDepositRefundService) resolveRefund(ctx context.Context, refundOrderID int64, paymentOrder db.PaymentOrder, refundStatus string, refundID string, drainRemainingCredit bool) error {
