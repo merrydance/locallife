@@ -768,6 +768,111 @@ func TestDepositRiderAPI(t *testing.T) {
 			},
 		},
 		{
+			name: "ExistingPendingPaymentWithPrepayReusesPayParams",
+			body: map[string]interface{}{
+				"amount": 10000,
+				"remark": "充值押金",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockDirectPaymentClientInterface) {
+				existingPayment := db.PaymentOrder{
+					ID:           4,
+					UserID:       user.ID,
+					PaymentType:  "miniprogram",
+					BusinessType: "rider_deposit",
+					Amount:       10000,
+					Status:       "pending",
+					OutTradeNo:   "test_order_existing",
+					ExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(20 * time.Minute), Valid: true},
+					PrepayID:     pgtype.Text{String: "prepay_existing_rider_deposit", Valid: true},
+				}
+
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(rider, nil)
+				store.EXPECT().
+					GetPendingPaymentOrderByUserAndBusinessType(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(existingPayment, nil)
+				paymentClient.EXPECT().
+					GenerateJSAPIPayParams("prepay_existing_rider_deposit").
+					Times(1).
+					Return(&wechat.JSAPIPayParams{
+						TimeStamp: "2234567890",
+						NonceStr:  "nonce-existing",
+						Package:   "prepay_id=prepay_existing_rider_deposit",
+						SignType:  "RSA",
+						PaySign:   "sign-existing",
+					}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp map[string]interface{}
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, float64(4), resp["payment_order_id"])
+				require.Equal(t, "test_order_existing", resp["out_trade_no"])
+				require.Equal(t, float64(10000), resp["amount"])
+
+				payParams, ok := resp["pay_params"].(map[string]interface{})
+				require.True(t, ok)
+				require.Equal(t, "prepay_id=prepay_existing_rider_deposit", payParams["package"])
+			},
+		},
+		{
+			name: "ExistingPendingPaymentCreateRejectedDoesNotCloseLocalOrder",
+			body: map[string]interface{}{
+				"amount": 10000,
+				"remark": "充值押金",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockDirectPaymentClientInterface) {
+				existingPayment := db.PaymentOrder{
+					ID:           5,
+					UserID:       user.ID,
+					PaymentType:  "miniprogram",
+					BusinessType: "rider_deposit",
+					Amount:       10000,
+					Status:       "pending",
+					OutTradeNo:   "test_order_existing_no_prepay",
+					ExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(20 * time.Minute), Valid: true},
+				}
+
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(rider, nil)
+				store.EXPECT().
+					GetPendingPaymentOrderByUserAndBusinessType(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(existingPayment, nil)
+				store.EXPECT().
+					GetUser(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(db.User{ID: user.ID, WechatOpenid: "openid_rider_001"}, nil)
+				paymentClient.EXPECT().
+					CreateJSAPIOrder(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(nil, nil, &wechat.WechatPayError{StatusCode: http.StatusForbidden, Code: wechaterrorcodes.DirectPaymentCodeOutTradeNoUsed, Message: "out trade no used"})
+				store.EXPECT().
+					CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
+						require.Equal(t, db.ExternalPaymentCommandStatusRejected, arg.CommandStatus)
+						require.Equal(t, "test_order_existing_no_prepay", arg.ExternalObjectKey)
+						require.Equal(t, wechaterrorcodes.DirectPaymentCodeOutTradeNoUsed, arg.LastErrorCode.String)
+						return db.ExternalPaymentCommand{ID: 7303}, nil
+					})
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusConflict, recorder.Code)
+			},
+		},
+		{
 			name: "InvalidAmount",
 			body: map[string]interface{}{
 				"amount": -100, // negative

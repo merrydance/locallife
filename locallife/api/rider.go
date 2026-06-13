@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -401,6 +402,7 @@ func (server *Server) depositRider(ctx *gin.Context) {
 
 	var outTradeNo string
 	var paymentOrder db.PaymentOrder
+	createdPaymentOrder := false
 
 	// 幂等保护：检查是否已有未过期的 pending 支付单（同用户、同业务类型、同金额）
 	existingPayment, findErr := server.store.GetPendingPaymentOrderByUserAndBusinessType(ctx, db.GetPendingPaymentOrderByUserAndBusinessTypeParams{
@@ -412,6 +414,28 @@ func (server *Server) depositRider(ctx *gin.Context) {
 		// 已存在未过期的 pending 单，复用
 		paymentOrder = existingPayment
 		outTradeNo = existingPayment.OutTradeNo
+		if paymentOrder.PrepayID.Valid && strings.TrimSpace(paymentOrder.PrepayID.String) != "" {
+			payParams, signErr := server.directPaymentClient.GenerateJSAPIPayParams(paymentOrder.PrepayID.String)
+			if signErr != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("generate rider deposit pay params: %w", signErr)))
+				return
+			}
+			resp := map[string]interface{}{
+				"payment_order_id": paymentOrder.ID,
+				"out_trade_no":     outTradeNo,
+				"amount":           paymentOrder.Amount,
+				"expires_at":       paymentOrder.ExpiresAt.Time,
+				"pay_params": map[string]string{
+					"timeStamp": payParams.TimeStamp,
+					"nonceStr":  payParams.NonceStr,
+					"package":   payParams.Package,
+					"signType":  payParams.SignType,
+					"paySign":   payParams.PaySign,
+				},
+			}
+			ctx.JSON(http.StatusOK, resp)
+			return
+		}
 	} else {
 		for attempt := 1; attempt <= outTradeNoMaxRetry; attempt++ {
 			var genErr error
@@ -431,6 +455,7 @@ func (server *Server) depositRider(ctx *gin.Context) {
 				ExpiresAt:             pgtype.Timestamptz{Time: expiresAt, Valid: true},
 			})
 			if err == nil {
+				createdPaymentOrder = true
 				break
 			}
 			if isOutTradeNoConflict(err) && attempt < outTradeNoMaxRetry {
@@ -470,9 +495,11 @@ func (server *Server) depositRider(ctx *gin.Context) {
 		PayerClientIP: ctx.ClientIP(),
 	})
 	if err != nil {
-		if _, closeErr := server.store.UpdatePaymentOrderToClosed(ctx, paymentOrder.ID); closeErr != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("close rider deposit payment order after jsapi create failure: %w", closeErr)))
-			return
+		if createdPaymentOrder {
+			if _, closeErr := server.store.UpdatePaymentOrderToClosed(ctx, paymentOrder.ID); closeErr != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("close rider deposit payment order after jsapi create failure: %w", closeErr)))
+				return
+			}
 		}
 		recordRiderDepositRechargeCommandRejected(ctx, server.store, paymentOrder, err)
 		if writeLogicRequestError(ctx, logic.MapDirectJSAPIOrderCreateError(err)) {
