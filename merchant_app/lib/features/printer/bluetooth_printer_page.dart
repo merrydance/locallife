@@ -11,7 +11,8 @@ class BluetoothPrinterPage extends ConsumerStatefulWidget {
   const BluetoothPrinterPage({super.key});
 
   @override
-  ConsumerState<BluetoothPrinterPage> createState() => _BluetoothPrinterPageState();
+  ConsumerState<BluetoothPrinterPage> createState() =>
+      _BluetoothPrinterPageState();
 }
 
 class _BluetoothPrinterPageState extends ConsumerState<BluetoothPrinterPage> {
@@ -104,7 +105,9 @@ class _BluetoothPrinterPageState extends ConsumerState<BluetoothPrinterPage> {
                                 height: 44,
                                 decoration: BoxDecoration(
                                   color: AppColors.surfaceLow,
-                                  borderRadius: BorderRadius.circular(AppRadius.lg),
+                                  borderRadius: BorderRadius.circular(
+                                    AppRadius.lg,
+                                  ),
                                 ),
                                 child: const Icon(
                                   Icons.print_outlined,
@@ -117,8 +120,8 @@ class _BluetoothPrinterPageState extends ConsumerState<BluetoothPrinterPage> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      state.connectedDevice!.platformName.isNotEmpty
-                                          ? state.connectedDevice!.platformName
+                                      state.connectedDevice!.name.isNotEmpty
+                                          ? state.connectedDevice!.name
                                           : '未知蓝牙打印机',
                                       style: const TextStyle(
                                         fontSize: 16,
@@ -127,7 +130,7 @@ class _BluetoothPrinterPageState extends ConsumerState<BluetoothPrinterPage> {
                                     ),
                                     const SizedBox(height: AppSpacing.xs),
                                     Text(
-                                      state.connectedDevice!.remoteId.str,
+                                      state.connectedDevice!.id,
                                       style: const TextStyle(
                                         color: AppColors.onSurfaceVariant,
                                       ),
@@ -193,7 +196,7 @@ class _BluetoothPrinterPageState extends ConsumerState<BluetoothPrinterPage> {
                           ),
                           const SizedBox(height: AppSpacing.lg),
                           MerchantPrimaryButton(
-                              label: state.isScanning ? '正在扫描...' : '重新扫描设备',
+                            label: state.isScanning ? '正在扫描...' : '重新扫描设备',
                             onPressed: state.isScanning
                                 ? null
                                 : () => notifier.startScan(),
@@ -210,10 +213,14 @@ class _BluetoothPrinterPageState extends ConsumerState<BluetoothPrinterPage> {
                         name: result.device.platformName,
                         deviceId: result.device.remoteId.str,
                         isConnected:
-                            state.connectedDevice?.remoteId == result.device.remoteId,
-                        isConnecting: state.isConnecting &&
-                            state.connectedDevice?.remoteId == result.device.remoteId,
-                        onConnect: () => notifier.connectToDevice(result.device),
+                            state.connectedDevice?.id ==
+                            result.device.remoteId.str,
+                        isConnecting:
+                            state.isConnecting &&
+                            state.connectedDevice?.id ==
+                                result.device.remoteId.str,
+                        onConnect: () =>
+                            notifier.connectToDevice(result.device),
                       ),
                     ),
                   ),
@@ -265,7 +272,7 @@ class _BluetoothPrinterPageState extends ConsumerState<BluetoothPrinterPage> {
                       ),
                       const SizedBox(height: AppSpacing.xs),
                       const Text(
-                          '连接蓝牙小票打印机后，可用于订单小票和后续自动打印能力。',
+                        '连接蓝牙小票打印机后，可用于订单小票和后续自动打印能力。',
                         style: TextStyle(
                           color: AppColors.onSurfaceVariant,
                           height: 1.45,
@@ -279,7 +286,7 @@ class _BluetoothPrinterPageState extends ConsumerState<BluetoothPrinterPage> {
             ),
             const SizedBox(height: AppSpacing.lg),
             MerchantPrimaryButton(
-                label: state.isScanning ? '正在扫描设备...' : '扫描附近设备',
+              label: state.isScanning ? '正在扫描设备...' : '扫描附近设备',
               onPressed: state.isScanning ? null : () => notifier.startScan(),
               icon: const Icon(Icons.bluetooth_searching_rounded),
             ),
@@ -292,10 +299,7 @@ class _BluetoothPrinterPageState extends ConsumerState<BluetoothPrinterPage> {
   Widget _buildSectionTitle(String title) {
     return Text(
       title,
-      style: const TextStyle(
-        fontSize: 16,
-        fontWeight: FontWeight.w700,
-      ),
+      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
     );
   }
 }
@@ -350,9 +354,7 @@ class _PrinterDeviceCard extends StatelessWidget {
                   const SizedBox(height: AppSpacing.xs),
                   Text(
                     deviceId,
-                    style: const TextStyle(
-                      color: AppColors.onSurfaceVariant,
-                    ),
+                    style: const TextStyle(color: AppColors.onSurfaceVariant),
                   ),
                   const SizedBox(height: AppSpacing.md),
                   if (isConnected)

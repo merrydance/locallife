@@ -92,7 +92,7 @@ class SettingsPage extends ConsumerWidget {
                       icon: Icons.print_outlined,
                       title: '小票打印机',
                       subtitle: printerState.connectedDevice != null
-                          ? '已连接 ${printerState.connectedDevice!.platformName}'
+                          ? '已连接 ${printerState.connectedDevice!.name.isNotEmpty ? printerState.connectedDevice!.name : '未知蓝牙打印机'}'
                           : '未连接蓝牙打印机',
                       badge: MerchantStatusBadge(
                         label: printerState.connectedDevice != null

@@ -39,7 +39,7 @@ class BleAcceptedOrderReceiptPrinter implements AcceptedOrderReceiptPrinter {
 
   @override
   String? get printerName {
-    final name = _ref.read(printerProvider).connectedDevice?.platformName;
+    final name = _ref.read(printerProvider).connectedDevice?.name;
     final normalized = name?.trim() ?? '';
     return normalized.isEmpty ? null : normalized;
   }
