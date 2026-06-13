@@ -30146,6 +30146,11 @@ paths:
       - application/json
       description: 从骑手账户提取押金到微信零钱，需要确保没有进行中的代取订单。最小提现金额1元，单次最大提现金额50000元。
       parameters:
+      - description: 幂等键，同一笔押金提现重试必须复用同一个值
+        in: header
+        name: Idempotency-Key
+        required: true
+        type: string
       - description: 提现金额（单位：分）
         in: body
         name: request

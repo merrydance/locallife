@@ -21,6 +21,8 @@ import (
 
 const riderWithdrawProcessingStatus = "processing"
 const riderDepositPaymentOrderObjectType = "payment_order"
+const riderWithdrawIdempotencyHeader = "Idempotency-Key"
+const riderWithdrawMaxIdempotencyKeyLength = 256
 
 func isRiderOnlineEligibleStatus(status string) bool {
 	return status == db.RiderStatusActive
@@ -536,6 +538,7 @@ func (server *Server) depositRider(ctx *gin.Context) {
 // @Tags 骑手
 // @Accept json
 // @Produce json
+// @Param Idempotency-Key header string true "幂等键，同一笔押金提现重试必须复用同一个值"
 // @Param request body withdrawRequest true "提现金额（单位：分）"
 // @Success 200 {object} riderWithdrawResponse "提现已完成对账"
 // @Success 202 {object} riderWithdrawResponse "提现请求已受理，等待异步终态"
@@ -553,11 +556,22 @@ func (server *Server) withdrawRider(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	idempotencyKey := strings.TrimSpace(ctx.GetHeader(riderWithdrawIdempotencyHeader))
+	if idempotencyKey == "" {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("Idempotency-Key header is required")))
+		return
+	}
+	if len(idempotencyKey) > riderWithdrawMaxIdempotencyKeyLength {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("Idempotency-Key header is too long")))
+		return
+	}
+
 	service := server.buildRiderDepositRefundService()
 	result, err := service.SubmitWithdrawal(ctx, logic.SubmitRiderDepositWithdrawalInput{
-		UserID: authPayload.UserID,
-		Amount: req.Amount,
-		Remark: req.Remark,
+		UserID:         authPayload.UserID,
+		Amount:         req.Amount,
+		Remark:         req.Remark,
+		IdempotencyKey: idempotencyKey,
 	})
 	if err != nil {
 		var reqErr *logic.RequestError

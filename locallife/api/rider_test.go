@@ -1298,11 +1298,12 @@ func TestWithdrawRiderAPI(t *testing.T) {
 	rider.FrozenDeposit = 0
 
 	testCases := []struct {
-		name          string
-		body          map[string]interface{}
-		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		buildStubs    func(store *mockdb.MockStore, paymentClient *wechatmock.MockDirectPaymentClientInterface)
-		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+		name           string
+		body           map[string]interface{}
+		idempotencyKey string
+		setupAuth      func(t *testing.T, request *http.Request, tokenMaker token.Maker)
+		buildStubs     func(store *mockdb.MockStore, paymentClient *wechatmock.MockDirectPaymentClientInterface)
+		checkResponse  func(t *testing.T, recorder *httptest.ResponseRecorder)
 	}{
 		{
 			name: "OK",
@@ -1310,6 +1311,7 @@ func TestWithdrawRiderAPI(t *testing.T) {
 				"amount": 100 * fenPerYuan,
 				"remark": "提现押金",
 			},
+			idempotencyKey: "rider-withdraw-ok-1",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
@@ -1330,19 +1332,27 @@ func TestWithdrawRiderAPI(t *testing.T) {
 					Return([]db.Delivery{}, nil)
 
 				store.EXPECT().
-					PrepareRiderDepositRefundTx(gomock.Any(), gomock.Any()).
+					PrepareRiderDepositRefundTx(gomock.Any(), gomock.AssignableToTypeOf(db.PrepareRiderDepositRefundTxParams{})).
 					Times(1).
-					Return(db.PrepareRiderDepositRefundTxResult{
-						Rider: db.Rider{
-							ID:            rider.ID,
-							DepositAmount: 500 * fenPerYuan,
-							FrozenDeposit: 150 * fenPerYuan,
-						},
-						RefundPlans: []db.RiderDepositRefundPlan{{
-							RefundOrder:        db.RefundOrder{ID: 1, PaymentOrderID: 91, RefundAmount: 100 * fenPerYuan, OutRefundNo: "RTEST123"},
-							SourcePaymentOrder: db.PaymentOrder{ID: 91, OutTradeNo: "PTEST123", Amount: 100 * fenPerYuan},
-						}},
-					}, nil)
+					DoAndReturn(func(_ context.Context, arg db.PrepareRiderDepositRefundTxParams) (db.PrepareRiderDepositRefundTxResult, error) {
+						require.Equal(t, rider.ID, arg.RiderID)
+						require.Equal(t, user.ID, arg.UserID)
+						require.Equal(t, int64(100*fenPerYuan), arg.Amount)
+						require.Equal(t, "提现押金", arg.Remark)
+						require.Equal(t, "rider-withdraw-ok-1", arg.IdempotencyKey)
+						require.NotEmpty(t, arg.IdempotencyRequestHash)
+						return db.PrepareRiderDepositRefundTxResult{
+							Rider: db.Rider{
+								ID:            rider.ID,
+								DepositAmount: 500 * fenPerYuan,
+								FrozenDeposit: 150 * fenPerYuan,
+							},
+							RefundPlans: []db.RiderDepositRefundPlan{{
+								RefundOrder:        db.RefundOrder{ID: 1, PaymentOrderID: 91, RefundAmount: 100 * fenPerYuan, OutRefundNo: "RTEST123"},
+								SourcePaymentOrder: db.PaymentOrder{ID: 91, OutTradeNo: "PTEST123", Amount: 100 * fenPerYuan},
+							}},
+						}, nil
+					})
 
 				paymentClient.EXPECT().
 					CreateRefund(gomock.Any(), gomock.Any()).
@@ -1380,6 +1390,7 @@ func TestWithdrawRiderAPI(t *testing.T) {
 				"amount": 100 * fenPerYuan,
 				"remark": "提现押金",
 			},
+			idempotencyKey: "rider-withdraw-success-1",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
@@ -1449,6 +1460,7 @@ func TestWithdrawRiderAPI(t *testing.T) {
 				"amount": 50, // 小于最小提现金额 100分
 				"remark": "提现押金",
 			},
+			idempotencyKey: "rider-withdraw-small-1",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
@@ -1468,6 +1480,7 @@ func TestWithdrawRiderAPI(t *testing.T) {
 				"amount": 6000000, // 超过最大提现金额 5000000分
 				"remark": "提现押金",
 			},
+			idempotencyKey: "rider-withdraw-large-1",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
@@ -1486,6 +1499,7 @@ func TestWithdrawRiderAPI(t *testing.T) {
 				"amount": 100 * fenPerYuan,
 				"remark": "提现押金",
 			},
+			idempotencyKey: "rider-withdraw-status-1",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
@@ -1507,6 +1521,7 @@ func TestWithdrawRiderAPI(t *testing.T) {
 				"amount": 1000 * fenPerYuan,
 				"remark": "提现押金",
 			},
+			idempotencyKey: "rider-withdraw-insufficient-1",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
@@ -1530,6 +1545,7 @@ func TestWithdrawRiderAPI(t *testing.T) {
 				"amount": 100 * fenPerYuan,
 				"remark": "提现押金",
 			},
+			idempotencyKey: "rider-withdraw-frozen-1",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
@@ -1542,11 +1558,14 @@ func TestWithdrawRiderAPI(t *testing.T) {
 					Return(frozenRider, nil)
 
 				store.EXPECT().
-					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
-					Times(0)
+					GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(int64(50*fenPerYuan), nil)
+
 				store.EXPECT().
 					PrepareRiderDepositRefundTx(gomock.Any(), gomock.Any()).
-					Times(0)
+					Times(1).
+					Return(db.PrepareRiderDepositRefundTxResult{}, db.ErrRiderDepositFrozen)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusConflict, recorder.Code)
@@ -1558,6 +1577,7 @@ func TestWithdrawRiderAPI(t *testing.T) {
 				"amount": 100 * fenPerYuan,
 				"remark": "提现押金",
 			},
+			idempotencyKey: "rider-withdraw-delivery-1",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
@@ -1586,6 +1606,7 @@ func TestWithdrawRiderAPI(t *testing.T) {
 				"amount": 100 * fenPerYuan,
 				"remark": "提现押金",
 			},
+			idempotencyKey: "rider-withdraw-channel-not-enough-1",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
@@ -1666,11 +1687,104 @@ func TestWithdrawRiderAPI(t *testing.T) {
 			require.NoError(t, err)
 
 			request.Header.Set("Content-Type", "application/json")
+			if tc.idempotencyKey != "" {
+				request.Header.Set("Idempotency-Key", tc.idempotencyKey)
+			}
 			tc.setupAuth(t, request, server.tokenMaker)
 			server.router.ServeHTTP(recorder, request)
 			tc.checkResponse(t, recorder)
 		})
 	}
+}
+
+func TestWithdrawRiderAPIRequiresIdempotencyKey(t *testing.T) {
+	user, _ := randomUser(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	paymentClient := wechatmock.NewMockDirectPaymentClientInterface(ctrl)
+	store.EXPECT().GetRiderByUserID(gomock.Any(), gomock.Any()).Times(0)
+	store.EXPECT().PrepareRiderDepositRefundTx(gomock.Any(), gomock.Any()).Times(0)
+
+	server := newTestServerWithPayment(t, store, paymentClient)
+	recorder := httptest.NewRecorder()
+
+	body := map[string]interface{}{
+		"amount": 100 * fenPerYuan,
+		"remark": "提现押金",
+	}
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
+	request, err := http.NewRequest(http.MethodPost, "/v1/rider/withdraw", bytes.NewReader(data))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "Idempotency-Key header is required")
+}
+
+func TestWithdrawRiderAPIPassesTrimmedIdempotencyKey(t *testing.T) {
+	user, _ := randomUser(t)
+	rider := randomRider(user.ID)
+	rider.Status = db.RiderStatusActive
+	rider.DepositAmount = 500 * fenPerYuan
+	rider.FrozenDeposit = 0
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	paymentClient := wechatmock.NewMockDirectPaymentClientInterface(ctrl)
+	store.EXPECT().GetRiderByUserID(gomock.Any(), user.ID).Return(rider, nil)
+	store.EXPECT().GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), user.ID).Return(int64(0), nil)
+	store.EXPECT().ListRiderActiveDeliveries(gomock.Any(), pgtype.Int8{Int64: rider.ID, Valid: true}).Return([]db.Delivery{}, nil)
+	store.EXPECT().
+		PrepareRiderDepositRefundTx(gomock.Any(), gomock.AssignableToTypeOf(db.PrepareRiderDepositRefundTxParams{})).
+		DoAndReturn(func(_ context.Context, arg db.PrepareRiderDepositRefundTxParams) (db.PrepareRiderDepositRefundTxResult, error) {
+			require.Equal(t, "rider-withdraw-trimmed-1", arg.IdempotencyKey)
+			require.Equal(t, user.ID, arg.UserID)
+			require.NotEmpty(t, arg.IdempotencyRequestHash)
+			return db.PrepareRiderDepositRefundTxResult{
+				Rider:        db.Rider{ID: rider.ID, UserID: user.ID, DepositAmount: 500 * fenPerYuan, FrozenDeposit: 100 * fenPerYuan},
+				FrozenAmount: 100 * fenPerYuan,
+				RefundPlans: []db.RiderDepositRefundPlan{{
+					RefundOrder:        db.RefundOrder{ID: 11, PaymentOrderID: 91, RefundAmount: 100 * fenPerYuan, OutRefundNo: "RTEST_TRIM"},
+					SourcePaymentOrder: db.PaymentOrder{ID: 91, OutTradeNo: "PTEST_TRIM", Amount: 100 * fenPerYuan},
+				}},
+			}, nil
+		})
+	paymentClient.EXPECT().
+		CreateRefund(gomock.Any(), gomock.Any()).
+		Return(&wechat.RefundResponse{RefundID: "wx_refund_trim", Status: wechat.RefundStatusProcessing}, nil)
+	store.EXPECT().
+		UpdateRefundOrderToProcessing(gomock.Any(), gomock.Any()).
+		Return(db.RefundOrder{ID: 11, Status: "processing"}, nil)
+	store.EXPECT().
+		CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).
+		Return(db.ExternalPaymentCommand{ID: 8204}, nil)
+
+	server := newTestServerWithPayment(t, store, paymentClient)
+	recorder := httptest.NewRecorder()
+	body := map[string]interface{}{
+		"amount": 100 * fenPerYuan,
+		"remark": "提现押金",
+	}
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
+	request, err := http.NewRequest(http.MethodPost, "/v1/rider/withdraw", bytes.NewReader(data))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Idempotency-Key", " rider-withdraw-trimmed-1 ")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusAccepted, recorder.Code)
 }
 
 func TestGetRiderWithdrawalStatusAPI(t *testing.T) {
