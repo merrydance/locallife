@@ -1,0 +1,170 @@
+# 死代码候选核对清单
+
+日期：2026-06-13
+
+这份清单只做定位和复核，不删除任何代码。
+
+## 核对方法
+
+- CodeGraph：读取 `/home/sam/locallife/.codegraph/codegraph.db`，索引为最新
+- 文本核对：用 `rg` 核对生产 Go 源码、测试源码和 Swagger 生成物中的引用
+- 静态检查：`staticcheck -checks=U1000,SA4006,SA4011 ./...`
+- 基础验证：`/usr/local/go/bin/go vet ./...`
+- 范围：`locallife/**/*.go`，重点看生产源码里的私有符号
+
+## 验证结果
+
+- 早前基线 `go vet ./...`：通过。
+- 本轮 fresh `go vet ./...`：未通过，原因是工作区已有的 `locallife/db/sqlc/tx_rider_refund_test.go` 修改尚未与当前接口对齐，`PrepareRiderDepositRefundTxParams` / `PrepareRiderDepositRefundTxResult` 字段不匹配；这不是本次报告更新引入的生产代码变化。
+- `staticcheck -checks=U1000,SA4006,SA4011 ./...`：继续确认未使用代码和 `SA4006` 信号；本轮 fresh 运行也先报同一个 `tx_rider_refund_test.go` 编译错误。
+- `/usr/local/go/bin/go test ./...`：本次为了确认现状跑过，但失败在既有 DB / integration 测试状态：
+  - `db/sqlc`: `TestDeactivateStaleMerchantAppDevices` 期望 `1`，实际 `3`
+  - `integration`: `TestClaimJourneyD39RiderRecoveryDisputeListPaginationIntegration` 返回 `404`，期望 `201`
+  - `integration`: `TestTakeoutJourneyB3Integration` 触发 `baofu_account_bindings_opening_mode_account_type_check`
+- 本次没有改生产代码，所以这些验证失败不来自本次文档更新。
+
+## 分类说明
+
+- `可优先清理候选`：生产源码里没有调用方；用途明确但当前未接入。删除前仍要做一次小范围编译/测试。
+- `已清理`：已按本报告逐项复核、删除，并记录对应验证。
+- `整组遗留候选`：一组同属一个未接入功能的类型/函数，适合按功能成组确认。
+- `测试仍在引用`：生产路径没用，但测试还在用；若删除，需要同步删/改测试。
+- `Swagger-only`：Go 编译视角未使用，但被 Swagger 注释或生成文档引用；不应按普通死代码直接删。
+- `暂不作为死代码`：静态工具有噪声，或它是被同文件内部私有函数调用的符号，不能单独删除。
+
+## 已清理
+
+| 位置 | 符号 | 原作用 | 复核与验证 |
+| --- | --- | --- | --- |
+| `locallife/api/server.go:1815` | `attachedServerError` | 将错误挂到 Gin context，同时返回公开错误文案 | 生产和测试均无调用；常用路径使用 `internalError` / `loggedServerError`。已删除；`go build ./api` 通过。`go test ./api` 被当前工作区已有的 `api/rider_test.go` WIP 编译错误挡住，未作为本项通过依据 |
+
+## 可优先清理候选
+
+| 位置 | 符号 | 作用 | 核对结论 |
+| --- | --- | --- | --- |
+| `locallife/api/applyment_contact_info.go:21` | `pgTextValue` | 把 `pgtype.Text` 转成普通字符串，用于取用户手机号兜底 | 只被同文件未使用的 `resolveApplymentContactPhone` 调用；随该 helper 一起复核 |
+| `locallife/api/applyment_contact_info.go:28` | `Server.resolveApplymentContactPhone` | 商户进件联系人手机号解析：候选值优先，否则从用户手机号兜底 | 生产无调用；像是宝付进件联系人字段迁移后遗留 |
+| `locallife/api/baofu_settlement_account_profile_defaults_merge.go:410` | `pgInt8Value` | 把 `pgtype.Int8` 转成 `int64`，原本用于结算账户默认值响应或合并 | 生产和测试均无调用 |
+| `locallife/api/merchant_application.go:35` | `loggingReader` / `Read` / `Close` | 包装上传 body，按读取进度记录商户 OCR 上传日志 | 类型和方法都无调用；上传链路已不使用这个 wrapper |
+| `locallife/api/merchant_application.go:1957` | `parseFlexibleDate` | 解析中文、点分隔、纯数字等营业执照日期字符串 | 生产无调用；OCR 日期解析逻辑已转移到其他 worker/helper |
+| `locallife/api/payment_callback.go:78` | `Server.enqueueProfitSharingPaymentFactApplication` | 从支付回调触发分账 payment fact application task | 生产无调用；相邻的骑手押金退款 enqueue helper 仍在用 |
+| `locallife/api/payment_callback.go:564` | `Server.requireTaskDistributorForNotification` | 回调处理前检查 task distributor，缺失时释放通知 claim 并返回失败 | 生产无调用；现在回调路径直接处理各自的缺失分支 |
+| `locallife/db/sqlc/tx_claim_behavior.go:135` | `behaviorDecisionScoreBreakdown` | 索赔行为决策评分详情 JSON 结构 | 生产无引用；测试 helper 仍可解码该类型，属于测试辅助引用 |
+| `locallife/db/sqlc/tx_claim_behavior.go:143` | `behaviorDecisionScoreDetail` | 单项评分与命中信号结构 | 只被上面的未使用评分结构嵌套引用 |
+| `locallife/db/sqlc/tx_claim_behavior.go:148` | `behaviorDecisionSignal` | 评分信号 code/weight/count/active | 只被上面的未使用评分结构嵌套引用 |
+| `locallife/logic/baofu_account_onboarding_profile.go:168` | `BaofuAccountOnboardingService.getOrCreateFlow` | 为宝付开户 profile 获取或创建开户 flow | 生产无调用；下层 `getOrCreateFlowWithExisting` / `createBaofuAccountOpeningFlow` 仍在同文件使用 |
+| `locallife/logic/baofu_payment_readiness.go:65` | `ensureCombinedPaymentMerchantsBaofuReady` | 创建合单支付前逐商户检查宝付账户和微信通道 readiness | 生产无调用；当前合单支付已 fail-closed，不走该 readiness helper |
+| `locallife/logic/combined_payment_service.go:15` | `combinedOutTradePrefix` | 原合单支付 out_trade_no 前缀 | 当前合单支付服务 fail-closed，没有创建路径使用 |
+| `locallife/logic/combined_payment_service.go:16` | `combinedOrderMaxCount` | 原合单支付子订单数量上限 | 当前合单支付服务 fail-closed，没有创建路径使用 |
+| `locallife/logic/payment_order_service.go:273` | `PaymentOrderService.resolveConcurrentOrderPayment` | 并发创建订单支付单冲突时，轮询并复用/关闭已有待支付单 | 生产无调用；同组 `sleepWithContext` 被它调用 |
+| `locallife/logic/payment_order_service.go:303` | `PaymentOrderService.resolveConcurrentReservationPayment` | 并发创建预订支付单冲突时，按 attach 判断是否复用已有待支付单 | 生产无调用；同组 `sleepWithContext` 被它调用 |
+| `locallife/logic/payment_order_service.go:427` | `subMchIDFromPaymentAttach` | 从支付单 attach 里解析 `sub_mchid` | 生产和测试均无调用 |
+| `locallife/logic/payment_order_service.go:466` | `shouldEnableOrderProfitSharing` | 按订单类型判断是否启用订单分账 | 生产和测试均无调用；worker 里有另一套 `shouldDispatchOrderProfitSharing` 测试覆盖 |
+| `locallife/logic/payment_order_service.go:536` | `sleepWithContext` | 并发支付冲突重试时的 context-aware sleep | 只被未使用的并发解析 helper 调用 |
+| `locallife/logic/payment_order_service.go:547` | `PaymentOrderService.markPaymentOrderFailedForCleanup` | 预支付失败后把支付单标记为 failed 并记录日志 | 生产无调用 |
+| `locallife/logic/refund_service.go:58` | `RefundService.maybeMarkPaymentOrderRefunded` | 累计退款额达到支付金额后，把支付单置为 refunded | 生产无调用；worker 和 PaymentFactService 各有独立在用实现 |
+| `locallife/logic/replace_order.go:332` | `markReplaceReservationPaymentOrderFailedForCleanup` | 替换预订支付失败后把支付单置为 failed | 生产和测试均无调用 |
+| `locallife/logic/rider_onboarding_review_service.go:571` | `onboardingReviewRunID` | 把 rider onboarding review run 转为 `*int64` | 生产无调用；API 层已有同名在用 helper |
+| `locallife/worker/order_payment_fact.go:36` | `recoveredOrderPaymentFactResource` | 为“已支付但未处理”恢复扫描构造 payment fact 资源快照 JSON | 生产和测试均无调用 |
+| `locallife/worker/task_payment_timeout.go:264` | `paymentTimeoutSubMchIDFromAttach` | 超时关闭支付单时从 attach 解析 `sub_mchid` | 生产和测试均无调用 |
+| `locallife/worker/task_process_payment.go:97` | `withProfitSharingEnqueueDedup` | 给分账 enqueue 追加 asynq unique 去重窗口 | 生产和测试均无调用 |
+| `locallife/worker/task_process_payment.go:1544` | `workerStringValue` | 把 `*string` 转成空字符串兜底 | 生产和测试均无调用 |
+| `locallife/worker/task_process_payment.go:1619` | `workerProfitSharingCommandSnapshot` | 过滤空字段后序列化分账 command snapshot | 生产和测试均无调用 |
+
+## 整组遗留候选
+
+| 位置 | 符号 | 作用 | 核对结论 |
+| --- | --- | --- | --- |
+| `locallife/internal/wechatdoc/alignment_helpers.go:61` | `fieldEnumDiff` | 微信文档字段枚举差异结果 | 整个 alignment helper 文件未被生产或测试调用 |
+| `locallife/internal/wechatdoc/alignment_helpers.go:66` | `endpointDoc` | 微信文档 endpoint 聚合结构 | 同上 |
+| `locallife/internal/wechatdoc/alignment_helpers.go:74` | `collectDocEndpoints` | 从抽取结果聚合 endpoint、字段、错误码 | 同上 |
+| `locallife/internal/wechatdoc/alignment_helpers.go:112` | `nearestEndpointKey` | 将文档 section 归属到最近 endpoint | 同上 |
+| `locallife/internal/wechatdoc/alignment_helpers.go:132` | `ensureDocEndpoint` | 初始化 endpoint 聚合项 | 同上 |
+| `locallife/internal/wechatdoc/alignment_helpers.go:148` | `pathWithoutLeaf` | 去掉文档路径末级 heading | 同上 |
+| `locallife/internal/wechatdoc/alignment_helpers.go:155` | `commonPrefixLength` | 计算文档路径公共前缀长度 | 同上 |
+| `locallife/internal/wechatdoc/alignment_helpers.go:167` | `accumulateAlignmentSummary` | 聚合缺字段、缺枚举、缺错误码计数 | 同上 |
+| `locallife/internal/wechatdoc/alignment_helpers.go:180` | `findEndpointAudit` | 在 audit 列表中按 method/path 找结果 | 同上 |
+| `locallife/internal/wechatdoc/alignment_helpers.go:190` | `countMissingEnumValues` | 统计缺失枚举值数量 | 同上 |
+| `locallife/internal/wechatdoc/alignment_helpers.go:198` | `endpointHasMissingCoverage` | 判断 endpoint 是否有缺口 | 同上 |
+| `locallife/internal/wechatdoc/alignment_helpers.go:209` | `structJSONFields` | 通过反射展开结构体 JSON 字段 | 同上 |
+| `locallife/internal/wechatdoc/alignment_helpers.go:215` | `collectJSONFields` | 递归收集 JSON 字段 | 同上 |
+| `locallife/internal/wechatdoc/alignment_helpers.go:246` | `jsonFieldName` | 从 struct tag 获取 JSON 字段名 | 同上 |
+| `locallife/internal/wechatdoc/alignment_helpers.go:258` | `diffFieldNames` | 比较文档字段与已知字段 | 同上 |
+| `locallife/internal/wechatdoc/alignment_helpers.go:269` | `diffFieldEnums` | 比较字段枚举值缺失/额外项 | 同上 |
+| `locallife/internal/wechatdoc/alignment_helpers.go:320` | `diffFieldConstraints` | 比较 required/format 等约束 | 同上 |
+| `locallife/internal/wechatdoc/alignment_helpers.go:339` | `inferFieldConstraints` | 从字段描述推断约束 | 同上 |
+| `locallife/internal/wechatdoc/alignment_helpers.go:351` | `isComparableEnumValue` | 过滤不适合直接比较的枚举值 | 同上 |
+| `locallife/internal/wechatdoc/alignment_helpers.go:366` | `isCJKRune` | 判断 CJK 字符，辅助枚举过滤 | 同上 |
+| `locallife/internal/wechatdoc/alignment_helpers.go:370` | `diffSet` | 集合差异 | 同上 |
+| `locallife/internal/wechatdoc/alignment_helpers.go:381` | `sortedFieldNames` | 字段名排序 | 同上 |
+| `locallife/internal/wechatdoc/alignment_helpers.go:390` | `sortedSetKeys` | set key 排序 | 同上 |
+| `locallife/internal/wechatdoc/alignment_helpers.go:399` | `setOf` | 构造字符串集合 | 同上 |
+| `locallife/internal/wechatdoc/alignment_helpers.go:407` | `sortedEndpointKeys` | endpoint key 排序 | 同上 |
+| `locallife/internal/wechatdoc/alignment_helpers.go:416` | `endpointAuditKey` | 构造 endpoint audit key | 同上 |
+
+这一组看起来是微信官方文档对齐审计工具的半成品或旧实现。删除前应先确认 `cmd/wechat_doc_extract`、`internal/docaudit` 或后续文档审计流程是否还有计划复用它。
+
+## 未注册 handler / 未接入入口候选
+
+| 位置 | 符号 | 作用 | 核对结论 |
+| --- | --- | --- | --- |
+| `locallife/api/rider.go:1187` | `listRidersRequest` | 旧版 `/v1/admin/riders` 查询参数 | 当前 `server.go` 将 `/admin/riders` 挂到 `listPlatformRiders`，不是 `listRiders` |
+| `locallife/api/rider.go:1193` | `listRidersResponse` | 旧版 `/v1/admin/riders` 响应结构 | 同上 |
+| `locallife/api/rider.go:1216` | `Server.listRiders` | 旧版管理员骑手列表 handler | 未注册到路由；Swagger 注释仍写着 `/v1/admin/riders`，但真实路由走 `platform_rider_management` |
+| `locallife/api/scan.go:475` | `buildMerchantStorefrontQRCodeObjectKey` | 生成商户店铺小程序码对象 key | 只被未注册的 `ensureMerchantStorefrontQRCode` 调用 |
+| `locallife/api/scan.go:480` | `buildMerchantStorefrontQRCodeScene` | 生成小程序码 scene | 只被未注册的 `ensureMerchantStorefrontQRCode` 调用 |
+| `locallife/api/scan.go:484` | `wxaCodeEnvVersion` | 将环境名映射到微信小程序码 env_version | 只被未注册的 `ensureMerchantStorefrontQRCode` 调用 |
+| `locallife/api/scan.go:493` | `Server.ensureMerchantStorefrontQRCode` | 为商户店铺生成并保存小程序码 | 生产无调用；如果店铺码能力不再需要，可成组清理 |
+
+## Swagger-only / 文档契约用途
+
+| 位置 | 符号 | 作用 | 核对结论 |
+| --- | --- | --- | --- |
+| `locallife/api/merchant_application_ocr_correction.go:39` | `patchMerchantDocumentOCRFieldsRequest` | Swagger 文档里的 OCR 更正统一请求体 | 代码实际按证照类型绑定更具体 DTO；该结构只被 Swagger 注释和 `docs/docs.go` 引用 |
+| `locallife/api/payment_order.go:1127` | `applyAbnormalRefundURIRequest` | 异常退款申请 URI 参数 DTO | 未见 handler 使用；也未见 Swagger 引用，偏清理候选 |
+| `locallife/api/payment_order.go:1131` | `applyAbnormalRefundBodyRequest` | 异常退款申请 body DTO | 未见 handler 使用；也未见 Swagger 引用，偏清理候选 |
+
+## 测试仍在引用，先别直接删
+
+| 位置 | 符号 | 作用 | 核对结论 |
+| --- | --- | --- | --- |
+| `locallife/api/recovery_dispute.go:1805` | `deriveAutomaticRecoveryDisputeResolution` | 从追偿争议和行为决策推导自动处理结果 | 生产无调用，但 `recovery_dispute_test.go` 仍直接测它 |
+| `locallife/baofu/client.go:454` | `publicBusinessFailure` | 解析宝付 public envelope 业务失败码/文案 | 生产无调用，但 `baofu/client_test.go` 仍直接测它；也可能是原本 public 接口失败分类残留 |
+| `locallife/logic/promotion_engine.go:269` | `suggestBestVoucher` | 从 DB 查询用户可用券并挑选最优券 | 生产无调用；`suggestBestVoucherFromList` 才是生产使用核心，测试仍覆盖该 wrapper |
+| `locallife/worker/baofu_alert_payloads.go:17` | `newBaofuPaymentCallbackMissingAlert` | 构造宝付支付回调缺失告警 payload | 生产无调用；`alert_payloads_test.go` 仍覆盖 |
+| `locallife/worker/baofu_alert_payloads.go:34` | `newBaofuProfitSharingProcessingSLAAlert` | 构造宝付分账处理超时告警 payload | 同上 |
+| `locallife/worker/baofu_alert_payloads.go:52` | `newBaofuWithdrawalProcessingSLAAlert` | 构造宝付提现处理超时告警 payload | 同上 |
+| `locallife/worker/baofu_alert_payloads.go:72` | `newBaofuFailedFactAlert` | 构造宝付 payment fact 失败告警 payload | 同上 |
+| `locallife/worker/baofu_alert_payloads.go:90` | `newBaofuFeeLedgerMismatchAlert` | 构造宝付手续费台账不一致告警 payload | 同上 |
+| `locallife/worker/payment_channel_boundary.go:11` | `paymentOrderRequiresProfitSharing` | 包装 `db.PaymentOrderRequiresProfitSharing`，用于判断支付单是否需要分账 | 生产无调用；测试仍覆盖边界 |
+| `locallife/worker/payment_channel_boundary.go:25` | `paymentOrderUsesMainBusinessRefundChannel` | 判断支付单是否应走主业务宝付退款通道 | 生产无调用；测试仍覆盖边界 |
+| `locallife/worker/task_merchant_application_ocr.go:505` | `parseFoodPermitOCRText` | 食品经营许可证 OCR 主解析入口，调用 internal parser 并记录失败日志 | 生产改用 `parseFoodPermitOCRTextFallback` / internal parser；测试仍直接测旧入口 |
+| `locallife/worker/task_process_payment.go:84` | `shouldDispatchOrderProfitSharing` | 判断支付成功后是否派发订单分账 | 生产无调用；`task_process_payment_internal_test.go` 仍覆盖 |
+| `locallife/worker/task_process_payment.go:1551` | `workerPaymentCommandErrorFields` | 将微信/宝付错误转成 command 记录的 code/message | 生产无调用；测试仍覆盖错误映射 |
+
+## 暂不作为死代码
+
+| 位置 | 符号 | 作用 | 核对结论 |
+| --- | --- | --- | --- |
+| `locallife/logic/baofu_payment_readiness.go:47` | `ensureMerchantBaofuReadyForPayment` | 单商户宝付支付 readiness 校验 | 被同文件 `ensureCombinedPaymentMerchantsBaofuReady` 调用；如果上层 helper 保留，它也必须保留 |
+| `locallife/worker/order_payment_fact.go:89` | `orderPaymentInt8Value` | 将 `pgtype.Int8` 转成 JSON 可序列化值 | 被 `recoveredOrderPaymentFactResource` 调用；随上层 helper 成组判断 |
+| `locallife/worker/order_profit_sharing_snapshot.go:13` | `wechatProfitSharingPaymentFeeRateBps` | 微信分账手续费估算费率 | 被同文件 `estimatedWechatProfitSharingPaymentFee` 调用 |
+| `locallife/worker/order_profit_sharing_snapshot.go:15` | `estimatedWechatProfitSharingPaymentFee` | 估算微信分账手续费 | 被 `ensureOrderProfitSharingSnapshot` 调用 |
+| `locallife/worker/order_profit_sharing_snapshot.go:22` | `RedisTaskProcessor.ensureOrderProfitSharingSnapshot` | 为订单创建分账快照 | CodeGraph/staticcheck 未发现外部调用，但同文件内部结构完整；删除前要确认历史微信分账路径是否已经彻底退役 |
+| `locallife/worker/refund_recovery_scheduler.go:30` | `errRefundRecoverySubMchIDMissing` | refund recovery 解析子商户号失败错误 | 被 `resolveSubMchID` 调用 |
+| `locallife/worker/refund_recovery_scheduler.go:31` | `errRefundRecoveryMerchantUnresolved` | refund recovery 无法解析商户错误 | 被 `resolveSubMchID` 调用 |
+| `locallife/worker/refund_recovery_scheduler.go:650` | `RefundRecoveryScheduler.resolveSubMchID` | 根据订单或预订解析子商户号 | CodeGraph/staticcheck 未发现外部调用；如果 refund recovery 已不需要直连微信子商户号，可成组清理 |
+
+## 代码块级信号
+
+| 位置 | 信号 | 作用 | 核对结论 |
+| --- | --- | --- | --- |
+| `locallife/api/merchant_finance.go:877` | `SA4006` | 统计带状态筛选的商户结算数量 | `err` 在分支中赋值后统一检查；不是死代码块，但 staticcheck 会提示可读性/风险 |
+| `locallife/api/merchant_finance.go:898` | `SA4006` | 统计不带状态筛选的商户结算数量 | 同上 |
+
+## 建议顺序
+
+1. 先清理纯孤立 helper：`pgInt8Value`、`parseFlexibleDate`、`subMchIDFromPaymentAttach`、`shouldEnableOrderProfitSharing`、`workerStringValue`、`workerProfitSharingCommandSnapshot`。
+2. 再按功能成组确认：`internal/wechatdoc/alignment_helpers.go`、旧 `listRiders` handler、店铺码生成、并发支付冲突 helper、refund recovery 子商户解析。
+3. 对“测试仍在引用”的项，先决定测试是否还代表有效业务规则；若规则已经迁移，应同步删除或改写测试。
+4. 对 `merchant_finance.go` 的 `SA4006`，如果进入修复阶段，建议只做局部可读性调整，不当作死代码删除。

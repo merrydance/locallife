@@ -1812,11 +1812,6 @@ func internalError(ctx *gin.Context, err error) ErrorResponse {
 	return loggedServerError(ctx, err, "internal server error", "internal error")
 }
 
-func attachedServerError(ctx *gin.Context, err error, publicMessage string) ErrorResponse {
-	_ = ctx.Error(err)
-	return ErrorResponse{Error: publicMessage}
-}
-
 func loggedServerError(ctx *gin.Context, err error, publicMessage string, logMessage string) ErrorResponse {
 	// Attach to gin context so RequestLoggingMiddleware can include it
 	_ = ctx.Error(err)
