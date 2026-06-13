@@ -75,6 +75,22 @@
         <text class="result-summary">{{boardResultSummaryText}}</text>
       </view>
 
+      <t-notice-bar
+        wx:if="{{boardRealtimeErrorMessage}}"
+        class="page-notice"
+        theme="warning"
+        visible="{{true}}"
+        content="{{boardRealtimeErrorMessage}}"
+      />
+
+      <t-notice-bar
+        wx:if="{{boardRefreshErrorMessage}}"
+        class="page-notice"
+        theme="error"
+        visible="{{true}}"
+        content="{{boardRefreshErrorMessage}}"
+      />
+
       <view wx:if="{{boardInitialLoading}}" class="loading-state">
         <t-loading theme="circular" size="40rpx" text="加载后厨订单中..." vertical />
       </view>

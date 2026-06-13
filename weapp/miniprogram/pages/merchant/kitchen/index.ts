@@ -171,6 +171,7 @@ Page({
     boardInitialError: false,
     boardInitialErrorMessage: '',
     boardRefreshErrorMessage: '',
+    boardRealtimeErrorMessage: '',
     boardLoading: false,
     isMerchantOpen: true,
     actionOrderId: 0,
@@ -229,6 +230,7 @@ Page({
       return
     }
 
+    this.refreshRealtimeRuntime()
     this.loadKitchenOrders(false).catch(() => undefined)
   },
 
@@ -287,7 +289,7 @@ Page({
         return
       }
 
-      this.setData({ boardRefreshErrorMessage: message })
+      this.setData({ boardRealtimeErrorMessage: message })
       wx.showToast({ title: message, icon: 'none' })
     })
 
@@ -316,7 +318,7 @@ Page({
   applyMerchantOpenStatus(isOpen: boolean) {
     this.setData({
       isMerchantOpen: isOpen,
-      boardRefreshErrorMessage: isOpen ? '' : '当前门店已打烊，后厨实时订单已暂停'
+      boardRealtimeErrorMessage: isOpen ? '' : '当前门店已打烊，后厨实时订单已暂停'
     })
   },
 
@@ -326,6 +328,7 @@ Page({
       this.syncRealtimeRuntime(Boolean(status?.is_open))
     } catch (err) {
       logger.warn('Load merchant open status for kitchen realtime failed', err)
+      this.setData({ boardRealtimeErrorMessage: '后厨实时同步暂不可用，请下拉刷新或稍后重试' })
       this.stopRealtimeRuntime({ disconnect: true })
     }
   },
