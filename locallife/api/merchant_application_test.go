@@ -346,6 +346,45 @@ func TestCheckMerchantApplicationApproval_UsesCorrectedMerchantDocumentOCRFields
 	require.NoError(t, err)
 }
 
+func TestCheckMerchantApplicationApproval_AllowsNearbyMerchantBeyondHardRejectDistance(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	server := &Server{store: store}
+	app := randomMerchantAppDraftWithData(1)
+
+	store.EXPECT().
+		ListMerchantLocationsInRegion(gomock.Any(), app.RegionID.Int64).
+		Times(1).
+		Return([]db.ListMerchantLocationsInRegionRow{
+			{
+				OwnerUserID: app.UserID + 1,
+				Address:     "北京市朝阳区测试路102号",
+				Latitude:    pgtype.Numeric{Int: big.NewInt(399080540), Exp: -7, Valid: true},
+				Longitude:   pgtype.Numeric{Int: big.NewInt(1163210000), Exp: -7, Valid: true},
+			},
+		}, nil)
+	store.EXPECT().
+		CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
+			BusinessLicenseNumber: app.BusinessLicenseNumber,
+			ID:                    app.ID,
+		}).
+		Times(1).
+		Return(int64(0), nil)
+	store.EXPECT().
+		CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
+			LegalPersonIDNumber: app.LegalPersonIDNumber,
+			ID:                  app.ID,
+		}).
+		Times(1).
+		Return(int64(0), nil)
+
+	err := server.checkMerchantApplicationApproval(nil, app)
+
+	require.NoError(t, err)
+}
+
 func TestCheckMerchantApplicationApproval_RequiresMerchantDocumentOCRConfirmation(t *testing.T) {
 	t.Parallel()
 
@@ -2902,7 +2941,8 @@ func TestSubmitMerchantApplication(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
-				require.Contains(t, recorder.Body.String(), "附近已有其他商户完成入驻")
+				require.Contains(t, recorder.Body.String(), "该定位点离已有门店太近")
+				require.Contains(t, recorder.Body.String(), "不要在隔壁店门前定位")
 			},
 		},
 	}

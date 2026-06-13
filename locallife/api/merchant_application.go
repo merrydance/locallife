@@ -26,8 +26,9 @@ import (
 )
 
 const (
-	merchantApplicationAddressValidationRadiusMeters = 1000
-	merchantOnboardingReviewTaskUniqueTTL            = 30 * time.Second
+	merchantApplicationAddressValidationRadiusMeters     = 1000
+	merchantApplicationDuplicateLocationHardRejectMeters = 5
+	merchantOnboardingReviewTaskUniqueTTL                = 30 * time.Second
 )
 
 // loggingReader wraps io.ReadCloser to log progress
@@ -1274,10 +1275,10 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 	}
 
 	// 6. 检查地址是否已被占用（GPS 距离去重）
-	// 五家店同写"希望路北段路东"但各自打了不同坐标 → 各 GPS 距离 > 20m，均可入驻。
-	// 同一商户重复申请或两家店坐标几乎完全相同 → 距离 ≤ 20m，拒绝。
+	// 五家店同写"希望路北段路东"但各自打了不同坐标 → 各 GPS 距离 > 5m，均可入驻。
+	// 同一商户重复申请或两家店坐标几乎完全相同 → 距离 ≤ 5m，拒绝。
 	// 字符串比较在模糊地址（无门牌号）场景下天生有歧义，GPS 是唯一可靠手段。
-	// 这里的 20m 是物理门店点位去重阈值，不是证照地址匹配半径。
+	// 这里的 5m 是物理门店点位硬拒阈值，不是证照地址匹配半径。
 	if !app.Longitude.Valid || !app.Latitude.Valid {
 		return apierr(ErrMerchantLocationRequired.Code, "请选择商户地理位置")
 	}
@@ -1290,7 +1291,6 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 		if err != nil {
 			log.Warn().Err(err).Int64("region_id", app.RegionID.Int64).Msg("GPS 去重查询失败，跳过")
 		} else {
-			const duplicateThresholdMeters = 20
 			for _, loc := range locations {
 				if loc.OwnerUserID == app.UserID {
 					continue // 排除申请人自己
@@ -1299,13 +1299,13 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 				existLng := pgNumericToFloat64(loc.Longitude)
 				existLoc := algorithm.Location{Latitude: existLat, Longitude: existLng}
 				dist := algorithm.HaversineDistance(appLoc, existLoc)
-				if dist <= duplicateThresholdMeters {
+				if dist <= merchantApplicationDuplicateLocationHardRejectMeters {
 					log.Warn().
 						Str("app_addr", app.BusinessAddress).
 						Str("exist_addr", loc.Address).
 						Int("dist_m", dist).
 						Msg("GPS 地址重复检测命中")
-					return apierr(ErrApplicationInvalidState.Code, "该位置附近已有其他商户完成入驻，请核对定位后重试")
+					return apierr(ErrApplicationInvalidState.Code, "该定位点离已有门店太近。请站在自己门店门口，或到 GPS 信号更好的位置重新定位；不要在隔壁店门前定位。")
 				}
 			}
 		}
