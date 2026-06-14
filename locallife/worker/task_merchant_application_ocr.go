@@ -502,16 +502,12 @@ func formatPgTimestamp(value pgtype.Timestamptz) string {
 	return value.Time.Format(time.RFC3339)
 }
 
-func parseFoodPermitOCRText(data *foodPermitOCRData, text string) {
-	parseFoodPermitOCRTextInternal(data, text, true)
-}
-
 func parseFoodPermitOCRTextFallback(data *foodPermitOCRData, text string) {
 	if data == nil || text == "" {
 		return
 	}
 	parsed := foodPermitOCRData{}
-	parseFoodPermitOCRTextInternal(&parsed, text, false)
+	parseFoodPermitOCRTextInternal(&parsed, text)
 	if data.CompanyName == "" {
 		data.CompanyName = parsed.CompanyName
 	}
@@ -529,7 +525,7 @@ func parseFoodPermitOCRTextFallback(data *foodPermitOCRData, text string) {
 	}
 }
 
-func parseFoodPermitOCRTextInternal(data *foodPermitOCRData, text string, logFailure bool) {
+func parseFoodPermitOCRTextInternal(data *foodPermitOCRData, text string) {
 	// 企业名称匹配 - 使用多种模式尝试提取
 	namePatterns := []*regexp.Regexp{
 		// 模式1: 标准格式 "经营者名称：XXX"
@@ -557,13 +553,6 @@ func parseFoodPermitOCRTextInternal(data *foodPermitOCRData, text string, logFai
 				break
 			}
 		}
-	}
-
-	// 如果未能提取企业名称，记录日志便于迭代优化
-	if logFailure && data.CompanyName == "" {
-		log.Warn().
-			Str("raw_text_preview", truncateString(text, 200)).
-			Msg("food permit company name extraction failed")
 	}
 
 	// 经营者姓名（个体工商户/小餐饮登记证格式）

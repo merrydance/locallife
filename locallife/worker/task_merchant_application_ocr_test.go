@@ -407,37 +407,54 @@ func TestProcessTaskMerchantApplicationFoodPermitOCR_PrefersStructuredFields(t *
 	require.NoError(t, err)
 }
 
-func TestParseFoodPermitOCRText_ExtractsLikelyCompanyName(t *testing.T) {
+func TestParseFoodPermitOCRTextFallback_ExtractsLikelyCompanyName(t *testing.T) {
 	t.Parallel()
 
 	var data foodPermitOCRData
-	parseFoodPermitOCRText(&data, "经营者名称：测试餐饮有限公司\n许可证编号：JY12345678901234\n有效期至：2027年01月08日")
+	parseFoodPermitOCRTextFallback(&data, "经营者名称：测试餐饮有限公司\n许可证编号：JY12345678901234\n有效期至：2027年01月08日")
 
 	require.Equal(t, "测试餐饮有限公司", data.CompanyName)
 	require.Equal(t, "JY12345678901234", data.PermitNo)
 	require.Equal(t, "2027年01月08日", data.ValidTo)
 }
 
-func TestParseFoodPermitOCRText_RejectsSuspiciousCompanyName(t *testing.T) {
+func TestParseFoodPermitOCRTextFallback_RejectsSuspiciousCompanyName(t *testing.T) {
 	t.Parallel()
 
 	var data foodPermitOCRData
-	parseFoodPermitOCRText(&data, "经营者名称：地址：生祠经营场所面积在50平米以上的小餐饮办理《食品河北省邢台市宁晋县经济开发区希望路北段路东\n许可证编号：JY12345678901234\n有效期至：2027年01月08日")
+	parseFoodPermitOCRTextFallback(&data, "经营者名称：地址：生祠经营场所面积在50平米以上的小餐饮办理《食品河北省邢台市宁晋县经济开发区希望路北段路东\n许可证编号：JY12345678901234\n有效期至：2027年01月08日")
 
 	require.Empty(t, data.CompanyName)
 	require.Equal(t, "JY12345678901234", data.PermitNo)
 	require.Equal(t, "2027年01月08日", data.ValidTo)
 }
 
-func TestParseFoodPermitOCRText_UsesRegistrationBusinessName(t *testing.T) {
+func TestParseFoodPermitOCRTextFallback_UsesRegistrationBusinessName(t *testing.T) {
 	t.Parallel()
 
 	var data foodPermitOCRData
-	parseFoodPermitOCRText(&data, "食品小作坊小餐饮登记证\n商号名称：宁晋县玉水轩鱼味馆\n经营者姓名：张三\n登记证编号：2130528020946\n有效期至：2030年12月31日")
+	parseFoodPermitOCRTextFallback(&data, "食品小作坊小餐饮登记证\n商号名称：宁晋县玉水轩鱼味馆\n经营者姓名：张三\n登记证编号：2130528020946\n有效期至：2030年12月31日")
 
 	require.Equal(t, "宁晋县玉水轩鱼味馆", data.CompanyName)
 	require.Equal(t, "2130528020946", data.PermitNo)
 	require.Equal(t, "2030年12月31日", data.ValidTo)
+}
+
+func TestParseFoodPermitOCRTextFallback_DoesNotOverwriteStructuredFields(t *testing.T) {
+	t.Parallel()
+
+	data := foodPermitOCRData{
+		CompanyName:  "结构化餐饮店",
+		OperatorName: "李四",
+		PermitNo:     "JY00000000000000",
+		ValidTo:      "2035年01月01日",
+	}
+	parseFoodPermitOCRTextFallback(&data, "经营者名称：文本餐饮有限公司\n经营者姓名：张三\n许可证编号：JY12345678901234\n有效期至：2027年01月08日")
+
+	require.Equal(t, "结构化餐饮店", data.CompanyName)
+	require.Equal(t, "李四", data.OperatorName)
+	require.Equal(t, "JY00000000000000", data.PermitNo)
+	require.Equal(t, "2035年01月01日", data.ValidTo)
 }
 
 func TestProcessTaskMerchantApplicationBusinessLicenseOCR_UsesOCRJob(t *testing.T) {

@@ -76,6 +76,7 @@
 | `locallife/logic/promotion_engine.go:269` | `suggestBestVoucher` | 旧版代金券推荐 wrapper：从 DB 查询可用券后调用 `suggestBestVoucherFromList` | 生产无调用；当前 `PromotionEngine.CalculateFinalPrice` 已先调用 `listAvailableVouchers` 取得同一批可用券，再直接用 `suggestBestVoucherFromList` 生成推荐和券试算。已删除 wrapper，并把测试改为覆盖真实核心选择函数；`go test ./logic -run 'TestSuggestBestVoucherFromList|TestCalculateFinalPrice' -count=1` 和 `go test ./logic -run '^$' -count=1` 通过 |
 | `locallife/worker/baofu_alert_payloads.go` | `newBaofuPaymentCallbackMissingAlert` / `newBaofuProfitSharingProcessingSLAAlert` / `newBaofuWithdrawalProcessingSLAAlert` / `newBaofuFailedFactAlert` / `newBaofuFeeLedgerMismatchAlert` | 未接入的宝付支付回调、分账、提现、fact 和手续费对账告警 payload 构造函数 | 生产无调用，未见 scheduler/worker/API 持久化入口；当前真实平台告警路径直接调用 `SavePlatformAlertEvent`，退款/超时告警仍使用 `refundOrderAlertExtra` / `paymentOrderAlertExtra` 等通用 helper。已删除整组文件，并移除只服务这组未接入 helper 的 `baofuReconciliationAlertExtra` / `isSensitiveBaofuAlertField` 和测试；`go test ./worker -run 'TestRefundOrderAlertExtra_IncludesCommonIdentifiers' -count=1`、`go test ./worker -run '^$' -count=1`、`go build ./worker` 通过 |
 | `locallife/worker/payment_channel_boundary.go:11` | `paymentOrderRequiresProfitSharing` / `paymentOrderUsesMainBusinessRefundChannel` | worker 包内支付单分账和宝付主业务退款通道判断 wrapper | 生产无调用；当前生产路径直接使用 `db.PaymentOrderRequiresProfitSharing` 或直接检查 `PaymentChannel == baofu_aggregate`，同文件仍保留真实退款路径使用的 `refundTypeForPaymentOrder` 和 `mainBusinessRefundChannelDriftError`。已删除两个 wrapper 和对应测试；`go test ./worker -run 'TestRefundTypeForPaymentOrder' -count=1`、`go test ./worker -run '^$' -count=1`、`go build ./worker` 通过 |
+| `locallife/worker/task_merchant_application_ocr.go:505` | `parseFoodPermitOCRText` | 食品经营许可证 OCR 旧版直接解析入口，调用 internal parser 并控制缺失公司名日志 | 生产无调用；当前商户食品经营许可证 OCR 成功路径先写入 normalized 结构化字段，仅在 `RawText` 存在时通过 `parseFoodPermitOCRTextFallback` 补齐缺失字段且不覆盖结构化结果。已删除旧 wrapper 和随之失效的 `logFailure` 分支，测试迁到生产 fallback 语义；`go test ./worker -run 'Test(ParseFoodPermitOCRTextFallback|ProcessTaskMerchantApplicationFoodPermitOCR)' -count=1`、`go test ./worker -run '^$' -count=1`、`go build ./worker` 通过 |
 
 ## 可优先清理候选
 
@@ -102,7 +103,6 @@
 
 | 位置 | 符号 | 作用 | 核对结论 |
 | --- | --- | --- | --- |
-| `locallife/worker/task_merchant_application_ocr.go:505` | `parseFoodPermitOCRText` | 食品经营许可证 OCR 主解析入口，调用 internal parser 并记录失败日志 | 生产改用 `parseFoodPermitOCRTextFallback` / internal parser；测试仍直接测旧入口 |
 | `locallife/worker/task_process_payment.go:84` | `shouldDispatchOrderProfitSharing` | 判断支付成功后是否派发订单分账 | 生产无调用；`task_process_payment_internal_test.go` 仍覆盖 |
 | `locallife/worker/task_process_payment.go:1551` | `workerPaymentCommandErrorFields` | 将微信/宝付错误转成 command 记录的 code/message | 生产无调用；测试仍覆盖错误映射 |
 
