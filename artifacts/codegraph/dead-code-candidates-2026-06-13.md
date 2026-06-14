@@ -70,9 +70,6 @@
 
 | 位置 | 符号 | 作用 | 核对结论 |
 | --- | --- | --- | --- |
-| `locallife/db/sqlc/tx_claim_behavior.go:135` | `behaviorDecisionScoreBreakdown` | 索赔行为决策评分详情 JSON 结构 | 生产无引用；测试 helper 仍可解码该类型，属于测试辅助引用 |
-| `locallife/db/sqlc/tx_claim_behavior.go:143` | `behaviorDecisionScoreDetail` | 单项评分与命中信号结构 | 只被上面的未使用评分结构嵌套引用 |
-| `locallife/db/sqlc/tx_claim_behavior.go:148` | `behaviorDecisionSignal` | 评分信号 code/weight/count/active | 只被上面的未使用评分结构嵌套引用 |
 
 ## 整组遗留候选
 
@@ -131,6 +128,9 @@
 | --- | --- | --- | --- |
 | `locallife/api/recovery_dispute.go:1805` | `deriveAutomaticRecoveryDisputeResolution` | 从追偿争议和行为决策推导自动处理结果 | 生产无调用，但 `recovery_dispute_test.go` 仍直接测它 |
 | `locallife/baofu/client.go:454` | `publicBusinessFailure` | 解析宝付 public envelope 业务失败码/文案 | 生产无调用，但 `baofu/client_test.go` 仍直接测它；也可能是原本 public 接口失败分类残留 |
+| `locallife/db/sqlc/tx_claim_behavior.go:135` | `behaviorDecisionScoreBreakdown` | 索赔行为决策评分详情 JSON 结构 | 生产无直接引用，但 `tx_claim_behavior_test.go` 的 `decodeScoreBreakdown` 直接用它校验评分 JSON 结构；若后续要清理，应先把测试解码结构移到 `_test.go` |
+| `locallife/db/sqlc/tx_claim_behavior.go:143` | `behaviorDecisionScoreDetail` | 单项评分与命中信号结构 | 被上面的测试解码结构嵌套引用，随 score breakdown 成组保留 |
+| `locallife/db/sqlc/tx_claim_behavior.go:148` | `behaviorDecisionSignal` | 评分信号 code/weight/count/active | 被上面的测试解码结构嵌套引用，随 score breakdown 成组保留 |
 | `locallife/logic/promotion_engine.go:269` | `suggestBestVoucher` | 从 DB 查询用户可用券并挑选最优券 | 生产无调用；`suggestBestVoucherFromList` 才是生产使用核心，测试仍覆盖该 wrapper |
 | `locallife/worker/baofu_alert_payloads.go:17` | `newBaofuPaymentCallbackMissingAlert` | 构造宝付支付回调缺失告警 payload | 生产无调用；`alert_payloads_test.go` 仍覆盖 |
 | `locallife/worker/baofu_alert_payloads.go:34` | `newBaofuProfitSharingProcessingSLAAlert` | 构造宝付分账处理超时告警 payload | 同上 |
