@@ -266,14 +266,6 @@ func isVoucherValid(v db.GetUserVoucherRow, opt OrderContext, now time.Time) boo
 	return true
 }
 
-func suggestBestVoucher(ctx context.Context, store db.Store, opt OrderContext) (*SuggestedVoucher, error) {
-	vouchers, err := listAvailableVouchers(ctx, store, opt)
-	if err != nil {
-		return nil, err
-	}
-	return suggestBestVoucherFromList(vouchers, opt), nil
-}
-
 func listAvailableVouchers(ctx context.Context, store db.Store, opt OrderContext) ([]db.ListUserAvailableVouchersForMerchantRow, error) {
 	return store.ListUserAvailableVouchersForMerchant(ctx, db.ListUserAvailableVouchersForMerchantParams{
 		UserID:         opt.UserID,
