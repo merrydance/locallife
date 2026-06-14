@@ -13,7 +13,6 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/websocket"
-	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 
 	"github.com/hibiken/asynq"
@@ -1518,21 +1517,6 @@ func workerStringPtrIfNotEmpty(value string) *string {
 		return nil
 	}
 	return &value
-}
-
-func workerPaymentCommandErrorFields(err error) (*string, *string) {
-	var wxErr *wechat.WechatPayError
-	if errors.As(err, &wxErr) {
-		return workerStringPtrIfNotEmpty(wxErr.Code), workerStringPtrIfNotEmpty(wxErr.Message)
-	}
-	var baofuErr *baofu.ProviderError
-	if errors.As(err, &baofuErr) {
-		return workerStringPtrIfNotEmpty(baofuErr.UpstreamCode), workerStringPtrIfNotEmpty(strings.TrimSpace(baofu.BaofuCommandMessage(baofuErr.UpstreamCode, baofuErr.UpstreamMessage)))
-	}
-	if err == nil {
-		return nil, nil
-	}
-	return nil, workerStringPtrIfNotEmpty(err.Error())
 }
 
 func dbWorkerBaofuRefundCommandInput(

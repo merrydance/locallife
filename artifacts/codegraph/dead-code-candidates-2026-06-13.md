@@ -78,6 +78,7 @@
 | `locallife/worker/payment_channel_boundary.go:11` | `paymentOrderRequiresProfitSharing` / `paymentOrderUsesMainBusinessRefundChannel` | worker 包内支付单分账和宝付主业务退款通道判断 wrapper | 生产无调用；当前生产路径直接使用 `db.PaymentOrderRequiresProfitSharing` 或直接检查 `PaymentChannel == baofu_aggregate`，同文件仍保留真实退款路径使用的 `refundTypeForPaymentOrder` 和 `mainBusinessRefundChannelDriftError`。已删除两个 wrapper 和对应测试；`go test ./worker -run 'TestRefundTypeForPaymentOrder' -count=1`、`go test ./worker -run '^$' -count=1`、`go build ./worker` 通过 |
 | `locallife/worker/task_merchant_application_ocr.go:505` | `parseFoodPermitOCRText` | 食品经营许可证 OCR 旧版直接解析入口，调用 internal parser 并控制缺失公司名日志 | 生产无调用；当前商户食品经营许可证 OCR 成功路径先写入 normalized 结构化字段，仅在 `RawText` 存在时通过 `parseFoodPermitOCRTextFallback` 补齐缺失字段且不覆盖结构化结果。已删除旧 wrapper 和随之失效的 `logFailure` 分支，测试迁到生产 fallback 语义；`go test ./worker -run 'Test(ParseFoodPermitOCRTextFallback|ProcessTaskMerchantApplicationFoodPermitOCR)' -count=1`、`go test ./worker -run '^$' -count=1`、`go build ./worker` 通过 |
 | `locallife/worker/task_process_payment.go:84` | `shouldDispatchOrderProfitSharing` | 旧版支付成功后订单分账派发判断，按订单类型和预订关联返回是否派发 | 生产无调用；当前宝付分账不在支付成功 worker 中直接派发，而由 `BaofuPaymentRecoveryScheduler.createReadyProfitSharingOrders` 扫描 `ListBaofuOrdersReadyForProfitSharing` 后按 `PaymentChannel=baofu_aggregate`、`RequiresProfitSharing=true`、`paid` 状态、业务类型和订单/预订完成状态创建分账单，再派发 `ProcessTaskBaofuProfitSharing`。旧 helper 的 `takeout` 规则也不再代表当前生产边界。已删除 helper 和只覆盖它的测试文件；`go test ./worker -run 'TestBaofuPaymentRecoveryScheduler|TestProcessTaskBaofuProfitSharing' -count=1`、`go test ./worker -run '^$' -count=1`、`go build ./worker` 通过 |
+| `locallife/worker/task_process_payment.go:1551` | `workerPaymentCommandErrorFields` | 旧版 worker 支付命令错误字段 mapper，把微信或宝付错误转为 command 的 `last_error_code/message` | 生产无调用；当前宝付退款命令记录由 `recordWorkerBaofuRefundCommand` 直接从 `RefundResult` 或 `baofu.ProviderError` 填充错误码和经过 `BaofuCommandMessage` 归一化的错误说明，`workerStringPtrIfNotEmpty` 仍被真实命令记录使用。已删除旧 mapper 和只测它的测试文件，并移除随之失效的 `wechat` import；`go test ./worker -run 'TestProcessTaskInitiateRefund_(OrderRefundUsesProvidedOutRefundNo|OrderRefundBaofuOrderExistMarksProcessingForQueryRecovery|ReservationAddonRefund_UsesProvidedOutRefundNo)' -count=1`、`go test ./worker -run '^$' -count=1`、`go build ./worker` 通过 |
 
 ## 可优先清理候选
 
@@ -104,7 +105,7 @@
 
 | 位置 | 符号 | 作用 | 核对结论 |
 | --- | --- | --- | --- |
-| `locallife/worker/task_process_payment.go:1551` | `workerPaymentCommandErrorFields` | 将微信/宝付错误转成 command 记录的 code/message | 生产无调用；测试仍覆盖错误映射 |
+暂无。
 
 ## 暂不作为死代码
 
