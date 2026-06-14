@@ -80,19 +80,6 @@ type riderDeliveryOrderNotificationPayload struct {
 	CreatedAt          time.Time `json:"created_at"`
 }
 
-func shouldDispatchOrderProfitSharing(order db.Order) bool {
-	if order.ReservationID.Valid {
-		return true
-	}
-
-	switch order.OrderType {
-	case "takeout", "dine_in", "takeaway":
-		return false
-	default:
-		return true
-	}
-}
-
 func profitSharingResultNotificationExpiresAt(order db.ProfitSharingOrder) time.Time {
 	if order.FinishedAt.Valid {
 		return order.FinishedAt.Time.Add(profitSharingResultNotificationExpireWindow)
