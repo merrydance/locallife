@@ -499,6 +499,7 @@ type Querier interface {
 	CreateRiderCredentialLedger(ctx context.Context, arg CreateRiderCredentialLedgerParams) (CredentialLedger, error)
 	CreateRiderDeposit(ctx context.Context, arg CreateRiderDepositParams) (RiderDeposit, error)
 	CreateRiderDepositCredit(ctx context.Context, arg CreateRiderDepositCreditParams) (RiderDepositCredit, error)
+	CreateRiderDepositWithdrawalRequest(ctx context.Context, arg CreateRiderDepositWithdrawalRequestParams) (RiderDepositWithdrawalRequest, error)
 	CreateRiderLocation(ctx context.Context, arg CreateRiderLocationParams) (RiderLocation, error)
 	CreateRiderOnboardingReviewRun(ctx context.Context, arg CreateRiderOnboardingReviewRunParams) (OnboardingReviewRun, error)
 	// ==========================================
@@ -1104,6 +1105,7 @@ type Querier interface {
 	GetRiderDepositCreditByPaymentOrderID(ctx context.Context, paymentOrderID int64) (RiderDepositCredit, error)
 	GetRiderDepositCreditForUpdate(ctx context.Context, id int64) (RiderDepositCredit, error)
 	GetRiderDepositStats(ctx context.Context, riderID int64) (GetRiderDepositStatsRow, error)
+	GetRiderDepositWithdrawalRequestForUpdate(ctx context.Context, arg GetRiderDepositWithdrawalRequestForUpdateParams) (RiderDepositWithdrawalRequest, error)
 	GetRiderEarnings(ctx context.Context, riderID pgtype.Int8) (int64, error)
 	// 获取骑手押金信息（用于扣款前检查）
 	GetRiderForDeposit(ctx context.Context, id int64) (GetRiderForDepositRow, error)
@@ -1988,6 +1990,7 @@ type Querier interface {
 	UpdateRiderApplicationIDCard(ctx context.Context, arg UpdateRiderApplicationIDCardParams) (RiderApplication, error)
 	UpdateRiderApplicationReviewSummary(ctx context.Context, arg UpdateRiderApplicationReviewSummaryParams) (RiderApplication, error)
 	UpdateRiderDeposit(ctx context.Context, arg UpdateRiderDepositParams) (Rider, error)
+	UpdateRiderDepositWithdrawalRequestRefundOrders(ctx context.Context, arg UpdateRiderDepositWithdrawalRequestRefundOrdersParams) (RiderDepositWithdrawalRequest, error)
 	UpdateRiderLocation(ctx context.Context, arg UpdateRiderLocationParams) (Rider, error)
 	UpdateRiderOnlineDuration(ctx context.Context, arg UpdateRiderOnlineDurationParams) (Rider, error)
 	UpdateRiderOnlineStatus(ctx context.Context, arg UpdateRiderOnlineStatusParams) (Rider, error)

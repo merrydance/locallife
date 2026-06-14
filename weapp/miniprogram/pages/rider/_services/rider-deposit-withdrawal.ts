@@ -9,7 +9,9 @@ const TERMINAL_WAIT_INTERVAL_MS = 2000
 
 export interface RiderDepositPendingWithdrawalContext {
   refundOrderIds: number[]
+  requestedAmount?: number
   acceptedAmount: number
+  idempotencyKey?: string
   updatedAt: string
 }
 
@@ -31,6 +33,8 @@ export interface RiderDepositWithdrawalRecoveryResult {
   view: RiderDepositWithdrawalStatusView
   isTerminal: boolean
   shouldRefreshFinance: boolean
+  idempotencyKey?: string
+  requestedAmount?: number
 }
 
 export interface RiderDepositWithdrawalTerminalWaitResult extends RiderDepositWithdrawalRecoveryResult {
@@ -40,6 +44,7 @@ export interface RiderDepositWithdrawalTerminalWaitResult extends RiderDepositWi
 export interface RiderDepositWithdrawalTerminalWaitOptions {
   maxAttempts?: number
   intervalMs?: number
+  idempotencyKey?: string
 }
 
 export interface RecoverStoredRiderDepositWithdrawalOptions extends RiderDepositWithdrawalTerminalWaitOptions {
@@ -82,6 +87,13 @@ function isValidPendingWithdrawalContext(value: unknown): value is RiderDepositP
   }
 
   const candidate = value as Partial<RiderDepositPendingWithdrawalContext>
+  if (candidate.idempotencyKey !== undefined && typeof candidate.idempotencyKey !== 'string') {
+    return false
+  }
+  if (candidate.requestedAmount !== undefined && !Number.isFinite(candidate.requestedAmount)) {
+    return false
+  }
+
   return Array.isArray(candidate.refundOrderIds)
     && uniquePositiveIds(candidate.refundOrderIds).length > 0
     && Number.isFinite(candidate.acceptedAmount)
@@ -93,22 +105,32 @@ function wait(ms: number): Promise<void> {
 }
 
 export function buildPendingRiderDepositWithdrawalContext(
-  response: RiderWithdrawResponse
+  response: RiderWithdrawResponse,
+  idempotencyKey?: string
 ): RiderDepositPendingWithdrawalContext | null {
   const refundOrderIds = uniquePositiveIds((response.refunds || []).map((refund) => refund.refund_order_id))
-  if (refundOrderIds.length === 0 || response.status === 'success') {
+  if (refundOrderIds.length === 0 || response.status === 'success' || response.status === 'failed') {
     return null
   }
 
   const acceptedAmount = Number.isFinite(response.accepted_amount)
     ? response.accepted_amount
     : (response.refunds || []).reduce((total, refund) => total + (refund.amount || 0), 0)
+  const requestedAmount = Number.isFinite(response.requested_amount) ? response.requested_amount : acceptedAmount
 
-  return {
+  const context: RiderDepositPendingWithdrawalContext = {
     refundOrderIds,
+    requestedAmount,
     acceptedAmount,
     updatedAt: new Date().toISOString()
   }
+
+  const trimmedIdempotencyKey = typeof idempotencyKey === 'string' ? idempotencyKey.trim() : ''
+  if (trimmedIdempotencyKey) {
+    context.idempotencyKey = trimmedIdempotencyKey
+  }
+
+  return context
 }
 
 export function savePendingRiderDepositWithdrawal(context: RiderDepositPendingWithdrawalContext) {
@@ -124,7 +146,9 @@ export function getPendingRiderDepositWithdrawal(): RiderDepositPendingWithdrawa
 
     return {
       ...stored,
-      refundOrderIds: uniquePositiveIds(stored.refundOrderIds)
+      refundOrderIds: uniquePositiveIds(stored.refundOrderIds),
+      requestedAmount: Number.isFinite(stored.requestedAmount) ? stored.requestedAmount : stored.acceptedAmount,
+      idempotencyKey: typeof stored.idempotencyKey === 'string' ? stored.idempotencyKey : undefined
     }
   } catch (_error) {
     return null
@@ -154,7 +178,12 @@ export async function recoverStoredRiderDepositWithdrawalStatus(
   }
 
   if (options.waitForTerminal) {
-    return waitForRiderDepositWithdrawalTerminalStatus(pendingWithdrawal, options)
+    const result = await waitForRiderDepositWithdrawalTerminalStatus(pendingWithdrawal, options)
+    return {
+      ...result,
+      idempotencyKey: pendingWithdrawal.idempotencyKey,
+      requestedAmount: pendingWithdrawal.requestedAmount
+    }
   }
 
   const result = await recoverPendingRiderDepositWithdrawal(pendingWithdrawal)
@@ -166,7 +195,9 @@ export async function recoverStoredRiderDepositWithdrawalStatus(
   return {
     view,
     isTerminal: view.isTerminal,
-    shouldRefreshFinance: view.shouldRefreshFinance
+    shouldRefreshFinance: view.shouldRefreshFinance,
+    idempotencyKey: pendingWithdrawal.idempotencyKey,
+    requestedAmount: pendingWithdrawal.requestedAmount
   }
 }
 
@@ -174,7 +205,7 @@ export async function waitForSubmittedRiderDepositWithdrawalTerminalStatus(
   response: RiderWithdrawResponse,
   options: RiderDepositWithdrawalTerminalWaitOptions = {}
 ): Promise<RiderDepositWithdrawalTerminalWaitResult | null> {
-  const context = buildPendingRiderDepositWithdrawalContext(response)
+  const context = buildPendingRiderDepositWithdrawalContext(response, options.idempotencyKey)
   if (!context) {
     return null
   }
@@ -202,6 +233,8 @@ export async function waitForRiderDepositWithdrawalTerminalStatus(
           view: latestView,
           isTerminal: true,
           shouldRefreshFinance: latestView.shouldRefreshFinance,
+          idempotencyKey: context.idempotencyKey,
+          requestedAmount: context.requestedAmount,
           timedOut: false
         }
       }
@@ -219,6 +252,8 @@ export async function waitForRiderDepositWithdrawalTerminalStatus(
       view: latestView,
       isTerminal: false,
       shouldRefreshFinance: latestView.shouldRefreshFinance,
+      idempotencyKey: context.idempotencyKey,
+      requestedAmount: context.requestedAmount,
       timedOut: true
     }
   }
@@ -227,6 +262,8 @@ export async function waitForRiderDepositWithdrawalTerminalStatus(
     view: buildRiderDepositWithdrawalSyncFailedView(context),
     isTerminal: false,
     shouldRefreshFinance: false,
+    idempotencyKey: context.idempotencyKey,
+    requestedAmount: context.requestedAmount,
     timedOut: true
   }
 }

@@ -1,11 +1,15 @@
 package logic
 
 import (
+	"errors"
 	"net/http"
 	"testing"
 
 	"github.com/merrydance/locallife/baofu"
+	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
+	wechaterrorcodes "github.com/merrydance/locallife/wechat/errorcodes"
 	"github.com/stretchr/testify/require"
 )
 
@@ -21,6 +25,68 @@ func TestMapDirectRefundCreateErrorPreservesWechatCause(t *testing.T) {
 	var unwrapped *wechat.WechatPayError
 	require.ErrorAs(t, err, &unwrapped)
 	require.Same(t, wxErr, unwrapped)
+}
+
+func TestClassifyDirectRefundCreateFailure(t *testing.T) {
+	testCases := []struct {
+		name              string
+		err               error
+		wantCommandStatus string
+		wantMarkFailed    bool
+	}{
+		{
+			name:              "system error uncertain",
+			err:               &wechat.WechatPayError{StatusCode: http.StatusInternalServerError, Code: wechaterrorcodes.DirectPaymentCodeSystemError},
+			wantCommandStatus: db.ExternalPaymentCommandStatusUnknown,
+		},
+		{
+			name:              "frequency limited uncertain",
+			err:               &wechat.WechatPayError{StatusCode: http.StatusTooManyRequests, Code: wechaterrorcodes.DirectPaymentCodeFrequencyLimited},
+			wantCommandStatus: db.ExternalPaymentCommandStatusUnknown,
+		},
+		{
+			name:              "contract error uncertain",
+			err:               &wechatcontracts.RefundContractError{Message: "create direct refund: refund_id is required"},
+			wantCommandStatus: db.ExternalPaymentCommandStatusUnknown,
+		},
+		{
+			name:              "transport error uncertain",
+			err:               errors.New("send request: context deadline exceeded"),
+			wantCommandStatus: db.ExternalPaymentCommandStatusUnknown,
+		},
+		{
+			name:              "not enough rejected",
+			err:               &wechat.WechatPayError{StatusCode: http.StatusForbidden, Code: wechaterrorcodes.DirectPaymentCodeNotEnough},
+			wantCommandStatus: db.ExternalPaymentCommandStatusRejected,
+			wantMarkFailed:    true,
+		},
+		{
+			name:              "user account abnormal rejected",
+			err:               &wechat.WechatPayError{StatusCode: http.StatusForbidden, Code: wechaterrorcodes.DirectPaymentCodeUserAccountAbnormal},
+			wantCommandStatus: db.ExternalPaymentCommandStatusRejected,
+			wantMarkFailed:    true,
+		},
+		{
+			name:              "resource missing rejected",
+			err:               &wechat.WechatPayError{StatusCode: http.StatusNotFound, Code: wechaterrorcodes.DirectPaymentCodeResourceNotExists},
+			wantCommandStatus: db.ExternalPaymentCommandStatusRejected,
+			wantMarkFailed:    true,
+		},
+		{
+			name:              "local validation rejected",
+			err:               &wechatcontracts.RefundValidationError{Message: "create direct refund: amount is required"},
+			wantCommandStatus: db.ExternalPaymentCommandStatusRejected,
+			wantMarkFailed:    true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ClassifyDirectRefundCreateFailure(tc.err)
+			require.Equal(t, tc.wantCommandStatus, got.CommandStatus)
+			require.Equal(t, tc.wantMarkFailed, got.MarkFailed)
+		})
+	}
 }
 
 func TestMapBaofuRefundCreateErrorUsesSafeChineseProviderMessage(t *testing.T) {

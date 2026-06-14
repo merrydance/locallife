@@ -92,6 +92,10 @@ export interface RiderWithdrawResponse {
     refunds: RiderWithdrawRefundItem[]
 }
 
+export interface RiderWithdrawOptions {
+    idempotencyKey: string
+}
+
 export interface RiderWithdrawalStatusRefundItem {
     refund_order_id: number
     payment_order_id: number
@@ -167,11 +171,18 @@ export class RiderService {
         })
     }
 
-    static async withdrawDeposit(data: { amount: number, remark?: string }): Promise<RiderWithdrawResponse> {
+    static async withdrawDeposit(data: { amount: number, remark?: string }, options: RiderWithdrawOptions): Promise<RiderWithdrawResponse> {
+        if (!options?.idempotencyKey) {
+            throw new Error('缺少押金提现请求幂等键')
+        }
+
         return await request({
             url: '/v1/rider/withdraw',
             method: 'POST',
-            data
+            data,
+            header: {
+                'Idempotency-Key': options.idempotencyKey
+            }
         })
     }
 

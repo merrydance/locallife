@@ -66,6 +66,50 @@ func mapDirectRefundCreateError(err error) error {
 	}
 }
 
+type DirectRefundCreateFailureDisposition struct {
+	CommandStatus string
+	MarkFailed    bool
+}
+
+func ClassifyDirectRefundCreateFailure(err error) DirectRefundCreateFailureDisposition {
+	disposition := DirectRefundCreateFailureDisposition{
+		CommandStatus: db.ExternalPaymentCommandStatusUnknown,
+	}
+	if err == nil {
+		return disposition
+	}
+
+	var validationErr *wechatcontracts.RefundValidationError
+	if errors.As(err, &validationErr) {
+		return DirectRefundCreateFailureDisposition{
+			CommandStatus: db.ExternalPaymentCommandStatusRejected,
+			MarkFailed:    true,
+		}
+	}
+
+	var contractErr *wechatcontracts.RefundContractError
+	if errors.As(err, &contractErr) {
+		return disposition
+	}
+
+	var wxErr *wechat.WechatPayError
+	if !errors.As(err, &wxErr) {
+		return disposition
+	}
+
+	switch wechaterrorcodes.CanonicalDirectPaymentCode(wxErr.Code) {
+	case wechaterrorcodes.DirectPaymentCodeNotEnough,
+		wechaterrorcodes.DirectPaymentCodeUserAccountAbnormal,
+		wechaterrorcodes.DirectPaymentCodeResourceNotExists:
+		return DirectRefundCreateFailureDisposition{
+			CommandStatus: db.ExternalPaymentCommandStatusRejected,
+			MarkFailed:    true,
+		}
+	default:
+		return disposition
+	}
+}
+
 type BaofuRefundCreateFailureDisposition struct {
 	CommandStatus  string
 	MarkFailed     bool

@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"net/http"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -22,17 +23,24 @@ func createRefundableRiderDepositCredit(t *testing.T, rider Rider, amount int64)
 	return paymentOrder
 }
 
+func prepareRiderDepositRefundTxParamsForTest(rider Rider, amount int64, remark string) PrepareRiderDepositRefundTxParams {
+	return PrepareRiderDepositRefundTxParams{
+		RiderID:                rider.ID,
+		UserID:                 rider.UserID,
+		Amount:                 amount,
+		Remark:                 remark,
+		IdempotencyKey:         "rider-deposit-withdrawal-" + util.RandomString(12),
+		IdempotencyRequestHash: "sha256:" + util.RandomString(64),
+	}
+}
+
 func TestPrepareRiderDepositRefundTx_ReservesCreditAndFreezesBalance(t *testing.T) {
 	setRiderDepositThresholdForTest(t, DefaultRiderDepositThresholdFen)
 
 	rider := createRandomRider(t)
 	paymentOrder := createRefundableRiderDepositCredit(t, rider, 30000)
 
-	result, err := testStore.(*SQLStore).PrepareRiderDepositRefundTx(context.Background(), PrepareRiderDepositRefundTxParams{
-		RiderID: rider.ID,
-		Amount:  12000,
-		Remark:  "骑手押金提现",
-	})
+	result, err := testStore.(*SQLStore).PrepareRiderDepositRefundTx(context.Background(), prepareRiderDepositRefundTxParamsForTest(rider, 12000, "骑手押金提现"))
 	require.NoError(t, err)
 	require.Equal(t, int64(12000), result.FrozenAmount)
 	require.Equal(t, int64(30000), result.Rider.DepositAmount)
@@ -74,11 +82,7 @@ func TestPrepareRiderDepositRefundTx_SplitsAcrossCredits(t *testing.T) {
 	firstPaymentOrder := createRefundableRiderDepositCredit(t, rider, 10000)
 	secondPaymentOrder := createRefundableRiderDepositCredit(t, rider, 20000)
 
-	result, err := testStore.(*SQLStore).PrepareRiderDepositRefundTx(context.Background(), PrepareRiderDepositRefundTxParams{
-		RiderID: rider.ID,
-		Amount:  25000,
-		Remark:  "跨押金凭证提现",
-	})
+	result, err := testStore.(*SQLStore).PrepareRiderDepositRefundTx(context.Background(), prepareRiderDepositRefundTxParamsForTest(rider, 25000, "跨押金凭证提现"))
 	require.NoError(t, err)
 	require.Equal(t, int64(25000), result.FrozenAmount)
 	require.Len(t, result.RefundPlans, 2)
@@ -120,12 +124,242 @@ func TestPrepareRiderDepositRefundTx_SubtractsPendingRefundWhenFrozenDrifted(t *
 	})
 	require.NoError(t, err)
 
-	_, err = testStore.(*SQLStore).PrepareRiderDepositRefundTx(context.Background(), PrepareRiderDepositRefundTxParams{
-		RiderID: rider.ID,
-		Amount:  10000,
-		Remark:  "押金提现",
-	})
+	_, err = testStore.(*SQLStore).PrepareRiderDepositRefundTx(context.Background(), prepareRiderDepositRefundTxParamsForTest(rider, 10000, "押金提现"))
 	require.ErrorIs(t, err, ErrInsufficientDeposit)
+}
+
+func TestPrepareRiderDepositRefundTx_BlocksNewRequestWhenRiderInactive(t *testing.T) {
+	setRiderDepositThresholdForTest(t, DefaultRiderDepositThresholdFen)
+
+	rider := createRandomRider(t)
+	paymentOrder := createRefundableRiderDepositCredit(t, rider, 30000)
+
+	inactiveRider, err := testStore.UpdateRiderStatus(context.Background(), UpdateRiderStatusParams{
+		ID:     rider.ID,
+		Status: RiderStatusSuspended,
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.(*SQLStore).PrepareRiderDepositRefundTx(context.Background(), prepareRiderDepositRefundTxParamsForTest(inactiveRider, 10000, "押金提现"))
+	require.ErrorIs(t, err, ErrRiderAccountNotActivated)
+
+	refunds, err := testStore.ListRefundOrdersByPaymentOrder(context.Background(), paymentOrder.ID)
+	require.NoError(t, err)
+	require.Empty(t, refunds)
+}
+
+func TestPrepareRiderDepositRefundTx_BlocksNewRequestWithActiveDeliveries(t *testing.T) {
+	setRiderDepositThresholdForTest(t, DefaultRiderDepositThresholdFen)
+
+	rider := createRandomRider(t)
+	paymentOrder := createRefundableRiderDepositCredit(t, rider, 30000)
+	createAssignedDelivery(t, rider.ID)
+
+	_, err := testStore.(*SQLStore).PrepareRiderDepositRefundTx(context.Background(), prepareRiderDepositRefundTxParamsForTest(rider, 10000, "押金提现"))
+	require.ErrorIs(t, err, ErrRiderHasActiveDeliveries)
+
+	refunds, err := testStore.ListRefundOrdersByPaymentOrder(context.Background(), paymentOrder.ID)
+	require.NoError(t, err)
+	require.Empty(t, refunds)
+}
+
+func TestPrepareRiderDepositRefundTx_ReplaysSameIdempotencyKey(t *testing.T) {
+	setRiderDepositThresholdForTest(t, DefaultRiderDepositThresholdFen)
+
+	ctx := context.Background()
+	rider := createRandomRider(t)
+	paymentOrder := createRefundableRiderDepositCredit(t, rider, 30000)
+	idempotencyKey := "rider-deposit-withdrawal-" + util.RandomString(12)
+	requestHash := "sha256:" + util.RandomString(64)
+
+	first, err := testStore.(*SQLStore).PrepareRiderDepositRefundTx(ctx, PrepareRiderDepositRefundTxParams{
+		RiderID:                rider.ID,
+		UserID:                 rider.UserID,
+		Amount:                 12000,
+		Remark:                 "骑手押金提现",
+		IdempotencyKey:         idempotencyKey,
+		IdempotencyRequestHash: requestHash,
+	})
+	require.NoError(t, err)
+	require.False(t, first.IdempotencyReplayed)
+	require.Equal(t, int64(12000), first.FrozenAmount)
+	require.Equal(t, int64(12000), first.Rider.FrozenDeposit)
+	require.NotZero(t, first.WithdrawalRequestID)
+	require.Len(t, first.RefundPlans, 1)
+
+	replayed, err := testStore.(*SQLStore).PrepareRiderDepositRefundTx(ctx, PrepareRiderDepositRefundTxParams{
+		RiderID:                rider.ID,
+		UserID:                 rider.UserID,
+		Amount:                 12000,
+		Remark:                 "骑手押金提现",
+		IdempotencyKey:         idempotencyKey,
+		IdempotencyRequestHash: requestHash,
+	})
+	require.NoError(t, err)
+	require.True(t, replayed.IdempotencyReplayed)
+	require.Equal(t, first.WithdrawalRequestID, replayed.WithdrawalRequestID)
+	require.Equal(t, first.FrozenAmount, replayed.FrozenAmount)
+	require.Equal(t, first.Rider.FrozenDeposit, replayed.Rider.FrozenDeposit)
+	require.Len(t, replayed.RefundPlans, 1)
+	require.Equal(t, first.RefundPlans[0].RefundOrder.ID, replayed.RefundPlans[0].RefundOrder.ID)
+	require.Equal(t, first.RefundPlans[0].RefundOrder.OutRefundNo, replayed.RefundPlans[0].RefundOrder.OutRefundNo)
+	require.Equal(t, first.RefundPlans[0].SourcePaymentOrder.ID, replayed.RefundPlans[0].SourcePaymentOrder.ID)
+	require.Equal(t, int64(12000), replayed.RefundPlans[0].RefundOrder.RefundAmount)
+
+	refunds, err := testStore.ListRefundOrdersByPaymentOrder(ctx, paymentOrder.ID)
+	require.NoError(t, err)
+	require.Len(t, refunds, 1)
+	require.Equal(t, first.RefundPlans[0].RefundOrder.ID, refunds[0].ID)
+
+	updatedRider, err := testStore.GetRider(ctx, rider.ID)
+	require.NoError(t, err)
+	require.Equal(t, int64(30000), updatedRider.DepositAmount)
+	require.Equal(t, int64(12000), updatedRider.FrozenDeposit)
+}
+
+func TestPrepareRiderDepositRefundTx_ReplayBypassesCurrentMutablePrechecks(t *testing.T) {
+	setRiderDepositThresholdForTest(t, DefaultRiderDepositThresholdFen)
+
+	ctx := context.Background()
+	rider := createRandomRider(t)
+	paymentOrder := createRefundableRiderDepositCredit(t, rider, 30000)
+	idempotencyKey := "rider-deposit-withdrawal-" + util.RandomString(12)
+	requestHash := "sha256:" + util.RandomString(64)
+
+	first, err := testStore.(*SQLStore).PrepareRiderDepositRefundTx(ctx, PrepareRiderDepositRefundTxParams{
+		RiderID:                rider.ID,
+		UserID:                 rider.UserID,
+		Amount:                 12000,
+		Remark:                 "骑手押金提现",
+		IdempotencyKey:         idempotencyKey,
+		IdempotencyRequestHash: requestHash,
+	})
+	require.NoError(t, err)
+	require.False(t, first.IdempotencyReplayed)
+	require.Len(t, first.RefundPlans, 1)
+
+	_, err = testStore.UpdateRiderStatus(ctx, UpdateRiderStatusParams{
+		ID:     rider.ID,
+		Status: RiderStatusSuspended,
+	})
+	require.NoError(t, err)
+	createAssignedDelivery(t, rider.ID)
+
+	replayed, err := testStore.(*SQLStore).PrepareRiderDepositRefundTx(ctx, PrepareRiderDepositRefundTxParams{
+		RiderID:                rider.ID,
+		UserID:                 rider.UserID,
+		Amount:                 12000,
+		Remark:                 "骑手押金提现",
+		IdempotencyKey:         idempotencyKey,
+		IdempotencyRequestHash: requestHash,
+	})
+	require.NoError(t, err)
+	require.True(t, replayed.IdempotencyReplayed)
+	require.Equal(t, first.WithdrawalRequestID, replayed.WithdrawalRequestID)
+	require.Equal(t, first.RefundPlans[0].RefundOrder.ID, replayed.RefundPlans[0].RefundOrder.ID)
+	require.Equal(t, first.RefundPlans[0].RefundOrder.OutRefundNo, replayed.RefundPlans[0].RefundOrder.OutRefundNo)
+
+	refunds, err := testStore.ListRefundOrdersByPaymentOrder(ctx, paymentOrder.ID)
+	require.NoError(t, err)
+	require.Len(t, refunds, 1)
+	require.Equal(t, first.RefundPlans[0].RefundOrder.ID, refunds[0].ID)
+}
+
+func TestPrepareRiderDepositRefundTx_RejectsConflictingIdempotencyKey(t *testing.T) {
+	setRiderDepositThresholdForTest(t, DefaultRiderDepositThresholdFen)
+
+	ctx := context.Background()
+	rider := createRandomRider(t)
+	paymentOrder := createRefundableRiderDepositCredit(t, rider, 30000)
+	idempotencyKey := "rider-deposit-withdrawal-" + util.RandomString(12)
+
+	first, err := testStore.(*SQLStore).PrepareRiderDepositRefundTx(ctx, PrepareRiderDepositRefundTxParams{
+		RiderID:                rider.ID,
+		UserID:                 rider.UserID,
+		Amount:                 12000,
+		Remark:                 "骑手押金提现",
+		IdempotencyKey:         idempotencyKey,
+		IdempotencyRequestHash: "sha256:" + util.RandomString(64),
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.(*SQLStore).PrepareRiderDepositRefundTx(ctx, PrepareRiderDepositRefundTxParams{
+		RiderID:                rider.ID,
+		UserID:                 rider.UserID,
+		Amount:                 13000,
+		Remark:                 "改金额复用 key",
+		IdempotencyKey:         idempotencyKey,
+		IdempotencyRequestHash: "sha256:" + util.RandomString(64),
+	})
+	require.Error(t, err)
+	statusCode, ok := IsRefundRequestError(err)
+	require.True(t, ok)
+	require.Equal(t, http.StatusConflict, statusCode)
+
+	refunds, err := testStore.ListRefundOrdersByPaymentOrder(ctx, paymentOrder.ID)
+	require.NoError(t, err)
+	require.Len(t, refunds, 1)
+	require.Equal(t, first.RefundPlans[0].RefundOrder.ID, refunds[0].ID)
+}
+
+func TestPrepareRiderDepositRefundTx_ReplayLoadsSplitRefundPlans(t *testing.T) {
+	setRiderDepositThresholdForTest(t, DefaultRiderDepositThresholdFen)
+
+	ctx := context.Background()
+	rider := createRandomRider(t)
+	firstPaymentOrder := createRefundableRiderDepositCredit(t, rider, 10000)
+	secondPaymentOrder := createRefundableRiderDepositCredit(t, rider, 20000)
+	idempotencyKey := "rider-deposit-withdrawal-" + util.RandomString(12)
+	requestHash := "sha256:" + util.RandomString(64)
+
+	first, err := testStore.(*SQLStore).PrepareRiderDepositRefundTx(ctx, PrepareRiderDepositRefundTxParams{
+		RiderID:                rider.ID,
+		UserID:                 rider.UserID,
+		Amount:                 25000,
+		Remark:                 "跨押金凭证提现",
+		IdempotencyKey:         idempotencyKey,
+		IdempotencyRequestHash: requestHash,
+	})
+	require.NoError(t, err)
+	require.Len(t, first.RefundPlans, 2)
+
+	replayed, err := testStore.(*SQLStore).PrepareRiderDepositRefundTx(ctx, PrepareRiderDepositRefundTxParams{
+		RiderID:                rider.ID,
+		UserID:                 rider.UserID,
+		Amount:                 25000,
+		Remark:                 "跨押金凭证提现",
+		IdempotencyKey:         idempotencyKey,
+		IdempotencyRequestHash: requestHash,
+	})
+	require.NoError(t, err)
+	require.True(t, replayed.IdempotencyReplayed)
+	require.Equal(t, first.WithdrawalRequestID, replayed.WithdrawalRequestID)
+	require.Equal(t, int64(25000), replayed.FrozenAmount)
+	require.Len(t, replayed.RefundPlans, 2)
+
+	replayedPlansByPaymentOrderID := make(map[int64]RiderDepositRefundPlan, len(replayed.RefundPlans))
+	for _, plan := range replayed.RefundPlans {
+		replayedPlansByPaymentOrderID[plan.SourcePaymentOrder.ID] = plan
+	}
+
+	firstReplayPlan := replayedPlansByPaymentOrderID[firstPaymentOrder.ID]
+	require.Equal(t, firstPaymentOrder.ID, firstReplayPlan.SourcePaymentOrder.ID)
+	require.Equal(t, int64(10000), firstReplayPlan.RefundOrder.RefundAmount)
+	require.Equal(t, first.RefundPlans[0].RefundOrder.ID, firstReplayPlan.RefundOrder.ID)
+	require.Equal(t, first.RefundPlans[0].RefundOrder.OutRefundNo, firstReplayPlan.RefundOrder.OutRefundNo)
+
+	secondReplayPlan := replayedPlansByPaymentOrderID[secondPaymentOrder.ID]
+	require.Equal(t, secondPaymentOrder.ID, secondReplayPlan.SourcePaymentOrder.ID)
+	require.Equal(t, int64(15000), secondReplayPlan.RefundOrder.RefundAmount)
+	require.Equal(t, first.RefundPlans[1].RefundOrder.ID, secondReplayPlan.RefundOrder.ID)
+	require.Equal(t, first.RefundPlans[1].RefundOrder.OutRefundNo, secondReplayPlan.RefundOrder.OutRefundNo)
+
+	firstRefunds, err := testStore.ListRefundOrdersByPaymentOrder(ctx, firstPaymentOrder.ID)
+	require.NoError(t, err)
+	require.Len(t, firstRefunds, 1)
+	secondRefunds, err := testStore.ListRefundOrdersByPaymentOrder(ctx, secondPaymentOrder.ID)
+	require.NoError(t, err)
+	require.Len(t, secondRefunds, 1)
 }
 
 func TestListRiderDepositLedgerAnomaliesDetectsDrift(t *testing.T) {
@@ -203,22 +437,14 @@ func TestListRiderDepositWithdrawalRefundOrdersByIDsFiltersUser(t *testing.T) {
 
 	rider := createRandomRider(t)
 	paymentOrder := createRefundableRiderDepositCredit(t, rider, 30000)
-	prepareResult, err := testStore.(*SQLStore).PrepareRiderDepositRefundTx(context.Background(), PrepareRiderDepositRefundTxParams{
-		RiderID: rider.ID,
-		Amount:  12000,
-		Remark:  "押金提现",
-	})
+	prepareResult, err := testStore.(*SQLStore).PrepareRiderDepositRefundTx(context.Background(), prepareRiderDepositRefundTxParamsForTest(rider, 12000, "押金提现"))
 	require.NoError(t, err)
 	require.Len(t, prepareResult.RefundPlans, 1)
 	refundOrder := prepareResult.RefundPlans[0].RefundOrder
 
 	otherRider := createRandomRider(t)
 	otherPaymentOrder := createRefundableRiderDepositCredit(t, otherRider, 20000)
-	otherPrepareResult, err := testStore.(*SQLStore).PrepareRiderDepositRefundTx(context.Background(), PrepareRiderDepositRefundTxParams{
-		RiderID: otherRider.ID,
-		Amount:  5000,
-		Remark:  "其他骑手押金提现",
-	})
+	otherPrepareResult, err := testStore.(*SQLStore).PrepareRiderDepositRefundTx(context.Background(), prepareRiderDepositRefundTxParamsForTest(otherRider, 5000, "其他骑手押金提现"))
 	require.NoError(t, err)
 	require.Len(t, otherPrepareResult.RefundPlans, 1)
 	otherRefundOrder := otherPrepareResult.RefundPlans[0].RefundOrder
@@ -267,11 +493,7 @@ func TestResolveRiderDepositRefundTx_SuccessSettlesFrozenBalance(t *testing.T) {
 	rider := createRandomRider(t)
 	paymentOrder := createRefundableRiderDepositCredit(t, rider, 30000)
 
-	prepareResult, err := testStore.(*SQLStore).PrepareRiderDepositRefundTx(context.Background(), PrepareRiderDepositRefundTxParams{
-		RiderID: rider.ID,
-		Amount:  12000,
-		Remark:  "押金提现成功",
-	})
+	prepareResult, err := testStore.(*SQLStore).PrepareRiderDepositRefundTx(context.Background(), prepareRiderDepositRefundTxParamsForTest(rider, 12000, "押金提现成功"))
 	require.NoError(t, err)
 	require.Len(t, prepareResult.RefundPlans, 1)
 
@@ -312,11 +534,7 @@ func TestResolveRiderDepositRefundTx_ClosedRestoresCreditAndUnfreezesBalance(t *
 	rider := createRandomRider(t)
 	paymentOrder := createRefundableRiderDepositCredit(t, rider, 30000)
 
-	prepareResult, err := testStore.(*SQLStore).PrepareRiderDepositRefundTx(context.Background(), PrepareRiderDepositRefundTxParams{
-		RiderID: rider.ID,
-		Amount:  12000,
-		Remark:  "押金提现关闭",
-	})
+	prepareResult, err := testStore.(*SQLStore).PrepareRiderDepositRefundTx(context.Background(), prepareRiderDepositRefundTxParamsForTest(rider, 12000, "押金提现关闭"))
 	require.NoError(t, err)
 	require.Len(t, prepareResult.RefundPlans, 1)
 
@@ -354,11 +572,7 @@ func TestResolveRiderDepositRefundTx_SuccessWithDrainRemainingCreditReconcilesSt
 	rider := createRandomRider(t)
 	paymentOrder := createRefundableRiderDepositCredit(t, rider, 30000)
 
-	prepareResult, err := testStore.(*SQLStore).PrepareRiderDepositRefundTx(context.Background(), PrepareRiderDepositRefundTxParams{
-		RiderID: rider.ID,
-		Amount:  10000,
-		Remark:  "押金提现对账",
-	})
+	prepareResult, err := testStore.(*SQLStore).PrepareRiderDepositRefundTx(context.Background(), prepareRiderDepositRefundTxParamsForTest(rider, 10000, "押金提现对账"))
 	require.NoError(t, err)
 	require.Len(t, prepareResult.RefundPlans, 1)
 

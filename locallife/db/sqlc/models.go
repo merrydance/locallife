@@ -2344,6 +2344,18 @@ type RiderDepositCredit struct {
 	UpdatedAt       time.Time          `json:"updated_at"`
 }
 
+type RiderDepositWithdrawalRequest struct {
+	ID              int64     `json:"id"`
+	UserID          int64     `json:"user_id"`
+	IdempotencyKey  string    `json:"idempotency_key"`
+	RequestHash     string    `json:"request_hash"`
+	RequestedAmount int64     `json:"requested_amount"`
+	AcceptedAmount  int64     `json:"accepted_amount"`
+	RefundOrderIds  []byte    `json:"refund_order_ids"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+}
+
 // 骑手位置记录
 type RiderLocation struct {
 	ID         int64          `json:"id"`

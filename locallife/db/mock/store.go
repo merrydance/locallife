@@ -5252,6 +5252,21 @@ func (mr *MockStoreMockRecorder) CreateRiderDepositCredit(ctx, arg any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateRiderDepositCredit", reflect.TypeOf((*MockStore)(nil).CreateRiderDepositCredit), ctx, arg)
 }
 
+// CreateRiderDepositWithdrawalRequest mocks base method.
+func (m *MockStore) CreateRiderDepositWithdrawalRequest(ctx context.Context, arg db.CreateRiderDepositWithdrawalRequestParams) (db.RiderDepositWithdrawalRequest, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateRiderDepositWithdrawalRequest", ctx, arg)
+	ret0, _ := ret[0].(db.RiderDepositWithdrawalRequest)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateRiderDepositWithdrawalRequest indicates an expected call of CreateRiderDepositWithdrawalRequest.
+func (mr *MockStoreMockRecorder) CreateRiderDepositWithdrawalRequest(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateRiderDepositWithdrawalRequest", reflect.TypeOf((*MockStore)(nil).CreateRiderDepositWithdrawalRequest), ctx, arg)
+}
+
 // CreateRiderLocation mocks base method.
 func (m *MockStore) CreateRiderLocation(ctx context.Context, arg db.CreateRiderLocationParams) (db.RiderLocation, error) {
 	m.ctrl.T.Helper()
@@ -11995,6 +12010,21 @@ func (m *MockStore) GetRiderDepositStats(ctx context.Context, riderID int64) (db
 func (mr *MockStoreMockRecorder) GetRiderDepositStats(ctx, riderID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRiderDepositStats", reflect.TypeOf((*MockStore)(nil).GetRiderDepositStats), ctx, riderID)
+}
+
+// GetRiderDepositWithdrawalRequestForUpdate mocks base method.
+func (m *MockStore) GetRiderDepositWithdrawalRequestForUpdate(ctx context.Context, arg db.GetRiderDepositWithdrawalRequestForUpdateParams) (db.RiderDepositWithdrawalRequest, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRiderDepositWithdrawalRequestForUpdate", ctx, arg)
+	ret0, _ := ret[0].(db.RiderDepositWithdrawalRequest)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetRiderDepositWithdrawalRequestForUpdate indicates an expected call of GetRiderDepositWithdrawalRequestForUpdate.
+func (mr *MockStoreMockRecorder) GetRiderDepositWithdrawalRequestForUpdate(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRiderDepositWithdrawalRequestForUpdate", reflect.TypeOf((*MockStore)(nil).GetRiderDepositWithdrawalRequestForUpdate), ctx, arg)
 }
 
 // GetRiderEarnings mocks base method.
@@ -23208,6 +23238,21 @@ func (m *MockStore) UpdateRiderDeposit(ctx context.Context, arg db.UpdateRiderDe
 func (mr *MockStoreMockRecorder) UpdateRiderDeposit(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRiderDeposit", reflect.TypeOf((*MockStore)(nil).UpdateRiderDeposit), ctx, arg)
+}
+
+// UpdateRiderDepositWithdrawalRequestRefundOrders mocks base method.
+func (m *MockStore) UpdateRiderDepositWithdrawalRequestRefundOrders(ctx context.Context, arg db.UpdateRiderDepositWithdrawalRequestRefundOrdersParams) (db.RiderDepositWithdrawalRequest, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateRiderDepositWithdrawalRequestRefundOrders", ctx, arg)
+	ret0, _ := ret[0].(db.RiderDepositWithdrawalRequest)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateRiderDepositWithdrawalRequestRefundOrders indicates an expected call of UpdateRiderDepositWithdrawalRequestRefundOrders.
+func (mr *MockStoreMockRecorder) UpdateRiderDepositWithdrawalRequestRefundOrders(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRiderDepositWithdrawalRequestRefundOrders", reflect.TypeOf((*MockStore)(nil).UpdateRiderDepositWithdrawalRequestRefundOrders), ctx, arg)
 }
 
 // UpdateRiderLocation mocks base method.

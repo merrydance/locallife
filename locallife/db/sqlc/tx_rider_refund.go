@@ -2,8 +2,11 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/util"
@@ -29,15 +32,20 @@ type RiderDepositRefundPlan struct {
 }
 
 type PrepareRiderDepositRefundTxParams struct {
-	RiderID int64
-	Amount  int64
-	Remark  string
+	RiderID                int64
+	UserID                 int64
+	Amount                 int64
+	Remark                 string
+	IdempotencyKey         string
+	IdempotencyRequestHash string
 }
 
 type PrepareRiderDepositRefundTxResult struct {
-	Rider        Rider
-	RefundPlans  []RiderDepositRefundPlan
-	FrozenAmount int64
+	Rider               Rider
+	RefundPlans         []RiderDepositRefundPlan
+	FrozenAmount        int64
+	IdempotencyReplayed bool
+	WithdrawalRequestID int64
 }
 
 type ResolveRiderDepositRefundTxParams struct {
@@ -64,8 +72,65 @@ func (store *SQLStore) PrepareRiderDepositRefundTx(ctx context.Context, arg Prep
 		if err != nil {
 			return fmt.Errorf("get rider for update: %w", err)
 		}
+
+		idempotencyKey := strings.TrimSpace(arg.IdempotencyKey)
+		idempotencyRequestHash := strings.TrimSpace(arg.IdempotencyRequestHash)
+		if arg.UserID == 0 || idempotencyKey == "" || idempotencyRequestHash == "" {
+			return &requestError{statusCode: http.StatusBadRequest, err: errors.New("rider deposit withdrawal idempotency metadata is incomplete")}
+		}
+		if rider.UserID != arg.UserID {
+			return &requestError{statusCode: http.StatusForbidden, err: errors.New("rider does not belong to user")}
+		}
+
+		withdrawalRequest, err := q.GetRiderDepositWithdrawalRequestForUpdate(ctx, GetRiderDepositWithdrawalRequestForUpdateParams{
+			UserID:         arg.UserID,
+			IdempotencyKey: idempotencyKey,
+		})
+		if err == nil {
+			if withdrawalRequest.RequestHash != idempotencyRequestHash {
+				return &requestError{statusCode: http.StatusConflict, err: errors.New("idempotency key already used by a different rider deposit withdrawal request")}
+			}
+			plans, replayErr := loadRiderDepositWithdrawalRefundPlans(ctx, q, withdrawalRequest)
+			if replayErr != nil {
+				return replayErr
+			}
+			result.Rider = rider
+			result.RefundPlans = plans
+			result.FrozenAmount = withdrawalRequest.AcceptedAmount
+			result.IdempotencyReplayed = true
+			result.WithdrawalRequestID = withdrawalRequest.ID
+			return nil
+		}
+		if !errors.Is(err, ErrRecordNotFound) {
+			return fmt.Errorf("get rider deposit withdrawal request: %w", err)
+		}
+
+		if rider.Status != RiderStatusApproved && rider.Status != RiderStatusActive {
+			return ErrRiderAccountNotActivated
+		}
+
 		if rider.FrozenDeposit > 0 {
 			return ErrRiderDepositFrozen
+		}
+
+		activeDeliveries, err := q.ListRiderActiveDeliveries(ctx, pgtype.Int8{Int64: rider.ID, Valid: true})
+		if err != nil {
+			return fmt.Errorf("list rider active deliveries: %w", err)
+		}
+		if len(activeDeliveries) > 0 {
+			return ErrRiderHasActiveDeliveries
+		}
+
+		withdrawalRequest, err = q.CreateRiderDepositWithdrawalRequest(ctx, CreateRiderDepositWithdrawalRequestParams{
+			UserID:          arg.UserID,
+			IdempotencyKey:  idempotencyKey,
+			RequestHash:     idempotencyRequestHash,
+			RequestedAmount: arg.Amount,
+			AcceptedAmount:  nil,
+			RefundOrderIds:  []byte("[]"),
+		})
+		if err != nil {
+			return fmt.Errorf("create rider deposit withdrawal request: %w", err)
 		}
 
 		withdrawalProcessingAmount, err := q.GetPendingRiderDepositRefundAmountByUserID(ctx, rider.UserID)
@@ -167,6 +232,25 @@ func (store *SQLStore) PrepareRiderDepositRefundTx(ctx context.Context, arg Prep
 			return ErrInsufficientDeposit
 		}
 
+		refundOrderIDs := make([]int64, 0, len(plans))
+		acceptedAmount := int64(0)
+		for _, plan := range plans {
+			refundOrderIDs = append(refundOrderIDs, plan.RefundOrder.ID)
+			acceptedAmount += plan.RefundOrder.RefundAmount
+		}
+		refundOrderIDPayload, err := json.Marshal(refundOrderIDs)
+		if err != nil {
+			return fmt.Errorf("marshal rider deposit withdrawal refund order ids: %w", err)
+		}
+		withdrawalRequest, err = q.UpdateRiderDepositWithdrawalRequestRefundOrders(ctx, UpdateRiderDepositWithdrawalRequestRefundOrdersParams{
+			ID:             withdrawalRequest.ID,
+			AcceptedAmount: acceptedAmount,
+			RefundOrderIds: refundOrderIDPayload,
+		})
+		if err != nil {
+			return fmt.Errorf("update rider deposit withdrawal request refund orders: %w", err)
+		}
+
 		updatedRider, err := q.UpdateRiderDeposit(ctx, UpdateRiderDepositParams{
 			ID:            rider.ID,
 			DepositAmount: rider.DepositAmount,
@@ -179,10 +263,78 @@ func (store *SQLStore) PrepareRiderDepositRefundTx(ctx context.Context, arg Prep
 		result.Rider = updatedRider
 		result.RefundPlans = plans
 		result.FrozenAmount = arg.Amount
+		result.WithdrawalRequestID = withdrawalRequest.ID
 		return nil
 	})
 
 	return result, err
+}
+
+func loadRiderDepositWithdrawalRefundPlans(ctx context.Context, q *Queries, request RiderDepositWithdrawalRequest) ([]RiderDepositRefundPlan, error) {
+	refundOrderIDs, err := decodeRiderDepositWithdrawalRefundOrderIDs(request.RefundOrderIds)
+	if err != nil {
+		return nil, fmt.Errorf("decode rider deposit withdrawal refund order ids: %w", err)
+	}
+	if len(refundOrderIDs) == 0 {
+		return nil, fmt.Errorf("rider deposit withdrawal request %d has no refund orders", request.ID)
+	}
+
+	rows, err := q.ListRiderDepositWithdrawalRefundOrdersByIDs(ctx, ListRiderDepositWithdrawalRefundOrdersByIDsParams{
+		UserID:         request.UserID,
+		RefundOrderIds: refundOrderIDs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list rider deposit withdrawal refund orders: %w", err)
+	}
+	rowsByRefundOrderID := make(map[int64]ListRiderDepositWithdrawalRefundOrdersByIDsRow, len(rows))
+	for _, row := range rows {
+		rowsByRefundOrderID[row.RefundOrderID] = row
+	}
+	if len(rowsByRefundOrderID) != len(refundOrderIDs) {
+		return nil, fmt.Errorf("rider deposit withdrawal request %d refund orders are incomplete", request.ID)
+	}
+
+	plans := make([]RiderDepositRefundPlan, 0, len(refundOrderIDs))
+	for _, refundOrderID := range refundOrderIDs {
+		row, ok := rowsByRefundOrderID[refundOrderID]
+		if !ok {
+			return nil, fmt.Errorf("rider deposit withdrawal request %d refund order %d is missing", request.ID, refundOrderID)
+		}
+		plans = append(plans, RiderDepositRefundPlan{
+			RefundOrder: RefundOrder{
+				ID:             row.RefundOrderID,
+				PaymentOrderID: row.PaymentOrderID,
+				RefundType:     riderDepositRefundType,
+				RefundAmount:   row.RefundAmount,
+				OutRefundNo:    row.OutRefundNo,
+				RefundID:       row.RefundID,
+				Status:         row.Status,
+				RefundedAt:     row.RefundedAt,
+				CreatedAt:      row.CreatedAt,
+			},
+			SourcePaymentOrder: PaymentOrder{
+				ID:           row.PaymentOrderID,
+				UserID:       request.UserID,
+				BusinessType: "rider_deposit",
+				Amount:       row.SourcePaymentAmount,
+				OutTradeNo:   row.OutTradeNo,
+			},
+		})
+	}
+	return plans, nil
+}
+
+func decodeRiderDepositWithdrawalRefundOrderIDs(raw []byte) ([]int64, error) {
+	var ids []int64
+	if err := json.Unmarshal(raw, &ids); err != nil {
+		return nil, err
+	}
+	for _, id := range ids {
+		if id <= 0 {
+			return nil, fmt.Errorf("invalid refund order id %d", id)
+		}
+	}
+	return ids, nil
 }
 
 func (store *SQLStore) ResolveRiderDepositRefundTx(ctx context.Context, arg ResolveRiderDepositRefundTxParams) (ResolveRiderDepositRefundTxResult, error) {

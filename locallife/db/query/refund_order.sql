@@ -62,6 +62,40 @@ SET updated_at = refund_request_idempotency.updated_at
 WHERE refund_request_idempotency.request_hash = EXCLUDED.request_hash
 RETURNING id, operation_scope, actor_user_id, idempotency_key, request_hash, refund_order_id, created_at, updated_at;
 
+-- name: CreateRiderDepositWithdrawalRequest :one
+INSERT INTO rider_deposit_withdrawal_requests (
+    user_id,
+    idempotency_key,
+    request_hash,
+    requested_amount,
+    accepted_amount,
+    refund_order_ids
+) VALUES (
+    sqlc.arg(user_id),
+    sqlc.arg(idempotency_key),
+    sqlc.arg(request_hash),
+    sqlc.arg(requested_amount),
+    COALESCE(sqlc.narg(accepted_amount), 0),
+    COALESCE(sqlc.narg(refund_order_ids), '[]'::jsonb)
+)
+RETURNING id, user_id, idempotency_key, request_hash, requested_amount, accepted_amount, refund_order_ids, created_at, updated_at;
+
+-- name: GetRiderDepositWithdrawalRequestForUpdate :one
+SELECT id, user_id, idempotency_key, request_hash, requested_amount, accepted_amount, refund_order_ids, created_at, updated_at
+FROM rider_deposit_withdrawal_requests
+WHERE user_id = sqlc.arg(user_id)
+  AND idempotency_key = sqlc.arg(idempotency_key)
+LIMIT 1
+FOR UPDATE;
+
+-- name: UpdateRiderDepositWithdrawalRequestRefundOrders :one
+UPDATE rider_deposit_withdrawal_requests
+SET accepted_amount = sqlc.arg(accepted_amount),
+    refund_order_ids = sqlc.arg(refund_order_ids),
+    updated_at = now()
+WHERE id = sqlc.arg(id)
+RETURNING id, user_id, idempotency_key, request_hash, requested_amount, accepted_amount, refund_order_ids, created_at, updated_at;
+
 -- name: ListRefundOrdersByPaymentOrder :many
 SELECT id, payment_order_id, refund_type, refund_amount, refund_reason, out_refund_no, refund_id, platform_refund, operator_refund, merchant_refund, status, refunded_at, created_at FROM refund_orders
 WHERE payment_order_id = $1
