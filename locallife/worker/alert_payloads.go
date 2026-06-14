@@ -17,31 +17,6 @@ func mergeAlertExtra(base map[string]interface{}, extras map[string]interface{})
 	return merged
 }
 
-func baofuReconciliationAlertExtra(extras map[string]interface{}) map[string]interface{} {
-	base := map[string]interface{}{
-		"provider": db.ExternalPaymentProviderBaofu,
-		"channel":  db.PaymentChannelBaofuAggregate,
-	}
-	for key, value := range extras {
-		if isSensitiveBaofuAlertField(key) {
-			continue
-		}
-		base[key] = value
-	}
-	base["provider"] = db.ExternalPaymentProviderBaofu
-	base["channel"] = db.PaymentChannelBaofuAggregate
-	return base
-}
-
-func isSensitiveBaofuAlertField(key string) bool {
-	switch key {
-	case "contract_no", "contractNo", "sharing_mer_id", "sharingMerId", "raw_resource", "raw_payload", "bank_card", "bank_card_no", "id_card", "phone", "signature", "sign", "private_key", "aes_key":
-		return true
-	default:
-		return false
-	}
-}
-
 func paymentOrderAlertExtra(paymentOrder db.PaymentOrder, merchantID int64) map[string]interface{} {
 	extra := map[string]interface{}{
 		"payment_order_id": paymentOrder.ID,

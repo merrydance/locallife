@@ -74,6 +74,7 @@
 | `locallife/baofu/client.go:454` | `publicBusinessFailure` | 旧版宝付 public envelope 通用业务失败解析器，读取 `resultCode` / `errCode` / `errMsg` | 生产无调用；当前宝付公共 envelope 只负责 `returnCode`、签名和 `dataContent` 解包，聚合支付与商户报备的业务失败分别由 `aggregatepay` / `merchantreport` client 按各自契约解析。已删除旧 helper 和直接测试，并把 `SUCCESS + errCode`、未知 `resultCode` 的保护迁到现用 client 测试；`go test ./baofu ./baofu/aggregatepay ./baofu/merchantreport -count=1` 和 `make check-baofu-contract` 通过 |
 | `locallife/db/sqlc/tx_claim_behavior.go:135` | `behaviorDecisionScoreBreakdown` / `behaviorDecisionScoreDetail` / `behaviorDecisionSignal` | 索赔行为决策 `score_breakdown` JSON 的测试解码结构 | 生产事务边界始终以 `[]byte` 保存 `score_breakdown`，默认写入 `{"version":"claims_rules_v1"}`，外部 adjudicator 路径写入已序列化 JSON；这三个结构只被 `tx_claim_behavior_test.go` 用来解码断言。已从生产事务文件移到 `_test.go`；`go test ./db/sqlc -run 'TestCreateClaimWithBehaviorTx_' -count=1` 和 `go test ./db/sqlc -run '^$' -count=1` 通过 |
 | `locallife/logic/promotion_engine.go:269` | `suggestBestVoucher` | 旧版代金券推荐 wrapper：从 DB 查询可用券后调用 `suggestBestVoucherFromList` | 生产无调用；当前 `PromotionEngine.CalculateFinalPrice` 已先调用 `listAvailableVouchers` 取得同一批可用券，再直接用 `suggestBestVoucherFromList` 生成推荐和券试算。已删除 wrapper，并把测试改为覆盖真实核心选择函数；`go test ./logic -run 'TestSuggestBestVoucherFromList|TestCalculateFinalPrice' -count=1` 和 `go test ./logic -run '^$' -count=1` 通过 |
+| `locallife/worker/baofu_alert_payloads.go` | `newBaofuPaymentCallbackMissingAlert` / `newBaofuProfitSharingProcessingSLAAlert` / `newBaofuWithdrawalProcessingSLAAlert` / `newBaofuFailedFactAlert` / `newBaofuFeeLedgerMismatchAlert` | 未接入的宝付支付回调、分账、提现、fact 和手续费对账告警 payload 构造函数 | 生产无调用，未见 scheduler/worker/API 持久化入口；当前真实平台告警路径直接调用 `SavePlatformAlertEvent`，退款/超时告警仍使用 `refundOrderAlertExtra` / `paymentOrderAlertExtra` 等通用 helper。已删除整组文件，并移除只服务这组未接入 helper 的 `baofuReconciliationAlertExtra` / `isSensitiveBaofuAlertField` 和测试；`go test ./worker -run 'TestRefundOrderAlertExtra_IncludesCommonIdentifiers' -count=1`、`go test ./worker -run '^$' -count=1`、`go build ./worker` 通过 |
 
 ## 可优先清理候选
 
@@ -100,11 +101,6 @@
 
 | 位置 | 符号 | 作用 | 核对结论 |
 | --- | --- | --- | --- |
-| `locallife/worker/baofu_alert_payloads.go:17` | `newBaofuPaymentCallbackMissingAlert` | 构造宝付支付回调缺失告警 payload | 生产无调用；`alert_payloads_test.go` 仍覆盖 |
-| `locallife/worker/baofu_alert_payloads.go:34` | `newBaofuProfitSharingProcessingSLAAlert` | 构造宝付分账处理超时告警 payload | 同上 |
-| `locallife/worker/baofu_alert_payloads.go:52` | `newBaofuWithdrawalProcessingSLAAlert` | 构造宝付提现处理超时告警 payload | 同上 |
-| `locallife/worker/baofu_alert_payloads.go:72` | `newBaofuFailedFactAlert` | 构造宝付 payment fact 失败告警 payload | 同上 |
-| `locallife/worker/baofu_alert_payloads.go:90` | `newBaofuFeeLedgerMismatchAlert` | 构造宝付手续费台账不一致告警 payload | 同上 |
 | `locallife/worker/payment_channel_boundary.go:11` | `paymentOrderRequiresProfitSharing` | 包装 `db.PaymentOrderRequiresProfitSharing`，用于判断支付单是否需要分账 | 生产无调用；测试仍覆盖边界 |
 | `locallife/worker/payment_channel_boundary.go:25` | `paymentOrderUsesMainBusinessRefundChannel` | 判断支付单是否应走主业务宝付退款通道 | 生产无调用；测试仍覆盖边界 |
 | `locallife/worker/task_merchant_application_ocr.go:505` | `parseFoodPermitOCRText` | 食品经营许可证 OCR 主解析入口，调用 internal parser 并记录失败日志 | 生产改用 `parseFoodPermitOCRTextFallback` / internal parser；测试仍直接测旧入口 |
