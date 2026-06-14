@@ -67,6 +67,7 @@
 | `locallife/logic/refund_service.go:58` | `RefundService.maybeMarkPaymentOrderRefunded` | 累计退款额达到支付金额后，把支付单置为 refunded | 生产和测试均无调用；当前退款结果终态由 worker legacy 路径和 `PaymentFactService.maybeMarkPaymentOrderRefunded` 处理，商户发起退款的同步阶段不直接终结支付单状态。已删除；`go build ./logic` 通过；`go test ./logic -run 'TestCreateRefundOrder|TestPaymentFactServiceApplyExternalPaymentFactApplication_.*Refund' -count=1` 通过 |
 | `locallife/internal/wechatdoc/alignment_helpers.go` | `alignment_helpers.go` 整组旧对齐审计 helper | 微信官方文档 endpoint/字段/枚举/约束对齐审计的未接入实现 | 生产和测试均无调用；`cmd/wechat_doc_extract` 只使用 `ExtractMarkdownFile`，`cmd/doc_audit` 走 `internal/docaudit`，未接入这套 alignment helper。已删除整个文件；`go test ./internal/wechatdoc ./internal/docaudit ./cmd/wechat_doc_extract ./cmd/doc_audit -count=1` 通过 |
 | `locallife/api/rider.go` | `listRidersRequest` / `listRidersResponse` / `Server.listRiders` | 旧版 `/v1/admin/riders` 管理员骑手列表 handler、查询参数和响应 DTO | 真实路由在 `server.go` 注册到 `listPlatformRiders`，旧 handler 生产和测试均无调用。已删除旧 handler，并把 `/v1/admin/riders` Swagger 注释迁移到真实 handler，使文档响应从旧 `listRidersResponse` 对齐为 `platformRiderListResponse`；`PATH="/usr/local/go/bin:$HOME/go/bin:$PATH" make swagger` 通过 |
+| `locallife/api/scan.go` | `buildMerchantStorefrontQRCodeObjectKey` / `buildMerchantStorefrontQRCodeScene` / `wxaCodeEnvVersion` / `Server.ensureMerchantStorefrontQRCode` | 旧版商户店铺小程序码生成和媒体资产保存 helper | 生产、测试、路由和 Swagger 均无调用；真实扫码/二维码入口只有 `/v1/scan/table` 和 `/v1/tables/{id}/qrcode`，桌台二维码生成路径独立保留。已删除店铺码整组 helper 和专属常量；不需要重新生成 Swagger |
 
 ## 可优先清理候选
 
@@ -81,10 +82,7 @@
 
 | 位置 | 符号 | 作用 | 核对结论 |
 | --- | --- | --- | --- |
-| `locallife/api/scan.go:475` | `buildMerchantStorefrontQRCodeObjectKey` | 生成商户店铺小程序码对象 key | 只被未注册的 `ensureMerchantStorefrontQRCode` 调用 |
-| `locallife/api/scan.go:480` | `buildMerchantStorefrontQRCodeScene` | 生成小程序码 scene | 只被未注册的 `ensureMerchantStorefrontQRCode` 调用 |
-| `locallife/api/scan.go:484` | `wxaCodeEnvVersion` | 将环境名映射到微信小程序码 env_version | 只被未注册的 `ensureMerchantStorefrontQRCode` 调用 |
-| `locallife/api/scan.go:493` | `Server.ensureMerchantStorefrontQRCode` | 为商户店铺生成并保存小程序码 | 生产无调用；如果店铺码能力不再需要，可成组清理 |
+暂无。已处理的未接入口项见“已清理”。
 
 ## Swagger-only / 文档契约用途
 
@@ -133,7 +131,7 @@
 
 ## 建议顺序
 
-1. 纯孤立 helper 第一批已清理；下一轮建议先复核店铺码生成这类未注册 handler / 未接入口候选。
-2. 再按功能成组确认：refund recovery 子商户解析、历史微信分账快照这类高风险 worker 遗留候选。
+1. 纯孤立 helper 和未接入口候选第一批已清理；下一轮建议按功能成组确认 refund recovery 子商户解析、历史微信分账快照这类高风险 worker 遗留候选。
+2. 对 Swagger-only 的 OCR 更正请求体，保持为文档契约用途，不作为删除项。
 3. 对“测试仍在引用”的项，先决定测试是否还代表有效业务规则；若规则已经迁移，应同步删除或改写测试。
 4. 对 `merchant_finance.go` 的 `SA4006`，如果进入修复阶段，建议只做局部可读性调整，不当作死代码删除。
