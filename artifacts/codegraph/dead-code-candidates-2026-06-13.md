@@ -68,6 +68,7 @@
 | `locallife/internal/wechatdoc/alignment_helpers.go` | `alignment_helpers.go` 整组旧对齐审计 helper | 微信官方文档 endpoint/字段/枚举/约束对齐审计的未接入实现 | 生产和测试均无调用；`cmd/wechat_doc_extract` 只使用 `ExtractMarkdownFile`，`cmd/doc_audit` 走 `internal/docaudit`，未接入这套 alignment helper。已删除整个文件；`go test ./internal/wechatdoc ./internal/docaudit ./cmd/wechat_doc_extract ./cmd/doc_audit -count=1` 通过 |
 | `locallife/api/rider.go` | `listRidersRequest` / `listRidersResponse` / `Server.listRiders` | 旧版 `/v1/admin/riders` 管理员骑手列表 handler、查询参数和响应 DTO | 真实路由在 `server.go` 注册到 `listPlatformRiders`，旧 handler 生产和测试均无调用。已删除旧 handler，并把 `/v1/admin/riders` Swagger 注释迁移到真实 handler，使文档响应从旧 `listRidersResponse` 对齐为 `platformRiderListResponse`；`PATH="/usr/local/go/bin:$HOME/go/bin:$PATH" make swagger` 通过 |
 | `locallife/api/scan.go` | `buildMerchantStorefrontQRCodeObjectKey` / `buildMerchantStorefrontQRCodeScene` / `wxaCodeEnvVersion` / `Server.ensureMerchantStorefrontQRCode` | 旧版商户店铺小程序码生成和媒体资产保存 helper | 生产、测试、路由和 Swagger 均无调用；真实扫码/二维码入口只有 `/v1/scan/table` 和 `/v1/tables/{id}/qrcode`，桌台二维码生成路径独立保留。已删除店铺码整组 helper 和专属常量；不需要重新生成 Swagger |
+| `locallife/worker/refund_recovery_scheduler.go` | `errRefundRecoverySubMchIDMissing` / `errRefundRecoveryMerchantUnresolved` / `RefundRecoveryScheduler.resolveSubMchID` | 旧版 refund recovery 根据订单或预订反查商户微信/宝付子商户号 | 生产和测试均无调用；当前 stuck refund status recovery 已按 payment channel 分流，直连微信用 `out_refund_no` 调 `DirectPaymentClientInterface.QueryRefund`，宝付用 collect merchant/terminal 配置调 `aggregatepay.QueryRefund`，不再需要按订单/预订解析商户 `sub_mchid`。已删除整组 helper 和专属错误；高风险退款恢复路径需跑 focused worker tests |
 
 ## 可优先清理候选
 
@@ -118,9 +119,6 @@
 | `locallife/worker/order_profit_sharing_snapshot.go:13` | `wechatProfitSharingPaymentFeeRateBps` | 微信分账手续费估算费率 | 被同文件 `estimatedWechatProfitSharingPaymentFee` 调用 |
 | `locallife/worker/order_profit_sharing_snapshot.go:15` | `estimatedWechatProfitSharingPaymentFee` | 估算微信分账手续费 | 被 `ensureOrderProfitSharingSnapshot` 调用 |
 | `locallife/worker/order_profit_sharing_snapshot.go:22` | `RedisTaskProcessor.ensureOrderProfitSharingSnapshot` | 为订单创建分账快照 | CodeGraph/staticcheck 未发现外部调用，但同文件内部结构完整；删除前要确认历史微信分账路径是否已经彻底退役 |
-| `locallife/worker/refund_recovery_scheduler.go:30` | `errRefundRecoverySubMchIDMissing` | refund recovery 解析子商户号失败错误 | 被 `resolveSubMchID` 调用 |
-| `locallife/worker/refund_recovery_scheduler.go:31` | `errRefundRecoveryMerchantUnresolved` | refund recovery 无法解析商户错误 | 被 `resolveSubMchID` 调用 |
-| `locallife/worker/refund_recovery_scheduler.go:650` | `RefundRecoveryScheduler.resolveSubMchID` | 根据订单或预订解析子商户号 | CodeGraph/staticcheck 未发现外部调用；如果 refund recovery 已不需要直连微信子商户号，可成组清理 |
 
 ## 代码块级信号
 
@@ -131,7 +129,7 @@
 
 ## 建议顺序
 
-1. 纯孤立 helper 和未接入口候选第一批已清理；下一轮建议按功能成组确认 refund recovery 子商户解析、历史微信分账快照这类高风险 worker 遗留候选。
+1. 纯孤立 helper、未接入口候选、refund recovery 旧子商户解析已清理；下一轮建议确认历史微信分账快照这类高风险 worker 遗留候选。
 2. 对 Swagger-only 的 OCR 更正请求体，保持为文档契约用途，不作为删除项。
 3. 对“测试仍在引用”的项，先决定测试是否还代表有效业务规则；若规则已经迁移，应同步删除或改写测试。
 4. 对 `merchant_finance.go` 的 `SA4006`，如果进入修复阶段，建议只做局部可读性调整，不当作死代码删除。
