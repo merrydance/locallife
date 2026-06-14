@@ -329,14 +329,6 @@ func createReplaceOrderBaofuPayment(
 	return result.PaymentOrder, nil
 }
 
-func markReplaceReservationPaymentOrderFailedForCleanup(ctx context.Context, store db.Store, paymentOrderID int64) {
-	if _, err := store.UpdatePaymentOrderToFailed(ctx, paymentOrderID); err != nil {
-		log.Error().Err(err).
-			Int64("payment_order_id", paymentOrderID).
-			Msg("failed to mark replace reservation payment order failed after prepay update failure")
-	}
-}
-
 func processReplaceOrderRefundWithBaofu(
 	ctx context.Context,
 	store db.Store,
