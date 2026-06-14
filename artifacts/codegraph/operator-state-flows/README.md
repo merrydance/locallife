@@ -17,10 +17,10 @@ LocalLife-aware source of truth after review.
 - `operator-region-rules-and-expansion.slice.md`: managed region list/config, delivery-fee config, peak-hour rules, operator editable region rules, rule-engine proxy boundary, and operator region-expansion application/approval handoff.
 - `operator-merchant-management.slice.md`: merchant list/detail/summary, region-scoped visibility, merchant capabilities, system-label reconciliation, merchant stats, and food-safety/recovery action boundary.
 - `operator-rider-management.slice.md`: rider list/detail/summary/stats, regional visibility, masked identity/deposit/status projection, delivery performance stats, and rule-driven suspension/deposit boundary.
+- `operator-safety-and-recovery.slice.md`: food-safety case list/detail/investigation/resolution, food-safety merchant/order recovery transaction, operator recovery-dispute and claim-recovery read boundary, and automatic recovery-dispute post-process boundary.
 
 Planned operator slices:
 
-- `operator-safety-and-recovery`: food-safety cases, investigation/resolution, recovery disputes, recoveries, behavior actions, and compensation/release handoff.
 - `operator-finance-and-baofu-withdrawal`: finance overview, commission bills, Baofu settlement account, Baofu income withdrawal, provider callbacks, and recovery.
 - `flow-variant-index.md`: compact branch/dead-code index across all operator-side slices.
 - `operator-related-completeness-audit.md`: explicit verdict for operator-side closure versus all operator-related cross-role/background touchpoints.
