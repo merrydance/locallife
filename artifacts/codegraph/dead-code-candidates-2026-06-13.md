@@ -64,6 +64,7 @@
 | `locallife/logic/payment_order_service.go:303` | `PaymentOrderService.resolveConcurrentReservationPayment` | 并发创建预订支付单冲突时，按 attach 判断是否复用已有待支付单 | 生产和测试均无调用；当前预订支付复用判断由创建前的 `shouldReuseReservationPendingPayment` 承担，`parsePaymentAttach` 因此仍在用并保留。已删除；同上 build/test 通过 |
 | `locallife/logic/payment_order_service.go:536` | `sleepWithContext` / 支撑重试常量 | 并发支付冲突轮询时的 context-aware sleep 和重试参数 | 只被已删除的并发解析 helper 调用；API 层仍有自己的 `sleepWithContext` 用于骑手押金 legacy out_trade_no 重试，不属于本项。已删除；同上 build/test 通过 |
 | `locallife/logic/payment_order_service.go:547` | `PaymentOrderService.markPaymentOrderFailedForCleanup` | 预支付失败后把支付单标记为 failed 并记录日志 | 生产和测试均无调用；当前宝付创建失败路径会关闭本地 pending 支付单，宝付/预订支付终态失败由 payment fact 应用路径处理。已删除；同上 build/test 通过 |
+| `locallife/logic/refund_service.go:58` | `RefundService.maybeMarkPaymentOrderRefunded` | 累计退款额达到支付金额后，把支付单置为 refunded | 生产和测试均无调用；当前退款结果终态由 worker legacy 路径和 `PaymentFactService.maybeMarkPaymentOrderRefunded` 处理，商户发起退款的同步阶段不直接终结支付单状态。已删除；`go build ./logic` 通过；`go test ./logic -run 'TestCreateRefundOrder|TestPaymentFactServiceApplyExternalPaymentFactApplication_.*Refund' -count=1` 通过 |
 
 ## 可优先清理候选
 
@@ -72,7 +73,6 @@
 | `locallife/db/sqlc/tx_claim_behavior.go:135` | `behaviorDecisionScoreBreakdown` | 索赔行为决策评分详情 JSON 结构 | 生产无引用；测试 helper 仍可解码该类型，属于测试辅助引用 |
 | `locallife/db/sqlc/tx_claim_behavior.go:143` | `behaviorDecisionScoreDetail` | 单项评分与命中信号结构 | 只被上面的未使用评分结构嵌套引用 |
 | `locallife/db/sqlc/tx_claim_behavior.go:148` | `behaviorDecisionSignal` | 评分信号 code/weight/count/active | 只被上面的未使用评分结构嵌套引用 |
-| `locallife/logic/refund_service.go:58` | `RefundService.maybeMarkPaymentOrderRefunded` | 累计退款额达到支付金额后，把支付单置为 refunded | 生产无调用；worker 和 PaymentFactService 各有独立在用实现 |
 
 ## 整组遗留候选
 
