@@ -13,10 +13,10 @@ LocalLife-aware source of truth after review.
 ## Slice Map
 
 - `operator-dashboard-analytics-notifications.slice.md`: operator dashboard, analytics page, managed-region picker, realtime/trend/ranking reads, finance summary card, notification center, read/read-all/detail, and dispatch-hall handoff.
+- `operator-dispatch-hall.slice.md`: operator pending-dispatch hall, region-scoped pending delivery summary/list, 3-minute timeout alert scheduler/worker, operator notification source, and cross-role dispatch timeout boundary.
 
 Planned operator slices:
 
-- `operator-dispatch-hall`: pending dispatch monitor, dispatch timeout alert source, region scoped pending-delivery visibility, and rider/merchant action handoff.
 - `operator-region-rules-and-expansion`: managed regions, region config, peak hours, delivery-fee config, rules, rule hits, and region expansion applications.
 - `operator-merchant-management`: merchant list/detail/summary, capabilities, merchant stats, and related recovery boundaries.
 - `operator-rider-management`: rider list/detail/summary/stats, ranking, and rule-driven suspension visibility.
