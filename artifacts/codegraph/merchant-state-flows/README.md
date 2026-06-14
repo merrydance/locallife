@@ -30,6 +30,7 @@ LocalLife-aware source of truth after review.
 - `merchant-reservation-and-table.slice.md`: reservations, tables, dining sessions, and related inventory/payment state.
 - `merchant-review-reply.slice.md`: merchant reply to reviews.
 - `merchant-staff-and-group.slice.md`: staff invite/bind/role/remove and group onboarding/join.
+- `merchant-stats-and-analytics.slice.md`: merchant BI, sales/order/reservation/dish statistics, and customer analytics reads.
 
 ## Core Backlog
 
