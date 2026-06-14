@@ -1802,15 +1802,6 @@ func (server *Server) autoResolveRecoveryDisputeBestEffort(ctx *gin.Context, rec
 	return recoveryDispute
 }
 
-func deriveAutomaticRecoveryDisputeResolution(recoveryDispute db.RecoveryDispute, decisions []db.BehaviorDecision) automaticRecoveryDisputeResolution {
-	resolution := logic.DeriveAutomaticRecoveryDisputeResolution(recoveryDispute, decisions)
-	return automaticRecoveryDisputeResolution{
-		status:      resolution.Status,
-		reviewNotes: resolution.ReviewNotes,
-		decisionID:  resolution.DecisionID,
-	}
-}
-
 func (server *Server) dispatchRecoveryDisputeResult(ctx *gin.Context, payload *worker.ProcessRecoveryDisputeResultPayload) error {
 	if server.taskDistributor == nil {
 		return server.processRecoveryDisputeResultInline(ctx, payload)

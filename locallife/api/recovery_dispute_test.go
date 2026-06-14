@@ -1300,55 +1300,6 @@ func TestOperatorRecoveryDisputeWriteRoutesRemoved(t *testing.T) {
 	}
 }
 
-func TestDeriveAutomaticRecoveryDisputeResolution_UsesClaimScopedDecision(t *testing.T) {
-	recoveryDispute := db.RecoveryDispute{
-		ID:            1,
-		ClaimID:       100,
-		AppellantType: "merchant",
-	}
-
-	resolution := deriveAutomaticRecoveryDisputeResolution(recoveryDispute, []db.BehaviorDecision{
-		{
-			ID:                 201,
-			ClaimID:            pgtype.Int8{Int64: 999, Valid: true},
-			ResponsibleParty:   "rider",
-			CompensationSource: "platform",
-		},
-		{
-			ID:                 202,
-			ClaimID:            pgtype.Int8{Int64: 100, Valid: true},
-			ResponsibleParty:   "merchant",
-			CompensationSource: "merchant",
-		},
-	})
-
-	require.Equal(t, "rejected", resolution.status)
-	require.Equal(t, int64(202), resolution.decisionID.Int64)
-	require.True(t, resolution.decisionID.Valid)
-	require.Equal(t, "系统复核确认最新行为判责仍指向当前申诉方，维持原判。", resolution.reviewNotes)
-}
-
-func TestDeriveAutomaticRecoveryDisputeResolution_ApprovesInactiveDecision(t *testing.T) {
-	recoveryDispute := db.RecoveryDispute{
-		ID:            2,
-		ClaimID:       101,
-		AppellantType: "rider",
-	}
-
-	resolution := deriveAutomaticRecoveryDisputeResolution(recoveryDispute, []db.BehaviorDecision{
-		{
-			ID:               301,
-			ClaimID:          pgtype.Int8{Int64: 101, Valid: true},
-			ResponsibleParty: "rider",
-			EffectiveStatus:  "overturned",
-		},
-	})
-
-	require.Equal(t, "approved", resolution.status)
-	require.Equal(t, int64(301), resolution.decisionID.Int64)
-	require.Equal(t, "系统复核发现相关行为判责已失效，自动撤销原追偿安排。", resolution.reviewNotes)
-}
-
 func assertAnError(message string) error {
 	return fmt.Errorf("%s", message)
 }
