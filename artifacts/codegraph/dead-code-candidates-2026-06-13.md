@@ -65,6 +65,7 @@
 | `locallife/logic/payment_order_service.go:536` | `sleepWithContext` / 支撑重试常量 | 并发支付冲突轮询时的 context-aware sleep 和重试参数 | 只被已删除的并发解析 helper 调用；API 层仍有自己的 `sleepWithContext` 用于骑手押金 legacy out_trade_no 重试，不属于本项。已删除；同上 build/test 通过 |
 | `locallife/logic/payment_order_service.go:547` | `PaymentOrderService.markPaymentOrderFailedForCleanup` | 预支付失败后把支付单标记为 failed 并记录日志 | 生产和测试均无调用；当前宝付创建失败路径会关闭本地 pending 支付单，宝付/预订支付终态失败由 payment fact 应用路径处理。已删除；同上 build/test 通过 |
 | `locallife/logic/refund_service.go:58` | `RefundService.maybeMarkPaymentOrderRefunded` | 累计退款额达到支付金额后，把支付单置为 refunded | 生产和测试均无调用；当前退款结果终态由 worker legacy 路径和 `PaymentFactService.maybeMarkPaymentOrderRefunded` 处理，商户发起退款的同步阶段不直接终结支付单状态。已删除；`go build ./logic` 通过；`go test ./logic -run 'TestCreateRefundOrder|TestPaymentFactServiceApplyExternalPaymentFactApplication_.*Refund' -count=1` 通过 |
+| `locallife/internal/wechatdoc/alignment_helpers.go` | `alignment_helpers.go` 整组旧对齐审计 helper | 微信官方文档 endpoint/字段/枚举/约束对齐审计的未接入实现 | 生产和测试均无调用；`cmd/wechat_doc_extract` 只使用 `ExtractMarkdownFile`，`cmd/doc_audit` 走 `internal/docaudit`，未接入这套 alignment helper。已删除整个文件；`go test ./internal/wechatdoc ./internal/docaudit ./cmd/wechat_doc_extract ./cmd/doc_audit -count=1` 通过 |
 
 ## 可优先清理候选
 
@@ -73,36 +74,7 @@
 
 ## 整组遗留候选
 
-| 位置 | 符号 | 作用 | 核对结论 |
-| --- | --- | --- | --- |
-| `locallife/internal/wechatdoc/alignment_helpers.go:61` | `fieldEnumDiff` | 微信文档字段枚举差异结果 | 整个 alignment helper 文件未被生产或测试调用 |
-| `locallife/internal/wechatdoc/alignment_helpers.go:66` | `endpointDoc` | 微信文档 endpoint 聚合结构 | 同上 |
-| `locallife/internal/wechatdoc/alignment_helpers.go:74` | `collectDocEndpoints` | 从抽取结果聚合 endpoint、字段、错误码 | 同上 |
-| `locallife/internal/wechatdoc/alignment_helpers.go:112` | `nearestEndpointKey` | 将文档 section 归属到最近 endpoint | 同上 |
-| `locallife/internal/wechatdoc/alignment_helpers.go:132` | `ensureDocEndpoint` | 初始化 endpoint 聚合项 | 同上 |
-| `locallife/internal/wechatdoc/alignment_helpers.go:148` | `pathWithoutLeaf` | 去掉文档路径末级 heading | 同上 |
-| `locallife/internal/wechatdoc/alignment_helpers.go:155` | `commonPrefixLength` | 计算文档路径公共前缀长度 | 同上 |
-| `locallife/internal/wechatdoc/alignment_helpers.go:167` | `accumulateAlignmentSummary` | 聚合缺字段、缺枚举、缺错误码计数 | 同上 |
-| `locallife/internal/wechatdoc/alignment_helpers.go:180` | `findEndpointAudit` | 在 audit 列表中按 method/path 找结果 | 同上 |
-| `locallife/internal/wechatdoc/alignment_helpers.go:190` | `countMissingEnumValues` | 统计缺失枚举值数量 | 同上 |
-| `locallife/internal/wechatdoc/alignment_helpers.go:198` | `endpointHasMissingCoverage` | 判断 endpoint 是否有缺口 | 同上 |
-| `locallife/internal/wechatdoc/alignment_helpers.go:209` | `structJSONFields` | 通过反射展开结构体 JSON 字段 | 同上 |
-| `locallife/internal/wechatdoc/alignment_helpers.go:215` | `collectJSONFields` | 递归收集 JSON 字段 | 同上 |
-| `locallife/internal/wechatdoc/alignment_helpers.go:246` | `jsonFieldName` | 从 struct tag 获取 JSON 字段名 | 同上 |
-| `locallife/internal/wechatdoc/alignment_helpers.go:258` | `diffFieldNames` | 比较文档字段与已知字段 | 同上 |
-| `locallife/internal/wechatdoc/alignment_helpers.go:269` | `diffFieldEnums` | 比较字段枚举值缺失/额外项 | 同上 |
-| `locallife/internal/wechatdoc/alignment_helpers.go:320` | `diffFieldConstraints` | 比较 required/format 等约束 | 同上 |
-| `locallife/internal/wechatdoc/alignment_helpers.go:339` | `inferFieldConstraints` | 从字段描述推断约束 | 同上 |
-| `locallife/internal/wechatdoc/alignment_helpers.go:351` | `isComparableEnumValue` | 过滤不适合直接比较的枚举值 | 同上 |
-| `locallife/internal/wechatdoc/alignment_helpers.go:366` | `isCJKRune` | 判断 CJK 字符，辅助枚举过滤 | 同上 |
-| `locallife/internal/wechatdoc/alignment_helpers.go:370` | `diffSet` | 集合差异 | 同上 |
-| `locallife/internal/wechatdoc/alignment_helpers.go:381` | `sortedFieldNames` | 字段名排序 | 同上 |
-| `locallife/internal/wechatdoc/alignment_helpers.go:390` | `sortedSetKeys` | set key 排序 | 同上 |
-| `locallife/internal/wechatdoc/alignment_helpers.go:399` | `setOf` | 构造字符串集合 | 同上 |
-| `locallife/internal/wechatdoc/alignment_helpers.go:407` | `sortedEndpointKeys` | endpoint key 排序 | 同上 |
-| `locallife/internal/wechatdoc/alignment_helpers.go:416` | `endpointAuditKey` | 构造 endpoint audit key | 同上 |
-
-这一组看起来是微信官方文档对齐审计工具的半成品或旧实现。删除前应先确认 `cmd/wechat_doc_extract`、`internal/docaudit` 或后续文档审计流程是否还有计划复用它。
+暂无。已处理的整组项见“已清理”。
 
 ## 未注册 handler / 未接入入口候选
 
@@ -163,7 +135,7 @@
 
 ## 建议顺序
 
-1. 纯孤立 helper 第一批已清理；下一轮建议先复核支付 callback、合单支付 fail-closed 遗留 helper、并发支付冲突 helper 这类需要按高风险域逐项确认的候选。
-2. 再按功能成组确认：`internal/wechatdoc/alignment_helpers.go`、旧 `listRiders` handler、店铺码生成、并发支付冲突 helper、refund recovery 子商户解析。
+1. 纯孤立 helper 第一批已清理；下一轮建议先复核旧 `listRiders` handler 和店铺码生成这类未注册 handler / 未接入口候选。
+2. 再按功能成组确认：refund recovery 子商户解析、历史微信分账快照这类高风险 worker 遗留候选。
 3. 对“测试仍在引用”的项，先决定测试是否还代表有效业务规则；若规则已经迁移，应同步删除或改写测试。
 4. 对 `merchant_finance.go` 的 `SA4006`，如果进入修复阶段，建议只做局部可读性调整，不当作死代码删除。
