@@ -16,10 +16,10 @@ LocalLife-aware source of truth after review.
 - `operator-dispatch-hall.slice.md`: operator pending-dispatch hall, region-scoped pending delivery summary/list, 3-minute timeout alert scheduler/worker, operator notification source, and cross-role dispatch timeout boundary.
 - `operator-region-rules-and-expansion.slice.md`: managed region list/config, delivery-fee config, peak-hour rules, operator editable region rules, rule-engine proxy boundary, and operator region-expansion application/approval handoff.
 - `operator-merchant-management.slice.md`: merchant list/detail/summary, region-scoped visibility, merchant capabilities, system-label reconciliation, merchant stats, and food-safety/recovery action boundary.
+- `operator-rider-management.slice.md`: rider list/detail/summary/stats, regional visibility, masked identity/deposit/status projection, delivery performance stats, and rule-driven suspension/deposit boundary.
 
 Planned operator slices:
 
-- `operator-rider-management`: rider list/detail/summary/stats, ranking, and rule-driven suspension visibility.
 - `operator-safety-and-recovery`: food-safety cases, investigation/resolution, recovery disputes, recoveries, behavior actions, and compensation/release handoff.
 - `operator-finance-and-baofu-withdrawal`: finance overview, commission bills, Baofu settlement account, Baofu income withdrawal, provider callbacks, and recovery.
 - `flow-variant-index.md`: compact branch/dead-code index across all operator-side slices.
