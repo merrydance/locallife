@@ -1,6 +1,6 @@
 # Operator State Flows Codegraph
 
-Status: in progress, first slice created 2026-06-14
+Status: initial exhaustive operator pass complete 2026-06-14
 Risk class: G2/G3 mix - operator regional authority, dispatch alerts, merchant/rider operational visibility, food-safety handling, recovery disputes, rules, finance, Baofu settlement/withdrawal
 Scope: WeChat Mini Program operator pages -> operator backend routes -> logic/transactions -> SQL tables -> async notifications/workers/recovery paths -> dead/orphan paths
 Boundary note: this directory judges operator-side closure only: what an operator can see, decide, submit, and recover. Merchant, rider, platform, customer, and provider-side source flows are referenced at their boundary but remain owned by their own role/domain slices.
@@ -20,10 +20,7 @@ LocalLife-aware source of truth after review.
 - `operator-safety-and-recovery.slice.md`: food-safety case list/detail/investigation/resolution, food-safety merchant/order recovery transaction, operator recovery-dispute and claim-recovery read boundary, and automatic recovery-dispute post-process boundary.
 - `operator-finance-and-baofu-withdrawal.slice.md`: finance overview, commission bills, Baofu settlement account, Baofu withdrawal list/create/detail, provider callbacks, async command/fact workers, recovery schedulers, and legacy withdrawal boundary.
 - `flow-variant-index.md`: compact branch, drift, no-page-caller, legacy-path, and operational-closure index across all operator-side slices.
-
-Planned operator slices:
-
-- `operator-related-completeness-audit.md`: explicit verdict for operator-side closure versus all operator-related cross-role/background touchpoints.
+- `operator-related-completeness-audit.md`: explicit verdict for operator-side closure versus all operator-related cross-role/background touchpoints, including the 24 Mini Program entrypoints in `app.json`.
 
 Each `*.edges.json` uses the same compact edge schema as the existing merchant and rider slices: only core page/API/logic/transaction/table/provider edges are modeled, while branch detail stays in the Markdown slices.
 
