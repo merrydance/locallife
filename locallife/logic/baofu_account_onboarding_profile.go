@@ -165,17 +165,6 @@ func validateBaofuOpenRequestProfile(req baofucontracts.OpenAccountRequest) erro
 	})
 }
 
-func (s *BaofuAccountOnboardingService) getOrCreateFlow(ctx context.Context, ownerType string, ownerID int64, accountType string, profile db.BaofuAccountOpeningProfile) (db.BaofuAccountOpeningFlow, error) {
-	flow, err := s.store.GetActiveBaofuAccountOpeningFlowByOwner(ctx, db.GetActiveBaofuAccountOpeningFlowByOwnerParams{OwnerType: ownerType, OwnerID: ownerID})
-	if err == nil {
-		return s.getOrCreateFlowWithExisting(ctx, ownerType, ownerID, accountType, profile, flow, true)
-	}
-	if !errors.Is(err, db.ErrRecordNotFound) {
-		return db.BaofuAccountOpeningFlow{}, err
-	}
-	return s.getOrCreateFlowWithExisting(ctx, ownerType, ownerID, accountType, profile, db.BaofuAccountOpeningFlow{}, false)
-}
-
 func (s *BaofuAccountOnboardingService) getOrCreateFlowWithExisting(ctx context.Context, ownerType string, ownerID int64, accountType string, profile db.BaofuAccountOpeningProfile, flow db.BaofuAccountOpeningFlow, found bool) (db.BaofuAccountOpeningFlow, error) {
 	if !found {
 		return s.createBaofuAccountOpeningFlow(ctx, ownerType, ownerID, accountType, profile)
