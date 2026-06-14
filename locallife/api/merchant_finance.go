@@ -880,6 +880,10 @@ func (server *Server) listMerchantSettlements(ctx *gin.Context) {
 			StartAt:    startDate,
 			EndAt:      endDate,
 		})
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
 	} else {
 		// 不带状态筛选的查询
 		settlementOrders, err := server.store.ListMerchantSettlements(ctx, db.ListMerchantSettlementsParams{
@@ -900,10 +904,10 @@ func (server *Server) listMerchantSettlements(ctx *gin.Context) {
 			StartAt:    startDate,
 			EndAt:      endDate,
 		})
-	}
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
 	}
 
 	// 查询统计（只统计已完成的）

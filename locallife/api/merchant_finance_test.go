@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -385,6 +386,94 @@ func TestMerchantFinanceRoutesHonorSelectedStaffMerchant(t *testing.T) {
 			server.router.ServeHTTP(recorder, request)
 
 			require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+		})
+	}
+}
+
+func TestListMerchantSettlementsReturnsInternalErrorWhenCountFails(t *testing.T) {
+	owner, _ := randomUser(t)
+	merchant := randomMerchant(owner.ID)
+	startAt, err := time.Parse("2006-01-02", "2026-06-01")
+	require.NoError(t, err)
+	endAt, err := time.Parse("2006-01-02", "2026-06-10")
+	require.NoError(t, err)
+	endAt = endAt.Add(24*time.Hour - time.Nanosecond)
+
+	testCases := []struct {
+		name       string
+		path       string
+		buildStubs func(store *mockdb.MockStore)
+	}{
+		{
+			name: "without status filter",
+			path: "/v1/merchant/finance/settlements?start_date=2026-06-01&end_date=2026-06-10&page=1&limit=20",
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					ListMerchantSettlements(gomock.Any(), gomock.Eq(db.ListMerchantSettlementsParams{
+						MerchantID: merchant.ID,
+						StartAt:    startAt,
+						EndAt:      endAt,
+						Limit:      20,
+						Offset:     0,
+					})).
+					Return([]db.ListMerchantSettlementsRow{}, nil)
+				store.EXPECT().
+					CountMerchantSettlements(gomock.Any(), gomock.Eq(db.CountMerchantSettlementsParams{
+						MerchantID: merchant.ID,
+						StartAt:    startAt,
+						EndAt:      endAt,
+					})).
+					Return(int64(0), errors.New("count settlements failed"))
+			},
+		},
+		{
+			name: "with status filter",
+			path: "/v1/merchant/finance/settlements?start_date=2026-06-01&end_date=2026-06-10&page=1&limit=20&status=finished",
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					ListMerchantSettlementsByStatus(gomock.Any(), gomock.Eq(db.ListMerchantSettlementsByStatusParams{
+						MerchantID: merchant.ID,
+						Status:     "finished",
+						StartAt:    startAt,
+						EndAt:      endAt,
+						Limit:      20,
+						Offset:     0,
+					})).
+					Return([]db.ListMerchantSettlementsByStatusRow{}, nil)
+				store.EXPECT().
+					CountMerchantSettlementsByStatus(gomock.Any(), gomock.Eq(db.CountMerchantSettlementsByStatusParams{
+						MerchantID: merchant.ID,
+						Status:     "finished",
+						StartAt:    startAt,
+						EndAt:      endAt,
+					})).
+					Return(int64(0), errors.New("count settlements by status failed"))
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+			tc.buildStubs(store)
+			store.EXPECT().
+				GetMerchantProfitSharingStats(gomock.Any(), gomock.Any()).
+				AnyTimes().
+				Return(db.GetMerchantProfitSharingStatsRow{}, nil)
+
+			server := newTestServer(t, store)
+			recorder := httptest.NewRecorder()
+			request, err := http.NewRequest(http.MethodGet, tc.path, nil)
+			require.NoError(t, err)
+			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
+
+			server.router.ServeHTTP(recorder, request)
+
+			require.Equal(t, http.StatusInternalServerError, recorder.Code, recorder.Body.String())
 		})
 	}
 }

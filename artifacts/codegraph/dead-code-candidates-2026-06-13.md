@@ -79,6 +79,7 @@
 | `locallife/worker/task_merchant_application_ocr.go:505` | `parseFoodPermitOCRText` | 食品经营许可证 OCR 旧版直接解析入口，调用 internal parser 并控制缺失公司名日志 | 生产无调用；当前商户食品经营许可证 OCR 成功路径先写入 normalized 结构化字段，仅在 `RawText` 存在时通过 `parseFoodPermitOCRTextFallback` 补齐缺失字段且不覆盖结构化结果。已删除旧 wrapper 和随之失效的 `logFailure` 分支，测试迁到生产 fallback 语义；`go test ./worker -run 'Test(ParseFoodPermitOCRTextFallback|ProcessTaskMerchantApplicationFoodPermitOCR)' -count=1`、`go test ./worker -run '^$' -count=1`、`go build ./worker` 通过 |
 | `locallife/worker/task_process_payment.go:84` | `shouldDispatchOrderProfitSharing` | 旧版支付成功后订单分账派发判断，按订单类型和预订关联返回是否派发 | 生产无调用；当前宝付分账不在支付成功 worker 中直接派发，而由 `BaofuPaymentRecoveryScheduler.createReadyProfitSharingOrders` 扫描 `ListBaofuOrdersReadyForProfitSharing` 后按 `PaymentChannel=baofu_aggregate`、`RequiresProfitSharing=true`、`paid` 状态、业务类型和订单/预订完成状态创建分账单，再派发 `ProcessTaskBaofuProfitSharing`。旧 helper 的 `takeout` 规则也不再代表当前生产边界。已删除 helper 和只覆盖它的测试文件；`go test ./worker -run 'TestBaofuPaymentRecoveryScheduler|TestProcessTaskBaofuProfitSharing' -count=1`、`go test ./worker -run '^$' -count=1`、`go build ./worker` 通过 |
 | `locallife/worker/task_process_payment.go:1551` | `workerPaymentCommandErrorFields` | 旧版 worker 支付命令错误字段 mapper，把微信或宝付错误转为 command 的 `last_error_code/message` | 生产无调用；当前宝付退款命令记录由 `recordWorkerBaofuRefundCommand` 直接从 `RefundResult` 或 `baofu.ProviderError` 填充错误码和经过 `BaofuCommandMessage` 归一化的错误说明，`workerStringPtrIfNotEmpty` 仍被真实命令记录使用。已删除旧 mapper 和只测它的测试文件，并移除随之失效的 `wechat` import；`go test ./worker -run 'TestProcessTaskInitiateRefund_(OrderRefundUsesProvidedOutRefundNo|OrderRefundBaofuOrderExistMarksProcessingForQueryRecovery|ReservationAddonRefund_UsesProvidedOutRefundNo)' -count=1`、`go test ./worker -run '^$' -count=1`、`go build ./worker` 通过 |
+| `locallife/api/merchant_finance.go:877` / `:898` | `SA4006` | 商户结算列表接口统计带状态/不带状态筛选的总数 | 已修复：两个 `CountMerchantSettlements...` 调用原先在分支内用 `:=` shadow 了外层 `err`，导致 count 查询失败后仍可能继续返回 200；现在各分支内立即检查 count 错误并走 `internalError`。新增失败回归覆盖带状态和不带状态两条 count 错误路径；`go test ./api -run 'TestListMerchantSettlementsReturnsInternalErrorWhenCountFails' -count=1` 先红后绿，`go test ./api -run 'TestMerchantFinanceRoutesHonorSelectedStaffMerchant|TestListMerchantSettlementsReturnsInternalErrorWhenCountFails' -count=1`、`go test ./api -run '^$' -count=1` 通过；本机无 `staticcheck` 命令，未能直接重跑 SA4006 |
 
 ## 可优先清理候选
 
@@ -117,12 +118,11 @@
 
 | 位置 | 信号 | 作用 | 核对结论 |
 | --- | --- | --- | --- |
-| `locallife/api/merchant_finance.go:877` | `SA4006` | 统计带状态筛选的商户结算数量 | `err` 在分支中赋值后统一检查；不是死代码块，但 staticcheck 会提示可读性/风险 |
-| `locallife/api/merchant_finance.go:898` | `SA4006` | 统计不带状态筛选的商户结算数量 | 同上 |
+暂无。
 
 ## 建议顺序
 
 1. 纯孤立 helper、未接入口候选和已确认退役的高风险 worker 遗留项已清理。
 2. 对 Swagger-only 的 OCR 更正请求体，保持为文档契约用途，不作为删除项。
 3. 对“测试仍在引用”的项，先决定测试是否还代表有效业务规则；若规则已经迁移，应同步删除或改写测试。
-4. 对 `merchant_finance.go` 的 `SA4006`，如果进入修复阶段，建议只做局部可读性调整，不当作死代码删除。
+4. `merchant_finance.go` 的 `SA4006` 已按局部 bugfix 修复：保留查询/响应契约，只修 count 错误传播。
