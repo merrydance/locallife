@@ -590,7 +590,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "管理员或运营商分页获取骑手列表，支持状态筛选",
+                "description": "管理员分页获取平台骑手列表，返回平台管理页使用的骑手卡片信息",
                 "consumes": [
                     "application/json"
                 ],
@@ -598,21 +598,10 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "骑手管理"
+                    "平台实体管理"
                 ],
-                "summary": "获取骑手列表（管理员）",
+                "summary": "获取平台骑手列表",
                 "parameters": [
-                    {
-                        "enum": [
-                            "approved",
-                            "active",
-                            "suspended"
-                        ],
-                        "type": "string",
-                        "description": "筛选状态",
-                        "name": "status",
-                        "in": "query"
-                    },
                     {
                         "minimum": 1,
                         "type": "integer",
@@ -635,7 +624,7 @@ const docTemplate = `{
                     "200": {
                         "description": "骑手列表",
                         "schema": {
-                            "$ref": "#/definitions/api.listRidersResponse"
+                            "$ref": "#/definitions/api.platformRiderListResponse"
                         }
                     },
                     "400": {
@@ -38481,26 +38470,6 @@ const docTemplate = `{
                 }
             }
         },
-        "api.listRidersResponse": {
-            "type": "object",
-            "properties": {
-                "page_id": {
-                    "type": "integer"
-                },
-                "page_size": {
-                    "type": "integer"
-                },
-                "riders": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/api.riderResponse"
-                    }
-                },
-                "total": {
-                    "type": "integer"
-                }
-            }
-        },
         "api.listRoomsForCustomerResponse": {
             "type": "object",
             "properties": {
@@ -42415,6 +42384,55 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "total_orders": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.platformRiderCard": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "type": "boolean"
+                },
+                "complaint_count": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "region_id": {
+                    "type": "integer"
+                },
+                "region_name": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.platformRiderListResponse": {
+            "type": "object",
+            "properties": {
+                "has_more": {
+                    "type": "boolean"
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "riders": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.platformRiderCard"
+                    }
+                },
+                "total": {
                     "type": "integer"
                 }
             }

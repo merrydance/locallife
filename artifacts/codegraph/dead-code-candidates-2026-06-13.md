@@ -66,6 +66,7 @@
 | `locallife/logic/payment_order_service.go:547` | `PaymentOrderService.markPaymentOrderFailedForCleanup` | 预支付失败后把支付单标记为 failed 并记录日志 | 生产和测试均无调用；当前宝付创建失败路径会关闭本地 pending 支付单，宝付/预订支付终态失败由 payment fact 应用路径处理。已删除；同上 build/test 通过 |
 | `locallife/logic/refund_service.go:58` | `RefundService.maybeMarkPaymentOrderRefunded` | 累计退款额达到支付金额后，把支付单置为 refunded | 生产和测试均无调用；当前退款结果终态由 worker legacy 路径和 `PaymentFactService.maybeMarkPaymentOrderRefunded` 处理，商户发起退款的同步阶段不直接终结支付单状态。已删除；`go build ./logic` 通过；`go test ./logic -run 'TestCreateRefundOrder|TestPaymentFactServiceApplyExternalPaymentFactApplication_.*Refund' -count=1` 通过 |
 | `locallife/internal/wechatdoc/alignment_helpers.go` | `alignment_helpers.go` 整组旧对齐审计 helper | 微信官方文档 endpoint/字段/枚举/约束对齐审计的未接入实现 | 生产和测试均无调用；`cmd/wechat_doc_extract` 只使用 `ExtractMarkdownFile`，`cmd/doc_audit` 走 `internal/docaudit`，未接入这套 alignment helper。已删除整个文件；`go test ./internal/wechatdoc ./internal/docaudit ./cmd/wechat_doc_extract ./cmd/doc_audit -count=1` 通过 |
+| `locallife/api/rider.go` | `listRidersRequest` / `listRidersResponse` / `Server.listRiders` | 旧版 `/v1/admin/riders` 管理员骑手列表 handler、查询参数和响应 DTO | 真实路由在 `server.go` 注册到 `listPlatformRiders`，旧 handler 生产和测试均无调用。已删除旧 handler，并把 `/v1/admin/riders` Swagger 注释迁移到真实 handler，使文档响应从旧 `listRidersResponse` 对齐为 `platformRiderListResponse`；`PATH="/usr/local/go/bin:$HOME/go/bin:$PATH" make swagger` 通过 |
 
 ## 可优先清理候选
 
@@ -80,9 +81,6 @@
 
 | 位置 | 符号 | 作用 | 核对结论 |
 | --- | --- | --- | --- |
-| `locallife/api/rider.go:1187` | `listRidersRequest` | 旧版 `/v1/admin/riders` 查询参数 | 当前 `server.go` 将 `/admin/riders` 挂到 `listPlatformRiders`，不是 `listRiders` |
-| `locallife/api/rider.go:1193` | `listRidersResponse` | 旧版 `/v1/admin/riders` 响应结构 | 同上 |
-| `locallife/api/rider.go:1216` | `Server.listRiders` | 旧版管理员骑手列表 handler | 未注册到路由；Swagger 注释仍写着 `/v1/admin/riders`，但真实路由走 `platform_rider_management` |
 | `locallife/api/scan.go:475` | `buildMerchantStorefrontQRCodeObjectKey` | 生成商户店铺小程序码对象 key | 只被未注册的 `ensureMerchantStorefrontQRCode` 调用 |
 | `locallife/api/scan.go:480` | `buildMerchantStorefrontQRCodeScene` | 生成小程序码 scene | 只被未注册的 `ensureMerchantStorefrontQRCode` 调用 |
 | `locallife/api/scan.go:484` | `wxaCodeEnvVersion` | 将环境名映射到微信小程序码 env_version | 只被未注册的 `ensureMerchantStorefrontQRCode` 调用 |
@@ -135,7 +133,7 @@
 
 ## 建议顺序
 
-1. 纯孤立 helper 第一批已清理；下一轮建议先复核旧 `listRiders` handler 和店铺码生成这类未注册 handler / 未接入口候选。
+1. 纯孤立 helper 第一批已清理；下一轮建议先复核店铺码生成这类未注册 handler / 未接入口候选。
 2. 再按功能成组确认：refund recovery 子商户解析、历史微信分账快照这类高风险 worker 遗留候选。
 3. 对“测试仍在引用”的项，先决定测试是否还代表有效业务规则；若规则已经迁移，应同步删除或改写测试。
 4. 对 `merchant_finance.go` 的 `SA4006`，如果进入修复阶段，建议只做局部可读性调整，不当作死代码删除。

@@ -4340,19 +4340,6 @@ definitions:
       total:
         type: integer
     type: object
-  api.listRidersResponse:
-    properties:
-      page_id:
-        type: integer
-      page_size:
-        type: integer
-      riders:
-        items:
-          $ref: '#/definitions/api.riderResponse'
-        type: array
-      total:
-        type: integer
-    type: object
   api.listRoomsForCustomerResponse:
     properties:
       count:
@@ -7018,6 +7005,38 @@ definitions:
       pending_orders:
         type: integer
       total_orders:
+        type: integer
+    type: object
+  api.platformRiderCard:
+    properties:
+      active:
+        type: boolean
+      complaint_count:
+        type: integer
+      id:
+        type: integer
+      name:
+        type: string
+      region_id:
+        type: integer
+      region_name:
+        type: string
+      status:
+        type: string
+    type: object
+  api.platformRiderListResponse:
+    properties:
+      has_more:
+        type: boolean
+      limit:
+        type: integer
+      page:
+        type: integer
+      riders:
+        items:
+          $ref: '#/definitions/api.platformRiderCard'
+        type: array
+      total:
         type: integer
     type: object
   api.printMerchantOrderResponse:
@@ -11340,16 +11359,8 @@ paths:
     get:
       consumes:
       - application/json
-      description: 管理员或运营商分页获取骑手列表，支持状态筛选
+      description: 管理员分页获取平台骑手列表，返回平台管理页使用的骑手卡片信息
       parameters:
-      - description: 筛选状态
-        enum:
-        - approved
-        - active
-        - suspended
-        in: query
-        name: status
-        type: string
       - default: 1
         description: 页码
         in: query
@@ -11369,7 +11380,7 @@ paths:
         "200":
           description: 骑手列表
           schema:
-            $ref: '#/definitions/api.listRidersResponse'
+            $ref: '#/definitions/api.platformRiderListResponse'
         "400":
           description: 参数错误
           schema:
@@ -11388,9 +11399,9 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: 获取骑手列表（管理员）
+      summary: 获取平台骑手列表
       tags:
-      - 骑手管理
+      - 平台实体管理
   /v1/agreements:
     get:
       consumes:
