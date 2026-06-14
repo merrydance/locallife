@@ -90,7 +90,7 @@
 
 | 位置 | 符号 | 作用 | 核对结论 |
 | --- | --- | --- | --- |
-| `locallife/api/merchant_application_ocr_correction.go:39` | `patchMerchantDocumentOCRFieldsRequest` | Swagger 文档里的 OCR 更正统一请求体 | 代码实际按证照类型绑定更具体 DTO；该结构只被 Swagger 注释和 `docs/docs.go` 引用 |
+| `locallife/api/merchant_application_ocr_correction.go:39` | `patchMerchantDocumentOCRFieldsRequest` | Swagger 文档里的 OCR 更正统一请求体 | 已复核并保留：真实路由 `/v1/merchant/application/documents/{document_type}/ocr-fields` 进入 `patchMerchantApplicationDocumentOCRFields` 后按 `business_license` / `food_permit` 分别绑定具体 DTO；该结构只作为多态请求体的 Swagger schema，被注释和生成文档引用，删除会丢失 API 文档契约 |
 
 ## 测试仍在引用，先别直接删
 
