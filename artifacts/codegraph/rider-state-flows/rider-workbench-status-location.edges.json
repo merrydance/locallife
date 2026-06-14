@@ -2,8 +2,9 @@
   "schema": "locallife-code-slice/v1",
   "slice": "rider-workbench-status-location",
   "risk_class": "G3",
-  "generated_at": "2026-06-08",
+  "generated_at": "2026-06-14",
   "nodes": [
+    {"id":"weapp.dashboardPage","kind":"frontend_page","label":"Rider dashboard page","file":"weapp/miniprogram/pages/rider/dashboard/index.ts","line":31},
     {"id":"weapp.dashboardRuntime","kind":"frontend_logic","label":"Rider dashboard runtime","file":"weapp/miniprogram/pages/rider/_utils/rider-dashboard-runtime.ts","line":294},
     {"id":"weapp.liveLocation","kind":"frontend_logic","label":"Rider live location session","file":"weapp/miniprogram/pages/rider/_utils/rider-live-location.ts","line":124},
     {"id":"weapp.riderApi","kind":"frontend_api","label":"Rider shared API wrappers","file":"weapp/miniprogram/pages/rider/_main_shared/api/rider.ts","line":122},
@@ -35,6 +36,7 @@
     {"id":"table.notificationPreferences","kind":"table","label":"user_notification_preferences","file":"locallife/db/query/notification.sql","line":127}
   ],
   "edges": [
+    {"from":"weapp.dashboardPage","to":"weapp.dashboardRuntime","kind":"compose_runtime"},
     {"from":"weapp.dashboardRuntime","to":"weapp.riderApi","kind":"frontend_api_call"},
     {"from":"weapp.dashboardRuntime","to":"weapp.workbenchApi","kind":"frontend_api_call"},
     {"from":"weapp.dashboardRuntime","to":"weapp.notificationPage","kind":"navigate"},
