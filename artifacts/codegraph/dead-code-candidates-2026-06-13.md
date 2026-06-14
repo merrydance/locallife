@@ -71,6 +71,7 @@
 | `locallife/worker/refund_recovery_scheduler.go` | `errRefundRecoverySubMchIDMissing` / `errRefundRecoveryMerchantUnresolved` / `RefundRecoveryScheduler.resolveSubMchID` | 旧版 refund recovery 根据订单或预订反查商户微信/宝付子商户号 | 生产和测试均无调用；当前 stuck refund status recovery 已按 payment channel 分流，直连微信用 `out_refund_no` 调 `DirectPaymentClientInterface.QueryRefund`，宝付用 collect merchant/terminal 配置调 `aggregatepay.QueryRefund`，不再需要按订单/预订解析商户 `sub_mchid`。已删除整组 helper 和专属错误；高风险退款恢复路径需跑 focused worker tests |
 | `locallife/worker/order_profit_sharing_snapshot.go` | `wechatProfitSharingPaymentFeeRateBps` / `estimatedWechatProfitSharingPaymentFee` / `RedisTaskProcessor.ensureOrderProfitSharingSnapshot` | 旧版微信分账快照创建逻辑，按订单、商户、运营商和骑手估算分账并写入 `profit_sharing_orders` | 生产和测试均无调用；当前主业务分账由 `BaofuPaymentRecoveryScheduler.createReadyProfitSharingOrders` 调 `BaofuProfitSharingService.CreatePendingOrder` 创建宝付分账单，并由 `ProcessTaskBaofuProfitSharing` 派发命令。旧 helper 会创建 `Provider=wechat` 的历史快照，已退役。已删除整个文件；高风险分账路径需跑 focused worker tests |
 | `locallife/api/recovery_dispute.go:1805` | `deriveAutomaticRecoveryDisputeResolution` | API 包内旧版追偿争议自动复核 wrapper，把 logic 层判定结果转成 API 私有结构 | 生产无调用，API 自动复核路径和 worker 重试路径均已直接使用 `logic.ResolveRecoveryDisputeAutomatically` / `logic.EvaluateAutomaticRecoveryDisputeResolution`。已删除 API wrapper，并把原本直接测 wrapper 的规则覆盖迁到 `logic/recovery_dispute_auto_resolution_test.go`；`go test ./logic -run 'Test(Evaluate|Derive)AutomaticRecoveryDisputeResolution' -count=1` 和 `go test ./api -run '^$' -count=1` 通过 |
+| `locallife/baofu/client.go:454` | `publicBusinessFailure` | 旧版宝付 public envelope 通用业务失败解析器，读取 `resultCode` / `errCode` / `errMsg` | 生产无调用；当前宝付公共 envelope 只负责 `returnCode`、签名和 `dataContent` 解包，聚合支付与商户报备的业务失败分别由 `aggregatepay` / `merchantreport` client 按各自契约解析。已删除旧 helper 和直接测试，并把 `SUCCESS + errCode`、未知 `resultCode` 的保护迁到现用 client 测试；`go test ./baofu ./baofu/aggregatepay ./baofu/merchantreport -count=1` 和 `make check-baofu-contract` 通过 |
 
 ## 可优先清理候选
 
@@ -97,7 +98,6 @@
 
 | 位置 | 符号 | 作用 | 核对结论 |
 | --- | --- | --- | --- |
-| `locallife/baofu/client.go:454` | `publicBusinessFailure` | 解析宝付 public envelope 业务失败码/文案 | 生产无调用，但 `baofu/client_test.go` 仍直接测它；也可能是原本 public 接口失败分类残留 |
 | `locallife/db/sqlc/tx_claim_behavior.go:135` | `behaviorDecisionScoreBreakdown` | 索赔行为决策评分详情 JSON 结构 | 生产无直接引用，但 `tx_claim_behavior_test.go` 的 `decodeScoreBreakdown` 直接用它校验评分 JSON 结构；若后续要清理，应先把测试解码结构移到 `_test.go` |
 | `locallife/db/sqlc/tx_claim_behavior.go:143` | `behaviorDecisionScoreDetail` | 单项评分与命中信号结构 | 被上面的测试解码结构嵌套引用，随 score breakdown 成组保留 |
 | `locallife/db/sqlc/tx_claim_behavior.go:148` | `behaviorDecisionSignal` | 评分信号 code/weight/count/active | 被上面的测试解码结构嵌套引用，随 score breakdown 成组保留 |

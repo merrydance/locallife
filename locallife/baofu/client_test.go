@@ -60,21 +60,11 @@ func TestBusinessFailureDetectorsFailClosedForMissingSuccessIndicators(t *testin
 	require.Equal(t, "上游账户失败但未返回错误码", accountFailure.Message)
 	require.Equal(t, "body.retCode", accountFailure.SourcePath)
 
-	publicCode, publicMessage, publicFailed := publicBusinessFailure(json.RawMessage(`{"errCode":"MERCHANT_NOT_REPORT","errMsg":"上游报备缺失"}`))
-	require.True(t, publicFailed)
-	require.Equal(t, "MERCHANT_NOT_REPORT", publicCode)
-	require.Equal(t, "上游报备缺失", publicMessage)
-
 	accountFailure = accountBusinessFailure(json.RawMessage(`{"contractNo":"CM202605040001"}`))
 	require.True(t, accountFailure.Failed)
 	require.Equal(t, "MISSING_RET_CODE", accountFailure.Code)
 	require.Empty(t, accountFailure.Message)
 	require.Equal(t, "body.retCode", accountFailure.SourcePath)
-
-	publicCode, publicMessage, publicFailed = publicBusinessFailure(json.RawMessage(`{"outTradeNo":"BF202605040001"}`))
-	require.True(t, publicFailed)
-	require.Equal(t, "MISSING_RESULT_CODE", publicCode)
-	require.Empty(t, publicMessage)
 }
 
 func TestAccountBusinessFailureAcceptsNumericRetCode(t *testing.T) {
@@ -96,34 +86,4 @@ func TestAccountBusinessFailureTreatsAcceptedResultFailureAsBusinessResult(t *te
 	require.False(t, failure.Failed)
 	require.Empty(t, failure.Code)
 	require.Empty(t, failure.Message)
-}
-
-func TestPublicBusinessFailureUsesUnknownNonSuccessResultCode(t *testing.T) {
-	code, message, failed := publicBusinessFailure(json.RawMessage(`{"resultCode":"PENDING_REVIEW","errMsg":"上游未知处理中"}`))
-
-	require.True(t, failed)
-	require.Equal(t, "PENDING_REVIEW", code)
-	require.Equal(t, "上游未知处理中", message)
-
-	err := providerResponseError("merchant_report", 200, code, message, errors.New("baofu public business response failed"))
-	var providerErr *ProviderError
-	require.ErrorAs(t, err, &providerErr)
-	require.Equal(t, "PENDING_REVIEW", providerErr.UpstreamCode)
-	require.Equal(t, "上游未知处理中", providerErr.UpstreamMessage)
-	require.Equal(t, "BAOFU_MANUAL_REVIEW", providerErr.Frontend.Code)
-	require.Equal(t, "支付通道异常，请联系平台处理", providerErr.Frontend.Message)
-	require.NotContains(t, providerErr.Frontend.Message, "上游未知")
-}
-
-func TestPublicBusinessFailureFailsForSuccessResultWithFailureErrCode(t *testing.T) {
-	code, message, failed := publicBusinessFailure(json.RawMessage(`{"resultCode":"SUCCESS","errCode":"ORDER_NOT_EXIST","errMsg":"上游订单不存在"}`))
-
-	require.True(t, failed)
-	require.Equal(t, "ORDER_NOT_EXIST", code)
-	require.Equal(t, "上游订单不存在", message)
-
-	code, message, failed = publicBusinessFailure(json.RawMessage(`{"resultCode":"SUCCESS","errCode":"SUCCESS","errMsg":"OK"}`))
-	require.False(t, failed)
-	require.Empty(t, code)
-	require.Empty(t, message)
 }

@@ -95,6 +95,31 @@ func TestAggregateClientReturnsProviderErrorForBusinessFailure(t *testing.T) {
 	require.Equal(t, "contact_platform", providerErr.Frontend.Action)
 }
 
+func TestAggregateClientReturnsBusinessErrorForSuccessResultWithFailureErrCode(t *testing.T) {
+	doer := &aggregateRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","errCode":"ORDER_NOT_EXIST","errMsg":"上游原始订单不存在","merId":"102004465","terId":"200005200","outTradeNo":"BF202605040001","txnState":"WAIT_PAYING","payCode":"WECHAT_JSAPI"}`)}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	_, err := client.CreateUnifiedOrder(context.Background(), validUnifiedOrderRequestForClientTest())
+
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "上游原始订单不存在")
+	var providerErr *baofu.ProviderError
+	require.ErrorAs(t, err, &providerErr)
+	require.Equal(t, "unified_order", providerErr.Operation)
+	require.Equal(t, "ORDER_NOT_EXIST", providerErr.UpstreamCode)
+	require.Equal(t, "上游原始订单不存在", providerErr.UpstreamMessage)
+	require.Equal(t, "支付通道异常，请联系平台处理", providerErr.Frontend.Message)
+}
+
+func TestAggregateClientRejectsUnsupportedBusinessResultCode(t *testing.T) {
+	doer := &aggregateRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"PENDING_REVIEW","errMsg":"上游未知处理中","merId":"102004465","terId":"200005200","outTradeNo":"BF202605040001","txnState":"WAIT_PAYING","payCode":"WECHAT_JSAPI"}`)}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	_, err := client.CreateUnifiedOrder(context.Background(), validUnifiedOrderRequestForClientTest())
+
+	requireAggregateContractProviderError(t, err, "unified_order", "baofu unified order response resultCode is unsupported")
+}
+
 func TestAggregateClientReturnsBusinessErrorForShareQueryFailureWithoutTxnState(t *testing.T) {
 	doer := &aggregateRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"FAIL","errCode":"ORDER_NOT_EXIST","errMsg":"上游原始订单不存在","merId":"102004465","terId":"200005200","outTradeNo":"BFSHARE202605040001"}`)}
 	client := NewClient(testBaofuRootClient(t, doer))
