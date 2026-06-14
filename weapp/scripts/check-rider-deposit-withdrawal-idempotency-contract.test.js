@@ -114,6 +114,27 @@ assert.strictEqual(
   'pending rider deposit withdrawal context must persist the request idempotency key'
 )
 
+const failedContext = withdrawalService.buildPendingRiderDepositWithdrawalContext({
+  status: 'failed',
+  requested_amount: 1200,
+  accepted_amount: 1200,
+  refunds: [
+    {
+      refund_order_id: 89,
+      payment_order_id: 189,
+      out_refund_no: 'RIDER_DEPOSIT_REFUND_89',
+      amount: 1200,
+      status: 'failed'
+    }
+  ]
+}, 'rider-deposit-withdrawal:test-key')
+
+assert.strictEqual(
+  failedContext,
+  null,
+  'terminal failed rider deposit withdrawal response must not be stored as pending'
+)
+
 withdrawalService.savePendingRiderDepositWithdrawal(pendingContext)
 assert.strictEqual(
   withdrawalService.getPendingRiderDepositWithdrawal().idempotencyKey,
@@ -149,6 +170,10 @@ assert(
 assert(
   /waitForSubmittedRiderDepositWithdrawalTerminalStatus\([\s\S]*\{\s*idempotencyKey\s*\}/.test(depositPageSource),
   'deposit page must persist the draft idempotency key with pending withdrawal context'
+)
+assert(
+  depositPageSource.includes("result.status !== 'success' && result.status !== 'failed'"),
+  'deposit page must not poll or persist terminal failed rider deposit withdrawal responses as pending'
 )
 assert(
   !depositPageSource.includes('baofu-withdrawal'),

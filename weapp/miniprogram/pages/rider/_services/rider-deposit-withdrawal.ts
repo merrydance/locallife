@@ -109,7 +109,7 @@ export function buildPendingRiderDepositWithdrawalContext(
   idempotencyKey?: string
 ): RiderDepositPendingWithdrawalContext | null {
   const refundOrderIds = uniquePositiveIds((response.refunds || []).map((refund) => refund.refund_order_id))
-  if (refundOrderIds.length === 0 || response.status === 'success') {
+  if (refundOrderIds.length === 0 || response.status === 'success' || response.status === 'failed') {
     return null
   }
 

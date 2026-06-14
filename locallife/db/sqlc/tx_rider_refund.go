@@ -105,8 +105,20 @@ func (store *SQLStore) PrepareRiderDepositRefundTx(ctx context.Context, arg Prep
 			return fmt.Errorf("get rider deposit withdrawal request: %w", err)
 		}
 
+		if rider.Status != RiderStatusApproved && rider.Status != RiderStatusActive {
+			return ErrRiderAccountNotActivated
+		}
+
 		if rider.FrozenDeposit > 0 {
 			return ErrRiderDepositFrozen
+		}
+
+		activeDeliveries, err := q.ListRiderActiveDeliveries(ctx, pgtype.Int8{Int64: rider.ID, Valid: true})
+		if err != nil {
+			return fmt.Errorf("list rider active deliveries: %w", err)
+		}
+		if len(activeDeliveries) > 0 {
+			return ErrRiderHasActiveDeliveries
 		}
 
 		withdrawalRequest, err = q.CreateRiderDepositWithdrawalRequest(ctx, CreateRiderDepositWithdrawalRequestParams{

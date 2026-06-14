@@ -1320,16 +1320,6 @@ func TestWithdrawRiderAPI(t *testing.T) {
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return(rider, nil)
-				store.EXPECT().
-					GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(int64(0), nil)
-
-				// 检查活跃代取
-				store.EXPECT().
-					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return([]db.Delivery{}, nil)
 
 				store.EXPECT().
 					PrepareRiderDepositRefundTx(gomock.Any(), gomock.AssignableToTypeOf(db.PrepareRiderDepositRefundTxParams{})).
@@ -1399,15 +1389,6 @@ func TestWithdrawRiderAPI(t *testing.T) {
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return(rider, nil)
-				store.EXPECT().
-					GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(int64(0), nil)
-
-				store.EXPECT().
-					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return([]db.Delivery{}, nil)
 
 				store.EXPECT().
 					PrepareRiderDepositRefundTx(gomock.Any(), gomock.Any()).
@@ -1510,6 +1491,10 @@ func TestWithdrawRiderAPI(t *testing.T) {
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return(pendingRider, nil)
+				store.EXPECT().
+					PrepareRiderDepositRefundTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.PrepareRiderDepositRefundTxResult{}, db.ErrRiderAccountNotActivated)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -1531,9 +1516,9 @@ func TestWithdrawRiderAPI(t *testing.T) {
 					Times(1).
 					Return(rider, nil)
 				store.EXPECT().
-					GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					PrepareRiderDepositRefundTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(int64(0), nil)
+					Return(db.PrepareRiderDepositRefundTxResult{}, db.ErrInsufficientDeposit)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -1556,11 +1541,6 @@ func TestWithdrawRiderAPI(t *testing.T) {
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return(frozenRider, nil)
-
-				store.EXPECT().
-					GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(int64(50*fenPerYuan), nil)
 
 				store.EXPECT().
 					PrepareRiderDepositRefundTx(gomock.Any(), gomock.Any()).
@@ -1587,14 +1567,9 @@ func TestWithdrawRiderAPI(t *testing.T) {
 					Times(1).
 					Return(rider, nil)
 				store.EXPECT().
-					GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					PrepareRiderDepositRefundTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(int64(0), nil)
-
-				store.EXPECT().
-					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return([]db.Delivery{{ID: 1}}, nil) // 有活跃代取
+					Return(db.PrepareRiderDepositRefundTxResult{}, db.ErrRiderHasActiveDeliveries)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -1615,15 +1590,6 @@ func TestWithdrawRiderAPI(t *testing.T) {
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return(rider, nil)
-				store.EXPECT().
-					GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(int64(0), nil)
-
-				store.EXPECT().
-					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return([]db.Delivery{}, nil)
 
 				store.EXPECT().
 					PrepareRiderDepositRefundTx(gomock.Any(), gomock.Any()).
@@ -1741,8 +1707,6 @@ func TestWithdrawRiderAPIPassesTrimmedIdempotencyKey(t *testing.T) {
 	store := mockdb.NewMockStore(ctrl)
 	paymentClient := wechatmock.NewMockDirectPaymentClientInterface(ctrl)
 	store.EXPECT().GetRiderByUserID(gomock.Any(), user.ID).Return(rider, nil)
-	store.EXPECT().GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), user.ID).Return(int64(0), nil)
-	store.EXPECT().ListRiderActiveDeliveries(gomock.Any(), pgtype.Int8{Int64: rider.ID, Valid: true}).Return([]db.Delivery{}, nil)
 	store.EXPECT().
 		PrepareRiderDepositRefundTx(gomock.Any(), gomock.AssignableToTypeOf(db.PrepareRiderDepositRefundTxParams{})).
 		DoAndReturn(func(_ context.Context, arg db.PrepareRiderDepositRefundTxParams) (db.PrepareRiderDepositRefundTxResult, error) {
@@ -1785,6 +1749,71 @@ func TestWithdrawRiderAPIPassesTrimmedIdempotencyKey(t *testing.T) {
 	server.router.ServeHTTP(recorder, request)
 
 	require.Equal(t, http.StatusAccepted, recorder.Code)
+}
+
+func TestWithdrawRiderAPIReplayedFailedTerminalReturnsOK(t *testing.T) {
+	user, _ := randomUser(t)
+	rider := randomRider(user.ID)
+	rider.Status = db.RiderStatusSuspended
+	rider.DepositAmount = 0
+	rider.FrozenDeposit = 0
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	paymentClient := wechatmock.NewMockDirectPaymentClientInterface(ctrl)
+	paymentOrder := db.PaymentOrder{ID: 191, UserID: user.ID, OutTradeNo: "PTEST_FAILED_REPLAY", Amount: 100 * fenPerYuan}
+	refundOrder := db.RefundOrder{ID: 111, PaymentOrderID: paymentOrder.ID, RefundAmount: 100 * fenPerYuan, OutRefundNo: "RTEST_FAILED_REPLAY", Status: "failed"}
+
+	store.EXPECT().GetRiderByUserID(gomock.Any(), user.ID).Return(rider, nil)
+	store.EXPECT().
+		PrepareRiderDepositRefundTx(gomock.Any(), gomock.AssignableToTypeOf(db.PrepareRiderDepositRefundTxParams{})).
+		DoAndReturn(func(_ context.Context, arg db.PrepareRiderDepositRefundTxParams) (db.PrepareRiderDepositRefundTxResult, error) {
+			require.Equal(t, "rider-withdraw-failed-replay-1", arg.IdempotencyKey)
+			require.Equal(t, user.ID, arg.UserID)
+			require.NotEmpty(t, arg.IdempotencyRequestHash)
+			return db.PrepareRiderDepositRefundTxResult{
+				Rider:               rider,
+				FrozenAmount:        100 * fenPerYuan,
+				IdempotencyReplayed: true,
+				WithdrawalRequestID: 411,
+				RefundPlans: []db.RiderDepositRefundPlan{{
+					RefundOrder:        refundOrder,
+					SourcePaymentOrder: paymentOrder,
+				}},
+			}, nil
+		})
+	paymentClient.EXPECT().CreateRefund(gomock.Any(), gomock.Any()).Times(0)
+	store.EXPECT().UpdateRefundOrderToProcessing(gomock.Any(), gomock.Any()).Times(0)
+	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).Times(0)
+
+	server := newTestServerWithPayment(t, store, paymentClient)
+	recorder := httptest.NewRecorder()
+	body := map[string]interface{}{
+		"amount": 100 * fenPerYuan,
+		"remark": "提现押金",
+	}
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
+	request, err := http.NewRequest(http.MethodPost, "/v1/rider/withdraw", bytes.NewReader(data))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Idempotency-Key", "rider-withdraw-failed-replay-1")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var resp riderWithdrawResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, riderWithdrawFailedStatus, resp.Status)
+	require.Equal(t, int64(100*fenPerYuan), resp.RequestedAmount)
+	require.Equal(t, int64(100*fenPerYuan), resp.AcceptedAmount)
+	require.Len(t, resp.Refunds, 1)
+	require.Equal(t, riderWithdrawFailedStatus, resp.Refunds[0].Status)
+	require.Equal(t, refundOrder.ID, resp.Refunds[0].RefundOrderID)
+	require.Equal(t, refundOrder.OutRefundNo, resp.Refunds[0].OutRefundNo)
 }
 
 func TestGetRiderWithdrawalStatusAPI(t *testing.T) {

@@ -128,6 +128,41 @@ func TestPrepareRiderDepositRefundTx_SubtractsPendingRefundWhenFrozenDrifted(t *
 	require.ErrorIs(t, err, ErrInsufficientDeposit)
 }
 
+func TestPrepareRiderDepositRefundTx_BlocksNewRequestWhenRiderInactive(t *testing.T) {
+	setRiderDepositThresholdForTest(t, DefaultRiderDepositThresholdFen)
+
+	rider := createRandomRider(t)
+	paymentOrder := createRefundableRiderDepositCredit(t, rider, 30000)
+
+	inactiveRider, err := testStore.UpdateRiderStatus(context.Background(), UpdateRiderStatusParams{
+		ID:     rider.ID,
+		Status: RiderStatusSuspended,
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.(*SQLStore).PrepareRiderDepositRefundTx(context.Background(), prepareRiderDepositRefundTxParamsForTest(inactiveRider, 10000, "押金提现"))
+	require.ErrorIs(t, err, ErrRiderAccountNotActivated)
+
+	refunds, err := testStore.ListRefundOrdersByPaymentOrder(context.Background(), paymentOrder.ID)
+	require.NoError(t, err)
+	require.Empty(t, refunds)
+}
+
+func TestPrepareRiderDepositRefundTx_BlocksNewRequestWithActiveDeliveries(t *testing.T) {
+	setRiderDepositThresholdForTest(t, DefaultRiderDepositThresholdFen)
+
+	rider := createRandomRider(t)
+	paymentOrder := createRefundableRiderDepositCredit(t, rider, 30000)
+	createAssignedDelivery(t, rider.ID)
+
+	_, err := testStore.(*SQLStore).PrepareRiderDepositRefundTx(context.Background(), prepareRiderDepositRefundTxParamsForTest(rider, 10000, "押金提现"))
+	require.ErrorIs(t, err, ErrRiderHasActiveDeliveries)
+
+	refunds, err := testStore.ListRefundOrdersByPaymentOrder(context.Background(), paymentOrder.ID)
+	require.NoError(t, err)
+	require.Empty(t, refunds)
+}
+
 func TestPrepareRiderDepositRefundTx_ReplaysSameIdempotencyKey(t *testing.T) {
 	setRiderDepositThresholdForTest(t, DefaultRiderDepositThresholdFen)
 
@@ -180,6 +215,54 @@ func TestPrepareRiderDepositRefundTx_ReplaysSameIdempotencyKey(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(30000), updatedRider.DepositAmount)
 	require.Equal(t, int64(12000), updatedRider.FrozenDeposit)
+}
+
+func TestPrepareRiderDepositRefundTx_ReplayBypassesCurrentMutablePrechecks(t *testing.T) {
+	setRiderDepositThresholdForTest(t, DefaultRiderDepositThresholdFen)
+
+	ctx := context.Background()
+	rider := createRandomRider(t)
+	paymentOrder := createRefundableRiderDepositCredit(t, rider, 30000)
+	idempotencyKey := "rider-deposit-withdrawal-" + util.RandomString(12)
+	requestHash := "sha256:" + util.RandomString(64)
+
+	first, err := testStore.(*SQLStore).PrepareRiderDepositRefundTx(ctx, PrepareRiderDepositRefundTxParams{
+		RiderID:                rider.ID,
+		UserID:                 rider.UserID,
+		Amount:                 12000,
+		Remark:                 "骑手押金提现",
+		IdempotencyKey:         idempotencyKey,
+		IdempotencyRequestHash: requestHash,
+	})
+	require.NoError(t, err)
+	require.False(t, first.IdempotencyReplayed)
+	require.Len(t, first.RefundPlans, 1)
+
+	_, err = testStore.UpdateRiderStatus(ctx, UpdateRiderStatusParams{
+		ID:     rider.ID,
+		Status: RiderStatusSuspended,
+	})
+	require.NoError(t, err)
+	createAssignedDelivery(t, rider.ID)
+
+	replayed, err := testStore.(*SQLStore).PrepareRiderDepositRefundTx(ctx, PrepareRiderDepositRefundTxParams{
+		RiderID:                rider.ID,
+		UserID:                 rider.UserID,
+		Amount:                 12000,
+		Remark:                 "骑手押金提现",
+		IdempotencyKey:         idempotencyKey,
+		IdempotencyRequestHash: requestHash,
+	})
+	require.NoError(t, err)
+	require.True(t, replayed.IdempotencyReplayed)
+	require.Equal(t, first.WithdrawalRequestID, replayed.WithdrawalRequestID)
+	require.Equal(t, first.RefundPlans[0].RefundOrder.ID, replayed.RefundPlans[0].RefundOrder.ID)
+	require.Equal(t, first.RefundPlans[0].RefundOrder.OutRefundNo, replayed.RefundPlans[0].RefundOrder.OutRefundNo)
+
+	refunds, err := testStore.ListRefundOrdersByPaymentOrder(ctx, paymentOrder.ID)
+	require.NoError(t, err)
+	require.Len(t, refunds, 1)
+	require.Equal(t, first.RefundPlans[0].RefundOrder.ID, refunds[0].ID)
 }
 
 func TestPrepareRiderDepositRefundTx_RejectsConflictingIdempotencyKey(t *testing.T) {

@@ -653,7 +653,7 @@ Page({
             })
             hideDepositToast(this)
             const withdrawStatusView = getRiderDepositWithdrawStatusView(result.status)
-            const hasPendingWithdrawal = result.status !== 'success' && (result.refunds || []).length > 0
+            const hasPendingWithdrawal = result.status !== 'success' && result.status !== 'failed' && (result.refunds || []).length > 0
 
             if (hasPendingWithdrawal) {
                 showDepositLoadingToast(this, '提现已受理，正在等待微信确认...')

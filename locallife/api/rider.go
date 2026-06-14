@@ -613,7 +613,7 @@ func (server *Server) withdrawRider(ctx *gin.Context) {
 		})
 	}
 
-	if response.Status == "success" {
+	if response.Status == riderWithdrawSuccessStatus || response.Status == riderWithdrawFailedStatus {
 		ctx.JSON(http.StatusOK, response)
 		return
 	}

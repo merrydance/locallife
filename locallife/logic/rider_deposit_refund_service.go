@@ -29,6 +29,7 @@ const (
 	riderDepositWithdrawalIdempotencyScope = "rider_deposit_withdrawal"
 	riderDepositWithdrawStatusSuccess      = "success"
 	riderDepositWithdrawStatusProcessing   = "processing"
+	riderDepositWithdrawStatusFailed       = "failed"
 	riderDepositRefundStatusSuccess        = "SUCCESS"
 	riderDepositRefundStatusFailed         = "FAILED"
 	riderDepositRefundStatusAbnormal       = "ABNORMAL"
@@ -94,28 +95,6 @@ func (s *RiderDepositRefundService) SubmitWithdrawal(ctx context.Context, input 
 		return result, err
 	}
 
-	if rider.Status != db.RiderStatusApproved && rider.Status != db.RiderStatusActive {
-		return result, NewRequestError(http.StatusBadRequest, ErrRiderAccountNotActivated)
-	}
-	withdrawalProcessingAmount, err := s.store.GetPendingRiderDepositRefundAmountByUserID(ctx, input.UserID)
-	if err != nil {
-		return result, fmt.Errorf("get pending rider deposit refund amount: %w", err)
-	}
-	availability := db.CalculateRiderDepositAvailability(rider, withdrawalProcessingAmount)
-	if rider.FrozenDeposit == 0 && input.Amount > availability.AvailableDeposit {
-		return result, NewRequestError(http.StatusBadRequest, ErrRiderAvailableDepositInsufficient)
-	}
-
-	if rider.FrozenDeposit == 0 {
-		activeDeliveries, err := s.store.ListRiderActiveDeliveries(ctx, pgtype.Int8{Int64: rider.ID, Valid: true})
-		if err != nil {
-			return result, fmt.Errorf("list rider active deliveries: %w", err)
-		}
-		if len(activeDeliveries) > 0 {
-			return result, NewRequestError(http.StatusBadRequest, ErrRiderHasActiveDeliveries)
-		}
-	}
-
 	prepareResult, err := s.store.PrepareRiderDepositRefundTx(ctx, db.PrepareRiderDepositRefundTxParams{
 		RiderID:                rider.ID,
 		UserID:                 input.UserID,
@@ -135,6 +114,12 @@ func (s *RiderDepositRefundService) SubmitWithdrawal(ctx context.Context, input 
 		if errors.Is(err, db.ErrRiderDepositFrozen) {
 			return result, NewRequestError(http.StatusConflict, ErrRiderDepositFrozen)
 		}
+		if errors.Is(err, db.ErrRiderAccountNotActivated) {
+			return result, NewRequestError(http.StatusBadRequest, ErrRiderAccountNotActivated)
+		}
+		if errors.Is(err, db.ErrRiderHasActiveDeliveries) {
+			return result, NewRequestError(http.StatusBadRequest, ErrRiderHasActiveDeliveries)
+		}
 		if errors.Is(err, db.ErrInsufficientDeposit) {
 			return result, NewRequestError(http.StatusBadRequest, ErrRiderAvailableDepositInsufficient)
 		}
@@ -150,10 +135,7 @@ func (s *RiderDepositRefundService) SubmitWithdrawal(ctx context.Context, input 
 
 	for _, plan := range prepareResult.RefundPlans {
 		if prepareResult.IdempotencyReplayed && plan.RefundOrder.Status != "pending" {
-			itemStatus := riderDepositWithdrawStatusProcessing
-			if plan.RefundOrder.Status == "success" {
-				itemStatus = riderDepositWithdrawStatusSuccess
-			}
+			itemStatus := riderDepositWithdrawStatusFromRefundOrderStatus(plan.RefundOrder.Status)
 			result.AcceptedAmount += plan.RefundOrder.RefundAmount
 			result.Refunds = append(result.Refunds, RiderDepositWithdrawalRefundItem{
 				RefundOrder:  plan.RefundOrder,
@@ -264,18 +246,35 @@ func (s *RiderDepositRefundService) SubmitWithdrawal(ctx context.Context, input 
 
 	if result.AcceptedAmount == input.Amount {
 		allSuccess := true
+		allFailed := true
 		for _, item := range result.Refunds {
 			if item.Status != riderDepositWithdrawStatusSuccess {
 				allSuccess = false
-				break
+			}
+			if item.Status != riderDepositWithdrawStatusFailed {
+				allFailed = false
 			}
 		}
-		if allSuccess {
+		switch {
+		case allSuccess:
 			result.Status = riderDepositWithdrawStatusSuccess
+		case allFailed:
+			result.Status = riderDepositWithdrawStatusFailed
 		}
 	}
 
 	return result, nil
+}
+
+func riderDepositWithdrawStatusFromRefundOrderStatus(status string) string {
+	switch status {
+	case "success":
+		return riderDepositWithdrawStatusSuccess
+	case "failed", "closed":
+		return riderDepositWithdrawStatusFailed
+	default:
+		return riderDepositWithdrawStatusProcessing
+	}
 }
 
 func riderDepositWithdrawalRequestHash(input SubmitRiderDepositWithdrawalInput) string {
