@@ -60,6 +60,10 @@
 | `locallife/worker/order_payment_fact.go:36` | `recoveredOrderPaymentFactResource` / `orderPaymentInt8Value` | 为“已支付但未处理”恢复扫描构造泛用 payment fact 资源快照 JSON，并把 `pgtype.Int8` 转成 JSON 值 | 生产和测试均无调用；支付恢复调度器当前通过 `recordRecoveredDirectPaymentFact` 使用 direct-payment 专用 `recoveredDirectPaymentFactResource`，宝付支付恢复由专用宝付 scheduler 处理。已删除，同时移除只服务该 helper 的 `encoding/json` import；`go build ./worker` 通过；`go test ./worker -run 'TestPaymentRecoverySchedulerRunOnceCreatesRiderDepositPaymentFactApplication|TestPaymentRecoverySchedulerRunOnceCreatesClaimRecoveryPaymentFactApplication|TestProcessTaskPaymentOrderTimeout_DirectRemotePaidRecordsFactInsteadOfClosing' -count=1` 通过 |
 | `locallife/logic/replace_order.go:332` | `markReplaceReservationPaymentOrderFailedForCleanup` | 替换预订支付失败后把支付单置为 failed | 生产和测试均无调用；当前替换预订正向支付创建失败直接返回错误，宝付预订支付终态失败由 payment fact 应用路径处理。已删除；`go build ./logic` 通过；`go test ./logic -run 'TestProcessReplaceOrderRefundWithBaofu|TestCreateReplaceOrderBaofuPayment|TestReplaceReservationOrderWithBaofu|TestReplaceReservationRefundCommandInputUsesBaofuProvider' -count=1` 通过 |
 | `locallife/logic/baofu_account_onboarding_profile.go:168` | `BaofuAccountOnboardingService.getOrCreateFlow` | 为宝付开户 profile 获取或创建开户 flow 的旧 wrapper | 生产和测试均无调用；当前 `Start` 流程先解析 active flow，再直接调用 `getOrCreateFlowWithExisting`，该函数和 `createBaofuAccountOpeningFlow` 仍承载开户草稿复用、模式切换作废和新 flow 创建。已删除；`go build ./logic` 通过；`go test ./logic -run 'TestBaofuAccountOnboardingServiceStart_MerchantEmptyModeContinuesPersonalDraft|TestBaofuAccountOnboardingServiceStart_MerchantOpeningModeChangeVoidsDraftFlow|TestBaofuAccountOnboardingServiceStart_MerchantOpeningModeChangeRejectsProcessingFlow|TestBaofuAccountOnboardingServiceStart_ReplacementFlowReusesPaidVerifyFeeWithoutChargingAgain|TestBaofuAccountOnboardingServiceStartRecoversProviderProgressFlow' -count=1` 通过 |
+| `locallife/logic/payment_order_service.go:273` | `PaymentOrderService.resolveConcurrentOrderPayment` | 并发创建订单支付单冲突时，轮询并复用或关闭已有待支付单 | 生产和测试均无调用；当前创建支付单路径已在创建前读取最新待支付单并按金额/渠道决定复用或关闭。已删除；`go build ./logic` 通过；`go test ./logic -run 'TestPaymentOrderServiceCreatePaymentOrder|TestPaymentOrderServiceCreateReservationPaymentRejectsOfflineOperatorAsCustomerOwner|TestPaymentOrderServiceClosePaymentOrder|TestPaymentOrderServiceGetPaymentOrder|TestPaymentOrderServiceListPaymentOrders' -count=1` 通过 |
+| `locallife/logic/payment_order_service.go:303` | `PaymentOrderService.resolveConcurrentReservationPayment` | 并发创建预订支付单冲突时，按 attach 判断是否复用已有待支付单 | 生产和测试均无调用；当前预订支付复用判断由创建前的 `shouldReuseReservationPendingPayment` 承担，`parsePaymentAttach` 因此仍在用并保留。已删除；同上 build/test 通过 |
+| `locallife/logic/payment_order_service.go:536` | `sleepWithContext` / 支撑重试常量 | 并发支付冲突轮询时的 context-aware sleep 和重试参数 | 只被已删除的并发解析 helper 调用；API 层仍有自己的 `sleepWithContext` 用于骑手押金 legacy out_trade_no 重试，不属于本项。已删除；同上 build/test 通过 |
+| `locallife/logic/payment_order_service.go:547` | `PaymentOrderService.markPaymentOrderFailedForCleanup` | 预支付失败后把支付单标记为 failed 并记录日志 | 生产和测试均无调用；当前宝付创建失败路径会关闭本地 pending 支付单，宝付/预订支付终态失败由 payment fact 应用路径处理。已删除；同上 build/test 通过 |
 
 ## 可优先清理候选
 
@@ -68,10 +72,6 @@
 | `locallife/db/sqlc/tx_claim_behavior.go:135` | `behaviorDecisionScoreBreakdown` | 索赔行为决策评分详情 JSON 结构 | 生产无引用；测试 helper 仍可解码该类型，属于测试辅助引用 |
 | `locallife/db/sqlc/tx_claim_behavior.go:143` | `behaviorDecisionScoreDetail` | 单项评分与命中信号结构 | 只被上面的未使用评分结构嵌套引用 |
 | `locallife/db/sqlc/tx_claim_behavior.go:148` | `behaviorDecisionSignal` | 评分信号 code/weight/count/active | 只被上面的未使用评分结构嵌套引用 |
-| `locallife/logic/payment_order_service.go:273` | `PaymentOrderService.resolveConcurrentOrderPayment` | 并发创建订单支付单冲突时，轮询并复用/关闭已有待支付单 | 生产无调用；同组 `sleepWithContext` 被它调用 |
-| `locallife/logic/payment_order_service.go:303` | `PaymentOrderService.resolveConcurrentReservationPayment` | 并发创建预订支付单冲突时，按 attach 判断是否复用已有待支付单 | 生产无调用；同组 `sleepWithContext` 被它调用 |
-| `locallife/logic/payment_order_service.go:536` | `sleepWithContext` | 并发支付冲突重试时的 context-aware sleep | 只被未使用的并发解析 helper 调用 |
-| `locallife/logic/payment_order_service.go:547` | `PaymentOrderService.markPaymentOrderFailedForCleanup` | 预支付失败后把支付单标记为 failed 并记录日志 | 生产无调用 |
 | `locallife/logic/refund_service.go:58` | `RefundService.maybeMarkPaymentOrderRefunded` | 累计退款额达到支付金额后，把支付单置为 refunded | 生产无调用；worker 和 PaymentFactService 各有独立在用实现 |
 
 ## 整组遗留候选

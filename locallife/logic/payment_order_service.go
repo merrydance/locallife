@@ -13,7 +13,6 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
-	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -25,11 +24,8 @@ const (
 )
 
 const (
-	outTradeNoMaxRetry      = 3
-	outTradeNoRetryBaseBack = 50 * time.Millisecond
-	concurrentPaymentRetry  = 2
-	orderTypeDineIn         = "dine_in"
-	orderTypeTakeaway       = "takeaway"
+	orderTypeDineIn   = "dine_in"
+	orderTypeTakeaway = "takeaway"
 )
 
 // PaymentOrderService owns user-facing single payment order operations.
@@ -270,66 +266,6 @@ func (svc *PaymentOrderService) supersedePendingPaymentOrder(ctx context.Context
 	return nil
 }
 
-func (svc *PaymentOrderService) resolveConcurrentOrderPayment(ctx context.Context, input CreatePaymentOrderInput, expectedAmount int64) (CreatePaymentOrderResult, bool, error) {
-	var result CreatePaymentOrderResult
-	for attempt := 1; attempt <= outTradeNoMaxRetry; attempt++ {
-		paymentOrder, err := svc.store.GetLatestPaymentOrderByOrder(ctx, db.GetLatestPaymentOrderByOrderParams{
-			OrderID:      pgtype.Int8{Int64: input.OrderID, Valid: true},
-			BusinessType: input.BusinessType,
-		})
-		if err != nil {
-			if errors.Is(err, db.ErrRecordNotFound) {
-				if attempt < outTradeNoMaxRetry && sleepWithContext(ctx, outTradeNoRetryBaseBack*time.Duration(attempt)) {
-					continue
-				}
-				return result, false, nil
-			}
-			return result, true, fmt.Errorf("get latest payment order after concurrent conflict: %w", err)
-		}
-		if paymentOrder.Status != paymentStatusPending {
-			return result, false, nil
-		}
-		if paymentOrder.Amount != expectedAmount || !paymentOrderUsesBaofuAggregateChannel(paymentOrder) {
-			if err := svc.supersedePendingPaymentOrder(ctx, paymentOrder); err != nil {
-				return result, true, err
-			}
-			return result, false, nil
-		}
-		return CreatePaymentOrderResult{PaymentOrder: paymentOrder}, true, nil
-	}
-	return result, false, nil
-}
-
-func (svc *PaymentOrderService) resolveConcurrentReservationPayment(ctx context.Context, input CreatePaymentOrderInput, expectedAmount int64, expectedAttach string) (CreatePaymentOrderResult, bool, error) {
-	var result CreatePaymentOrderResult
-	for attempt := 1; attempt <= outTradeNoMaxRetry; attempt++ {
-		paymentOrder, err := svc.store.GetLatestPaymentOrderByReservation(ctx, db.GetLatestPaymentOrderByReservationParams{
-			ReservationID: pgtype.Int8{Int64: input.OrderID, Valid: true},
-			BusinessType:  input.BusinessType,
-		})
-		if err != nil {
-			if errors.Is(err, db.ErrRecordNotFound) {
-				if attempt < outTradeNoMaxRetry && sleepWithContext(ctx, outTradeNoRetryBaseBack*time.Duration(attempt)) {
-					continue
-				}
-				return result, false, nil
-			}
-			return result, true, fmt.Errorf("get latest payment order after concurrent conflict: %w", err)
-		}
-		if paymentOrder.Status != paymentStatusPending {
-			return result, false, nil
-		}
-		if !paymentOrderUsesBaofuAggregateChannel(paymentOrder) || !shouldReuseReservationPendingPayment(paymentOrder, expectedAmount, expectedAttach) {
-			if err := svc.supersedePendingPaymentOrder(ctx, paymentOrder); err != nil {
-				return result, true, err
-			}
-			return result, false, nil
-		}
-		return CreatePaymentOrderResult{PaymentOrder: paymentOrder}, true, nil
-	}
-	return result, false, nil
-}
-
 func (svc *PaymentOrderService) GetPaymentOrder(ctx context.Context, input GetPaymentOrderInput) (GetPaymentOrderResult, error) {
 	paymentOrder, err := svc.store.GetPaymentOrder(ctx, input.PaymentOrderID)
 	if err != nil {
@@ -515,21 +451,4 @@ func isOutTradeNoConflict(err error) bool {
 		return false
 	}
 	return strings.Contains(pgErr.ConstraintName, "out_trade_no") || strings.Contains(pgErr.Detail, "out_trade_no")
-}
-
-func sleepWithContext(ctx context.Context, d time.Duration) bool {
-	t := time.NewTimer(d)
-	defer t.Stop()
-	select {
-	case <-t.C:
-		return true
-	case <-ctx.Done():
-		return false
-	}
-}
-
-func (svc *PaymentOrderService) markPaymentOrderFailedForCleanup(ctx context.Context, paymentOrderID int64, message string) {
-	if _, err := svc.store.UpdatePaymentOrderToFailed(ctx, paymentOrderID); err != nil {
-		log.Error().Err(err).Int64("payment_order_id", paymentOrderID).Msg(message)
-	}
 }
