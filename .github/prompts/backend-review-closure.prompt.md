@@ -12,6 +12,10 @@ Use `.github/standards/backend/WORKFLOW_AND_VALIDATION.md` when deciding which g
 Use `.github/standards/backend/README.md` plus the matching domain README to bias review depth toward already-known high-risk production chains.
 Use `.github/standards/backend/BACKEND_REVIEW_CLOSEOUT_CHECKLIST.md` when the review is formal enough that findings, residual risk, or systemic feedback should become durable project knowledge.
 Use `.github/standards/backend/FORMAL_REVIEW_DURABILITY.md` when deciding where reusable findings should be written back.
+Use `artifacts/codegraph/README.md` when the review creates or updates
+codegraph artifacts: CodeGraph is a discovery and drift-check aid, while the
+reviewed `*.slice.md` and `*.edges.json` artifacts are the durable source for
+LocalLife business semantics.
 
 If this session is new, compacted, forked, or handed off, rerun routing from `.github/README.md`, reopen the matching instructions, and confirm the review scope before writing findings. Do not keep relying on stale context.
 
@@ -31,6 +35,7 @@ Request:
 - Flag debug leftovers such as temporary prints, panic probes, hardcoded values, placeholder branches, or short-circuit returns
 - Check whether `make sqlc`, `make mock`, `make swagger`, `make test-unit`, or `make test-integration` should have been run
 - Check whether repo-specific closeout actions such as `make check-generated`, safety regressions, or standards/workflow feedback should have been triggered
+- For codegraph artifact work, check whether tool-discovered paths were verified against current code, SQL, route groups, provider/domain standards, idempotency, and async convergence before being treated as artifact truth
 - Call out unverified high-risk paths explicitly when the change touches callbacks, async jobs, payment, uploads, OCR, or authorization-sensitive logic
 - If a high-risk path changed but evidence is missing, say exactly what remained unverified, such as callback idempotency, retry classification, signed access control, or recovery scheduling
 - If no findings are discovered, say so explicitly and mention residual risk or untested areas

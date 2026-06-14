@@ -8,6 +8,10 @@ Use this template when asking for a Mermaid flowchart from a business process de
 
 If this session is new, compacted, forked, or handed off, rerun routing from `.github/README.md`, reopen the matching instructions, and confirm the flow scope before writing the request. Do not keep relying on stale context.
 
+If the flow is derived from `artifacts/codegraph/`, follow
+`artifacts/codegraph/README.md`: use CodeGraph only as a discovery aid, and base
+the final business flow on reviewed slice artifacts and current source truth.
+
 ## Flowchart Request
 
 Request:

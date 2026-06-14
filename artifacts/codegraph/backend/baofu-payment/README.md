@@ -4,6 +4,14 @@ This directory stores human-audited LocalLife codegraph slices for Baofoo/BaoCai
 
 Important: these slices are variant-specific. LocalLife has multiple order, payment, refund, recovery, and profit-sharing paths; no single slice should be treated as "the" payment or refund chain.
 
+Before creating or refreshing a payment slice, use the workflow in
+`artifacts/codegraph/README.md`: CodeGraph may be used for discovery and line
+anchor drift checks, but the slice and edge artifacts are the durable
+LocalLife-aware source of truth after review. Payment, refund, profit sharing,
+withdrawal, callback, and recovery flows must still be verified against the
+current code, SQL, provider standards, idempotency boundaries, and async
+convergence semantics.
+
 ## Artifact Types
 
 - `*.slice.md`: review narrative, invariants, recovery paths, and refactor notes.

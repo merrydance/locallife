@@ -6,6 +6,11 @@ Scope: merchant Mini Program, App, and merchant-facing backend flows only
 
 This directory keeps the merchant-side closure judgment in one place. The detailed evidence stays in the slice files; this README only centralizes the live backlog order so the docs stay readable and do not spread into extra index files.
 
+Before creating or refreshing a merchant slice, use the workflow in
+`artifacts/codegraph/README.md`: CodeGraph may be used for discovery and line
+anchor drift checks, but the slice and edge artifacts are the durable
+LocalLife-aware source of truth after review.
+
 ## Slice Map
 
 - `merchant-app-bind-and-device.slice.md`: App bind, device register/heartbeat/unregister, push device truth.
