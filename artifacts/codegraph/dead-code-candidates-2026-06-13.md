@@ -69,6 +69,7 @@
 | `locallife/api/rider.go` | `listRidersRequest` / `listRidersResponse` / `Server.listRiders` | 旧版 `/v1/admin/riders` 管理员骑手列表 handler、查询参数和响应 DTO | 真实路由在 `server.go` 注册到 `listPlatformRiders`，旧 handler 生产和测试均无调用。已删除旧 handler，并把 `/v1/admin/riders` Swagger 注释迁移到真实 handler，使文档响应从旧 `listRidersResponse` 对齐为 `platformRiderListResponse`；`PATH="/usr/local/go/bin:$HOME/go/bin:$PATH" make swagger` 通过 |
 | `locallife/api/scan.go` | `buildMerchantStorefrontQRCodeObjectKey` / `buildMerchantStorefrontQRCodeScene` / `wxaCodeEnvVersion` / `Server.ensureMerchantStorefrontQRCode` | 旧版商户店铺小程序码生成和媒体资产保存 helper | 生产、测试、路由和 Swagger 均无调用；真实扫码/二维码入口只有 `/v1/scan/table` 和 `/v1/tables/{id}/qrcode`，桌台二维码生成路径独立保留。已删除店铺码整组 helper 和专属常量；不需要重新生成 Swagger |
 | `locallife/worker/refund_recovery_scheduler.go` | `errRefundRecoverySubMchIDMissing` / `errRefundRecoveryMerchantUnresolved` / `RefundRecoveryScheduler.resolveSubMchID` | 旧版 refund recovery 根据订单或预订反查商户微信/宝付子商户号 | 生产和测试均无调用；当前 stuck refund status recovery 已按 payment channel 分流，直连微信用 `out_refund_no` 调 `DirectPaymentClientInterface.QueryRefund`，宝付用 collect merchant/terminal 配置调 `aggregatepay.QueryRefund`，不再需要按订单/预订解析商户 `sub_mchid`。已删除整组 helper 和专属错误；高风险退款恢复路径需跑 focused worker tests |
+| `locallife/worker/order_profit_sharing_snapshot.go` | `wechatProfitSharingPaymentFeeRateBps` / `estimatedWechatProfitSharingPaymentFee` / `RedisTaskProcessor.ensureOrderProfitSharingSnapshot` | 旧版微信分账快照创建逻辑，按订单、商户、运营商和骑手估算分账并写入 `profit_sharing_orders` | 生产和测试均无调用；当前主业务分账由 `BaofuPaymentRecoveryScheduler.createReadyProfitSharingOrders` 调 `BaofuProfitSharingService.CreatePendingOrder` 创建宝付分账单，并由 `ProcessTaskBaofuProfitSharing` 派发命令。旧 helper 会创建 `Provider=wechat` 的历史快照，已退役。已删除整个文件；高风险分账路径需跑 focused worker tests |
 
 ## 可优先清理候选
 
@@ -116,9 +117,7 @@
 
 | 位置 | 符号 | 作用 | 核对结论 |
 | --- | --- | --- | --- |
-| `locallife/worker/order_profit_sharing_snapshot.go:13` | `wechatProfitSharingPaymentFeeRateBps` | 微信分账手续费估算费率 | 被同文件 `estimatedWechatProfitSharingPaymentFee` 调用 |
-| `locallife/worker/order_profit_sharing_snapshot.go:15` | `estimatedWechatProfitSharingPaymentFee` | 估算微信分账手续费 | 被 `ensureOrderProfitSharingSnapshot` 调用 |
-| `locallife/worker/order_profit_sharing_snapshot.go:22` | `RedisTaskProcessor.ensureOrderProfitSharingSnapshot` | 为订单创建分账快照 | CodeGraph/staticcheck 未发现外部调用，但同文件内部结构完整；删除前要确认历史微信分账路径是否已经彻底退役 |
+暂无。已处理的高风险 worker 遗留项见“已清理”。
 
 ## 代码块级信号
 
@@ -129,7 +128,7 @@
 
 ## 建议顺序
 
-1. 纯孤立 helper、未接入口候选、refund recovery 旧子商户解析已清理；下一轮建议确认历史微信分账快照这类高风险 worker 遗留候选。
+1. 纯孤立 helper、未接入口候选和已确认退役的高风险 worker 遗留项已清理。
 2. 对 Swagger-only 的 OCR 更正请求体，保持为文档契约用途，不作为删除项。
 3. 对“测试仍在引用”的项，先决定测试是否还代表有效业务规则；若规则已经迁移，应同步删除或改写测试。
 4. 对 `merchant_finance.go` 的 `SA4006`，如果进入修复阶段，建议只做局部可读性调整，不当作死代码删除。
