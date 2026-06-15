@@ -3,7 +3,7 @@
 Date: 2026-06-15
 Risk theme: state sequencing / transaction consistency / release configuration
 Risk class: G3 - table session, billing group, order payment, post-paid session checkout
-Status: source-audited, fixed, backend recovery implemented, validated
+Status: source-audited, fixed, backend recovery implemented, Mini Program contract covered, validated
 
 ## Decision
 
@@ -23,6 +23,17 @@ Follow-up implementation in this change set:
 - SQL/sqlc query that scans only open sessions with active paid dine-in orders;
 - partial index for the recovery scan; and
 - scheduler registration in the runtime composition root.
+
+Mini Program contract follow-up:
+
+- `weapp/scripts/check-dine-in-checkout-result-reentry-contract.test.js`
+  now locks the pending checkout storage contract shared by the dine-in checkout
+  page and the payment result page;
+- the check proves that result-page reload with `paid` status triggers
+  `checkoutPaidDineInSession`; and
+- the check proves that `pending_confirmation` result-page reload resumes
+  payment polling and closes the saved dine-in session once backend payment
+  truth becomes paid.
 
 The backend now allows a customer to close only their own dining session when
 the session has an active dine-in order owned by that customer and that order is
@@ -117,6 +128,8 @@ and reservation completion remain in the transaction-owned close boundary.
 - Pending dine-in checkout context and backend checkout call:
   `weapp/miniprogram/pages/payment/_main_shared/services/dine-in-session.ts:78`
   through `:120`.
+- Mini Program re-entry/polling contract:
+  `weapp/scripts/check-dine-in-checkout-result-reentry-contract.test.js`.
 
 ## Source-Audit Questions
 
@@ -166,10 +179,26 @@ make check-generated
 From `weapp/`, add or run a focused script covering:
 
 ```bash
-node scripts/<new-or-existing-dine-in-checkout-contract-test>.js
+node scripts/check-dine-in-checkout-result-reentry-contract.test.js
 ```
 
-The missing high-value regression is:
+Executed Mini Program contract validation:
+
+```bash
+npm run check:dine-in-checkout-result-reentry-contract
+npm run check:payment-refund-terminal-flow
+npm run lint:all
+npm run compile
+WEAPP_GATE_SCOPE=changed npm run gate:weapp
+```
+
+`npm run quality:check` was also attempted. It reached the new contract check,
+lint, compile, and the full weapp gate, then failed at the existing full-scan
+`gate:page-complexity` backlog for pages outside this change:
+`merchant/group/application`, `register/merchant/group`, and `rider/deposit`.
+The changed-scope gate passed for this change set.
+
+The remaining high-value device/E2E regression is:
 
 1. QR scan/open session.
 2. Add cart.
@@ -182,11 +211,11 @@ The missing high-value regression is:
 
 ## Remaining Follow-Ups
 
-The original authz blocker and backend post-paid recovery gap are fixed and
-covered. Remaining follow-ups are:
+The original authz blocker, backend post-paid recovery gap, and Mini Program
+re-entry/polling contract gap are fixed and covered. Remaining follow-ups are:
 
-1. Add Mini Program contract/E2E coverage for pending checkout context survival
-   across result-page reload and paid-status polling.
+1. Add an actual Mini Program device/E2E run for pending checkout context
+   survival across result-page reload and paid-status polling.
 2. Consider an operational alert if the recovery scheduler repeatedly fails to
    list or close eligible sessions.
 3. Keep this card as the rerun checklist before changing dine-in checkout,
