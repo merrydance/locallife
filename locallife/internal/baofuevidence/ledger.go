@@ -141,6 +141,63 @@ func RenderProfitSharingLedgerRow(summary ProfitSharingSummary, context Evidence
 	}
 }
 
+func RenderRefundLedgerRow(summary RefundSummary, context EvidenceLedgerRowContext) (EvidenceLedgerRow, error) {
+	if summary.Status != StatusPass {
+		return EvidenceLedgerRow{}, fmt.Errorf("cannot render failing evidence summary: %s", strings.Join(summary.Findings, "; "))
+	}
+	if err := validateRefundLedgerSummary(summary); err != nil {
+		return EvidenceLedgerRow{}, err
+	}
+	if err := validateRefundLedgerRowContext(summary, context); err != nil {
+		return EvidenceLedgerRow{}, err
+	}
+
+	localIDs := refundLocalRowIDs(summary)
+	notes := strings.TrimSpace(context.Notes)
+	if localIDs != "" {
+		notes = strings.TrimSpace(notes + "; local_row_ids: " + localIDs)
+	}
+
+	switch strings.TrimSpace(summary.FactSource) {
+	case db.ExternalPaymentFactSourceCallback:
+		return EvidenceLedgerRow{
+			Section: "Refund Callback",
+			Row: fmt.Sprintf("| %s | %s | `%s` | `%s` | success; refund_status=%s | fact_id=%d; source=%s; event=%s | applied application_id=%d | %s | `%s` | %s |",
+				context.Date,
+				context.Env,
+				context.Endpoint,
+				summary.OutRefundNoMasked,
+				summary.RefundOrderStatus,
+				summary.FactID,
+				summary.FactSource,
+				emptyDash(summary.SourceEventType),
+				summary.ApplicationID,
+				context.ACK,
+				context.Commit,
+				notes,
+			),
+		}, nil
+	default:
+		return EvidenceLedgerRow{
+			Section: "Refund Query",
+			Row: fmt.Sprintf("| %s | %s | `%s` | `%s` / `%s` | success; fact_source=%s; refund_status=%s | fact_id=%d; terminal_status=%s | applied application_id=%d | `%s` | %s |",
+				context.Date,
+				context.Env,
+				context.Endpoint,
+				summary.OutRefundNoMasked,
+				emptyDash(summary.RefundIDMasked),
+				summary.FactSource,
+				summary.RefundOrderStatus,
+				summary.FactID,
+				summary.TerminalStatus,
+				summary.ApplicationID,
+				context.Commit,
+				notes,
+			),
+		}, nil
+	}
+}
+
 func validateLedgerSummary(summary AggregatePaymentSummary) error {
 	if summary.FactID <= 0 {
 		return fmt.Errorf("ledger summary fact id is required")
@@ -184,6 +241,31 @@ func validateProfitSharingLedgerSummary(summary ProfitSharingSummary) error {
 	}
 	if strings.TrimSpace(summary.OutOrderNoMasked) == "" {
 		return fmt.Errorf("ledger summary masked out order no is required")
+	}
+	return nil
+}
+
+func validateRefundLedgerSummary(summary RefundSummary) error {
+	if summary.FactID <= 0 {
+		return fmt.Errorf("ledger summary fact id is required")
+	}
+	if summary.ApplicationID <= 0 {
+		return fmt.Errorf("ledger summary application id is required")
+	}
+	if !isAcceptedPaymentFactSource(summary.FactSource) {
+		return fmt.Errorf("ledger summary fact source is not callback/query/manual_reconciliation")
+	}
+	if summary.TerminalStatus != db.ExternalPaymentTerminalStatusSuccess {
+		return fmt.Errorf("ledger summary terminal status is not success")
+	}
+	if strings.TrimSpace(summary.ApplicationStatus) != db.ExternalPaymentFactApplicationStatusApplied {
+		return fmt.Errorf("ledger summary application is not applied")
+	}
+	if strings.TrimSpace(summary.RefundOrderStatus) != refundOrderStatusSuccess {
+		return fmt.Errorf("ledger summary refund order is not success")
+	}
+	if strings.TrimSpace(summary.OutRefundNoMasked) == "" {
+		return fmt.Errorf("ledger summary masked out refund no is required")
 	}
 	return nil
 }
@@ -232,6 +314,28 @@ func validateProfitSharingLedgerRowContext(summary ProfitSharingSummary, context
 	return nil
 }
 
+func validateRefundLedgerRowContext(summary RefundSummary, context EvidenceLedgerRowContext) error {
+	if strings.TrimSpace(context.Date) == "" {
+		return fmt.Errorf("ledger evidence date is required")
+	}
+	if strings.TrimSpace(context.Env) == "" {
+		return fmt.Errorf("ledger evidence env is required")
+	}
+	if strings.TrimSpace(context.Endpoint) == "" {
+		return fmt.Errorf("ledger evidence endpoint is required")
+	}
+	if strings.TrimSpace(context.Commit) == "" {
+		return fmt.Errorf("ledger evidence commit is required")
+	}
+	if strings.TrimSpace(context.Notes) == "" {
+		return fmt.Errorf("ledger evidence notes are required")
+	}
+	if strings.TrimSpace(summary.FactSource) == db.ExternalPaymentFactSourceCallback && strings.TrimSpace(context.ACK) == "" {
+		return fmt.Errorf("callback ack is required")
+	}
+	return nil
+}
+
 func aggregatePaymentLocalRowIDs(summary AggregatePaymentSummary) string {
 	parts := []string{}
 	if summary.PaymentOrderID > 0 {
@@ -242,6 +346,26 @@ func aggregatePaymentLocalRowIDs(summary AggregatePaymentSummary) string {
 	}
 	if summary.ProfitSharingOrderID > 0 {
 		parts = append(parts, fmt.Sprintf("profit_sharing_order_id=%d", summary.ProfitSharingOrderID))
+	}
+	return strings.Join(parts, ", ")
+}
+
+func refundLocalRowIDs(summary RefundSummary) string {
+	parts := []string{}
+	if summary.RefundOrderID > 0 {
+		parts = append(parts, fmt.Sprintf("refund_order_id=%d", summary.RefundOrderID))
+	}
+	if summary.PaymentOrderID > 0 {
+		parts = append(parts, fmt.Sprintf("payment_order_id=%d", summary.PaymentOrderID))
+	}
+	if summary.OrderID > 0 {
+		parts = append(parts, fmt.Sprintf("order_id=%d", summary.OrderID))
+	}
+	if summary.ReservationID > 0 {
+		parts = append(parts, fmt.Sprintf("reservation_id=%d", summary.ReservationID))
+	}
+	if summary.CommandID > 0 {
+		parts = append(parts, fmt.Sprintf("command_id=%d", summary.CommandID))
 	}
 	return strings.Join(parts, ", ")
 }

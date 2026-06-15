@@ -254,6 +254,30 @@ It does not prove provider reachability, callback ACK, or C4 status by itself.
 Closed/failed refund evidence remains a separate negative-evidence use case and
 is intentionally not treated as a passing positive refund proof here.
 
+To generate an explicit candidate row for
+`.github/standards/domains/baofu-payment/SANDBOX_EVIDENCE_LEDGER.md`, rerun the
+same command with `-ledger-row` and supply the observed runtime context rather
+than inferring it from DB rows:
+
+```bash
+PATH="/usr/local/go/bin:$PATH" go run ./cmd/baofu_refund_evidence \
+  -fact-id <external_payment_facts.id> \
+  -application-id <external_payment_fact_applications.id> \
+  -refund-order-id <refund_orders.id> \
+  -payment-order-id <payment_orders.id> \
+  -command-id <optional external_payment_commands.id> \
+  -ledger-row \
+  -ledger-date <yyyy-mm-dd> \
+  -ledger-env <sandbox|production|provider-real-transaction-env> \
+  -ledger-endpoint <callback-url-or-refund-query-endpoint> \
+  -ledger-commit <commit-sha> \
+  -ledger-notes <controlled-run-notes> \
+  -ledger-ack <OK-for-callback-evidence>
+```
+
+The ledger row renderer rejects failing summaries and rejects refund callback
+evidence without an explicit observed ACK.
+
 Implemented local withdrawal collector:
 
 ```bash

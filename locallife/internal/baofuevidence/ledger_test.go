@@ -195,3 +195,88 @@ func TestRenderProfitSharingLedgerRowRejectsMissingCallbackACK(t *testing.T) {
 
 	require.ErrorContains(t, err, "callback ack is required")
 }
+
+func TestRenderRefundLedgerRowForCallbackEvidence(t *testing.T) {
+	row, err := RenderRefundLedgerRow(RefundSummary{
+		Status:             StatusPass,
+		FactID:             401,
+		ApplicationID:      501,
+		RefundOrderID:      71,
+		PaymentOrderID:     31,
+		OrderID:            41,
+		CommandID:          601,
+		FactSource:         db.ExternalPaymentFactSourceCallback,
+		SourceEventType:    "REFUND",
+		TerminalStatus:     db.ExternalPaymentTerminalStatusSuccess,
+		ApplicationStatus:  db.ExternalPaymentFactApplicationStatusApplied,
+		RefundOrderStatus:  refundOrderStatusSuccess,
+		PaymentOrderStatus: "refunded",
+		CommandStatus:      db.ExternalPaymentCommandStatusAccepted,
+		AmountFen:          8800,
+		OutRefundNoMasked:  "BFRF***1O41",
+	}, EvidenceLedgerRowContext{
+		Date:     "2026-06-15",
+		Env:      "production",
+		Endpoint: "https://llapi.merrydance.cn/v1/webhooks/baofu/refund",
+		ACK:      "OK",
+		Commit:   "7c325e4d",
+		Notes:    "controlled refund callback",
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "Refund Callback", row.Section)
+	require.Equal(t, "| 2026-06-15 | production | `https://llapi.merrydance.cn/v1/webhooks/baofu/refund` | `BFRF***1O41` | success; refund_status=success | fact_id=401; source=callback; event=REFUND | applied application_id=501 | OK | `7c325e4d` | controlled refund callback; local_row_ids: refund_order_id=71, payment_order_id=31, order_id=41, command_id=601 |", row.Row)
+}
+
+func TestRenderRefundLedgerRowForQueryEvidence(t *testing.T) {
+	row, err := RenderRefundLedgerRow(RefundSummary{
+		Status:                  StatusPass,
+		FactID:                  402,
+		ApplicationID:           502,
+		RefundOrderID:           72,
+		PaymentOrderID:          32,
+		ReservationID:           42,
+		CommandID:               602,
+		FactSource:              db.ExternalPaymentFactSourceManualReconciliation,
+		TerminalStatus:          db.ExternalPaymentTerminalStatusSuccess,
+		ApplicationStatus:       db.ExternalPaymentFactApplicationStatusApplied,
+		RefundOrderStatus:       refundOrderStatusSuccess,
+		PaymentOrderStatus:      "refunded",
+		CommandStatus:           db.ExternalPaymentCommandStatusAccepted,
+		AmountFen:               6600,
+		OutRefundNoMasked:       "BFRF***1R42",
+		RefundIDMasked:          "2605***8888",
+		PaymentOutTradeNoMasked: "BFPA***1R42",
+	}, EvidenceLedgerRowContext{
+		Date:     "2026-06-15",
+		Env:      "production",
+		Endpoint: "https://mch-juhe.baofoo.com/api refund_query",
+		Commit:   "7c325e4d",
+		Notes:    "controlled refund recovery query",
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "Refund Query", row.Section)
+	require.Equal(t, "| 2026-06-15 | production | `https://mch-juhe.baofoo.com/api refund_query` | `BFRF***1R42` / `2605***8888` | success; fact_source=manual_reconciliation; refund_status=success | fact_id=402; terminal_status=success | applied application_id=502 | `7c325e4d` | controlled refund recovery query; local_row_ids: refund_order_id=72, payment_order_id=32, reservation_id=42, command_id=602 |", row.Row)
+}
+
+func TestRenderRefundLedgerRowRejectsMissingCallbackACK(t *testing.T) {
+	_, err := RenderRefundLedgerRow(RefundSummary{
+		Status:            StatusPass,
+		FactID:            401,
+		ApplicationID:     501,
+		FactSource:        db.ExternalPaymentFactSourceCallback,
+		TerminalStatus:    db.ExternalPaymentTerminalStatusSuccess,
+		ApplicationStatus: db.ExternalPaymentFactApplicationStatusApplied,
+		RefundOrderStatus: refundOrderStatusSuccess,
+		OutRefundNoMasked: "BFRF***1O41",
+	}, EvidenceLedgerRowContext{
+		Date:     "2026-06-15",
+		Env:      "production",
+		Endpoint: "https://llapi.merrydance.cn/v1/webhooks/baofu/refund",
+		Commit:   "7c325e4d",
+		Notes:    "missing callback ack",
+	})
+
+	require.ErrorContains(t, err, "callback ack is required")
+}

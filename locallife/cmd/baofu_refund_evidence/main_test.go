@@ -158,7 +158,7 @@ func TestRenderRefundCommandOutputKeepsSummaryShape(t *testing.T) {
 	output, exitCode, err := renderCommandOutput(baofuevidence.RefundSummary{
 		Status: baofuevidence.StatusPass,
 		FactID: 401,
-	})
+	}, commandOutputOptions{})
 
 	require.NoError(t, err)
 	require.Equal(t, 0, exitCode)
@@ -166,12 +166,71 @@ func TestRenderRefundCommandOutputKeepsSummaryShape(t *testing.T) {
 	require.NotContains(t, output, "\"summary\"")
 }
 
+func TestRenderRefundCommandOutputIncludesLedgerRowWhenRequested(t *testing.T) {
+	output, exitCode, err := renderCommandOutput(baofuevidence.RefundSummary{
+		Status:             baofuevidence.StatusPass,
+		FactID:             401,
+		ApplicationID:      501,
+		RefundOrderID:      71,
+		PaymentOrderID:     31,
+		OrderID:            41,
+		CommandID:          601,
+		FactSource:         db.ExternalPaymentFactSourceCallback,
+		SourceEventType:    "REFUND",
+		TerminalStatus:     db.ExternalPaymentTerminalStatusSuccess,
+		ApplicationStatus:  db.ExternalPaymentFactApplicationStatusApplied,
+		RefundOrderStatus:  "success",
+		PaymentOrderStatus: "refunded",
+		OutRefundNoMasked:  "BFRF***1O41",
+	}, commandOutputOptions{
+		LedgerRow: true,
+		LedgerContext: baofuevidence.EvidenceLedgerRowContext{
+			Date:     "2026-06-15",
+			Env:      "production",
+			Endpoint: "https://llapi.merrydance.cn/v1/webhooks/baofu/refund",
+			ACK:      "OK",
+			Commit:   "7c325e4d",
+			Notes:    "controlled refund callback",
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, 0, exitCode)
+	require.Contains(t, output, "\"status\": \"pass\"")
+	require.Contains(t, output, "\"section\": \"Refund Callback\"")
+	require.Contains(t, output, "| 2026-06-15 | production |")
+}
+
+func TestRenderRefundCommandOutputRejectsLedgerRowMissingContext(t *testing.T) {
+	_, _, err := renderCommandOutput(baofuevidence.RefundSummary{
+		Status:            baofuevidence.StatusPass,
+		FactID:            401,
+		ApplicationID:     501,
+		FactSource:        db.ExternalPaymentFactSourceCallback,
+		TerminalStatus:    db.ExternalPaymentTerminalStatusSuccess,
+		ApplicationStatus: db.ExternalPaymentFactApplicationStatusApplied,
+		RefundOrderStatus: "success",
+		OutRefundNoMasked: "BFRF***1O41",
+	}, commandOutputOptions{
+		LedgerRow: true,
+		LedgerContext: baofuevidence.EvidenceLedgerRowContext{
+			Date:     "2026-06-15",
+			Env:      "production",
+			Endpoint: "https://llapi.merrydance.cn/v1/webhooks/baofu/refund",
+			Commit:   "7c325e4d",
+			Notes:    "missing ack",
+		},
+	})
+
+	require.ErrorContains(t, err, "callback ack is required")
+}
+
 func TestRefundEvidenceExitCodeFailsOnFindings(t *testing.T) {
 	_, exitCode, err := renderCommandOutput(baofuevidence.RefundSummary{
 		Status:   baofuevidence.StatusFail,
 		FactID:   401,
 		Findings: []string{"refund order is not success"},
-	})
+	}, commandOutputOptions{})
 
 	require.NoError(t, err)
 	require.Equal(t, 1, exitCode)
