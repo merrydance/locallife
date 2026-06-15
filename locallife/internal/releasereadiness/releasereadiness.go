@@ -10,13 +10,16 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/baofu"
 	baofuaccount "github.com/merrydance/locallife/baofu/account"
 	"github.com/merrydance/locallife/baofu/aggregatepay"
 	"github.com/merrydance/locallife/baofu/merchantreport"
+	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/util"
 )
 
@@ -59,6 +62,16 @@ type RedisAsynqOptions struct {
 	Address        string
 	Password       string
 	RequiredQueues []string
+}
+
+type FixtureClaimabilityOptions struct {
+	PaymentFactApplicationID int64
+	PaymentDomainOutboxID    int64
+}
+
+type FixtureClaimStore interface {
+	ClaimExternalPaymentFactApplication(ctx context.Context, id int64) (db.ExternalPaymentFactApplication, error)
+	ClaimPaymentDomainOutbox(ctx context.Context, arg db.ClaimPaymentDomainOutboxParams) (db.PaymentDomainOutbox, error)
 }
 
 func DefaultExpectations() Expectations {
@@ -385,6 +398,61 @@ func CheckBaofuProviderClients(config util.Config) Report {
 	} else {
 		report.Checks = append(report.Checks, CheckResult{ID: "provider:baofu:merchant_report", Status: StatusPass, Detail: "merchant report client constructed"})
 	}
+	sort.SliceStable(report.Checks, func(i, j int) bool {
+		return report.Checks[i].ID < report.Checks[j].ID
+	})
+	return report
+}
+
+func CheckFixtureClaimability(ctx context.Context, store FixtureClaimStore, opts FixtureClaimabilityOptions) Report {
+	report := Report{Status: StatusPass}
+	addCheck := func(id string, ok bool, detail string) {
+		status := StatusPass
+		if !ok {
+			report.Status = StatusFail
+			status = StatusFail
+		}
+		report.Checks = append(report.Checks, CheckResult{ID: id, Status: status, Detail: detail})
+	}
+
+	if store == nil {
+		addCheck("fixture:payment_fact_application", false, "fixture claim store is required")
+		addCheck("fixture:payment_domain_outbox", false, "fixture claim store is required")
+		sort.SliceStable(report.Checks, func(i, j int) bool {
+			return report.Checks[i].ID < report.Checks[j].ID
+		})
+		return report
+	}
+
+	if opts.PaymentFactApplicationID <= 0 {
+		addCheck("fixture:payment_fact_application", false, "explicit payment fact application fixture id is required")
+	} else {
+		application, err := store.ClaimExternalPaymentFactApplication(ctx, opts.PaymentFactApplicationID)
+		if err != nil {
+			addCheck("fixture:payment_fact_application", false, err.Error())
+		} else if application.Status != db.ExternalPaymentFactApplicationStatusProcessing {
+			addCheck("fixture:payment_fact_application", false, fmt.Sprintf("claim returned status %s, expected %s", application.Status, db.ExternalPaymentFactApplicationStatusProcessing))
+		} else {
+			addCheck("fixture:payment_fact_application", true, fmt.Sprintf("payment fact application %d claimable", application.ID))
+		}
+	}
+
+	if opts.PaymentDomainOutboxID <= 0 {
+		addCheck("fixture:payment_domain_outbox", false, "explicit payment domain outbox fixture id is required")
+	} else {
+		outbox, err := store.ClaimPaymentDomainOutbox(ctx, db.ClaimPaymentDomainOutboxParams{
+			ID:    opts.PaymentDomainOutboxID,
+			NowAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		})
+		if err != nil {
+			addCheck("fixture:payment_domain_outbox", false, err.Error())
+		} else if outbox.Status != db.PaymentDomainOutboxStatusProcessing {
+			addCheck("fixture:payment_domain_outbox", false, fmt.Sprintf("claim returned status %s, expected %s", outbox.Status, db.PaymentDomainOutboxStatusProcessing))
+		} else {
+			addCheck("fixture:payment_domain_outbox", true, fmt.Sprintf("payment domain outbox %d claimable", outbox.ID))
+		}
+	}
+
 	sort.SliceStable(report.Checks, func(i, j int) bool {
 		return report.Checks[i].ID < report.Checks[j].ID
 	})

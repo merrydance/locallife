@@ -1,11 +1,14 @@
 package releasereadiness
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
+	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/util"
 	"github.com/stretchr/testify/require"
 )
@@ -169,6 +172,48 @@ func TestCheckBaofuProviderClientReadiness(t *testing.T) {
 	require.Equal(t, StatusFail, requireCheck(t, report, "provider:baofu:root").Status)
 }
 
+func TestCheckFixtureClaimabilityRequiresExplicitFixtureIDs(t *testing.T) {
+	report := CheckFixtureClaimability(context.Background(), &fakeFixtureClaimer{}, FixtureClaimabilityOptions{})
+
+	require.Equal(t, StatusFail, report.Status)
+	require.Equal(t, StatusFail, requireCheck(t, report, "fixture:payment_fact_application").Status)
+	require.Equal(t, StatusFail, requireCheck(t, report, "fixture:payment_domain_outbox").Status)
+}
+
+func TestCheckFixtureClaimabilityProvesClaimableRows(t *testing.T) {
+	claimer := &fakeFixtureClaimer{
+		application: db.ExternalPaymentFactApplication{ID: 101, Status: db.ExternalPaymentFactApplicationStatusProcessing},
+		outbox:      db.PaymentDomainOutbox{ID: 202, Status: db.PaymentDomainOutboxStatusProcessing},
+	}
+
+	report := CheckFixtureClaimability(context.Background(), claimer, FixtureClaimabilityOptions{
+		PaymentFactApplicationID: 101,
+		PaymentDomainOutboxID:    202,
+	})
+
+	require.Equal(t, StatusPass, report.Status)
+	require.Equal(t, StatusPass, requireCheck(t, report, "fixture:payment_fact_application").Status)
+	require.Equal(t, StatusPass, requireCheck(t, report, "fixture:payment_domain_outbox").Status)
+	require.Equal(t, int64(101), claimer.claimedApplicationID)
+	require.Equal(t, int64(202), claimer.claimedOutboxID)
+}
+
+func TestCheckFixtureClaimabilityFailsWhenRowCannotBeClaimed(t *testing.T) {
+	claimer := &fakeFixtureClaimer{
+		applicationErr: db.ErrRecordNotFound,
+		outbox:         db.PaymentDomainOutbox{ID: 202, Status: db.PaymentDomainOutboxStatusProcessing},
+	}
+
+	report := CheckFixtureClaimability(context.Background(), claimer, FixtureClaimabilityOptions{
+		PaymentFactApplicationID: 101,
+		PaymentDomainOutboxID:    202,
+	})
+
+	require.Equal(t, StatusFail, report.Status)
+	require.Equal(t, StatusFail, requireCheck(t, report, "fixture:payment_fact_application").Status)
+	require.Equal(t, StatusPass, requireCheck(t, report, "fixture:payment_domain_outbox").Status)
+}
+
 func requireCheck(t *testing.T, report Report, id string) CheckResult {
 	t.Helper()
 	for _, check := range report.Checks {
@@ -243,4 +288,26 @@ func writeFixture(t *testing.T, root, name, body string) {
 	path := filepath.Join(root, filepath.FromSlash(name))
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 	require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
+}
+
+type fakeFixtureClaimer struct {
+	application          db.ExternalPaymentFactApplication
+	applicationErr       error
+	outbox               db.PaymentDomainOutbox
+	outboxErr            error
+	claimedApplicationID int64
+	claimedOutboxID      int64
+}
+
+func (claimer *fakeFixtureClaimer) ClaimExternalPaymentFactApplication(ctx context.Context, id int64) (db.ExternalPaymentFactApplication, error) {
+	claimer.claimedApplicationID = id
+	return claimer.application, claimer.applicationErr
+}
+
+func (claimer *fakeFixtureClaimer) ClaimPaymentDomainOutbox(ctx context.Context, arg db.ClaimPaymentDomainOutboxParams) (db.PaymentDomainOutbox, error) {
+	claimer.claimedOutboxID = arg.ID
+	if !arg.NowAt.Valid || arg.NowAt.Time.IsZero() {
+		return db.PaymentDomainOutbox{}, errors.New("missing now_at")
+	}
+	return claimer.outbox, claimer.outboxErr
 }

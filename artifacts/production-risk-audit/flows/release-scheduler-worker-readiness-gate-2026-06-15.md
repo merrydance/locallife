@@ -3,17 +3,18 @@
 Date: 2026-06-15
 Risk theme: release configuration
 Risk class: G3 where schedulers/workers converge payment, refund, withdrawal, delivery, claims, and order state
-Status: execution card, documentation-only
-Phase 1 status: runtime registration/config/test-surface recon completed; focused local validation passed; no production code changed
+Status: release readiness smoke implemented; release-environment execution still required
+Phase 1 status: static registration, config, Redis/Asynq, provider-client, and rollback-only fixture claimability surfaces implemented; focused local validation passed
 
 ## Decision
 
-Add a standard scheduler/worker readiness gate before production releases that
+Run the standard scheduler/worker readiness gate before production releases that
 touch callback/provider flows, payment/refund/withdrawal recovery, order
 timeouts, print processing, or merchant open-state automation.
 
-This card does not implement the smoke. It defines the release gate so the next
-code/config task has a concrete target.
+This card records the gate and the Phase 1 implementation surface. The command
+is safe by default, with Redis/provider/fixture checks enabled only through
+explicit flags.
 
 ## Runtime Scheduler/Worker Surface
 
@@ -50,10 +51,11 @@ Evidence: `locallife/main.go:97` through `:112`,
 The worker task processor registers the corresponding Asynq task handlers at
 `locallife/worker/processor.go:318` through `:366`.
 
-## Current Gap
+## Original Gap
 
 The repository has backend CI, safety scripts, Baofu contract drift checks, and
-generated-artifact checks, but no standard release smoke that proves:
+generated-artifact checks, but previously had no standard release smoke that
+proved:
 
 - the task processor starts with the production-like Redis config;
 - required queues are reachable;
@@ -108,11 +110,11 @@ Still not proven by CI/release gates:
 - No release smoke proves a pending fixture row can be claimed or enqueued by
   the recovery/application paths without mutating production money state.
 
-## Phase 1 Implementation Target
+## Phase 1 Implemented Target
 
-The next code/config task should add a release-oriented readiness command or
-script. It should be safe by default, read-only where possible, and require an
-explicit fixture mode before inserting disposable rows.
+The release-oriented readiness command is safe by default, read-only where
+possible, and requires explicit fixture mode plus known disposable row IDs
+before exercising DB claimability.
 
 | Area | Readiness assertion | Current anchor |
 | --- | --- | --- |
@@ -137,6 +139,7 @@ PATH="/usr/local/go/bin:$PATH" go run ./cmd/release_readiness_smoke -format json
 PATH="/usr/local/go/bin:$PATH" go run ./cmd/release_readiness_smoke -include-config -format text
 PATH="/usr/local/go/bin:$PATH" go run ./cmd/release_readiness_smoke -include-config -include-redis -format text
 PATH="/usr/local/go/bin:$PATH" go run ./cmd/release_readiness_smoke -include-config -include-provider-clients -format text
+PATH="/usr/local/go/bin:$PATH" go run ./cmd/release_readiness_smoke -include-config -include-fixture-claimability -payment-fact-application-fixture-id <id> -payment-domain-outbox-fixture-id <id> -format text
 ```
 
 The command parses `main.go`, `worker/processor.go`, and `worker/*.go` with Go
@@ -146,8 +149,11 @@ tasks, or call any provider. With `-include-config`, it also loads the same
 without printing secrets. With `-include-redis`, it pings Redis and reads
 Asynq queue stats for the `critical` and `default` queues without enqueueing
 tasks. With `-include-provider-clients`, it constructs Baofu root, aggregate,
-account, and merchant-report clients without making provider requests. A
-non-pass report exits non-zero.
+account, and merchant-report clients without making provider requests. With
+`-include-fixture-claimability`, it opens a rollback-only DB transaction and
+claims explicit disposable fixture rows by ID, proving claim SQL reaches
+`processing` without committing the state change. A non-pass report exits
+non-zero.
 
 Current rows:
 
@@ -162,6 +168,8 @@ Current rows:
 | `redis:connection` | `pass/fail` | Confirms Redis ping succeeds when `-include-redis` is used. |
 | `asynq:queue:<name>` | `pass/fail` | Confirms Asynq inspector can read queue stats or an empty queue namespace without enqueueing tasks. |
 | `provider:baofu:<client>` | `pass/fail` | Confirms Baofu provider clients can be locally constructed from config without provider requests. |
+| `fixture:payment_fact_application` | `pass/fail` | Confirms an explicit `external_payment_fact_applications` fixture row can be claimed inside a rollback-only transaction. |
+| `fixture:payment_domain_outbox` | `pass/fail` | Confirms an explicit `payment_domain_outbox` fixture row can be claimed inside a rollback-only transaction. |
 
 Minimum missing task or scheduler names should be literal names from the current
 runtime, for example `payment-fact-application`,
@@ -171,11 +179,9 @@ runtime, for example `payment-fact-application`,
 `baofu:process_profit_sharing`, and
 `baofu:process_withdrawal_fact_application`.
 
-Rows still planned for a future runtime smoke:
-
-| Row | Status values | Notes |
-| --- | --- | --- |
-| `fixture.claimability` | `pass/fail/skipped` | Skipped unless fixture mode is explicitly enabled. |
+Fixture claimability mode requires the release operator to supply known
+disposable fixture IDs. It does not auto-select arbitrary pending production
+money rows.
 
 ## Phase 1 Implementation Run 2026-06-15
 
@@ -191,6 +197,7 @@ PATH="/usr/local/go/bin:$PATH" go run ./cmd/release_readiness_smoke -include-con
 PATH="/usr/local/go/bin:$PATH" go build ./cmd/release_readiness_smoke
 PATH="/usr/local/go/bin:$PATH" go test ./internal/releasereadiness -run TestCheckRedisAsynqReadiness -count=1
 PATH="/usr/local/go/bin:$PATH" go test ./internal/releasereadiness -run TestCheckBaofuProviderClientReadiness -count=1
+PATH="/usr/local/go/bin:$PATH" go test ./internal/releasereadiness -run TestCheckFixtureClaimability -count=1
 PATH="/usr/local/go/bin:$PATH" go test ./worker -run 'TestBaofuPaymentRecoveryScheduler|TestPaymentFactApplicationSchedulerRunOnce|TestPaymentDomainOutboxScheduler|TestBaofuWithdrawalRecoveryScheduler|TestRefundRecoveryScheduler' -count=1
 PATH="/usr/local/go/bin:$PATH" go test ./scheduler -run 'Test.*OrderTimeout|Test.*TakeoutAutoComplete|Test.*MerchantOpenStatus|Test.*DataCleanup' -count=1
 ```
@@ -209,6 +216,8 @@ Observed result:
 - Baofu provider-client readiness is covered by a focused unit test; the local
   command can construct clients when release-like Baofu config is supplied, but
   does not call Baofoo.
+- Fixture claimability is covered by focused unit tests for explicit fixture
+  IDs, successful claim returns, and unclaimable rows.
 - Focused worker and scheduler package tests returned `ok`.
 
 What this proves:
@@ -225,6 +234,9 @@ What this proves:
 - With `-include-provider-clients`, a release operator can prove Baofu root,
   aggregate, account, and merchant-report clients can be locally constructed
   from loaded config without calling Baofoo.
+- With `-include-fixture-claimability`, a release operator can prove explicit
+  disposable payment fact application and payment-domain outbox fixture rows
+  are claimable inside a rollback-only DB transaction.
 - The static report covers payment fact application, payment outbox, Baofu
   payment/account/withdrawal/merchant-report recovery, refund recovery, order
   timeout, takeout auto-complete, merchant-open status, data cleanup, claim
@@ -236,7 +248,9 @@ What this still does not prove:
 - Redis/Asynq reachability was unit-tested with miniredis; it was not executed
   against a deployed Redis instance in this implementation run.
 - No provider network request was made.
-- No disposable fixture row was claimed or enqueued.
+- No release-environment disposable fixture IDs were supplied in this local
+  implementation run, so the DB fixture mode was not executed against a real
+  deployed database.
 
 ## Phase 1 Validation Run 2026-06-15
 
@@ -284,7 +298,7 @@ report a pass/fail matrix with these rows:
 | Merchant open status | `merchant-open-status` scheduler starts with websocket publisher available. |
 | Data cleanup | credit expiry, stale print anomaly, stale delivery cleanup, and related cleanup jobs are in the deployed scheduler set. |
 
-## Focused Validation To Run Before Code Changes
+## Focused Validation And Release Commands
 
 From `locallife/`:
 
@@ -300,10 +314,12 @@ go run ./cmd/release_readiness_smoke -format text
 go run ./cmd/release_readiness_smoke -include-config -format text
 go run ./cmd/release_readiness_smoke -include-config -include-redis -format text
 go run ./cmd/release_readiness_smoke -include-config -include-provider-clients -format text
+go run ./cmd/release_readiness_smoke -include-config -include-fixture-claimability -payment-fact-application-fixture-id <id> -payment-domain-outbox-fixture-id <id> -format text
 ```
 
-Future runtime smoke work should validate optional disposable fixture
-claimability without mutating production money state.
+Fixture IDs must point at disposable release-smoke rows prepared by the release
+operator; the command does not create rows or select arbitrary pending
+production money records.
 
 ## Remaining Real Issue
 
@@ -311,6 +327,9 @@ Many audited flows are safe only if callback facts, outbox rows, recovery rows,
 timeouts, and cleanup schedulers actually run in the deployed environment.
 The static/config/Redis/provider-client smoke reduces source-level
 registration, production fail-fast configuration, queue reachability, and local
-provider-client construction drift risk, but deployed runtime readiness still
-needs fixture-level proof. This remains a real cross-flow release risk until
-those runtime checks are added to the release path.
+provider-client construction drift risk. The fixture claimability mode adds a
+rollback-only DB proof for explicit disposable rows, but this implementation
+run did not execute it against a deployed release database. The remaining
+release risk is operational: every release still needs prepared fixture IDs and
+an actual smoke run in the target environment before claiming deployed runtime
+readiness.
