@@ -3,7 +3,7 @@
 Date: 2026-06-15
 Risk theme: release configuration
 Risk class: G3 where schedulers/workers converge payment, refund, withdrawal, delivery, claims, and order state
-Status: release readiness smoke implemented; release-environment execution still required
+Status: release readiness smoke implemented; release-environment execution still required; target-evidence contract added
 Phase 1 status: static registration, config, Redis/Asynq, provider-client, rollback-only fixture claimability surfaces, and release wrapper implemented; focused local validation passed
 
 ## Decision
@@ -138,6 +138,7 @@ Implemented command:
 ```bash
 PATH="/usr/local/go/bin:$PATH" scripts/release_readiness_smoke.sh --static --format text
 PATH="/usr/local/go/bin:$PATH" PAYMENT_FACT_APPLICATION_FIXTURE_ID=<id> PAYMENT_DOMAIN_OUTBOX_FIXTURE_ID=<id> scripts/release_readiness_smoke.sh --target --format text
+PATH="/usr/local/go/bin:$PATH" make check-release-readiness-target-evidence evidence=../artifacts/production-risk-audit/flows/release-readiness-target-evidence-YYYY-MM-DD.md
 PATH="/usr/local/go/bin:$PATH" go run ./cmd/release_readiness_smoke -format text
 PATH="/usr/local/go/bin:$PATH" go run ./cmd/release_readiness_smoke -format json
 PATH="/usr/local/go/bin:$PATH" go run ./cmd/release_readiness_smoke -include-config -format text
@@ -353,6 +354,17 @@ Fixture IDs must point at disposable release-smoke rows prepared by the release
 operator and must be positive integers; the command does not create rows or
 select arbitrary pending production money records.
 
+Target release evidence template:
+`artifacts/production-risk-audit/flows/release-readiness-target-evidence-template-2026-06-15.md`.
+
+The target evidence checker rejects template-only evidence, static smoke output,
+dry-run commands, non-production target context, non-positive fixture IDs, and
+missing or non-pass rows for production config, Redis/Asynq, Baofu provider
+client construction, rollback-only fixture claimability,
+`scheduler:dine-in-checkout-recovery`,
+`worker:payment:process_fact_application`, and
+`worker:payment:process_domain_outbox`.
+
 ## Remaining Real Issue
 
 Many audited flows are safe only if callback facts, outbox rows, recovery rows,
@@ -362,10 +374,13 @@ registration, production fail-fast configuration, queue reachability, paused
 required-queue drift, and local provider-client construction drift risk. The
 fixture claimability mode adds a rollback-only DB proof for explicit disposable
 rows, and target wrapper mode now fails if the loaded config is not
-`ENVIRONMENT=production`. This implementation run did not execute it against a
-deployed release database. The remaining release risk is operational: every
-release still needs prepared fixture IDs and an actual smoke run in the target
-production environment before claiming deployed runtime readiness.
+`ENVIRONMENT=production`. A filled target evidence file must pass
+`make check-release-readiness-target-evidence` before this release-readiness
+gap is closed for a target environment. This implementation run did not execute
+the target smoke against a deployed release database. The remaining release risk
+is operational: every release still needs prepared fixture IDs and an actual
+smoke run in the target production environment before claiming deployed runtime
+readiness.
 
 For dine-in checkout recovery specifically, the deployed Prometheus or
 equivalent monitor must have a filled target-environment evidence file that
