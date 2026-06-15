@@ -6,6 +6,7 @@ const vm = require('vm')
 
 const weappRoot = path.join(__dirname, '..')
 const supportPath = path.join(weappRoot, 'miniprogram/pages/takeout/order-confirm/_utils/takeout-order-confirm-support.ts')
+const idempotencyPath = path.join(weappRoot, 'miniprogram/pages/takeout/order-confirm/_services/takeout-order-create-idempotency.ts')
 
 function read(relativePath) {
   return fs.readFileSync(path.join(weappRoot, relativePath), 'utf8')
@@ -43,6 +44,56 @@ function loadOrderConfirmSupport() {
   sandbox.exports = sandbox.module.exports
   vm.runInNewContext(compiled, sandbox, { filename: supportPath })
   return sandbox.module.exports
+}
+
+function loadOrderCreateIdempotencyService() {
+  const source = fs.readFileSync(idempotencyPath, 'utf8')
+  const compiled = ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2018,
+      strict: true
+    }
+  }).outputText
+
+  const storage = new Map()
+  const randomValues = [0.1111111111, 0.2222222222, 0.3333333333]
+  let randomIndex = 0
+  const sandboxMath = Object.create(Math)
+  sandboxMath.random = () => randomValues[randomIndex++] || 0.4444444444
+  let nowMs = Date.parse('2026-06-15T12:00:00.000Z')
+  function SandboxDate(...args) {
+    if (!(this instanceof SandboxDate)) {
+      return new Date(args.length ? Date(...args) : nowMs).toString()
+    }
+    return args.length ? new Date(...args) : new Date(nowMs)
+  }
+  Object.setPrototypeOf(SandboxDate, Date)
+  SandboxDate.prototype = Date.prototype
+  SandboxDate.now = () => nowMs
+  SandboxDate.parse = Date.parse
+  SandboxDate.UTC = Date.UTC
+  const sandbox = {
+    exports: {},
+    module: { exports: {} },
+    Date: SandboxDate,
+    Math: sandboxMath,
+    __advanceNow: (ms) => {
+      nowMs += ms
+    },
+    wx: {
+      getStorageSync: (key) => storage.get(key),
+      setStorageSync: (key, value) => storage.set(key, value),
+      removeStorageSync: (key) => storage.delete(key)
+    },
+    require: (request) => {
+      if (request.includes('/utils/logger')) return { logger: { error: () => {} } }
+      return require(request)
+    }
+  }
+  sandbox.exports = sandbox.module.exports
+  vm.runInNewContext(compiled, sandbox, { filename: idempotencyPath })
+  return { ...sandbox.module.exports, __advanceNow: sandbox.__advanceNow }
 }
 
 function assertPackageWiring() {
@@ -154,9 +205,13 @@ function assertTakeoutOrderConfirmRecoveryContract() {
     'CartAPI.calculateCart({',
     'if (pricingError)',
     "wx.showToast({ title: '请先重试代取费计算'",
-    'const order = await createOrder(buildTakeoutCreateOrderRequest({',
+    'const orderRequest = buildTakeoutCreateOrderRequest({',
     'await this.handlePayment(createdOrder)',
     'this.handlePartialOrderCreationFailure(carts, ordersCreated)',
+    'buildTakeoutOrderCreateRequestSignature(orderRequest)',
+    'ensureTakeoutOrderCreateIdempotencyKey(orderRequestSignature)',
+    'createOrder(orderRequest, { idempotencyKey })',
+    'clearTakeoutOrderCreateIdempotency(idempotencyKey)',
     "title: '部分订单已创建'",
     "confirmText: '查看订单'",
     'Navigation.redirectToOrderList',
@@ -181,6 +236,102 @@ function assertTakeoutOrderConfirmRecoveryContract() {
       paymentErrorCopy.includes('该商户资质不完整，暂不支持下单'),
     'payment creation failure copy must send customers to durable order detail without leaking provider internals'
   )
+}
+
+function assertTakeoutOrderCreateIdempotencyContract() {
+  const idempotencySource = read('miniprogram/pages/takeout/order-confirm/_services/takeout-order-create-idempotency.ts')
+  const orderWrapperSource = read('miniprogram/pages/takeout/order-confirm/_main_shared/api/order.ts')
+  const idempotency = loadOrderCreateIdempotencyService()
+
+  const baseRequest = {
+    merchant_id: 11,
+    order_type: 'takeout',
+    address_id: 88,
+    delivery_fee: 500,
+    delivery_fee_discount: 100,
+    delivery_distance: 1200,
+    notes: '门口等',
+    items: [
+      {
+        dish_id: 401,
+        quantity: 1,
+        customizations: {
+          spice: 'mild',
+          size: 2
+        }
+      }
+    ]
+  }
+  const reorderedRequest = {
+    items: [
+      {
+        customizations: {
+          size: 2,
+          spice: 'mild'
+        },
+        quantity: 1,
+        dish_id: 401
+      }
+    ],
+    notes: '门口等',
+    delivery_distance: 1200,
+    delivery_fee_discount: 100,
+    delivery_fee: 500,
+    address_id: 88,
+    order_type: 'takeout',
+    merchant_id: 11
+  }
+  const changedRequest = { ...baseRequest, notes: '放前台' }
+
+  const baseSignature = idempotency.buildTakeoutOrderCreateRequestSignature(baseRequest)
+  assert(
+    !baseSignature.includes('门口等') && !baseSignature.includes('dish_id') && baseSignature.startsWith('v1:'),
+    'stored order-create signature must be a stable digest, not plaintext order payload'
+  )
+  assert.strictEqual(
+    baseSignature,
+    idempotency.buildTakeoutOrderCreateRequestSignature(reorderedRequest),
+    'same order-create payload must produce a stable signature regardless of object key order'
+  )
+  assert.notStrictEqual(
+    baseSignature,
+    idempotency.buildTakeoutOrderCreateRequestSignature(changedRequest),
+    'changed order-create payload must rotate the local idempotency attempt'
+  )
+
+  const firstKey = idempotency.ensureTakeoutOrderCreateIdempotencyKey(baseSignature)
+  const retryKey = idempotency.ensureTakeoutOrderCreateIdempotencyKey(baseSignature)
+  const changedKey = idempotency.ensureTakeoutOrderCreateIdempotencyKey(
+    idempotency.buildTakeoutOrderCreateRequestSignature(changedRequest)
+  )
+  assert.strictEqual(firstKey, retryKey, 'same pending order-create attempt must reuse the idempotency key')
+  assert.notStrictEqual(firstKey, changedKey, 'changed order-create attempt must get a fresh idempotency key')
+  idempotency.clearTakeoutOrderCreateIdempotency(changedKey)
+  const afterClearKey = idempotency.ensureTakeoutOrderCreateIdempotencyKey(baseSignature)
+  assert.notStrictEqual(afterClearKey, firstKey, 'successful order creation must clear the consumed key before a new attempt')
+  const immediateRetryKey = idempotency.ensureTakeoutOrderCreateIdempotencyKey(baseSignature)
+  assert.strictEqual(afterClearKey, immediateRetryKey, 'fresh same-signature retry must reuse the pending key')
+  idempotency.__advanceNow(3 * 60 * 60 * 1000)
+  const expiredRetryKey = idempotency.ensureTakeoutOrderCreateIdempotencyKey(baseSignature)
+  assert.notStrictEqual(expiredRetryKey, immediateRetryKey, 'stale pending order-create key must rotate after the recovery window')
+
+  assertSourceIncludes(idempotencySource, [
+    'TAKEOUT_ORDER_CREATE_IDEMPOTENCY_STORAGE_KEY',
+    'TAKEOUT_ORDER_CREATE_IDEMPOTENCY_TTL_MS',
+    'isContextFresh',
+    'buildTakeoutOrderCreateRequestSignature',
+    'ensureTakeoutOrderCreateIdempotencyKey',
+    'clearTakeoutOrderCreateIdempotency',
+    'wx.setStorageSync',
+    'wx.getStorageSync',
+    'wx.removeStorageSync'
+  ], 'takeout order-create idempotency service must persist one stable key for the pending attempt')
+
+  assertSourceIncludes(orderWrapperSource, [
+    'export interface CreateOrderOptions',
+    'idempotencyKey?: string',
+    "header: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined"
+  ], 'takeout order wrapper must pass optional Idempotency-Key to POST /v1/orders')
 }
 
 function assertPaymentResultReentryContract() {
@@ -253,6 +404,7 @@ function assertCustomerWrapperDriftBoundary() {
 function main() {
   assertPackageWiring()
   assertSnapshotIsDraftUntilBackendPricing()
+  assertTakeoutOrderCreateIdempotencyContract()
   assertTakeoutOrderConfirmRecoveryContract()
   assertPaymentResultReentryContract()
   assertCustomerWrapperDriftBoundary()

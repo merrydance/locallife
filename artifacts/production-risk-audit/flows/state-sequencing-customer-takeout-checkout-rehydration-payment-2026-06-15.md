@@ -3,7 +3,7 @@
 Date: 2026-06-15
 Risk theme: state sequencing / idempotency and retry / transaction consistency
 Risk class: G3 - customer cart, order creation, payment callback/recovery, visible order status
-Status: source-audited, Mini Program contract covered, backend payment-create proof covered, backend order-create guard covered when `Idempotency-Key` is supplied, frontend stable-key/provider proof pending
+Status: source-audited, Mini Program contract covered, backend payment-create proof covered, backend order-create guard covered when `Idempotency-Key` is supplied, frontend stable-key propagation covered, provider proof pending
 
 ## Decision
 
@@ -77,9 +77,35 @@ Backend order-create idempotency follow-up:
   single-order creation, API header propagation, logic conflict mapping, and
   skipping duplicate payment-timeout scheduling on replay.
 - This closes the backend duplicate order-create window only for callers that
-  reuse a stable key. The Mini Program takeout submit path still needs to
-  generate and reuse that key across duplicate submit/retry before the
-  user-facing flow is fully closed.
+  reuse a stable key. The Mini Program takeout submit path now generates and
+  reuses a stable key for the same pending order-create request, passes it to
+  `POST /v1/orders`, clears it after an order id is returned, and preserves it
+  across unknown/network failures before an order id exists.
+
+Mini Program order-create idempotency follow-up:
+
+- `weapp/miniprogram/pages/takeout/order-confirm/_services/takeout-order-create-idempotency.ts`
+  canonicalizes the create-order request into a stable signature, stores one
+  pending `Idempotency-Key` in local storage for that signature, rotates it when
+  the request payload changes, and clears the consumed key after order creation
+  returns an order id. The local signature is a digest rather than plaintext
+  order payload, and the pending key has a 2-hour recovery window so unknown
+  network failures can retry safely without allowing long-lived stale replay.
+- `weapp/miniprogram/pages/takeout/order-confirm/_main_shared/api/order.ts`
+  accepts an optional `idempotencyKey` option and sends it as `Idempotency-Key`
+  to `POST /v1/orders`.
+- `weapp/miniprogram/pages/takeout/order-confirm/index.ts` builds the request,
+  derives the signature, obtains the pending key, passes it to `createOrder`,
+  and only clears it after `createOrder` succeeds. If order creation fails
+  before a durable order id is returned to the client, the key remains available
+  for safe retry/replay.
+- `weapp/scripts/check-takeout-checkout-rehydration-payment-contract.test.js`
+  now locks the stable signature, same-attempt key reuse, changed-payload key
+  rotation, stale-key rotation after the recovery window, key clearing, wrapper
+  header propagation, and page-level wiring.
+- The Mini Program-generated key is a retry correlation token, not a trust or
+  authorization boundary. Production idempotency remains owned by the backend
+  actor/key/hash guard and the `CreateOrderTx` transaction binding.
 
 ## Evidence Anchors
 
@@ -95,6 +121,9 @@ Backend order-create idempotency follow-up:
   `weapp/miniprogram/pages/takeout/order-confirm/index.ts:291` through `:375`.
 - Submit guard, order create, and payment create:
   `weapp/miniprogram/pages/takeout/order-confirm/index.ts:423` through `:555`.
+- Mini Program order-create idempotency service and wrapper:
+  `weapp/miniprogram/pages/takeout/order-confirm/_services/takeout-order-create-idempotency.ts`
+  and `weapp/miniprogram/pages/takeout/order-confirm/_main_shared/api/order.ts`.
 - Payment result polling:
   `weapp/miniprogram/pages/payment/result/index.ts:77` through `:157`.
 - Backend payment creation transaction:
@@ -122,7 +151,7 @@ Backend order-create idempotency follow-up:
 | Question | Required answer before code changes |
 | --- | --- |
 | Can a stale event-channel snapshot create an order with stale price/address truth? | Prove backend cart reload/calculation and order create validation are authoritative. |
-| Can duplicate submit create duplicate orders or duplicate payment orders? | Payment-order duplication for an already-created order is now covered by transaction and logic tests. Backend order-create duplication is covered when the caller supplies a stable `Idempotency-Key`; Mini Program stable-key propagation remains open. |
+| Can duplicate submit create duplicate orders or duplicate payment orders? | Payment-order duplication for an already-created order is now covered by transaction and logic tests. Backend order-create duplication is covered when the caller supplies a stable `Idempotency-Key`; Mini Program takeout now generates/reuses that key for the same pending submit/retry attempt. |
 | Can payment callback/recovery advance visible order state after client leaves result page? | Prove payment fact application and result/detail reads converge independently of `wx.requestPayment`. |
 | What happens if order create succeeds but payment create fails? | Prove partial success copy/readback leads user to existing order rather than repeated blind order creation. |
 | Are copied customer wrappers in sync? | Audit active `_main_shared/api/order.ts` and `payment.ts` copies before contract changes. |
@@ -157,6 +186,8 @@ npm run check:takeout-checkout-rehydration-payment-contract
 This covers:
 
 - stale event-channel snapshot -> backend cart rehydration -> submit guard
+- takeout order-create request signature -> stable `Idempotency-Key` reuse ->
+  payload-change key rotation -> stale-key rotation -> consumed-key clearing
 - order create -> payment create failure -> durable order detail recovery
 - pending payment result -> backend payment query/polling -> result/detail/list
   recovery
@@ -172,7 +203,8 @@ Baofu payment orders or call Baofu after the transaction reports a pending
 payment conflict. Backend order creation now has request-level idempotency when
 callers supply a stable `Idempotency-Key`, including same-key replay,
 same-key/different-hash `409`, and same-key concurrent single-order proof.
-Remaining proof gaps are Mini Program stable-key propagation for takeout
-submit/retry, real provider callback/recovery evidence, and an actual end-to-end
-run that shows order detail/list visibility after the client leaves the payment
+The Mini Program takeout submit path now supplies that stable key and preserves
+it for unknown order-create failures before an order id exists. Remaining proof
+gaps are real provider callback/recovery evidence and an actual end-to-end run
+that shows order detail/list visibility after the client leaves the payment
 result page.

@@ -215,6 +215,10 @@ export interface CreateOrderRequest extends Record<string, unknown> {
   delivery_distance?: number    // 前端计算的代取距离（米）
 }
 
+export interface CreateOrderOptions {
+  idempotencyKey?: string
+}
+
 /** 订单商品请求 - 对齐 api.orderItemRequest */
 export interface OrderItemRequest {
   combo_id?: number             // 套餐ID
@@ -346,11 +350,13 @@ export async function getOrderDetail(orderId: number): Promise<OrderResponse> {
  * 创建订单
  * @param orderData 订单数据
  */
-export async function createOrder(orderData: CreateOrderRequest): Promise<OrderResponse> {
+export async function createOrder(orderData: CreateOrderRequest, options: CreateOrderOptions = {}): Promise<OrderResponse> {
+  const idempotencyKey = options.idempotencyKey?.trim()
   return request({
     url: '/v1/orders',
     method: 'POST',
-    data: orderData
+    data: orderData,
+    header: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined
   })
 }
 
