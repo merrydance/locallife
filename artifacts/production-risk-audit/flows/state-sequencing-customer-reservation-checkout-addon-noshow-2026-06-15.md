@@ -144,6 +144,8 @@ npm run check:merchant-reservation-actions-contract
 npm run check:reservation-checkout-addon-recovery-contract
 npm run check:payment-refund-terminal-flow
 npm run check:payment-workflow-boundary
+npm run check:customer-checkout-provider-e2e-evidence
+npm run check:customer-checkout-provider-e2e-evidence -- ../artifacts/production-risk-audit/flows/customer-reservation-provider-e2e-evidence-YYYY-MM-DD.md
 ```
 
 Before any customer reservation checkout/add-on UI change, run
@@ -160,6 +162,9 @@ Before any customer reservation checkout/add-on UI change, run
 - copied reservation/payment wrappers stay aligned for create/detail/list,
   modify/add-dishes, payment create/query/detail, and refund detail.
 
+Provider/E2E evidence template:
+`artifacts/production-risk-audit/flows/customer-reservation-provider-e2e-evidence-template-2026-06-15.md`.
+
 ## Validation Recorded 2026-06-15
 
 Commands run:
@@ -175,6 +180,7 @@ cd ../weapp
 PATH="$HOME/.local/bin:$PATH" npm run check:merchant-reservation-table-status-contract
 PATH="$HOME/.local/bin:$PATH" npm run check:merchant-reservation-actions-contract
 PATH="$HOME/.local/bin:$PATH" npm run check:reservation-checkout-addon-recovery-contract
+PATH="$HOME/.local/bin:$PATH" npm run check:customer-checkout-provider-e2e-evidence
 PATH="$HOME/.local/bin:$PATH" npm run check:payment-refund-terminal-flow
 PATH="$HOME/.local/bin:$PATH" npm run gate:payment-workflow-boundary
 ```
@@ -197,3 +203,10 @@ reservation deposit, add-on, and refund paths is still external-provider
 evidence, not local unit-test proof. Do not treat reservation
 payment/add-on/no-show changes as release-ready until that masked target
 evidence is supplied or the gap is explicitly accepted.
+
+The provider/device follow-up now has a release evidence gate:
+`check:customer-checkout-provider-e2e-evidence` rejects template-only,
+non-pass, placeholder, unsupported-flow, or missing Baofu evidence gate command
+proof. This gate does not create provider evidence; it prevents the remaining
+reservation provider/E2E gap from being closed with a template or local-only
+contract result.

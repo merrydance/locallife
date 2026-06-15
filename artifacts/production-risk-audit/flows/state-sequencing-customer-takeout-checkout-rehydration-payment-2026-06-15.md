@@ -181,6 +181,8 @@ From `weapp/`, add or run focused contract scripts for:
 
 ```bash
 npm run check:takeout-checkout-rehydration-payment-contract
+npm run check:customer-checkout-provider-e2e-evidence
+npm run check:customer-checkout-provider-e2e-evidence -- ../artifacts/production-risk-audit/flows/customer-takeout-provider-e2e-evidence-YYYY-MM-DD.md
 ```
 
 This covers:
@@ -192,6 +194,9 @@ This covers:
 - pending payment result -> backend payment query/polling -> result/detail/list
   recovery
 - wrapper-copy drift for active order/payment APIs
+
+Provider/E2E evidence template:
+`artifacts/production-risk-audit/flows/customer-takeout-provider-e2e-evidence-template-2026-06-15.md`.
 
 ## Remaining Real Issue
 
@@ -208,3 +213,10 @@ it for unknown order-create failures before an order id exists. Remaining proof
 gaps are real provider callback/recovery evidence and an actual end-to-end run
 that shows order detail/list visibility after the client leaves the payment
 result page.
+
+The provider/device follow-up now has a release evidence gate:
+`check:customer-checkout-provider-e2e-evidence` rejects template-only,
+non-pass, placeholder, unsupported-flow, or missing Baofu evidence gate command
+proof. This gate does not create provider evidence; it prevents the remaining
+takeout provider/E2E gap from being closed with a template or local-only
+contract result.
