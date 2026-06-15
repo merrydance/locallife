@@ -156,6 +156,29 @@ non-Baofu channel, missing business object link, missing amount, or amount
 mismatch. This proves local DB evidence only after a real callback/query/recovery
 event has already created the rows.
 
+To generate an explicit candidate row for
+`.github/standards/domains/baofu-payment/SANDBOX_EVIDENCE_LEDGER.md`, rerun the
+same command with `-ledger-row` and supply the observed runtime context rather
+than inferring it from DB rows:
+
+```bash
+PATH="/usr/local/go/bin:$PATH" go run ./cmd/baofu_payment_evidence \
+  -fact-id <external_payment_facts.id> \
+  -application-id <external_payment_fact_applications.id> \
+  -payment-order-id <payment_orders.id> \
+  -profit-sharing-order-id <optional profit_sharing_orders.id> \
+  -ledger-row \
+  -ledger-date <yyyy-mm-dd> \
+  -ledger-env <sandbox|production|provider-real-transaction-env> \
+  -ledger-endpoint <callback-url-or-order-query-endpoint> \
+  -ledger-commit <commit-sha> \
+  -ledger-notes <controlled-run-notes> \
+  -ledger-ack <OK-for-callback-evidence>
+```
+
+The ledger row renderer rejects failing summaries and rejects callback evidence
+without an explicit observed ACK.
+
 ## Phase 1 Release Gate Checklist
 
 Before any Baofu-affecting release, answer every item below in the change
@@ -203,6 +226,9 @@ What this proves:
 - A read-only local evidence command can now convert real callback/query
   persistence rows into a masked JSON summary and fail incomplete local
   convergence evidence.
+- With explicit operator-supplied runtime context, the command can render a
+  candidate Payment Callback or Payment Query ledger row without inventing env,
+  endpoint, ACK, or commit facts.
 
 What this still does not prove:
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
@@ -22,6 +23,13 @@ func main() {
 	applicationID := flag.Int64("application-id", 0, "external_payment_fact_applications id for the fact")
 	paymentOrderID := flag.Int64("payment-order-id", 0, "payment_orders id for the LocalLife order payment")
 	profitSharingOrderID := flag.Int64("profit-sharing-order-id", 0, "optional profit_sharing_orders id for the payment")
+	ledgerRow := flag.Bool("ledger-row", false, "include a SANDBOX_EVIDENCE_LEDGER.md row candidate in the JSON output")
+	ledgerDate := flag.String("ledger-date", "", "evidence row date, required with -ledger-row")
+	ledgerEnv := flag.String("ledger-env", "", "evidence environment, required with -ledger-row")
+	ledgerEndpoint := flag.String("ledger-endpoint", "", "evidence endpoint or callback URL, required with -ledger-row")
+	ledgerACK := flag.String("ledger-ack", "", "callback ACK observed for callback evidence")
+	ledgerCommit := flag.String("ledger-commit", "", "commit SHA for the evidence row, required with -ledger-row")
+	ledgerNotes := flag.String("ledger-notes", "", "operator notes for the evidence row, required with -ledger-row")
 	flag.Parse()
 
 	if *factID <= 0 || *applicationID <= 0 || *paymentOrderID <= 0 {
@@ -60,15 +68,64 @@ func main() {
 		os.Exit(2)
 	}
 
-	encoder := json.NewEncoder(os.Stdout)
-	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(summary); err != nil {
+	output, exitCode, err := renderCommandOutput(summary, commandOutputOptions{
+		LedgerRow: *ledgerRow,
+		LedgerContext: baofuevidence.AggregatePaymentLedgerRowContext{
+			Date:     *ledgerDate,
+			Env:      *ledgerEnv,
+			Endpoint: *ledgerEndpoint,
+			ACK:      *ledgerACK,
+			Commit:   *ledgerCommit,
+			Notes:    *ledgerNotes,
+		},
+	})
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "encode evidence:", err)
 		os.Exit(2)
 	}
-	if summary.Status != baofuevidence.StatusPass {
-		os.Exit(1)
+	fmt.Print(output)
+	os.Exit(exitCode)
+}
+
+type commandOutputOptions struct {
+	LedgerRow     bool
+	LedgerContext baofuevidence.AggregatePaymentLedgerRowContext
+}
+
+type commandOutput struct {
+	Summary   baofuevidence.AggregatePaymentSummary    `json:"summary"`
+	LedgerRow *baofuevidence.AggregatePaymentLedgerRow `json:"ledger_row,omitempty"`
+}
+
+func renderCommandOutput(summary baofuevidence.AggregatePaymentSummary, options commandOutputOptions) (string, int, error) {
+	var buffer bytes.Buffer
+	encoder := json.NewEncoder(&buffer)
+	encoder.SetIndent("", "  ")
+	if !options.LedgerRow {
+		if err := encoder.Encode(summary); err != nil {
+			return "", 0, err
+		}
+		return buffer.String(), evidenceExitCode(summary), nil
 	}
+
+	row, err := baofuevidence.RenderAggregatePaymentLedgerRow(summary, options.LedgerContext)
+	if err != nil {
+		return "", 0, err
+	}
+	if err := encoder.Encode(commandOutput{
+		Summary:   summary,
+		LedgerRow: &row,
+	}); err != nil {
+		return "", 0, err
+	}
+	return buffer.String(), evidenceExitCode(summary), nil
+}
+
+func evidenceExitCode(summary baofuevidence.AggregatePaymentSummary) int {
+	if summary.Status != baofuevidence.StatusPass {
+		return 1
+	}
+	return 0
 }
 
 type aggregatePaymentEvidenceReader interface {

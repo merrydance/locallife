@@ -63,6 +63,73 @@ func TestLoadAggregatePaymentEvidenceUsesExplicitRows(t *testing.T) {
 	require.Equal(t, []int64{51}, reader.profitSharingOrderIDs)
 }
 
+func TestRenderCommandOutputIncludesLedgerRowWhenRequested(t *testing.T) {
+	output, exitCode, err := renderCommandOutput(baofuevidence.AggregatePaymentSummary{
+		Status:             baofuevidence.StatusPass,
+		FactID:             11,
+		ApplicationID:      21,
+		PaymentOrderID:     31,
+		FactSource:         db.ExternalPaymentFactSourceCallback,
+		SourceEventType:    "PAYMENT",
+		TerminalStatus:     db.ExternalPaymentTerminalStatusSuccess,
+		ApplicationStatus:  db.ExternalPaymentFactApplicationStatusApplied,
+		PaymentOrderStatus: "paid",
+		OutTradeNoMasked:   "BAOF***0001",
+		TradeNoMasked:      "2605***1965",
+	}, commandOutputOptions{
+		LedgerRow: true,
+		LedgerContext: baofuevidence.AggregatePaymentLedgerRowContext{
+			Date:     "2026-06-15",
+			Env:      "production",
+			Endpoint: "https://llapi.merrydance.cn/v1/webhooks/baofu/payment",
+			ACK:      "OK",
+			Commit:   "b6507961",
+			Notes:    "controlled first-order callback",
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, 0, exitCode)
+	require.Contains(t, output, "\"status\": \"pass\"")
+	require.Contains(t, output, "\"section\": \"Payment Callback\"")
+	require.Contains(t, output, "| 2026-06-15 | production |")
+}
+
+func TestRenderCommandOutputKeepsSummaryAsDefaultShape(t *testing.T) {
+	output, exitCode, err := renderCommandOutput(baofuevidence.AggregatePaymentSummary{
+		Status: baofuevidence.StatusPass,
+		FactID: 11,
+	}, commandOutputOptions{})
+
+	require.NoError(t, err)
+	require.Equal(t, 0, exitCode)
+	require.Contains(t, output, "\"status\": \"pass\"")
+	require.NotContains(t, output, "\"summary\"")
+}
+
+func TestRenderCommandOutputRejectsLedgerRowMissingContext(t *testing.T) {
+	_, _, err := renderCommandOutput(baofuevidence.AggregatePaymentSummary{
+		Status:             baofuevidence.StatusPass,
+		FactID:             11,
+		ApplicationID:      21,
+		FactSource:         db.ExternalPaymentFactSourceCallback,
+		TerminalStatus:     db.ExternalPaymentTerminalStatusSuccess,
+		PaymentOrderStatus: "paid",
+		OutTradeNoMasked:   "BAOF***0001",
+	}, commandOutputOptions{
+		LedgerRow: true,
+		LedgerContext: baofuevidence.AggregatePaymentLedgerRowContext{
+			Date:     "2026-06-15",
+			Env:      "production",
+			Endpoint: "https://llapi.merrydance.cn/v1/webhooks/baofu/payment",
+			Commit:   "b6507961",
+			Notes:    "missing ack",
+		},
+	})
+
+	require.ErrorContains(t, err, "callback ack is required")
+}
+
 type fakeEvidenceReader struct {
 	fact                  db.ExternalPaymentFact
 	application           db.ExternalPaymentFactApplication
