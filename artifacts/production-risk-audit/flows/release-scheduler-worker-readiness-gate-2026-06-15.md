@@ -4,7 +4,7 @@ Date: 2026-06-15
 Risk theme: release configuration
 Risk class: G3 where schedulers/workers converge payment, refund, withdrawal, delivery, claims, and order state
 Status: release readiness smoke implemented; release-environment execution still required
-Phase 1 status: static registration, config, Redis/Asynq, provider-client, and rollback-only fixture claimability surfaces implemented; focused local validation passed
+Phase 1 status: static registration, config, Redis/Asynq, provider-client, rollback-only fixture claimability surfaces, and release wrapper implemented; focused local validation passed
 
 ## Decision
 
@@ -136,6 +136,8 @@ before exercising DB claimability.
 Implemented command:
 
 ```bash
+PATH="/usr/local/go/bin:$PATH" scripts/release_readiness_smoke.sh --static --format text
+PATH="/usr/local/go/bin:$PATH" PAYMENT_FACT_APPLICATION_FIXTURE_ID=<id> PAYMENT_DOMAIN_OUTBOX_FIXTURE_ID=<id> scripts/release_readiness_smoke.sh --target --format text
 PATH="/usr/local/go/bin:$PATH" go run ./cmd/release_readiness_smoke -format text
 PATH="/usr/local/go/bin:$PATH" go run ./cmd/release_readiness_smoke -format json
 PATH="/usr/local/go/bin:$PATH" go run ./cmd/release_readiness_smoke -include-config -format text
@@ -156,6 +158,12 @@ account, and merchant-report clients without making provider requests. With
 claims explicit disposable fixture rows by ID, proving claim SQL reaches
 `processing` without committing the state change. A non-pass report exits
 non-zero.
+
+The wrapper `scripts/release_readiness_smoke.sh` is the preferred release
+entrypoint. `--static` keeps the side-effect-free source report. `--target`
+requires `PAYMENT_FACT_APPLICATION_FIXTURE_ID` and
+`PAYMENT_DOMAIN_OUTBOX_FIXTURE_ID`, then always runs config, Redis/Asynq,
+Baofu provider-client, and rollback-only fixture claimability checks together.
 
 Current rows:
 
@@ -201,6 +209,8 @@ PATH="/usr/local/go/bin:$PATH" go build ./cmd/release_readiness_smoke
 PATH="/usr/local/go/bin:$PATH" go test ./internal/releasereadiness -run TestCheckRedisAsynqReadiness -count=1
 PATH="/usr/local/go/bin:$PATH" go test ./internal/releasereadiness -run TestCheckBaofuProviderClientReadiness -count=1
 PATH="/usr/local/go/bin:$PATH" go test ./internal/releasereadiness -run TestCheckFixtureClaimability -count=1
+PATH="/usr/local/go/bin:$PATH" bash scripts/test_release_readiness_smoke.sh
+PATH="/usr/local/go/bin:$PATH" bash scripts/release_readiness_smoke.sh --static --format text
 PATH="/usr/local/go/bin:$PATH" go test ./worker -run 'TestBaofuPaymentRecoveryScheduler|TestPaymentFactApplicationSchedulerRunOnce|TestPaymentDomainOutboxScheduler|TestBaofuWithdrawalRecoveryScheduler|TestRefundRecoveryScheduler' -count=1
 PATH="/usr/local/go/bin:$PATH" go test ./scheduler -run 'Test.*OrderTimeout|Test.*TakeoutAutoComplete|Test.*MerchantOpenStatus|Test.*DataCleanup' -count=1
 ```
@@ -221,6 +231,9 @@ Observed result:
   does not call Baofoo.
 - Fixture claimability is covered by focused unit tests for explicit fixture
   IDs, successful claim returns, and unclaimable rows.
+- The wrapper contract test proves target mode includes config, Redis/Asynq,
+  Baofu provider-client, and rollback-only fixture checks and refuses to run
+  without fixture IDs.
 - Focused worker and scheduler package tests returned `ok`.
 
 What this proves:
@@ -314,6 +327,8 @@ go test ./scheduler -run 'Test.*OrderTimeout|Test.*TakeoutAutoComplete|Test.*Mer
 Also run the static release smoke:
 
 ```bash
+scripts/release_readiness_smoke.sh --static --format text
+PAYMENT_FACT_APPLICATION_FIXTURE_ID=<id> PAYMENT_DOMAIN_OUTBOX_FIXTURE_ID=<id> scripts/release_readiness_smoke.sh --target --format text
 go run ./cmd/release_readiness_smoke -format text
 go run ./cmd/release_readiness_smoke -include-config -format text
 go run ./cmd/release_readiness_smoke -include-config -include-redis -format text
