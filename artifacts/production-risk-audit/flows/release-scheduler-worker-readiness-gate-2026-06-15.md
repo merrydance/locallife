@@ -127,19 +127,25 @@ explicit fixture mode before inserting disposable rows.
 | Merchant availability | `merchant-open-status` starts inside `runGinServer` with the server publisher. | `locallife/main.go:551` through `:553`. |
 | Cleanup/reconciliation | `data-cleanup` starts with a non-nil publisher strategy in the intended environment. | `locallife/main.go:325`. |
 
-## Proposed Readiness Report Shape
+## Phase 1 Static Readiness Smoke
 
-The future command should print a concise matrix, not rely on log scraping:
+Implemented command:
 
-| Row | Status values | Notes |
+```bash
+PATH="/usr/local/go/bin:$PATH" go run ./cmd/release_readiness_smoke -format text
+PATH="/usr/local/go/bin:$PATH" go run ./cmd/release_readiness_smoke -format json
+```
+
+The command parses `main.go`, `worker/processor.go`, and `worker/*.go` with Go
+AST only. It does not boot the service, connect to Redis/Postgres, enqueue
+tasks, or call any provider. A non-pass report exits non-zero.
+
+Current rows:
+
+| Row group | Status values | Notes |
 | --- | --- | --- |
-| `config.production_fail_fast` | `pass/fail` | Redact all secrets and provider identifiers. |
-| `redis.connection` | `pass/fail` | Include host label only, not password. |
-| `asynq.queues` | `pass/fail/warn` | Verify `critical` and `default`. |
-| `worker.handlers` | `pass/fail` | Include missing task type names. |
-| `scheduler.registry` | `pass/fail` | Include missing scheduler names. |
-| `provider.clients` | `pass/fail/warn` | Fail when Baofu main business is enabled but required client is absent. |
-| `fixture.claimability` | `pass/fail/skipped` | Skipped unless fixture mode is explicitly enabled. |
+| `scheduler:<name>` | `pass/fail` | Confirms required scheduler names are registered through production startup source. |
+| `worker:<task_type>` | `pass/fail` | Confirms required task constants match expected queue names and are registered to expected processor handlers. |
 
 Minimum missing task or scheduler names should be literal names from the current
 runtime, for example `payment-fact-application`,
@@ -148,6 +154,55 @@ runtime, for example `payment-fact-application`,
 `merchant-open-status`, `payment:process_fact_application`,
 `baofu:process_profit_sharing`, and
 `baofu:process_withdrawal_fact_application`.
+
+Rows still planned for a future runtime smoke:
+
+| Row | Status values | Notes |
+| --- | --- | --- |
+| `config.production_fail_fast` | `pass/fail` | Redact all secrets and provider identifiers. |
+| `redis.connection` | `pass/fail` | Include host label only, not password. |
+| `asynq.queues` | `pass/fail/warn` | Verify `critical` and `default`. |
+| `provider.clients` | `pass/fail/warn` | Fail when Baofu main business is enabled but required client is absent. |
+| `fixture.claimability` | `pass/fail/skipped` | Skipped unless fixture mode is explicitly enabled. |
+
+## Phase 1 Implementation Run 2026-06-15
+
+Commands run from `locallife/`:
+
+```bash
+PATH="/usr/local/go/bin:$PATH" go test ./internal/releasereadiness -run TestCheck -count=1
+PATH="/usr/local/go/bin:$PATH" go test ./internal/releasereadiness ./cmd/release_readiness_smoke -count=1
+PATH="/usr/local/go/bin:$PATH" go run ./cmd/release_readiness_smoke -format json
+PATH="/usr/local/go/bin:$PATH" go run ./cmd/release_readiness_smoke -format text
+PATH="/usr/local/go/bin:$PATH" go build ./cmd/release_readiness_smoke
+PATH="/usr/local/go/bin:$PATH" go test ./worker -run 'TestBaofuPaymentRecoveryScheduler|TestPaymentFactApplicationSchedulerRunOnce|TestPaymentDomainOutboxScheduler|TestBaofuWithdrawalRecoveryScheduler|TestRefundRecoveryScheduler' -count=1
+PATH="/usr/local/go/bin:$PATH" go test ./scheduler -run 'Test.*OrderTimeout|Test.*TakeoutAutoComplete|Test.*MerchantOpenStatus|Test.*DataCleanup' -count=1
+```
+
+Observed result:
+
+- The release readiness package tests returned `ok`.
+- The command package builds and runs.
+- The generated text and JSON reports returned `status=pass` for the current
+  static scheduler and worker registration set.
+- Focused worker and scheduler package tests returned `ok`.
+
+What this proves:
+
+- A release operator can now run a side-effect-free static smoke that fails
+  when required scheduler registrations or worker handler/task-type bindings
+  drift out of production startup source.
+- The static report covers payment fact application, payment outbox, Baofu
+  payment/account/withdrawal/merchant-report recovery, refund recovery, order
+  timeout, takeout auto-complete, merchant-open status, data cleanup, claim
+  recovery, OCR, notification, print, and risk task handler registration.
+
+What this still does not prove:
+
+- No deployed process was started.
+- No Redis/Asynq queue reachability smoke was executed.
+- No runtime provider-client config branch was executed.
+- No disposable fixture row was claimed or enqueued.
 
 ## Phase 1 Validation Run 2026-06-15
 
@@ -174,9 +229,9 @@ What this still does not prove:
 
 - No deployed process was started.
 - No Redis/Asynq queue reachability smoke was executed.
-- No process-level scheduler registry or worker-handler report was generated.
 - No disposable fixture row was claimed or enqueued.
-- The release readiness smoke described by this card is still not implemented.
+- Before the implementation run above, no process-level scheduler registry or
+  worker-handler report existed; that static report now exists.
 
 ## Proposed Release Smoke Contract
 
@@ -204,12 +259,21 @@ go test ./worker -run 'TestPaymentFactApplicationSchedulerRunOnce|TestPaymentDom
 go test ./scheduler -run 'Test.*OrderTimeout|Test.*TakeoutAutoComplete|Test.*MerchantOpenStatus|Test.*DataCleanup' -count=1
 ```
 
-Then add a release-oriented smoke script or command that validates process-level
-registration and config readiness without mutating production money state.
+Also run the static release smoke:
+
+```bash
+go run ./cmd/release_readiness_smoke -format text
+```
+
+Future runtime smoke work should validate config readiness, Redis/Asynq reachability,
+provider-client branch readiness, and optional disposable fixture claimability
+without mutating production money state.
 
 ## Remaining Real Issue
 
 Many audited flows are safe only if callback facts, outbox rows, recovery rows,
 timeouts, and cleanup schedulers actually run in the deployed environment.
-Current docs and CI do not prove that release readiness. This remains a real
-cross-flow release risk.
+The new static smoke reduces source-level registration drift risk, but deployed
+runtime readiness still needs Redis/Asynq, provider-client, and fixture-level
+proof. This remains a real cross-flow release risk until those runtime checks
+are added to the release path.
