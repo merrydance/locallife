@@ -423,7 +423,8 @@ and refund so a normal query/callback row cannot be promoted under a withdrawal
 operations label. Callback evidence requires `--ledger-ack`; query evidence
 rejects ACK input so the row cannot invent a callback observation. Callback
 ledger endpoints must also match the selected capability's LocalLife webhook
-path, so a query endpoint or another Baofu callback route cannot be recorded as
+path exactly after URL parsing, so a query endpoint, another Baofu callback
+route, or a prefixed fake route such as `payment-extra` cannot be recorded as
 positive callback evidence for the wrong capability. Withdrawal
 `--evidence-kind funds-action` also requires `--withdrawal-approver`,
 `--withdrawal-amount-bound`, and `--withdrawal-monitoring-owner`, and still does
@@ -552,7 +553,8 @@ What this proves:
   read-only collector command.
 - Callback ledger rows are rejected without explicit ACK.
 - Callback ledger rows are rejected when the endpoint does not match the
-  selected capability's LocalLife Baofu webhook path.
+  selected capability's exact LocalLife Baofu webhook path; prefix lookalikes
+  such as `payment-extra` are rejected.
 - Query evidence does not receive a synthetic ACK.
 - Payment, profit-sharing, and refund evidence reject withdrawal-only
   `manual-reconciliation` and `funds-action` labels.

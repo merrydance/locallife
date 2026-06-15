@@ -260,9 +260,21 @@ expected_callback_endpoint_path() {
 
 validate_callback_endpoint_for_capability() {
   local expected_path
+  local endpoint_path
   expected_path="$(expected_callback_endpoint_path)"
-  if [[ "$ledger_endpoint" != *"$expected_path"* ]]; then
-    echo "callback endpoint does not match ${capability} evidence; expected endpoint containing ${expected_path}" >&2
+  endpoint_path="$ledger_endpoint"
+  endpoint_path="${endpoint_path%%#*}"
+  endpoint_path="${endpoint_path%%\?*}"
+  if [[ "$endpoint_path" == http://* || "$endpoint_path" == https://* ]]; then
+    endpoint_path="${endpoint_path#*://}"
+    if [[ "$endpoint_path" == */* ]]; then
+      endpoint_path="/${endpoint_path#*/}"
+    else
+      endpoint_path="/"
+    fi
+  fi
+  if [[ "$endpoint_path" != "$expected_path" ]]; then
+    echo "callback endpoint does not match ${capability} evidence; expected endpoint path ${expected_path}" >&2
     exit 2
   fi
 }

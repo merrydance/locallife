@@ -10,9 +10,10 @@ missing_manual_output="$(mktemp)"
 unsupported_evidence_kind_output="$(mktemp)"
 unknown_capability_output="$(mktemp)"
 wrong_callback_endpoint_output="$(mktemp)"
+callback_endpoint_prefix_output="$(mktemp)"
 query_endpoint_callback_output="$(mktemp)"
 wrong_funds_action_endpoint_output="$(mktemp)"
-trap 'rm -f "$missing_ack_output" "$malformed_context_output" "$missing_withdrawal_output" "$missing_manual_output" "$unsupported_evidence_kind_output" "$unknown_capability_output" "$wrong_callback_endpoint_output" "$query_endpoint_callback_output" "$wrong_funds_action_endpoint_output"' EXIT
+trap 'rm -f "$missing_ack_output" "$malformed_context_output" "$missing_withdrawal_output" "$missing_manual_output" "$unsupported_evidence_kind_output" "$unknown_capability_output" "$wrong_callback_endpoint_output" "$callback_endpoint_prefix_output" "$query_endpoint_callback_output" "$wrong_funds_action_endpoint_output"' EXIT
 
 assert_contains() {
   local haystack="$1"
@@ -129,6 +130,30 @@ if (
 fi
 
 assert_contains "$(cat "$wrong_callback_endpoint_output")" "callback endpoint does not match payment evidence"
+
+if (
+  cd "$BACKEND_ROOT"
+  scripts/baofu_provider_evidence_gate.sh \
+    --capability payment \
+    --fact-id 11 \
+    --application-id 21 \
+    --payment-order-id 31 \
+    --ledger-row \
+    --evidence-kind callback \
+    --ledger-date 2026-06-15 \
+    --ledger-env production \
+    --ledger-endpoint https://llapi.merrydance.cn/v1/webhooks/baofu/payment-extra \
+    --ledger-ack OK \
+    --ledger-commit b6507961 \
+    --ledger-notes "payment callback endpoint prefix must not count" \
+    --dry-run
+) >"$callback_endpoint_prefix_output" 2>&1; then
+  echo "payment callback evidence with prefixed endpoint unexpectedly succeeded" >&2
+  cat "$callback_endpoint_prefix_output" >&2
+  exit 1
+fi
+
+assert_contains "$(cat "$callback_endpoint_prefix_output")" "callback endpoint does not match payment evidence"
 
 if (
   cd "$BACKEND_ROOT"
