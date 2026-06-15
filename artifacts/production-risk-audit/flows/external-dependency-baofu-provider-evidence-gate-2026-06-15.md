@@ -362,8 +362,10 @@ Execution:
 4. Verify local durable rows after the provider event:
    `external_payment_facts`, `external_payment_fact_applications` when the flow
    uses applications, command row, and the relevant business row.
-5. Run the matching local collector with the exact DB row IDs. Use
-   `-ledger-row` only after all runtime context fields are known.
+5. Run `scripts/baofu_provider_evidence_gate.sh` with the exact DB row IDs. The
+   wrapper runs the contract drift guard and static release readiness preflight
+   before the matching read-only collector. Use `--ledger-row` only after all
+   runtime context fields are known.
 
 Writeback:
 
@@ -385,6 +387,37 @@ Non-claims:
   transport/error-classification evidence only.
 - A withdrawal query result is not approval to execute a withdrawal.
 
+## Phase 1 Evidence Gate Wrapper
+
+Use the wrapper as the preferred local entrypoint after the controlled provider
+event has already produced the relevant DB rows:
+
+```bash
+PATH="/usr/local/go/bin:$PATH" scripts/baofu_provider_evidence_gate.sh \
+  --capability payment \
+  --fact-id <external_payment_facts.id> \
+  --application-id <external_payment_fact_applications.id> \
+  --payment-order-id <payment_orders.id> \
+  --ledger-row \
+  --evidence-kind callback \
+  --ledger-date <yyyy-mm-dd> \
+  --ledger-env <sandbox|production|provider-real-transaction-env> \
+  --ledger-endpoint <callback-url> \
+  --ledger-ack OK \
+  --ledger-commit <commit-sha> \
+  --ledger-notes <controlled-run-notes>
+```
+
+Supported `--capability` values are `payment`, `profit-sharing`, `refund`, and
+`withdrawal`. Callback evidence requires `--ledger-ack`; query evidence rejects
+ACK input so the row cannot invent a callback observation. Withdrawal
+`--evidence-kind funds-action` also requires `--withdrawal-approver`,
+`--withdrawal-amount-bound`, and `--withdrawal-monitoring-owner`, and still does
+not authorize or execute the withdrawal.
+
+The wrapper has a `--dry-run` mode for release/runbook review. Dry-run prints
+the exact commands and performs no DB, provider, or funds-action work.
+
 ## Phase 1 Release Gate Checklist
 
 Before any Baofu-affecting release, answer every item below in the change
@@ -401,6 +434,8 @@ handoff.
   persistence and application?
 - If a withdrawal path is claimed, who approved the funds action and how was
   the amount bounded?
+- Did `scripts/baofu_provider_evidence_gate.sh` run, or was its `--dry-run`
+  output reviewed before the controlled evidence run?
 - Which provider identifiers were masked in the evidence ledger?
 
 ## Phase 1 Validation Run 2026-06-15
@@ -453,6 +488,35 @@ What this still does not prove:
 - The local collector currently does not read `payment_domain_outbox`
   automatically; outbox proof still needs either an explicit future query or
   manual evidence from the controlled run.
+
+## Phase 1 Wrapper Validation Run 2026-06-15
+
+Commands run from `locallife/`:
+
+```bash
+PATH="/usr/local/go/bin:$PATH" bash scripts/test_baofu_provider_evidence_gate.sh
+```
+
+Observed result:
+
+- The wrapper contract test printed
+  `baofu provider evidence gate wrapper contract passed`.
+
+What this proves:
+
+- The wrapper dry-run includes `make check-baofu-contract`,
+  `scripts/release_readiness_smoke.sh --static --format text`, and the matching
+  read-only collector command.
+- Callback ledger rows are rejected without explicit ACK.
+- Query evidence does not receive a synthetic ACK.
+- Withdrawal funds-action evidence is rejected unless approval, amount bound,
+  and monitoring owner are supplied.
+
+What this still does not prove:
+
+- No real Baofoo provider callback, query, or funds action was executed by the
+  wrapper test.
+- No new C4 evidence row was added to `SANDBOX_EVIDENCE_LEDGER.md`.
 
 ## Release Gate
 

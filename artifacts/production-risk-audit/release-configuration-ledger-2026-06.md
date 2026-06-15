@@ -73,7 +73,7 @@ documentation-only and does not change production code or configuration.
 
 | Backlog ID | Flow | Finding | Suggested Follow-Up |
 | --- | --- | --- | --- |
-| RC-BACKLOG-001 | All callback/provider flows | Callback URL, public key, cert serial, terminal/member id, and environment mode must match deployed code. | Use `flows/external-dependency-baofu-provider-evidence-gate-2026-06-15.md` for Baofu releases and add release checklist entries before provider-affecting releases. |
+| RC-BACKLOG-001 | All callback/provider flows | Callback URL, public key, cert serial, terminal/member id, and environment mode must match deployed code. | Use `flows/external-dependency-baofu-provider-evidence-gate-2026-06-15.md`, `locallife/scripts/baofu_provider_evidence_gate.sh`, and the target release readiness smoke before provider-affecting releases. |
 | RC-BACKLOG-002 | All scheduler-dependent flows | Many convergence paths depend on scheduler/worker boot, not request code. | Use `flows/release-scheduler-worker-readiness-gate-2026-06-15.md` and `scripts/release_readiness_smoke.sh --target`; remaining work is target-environment execution with disposable fixture IDs and alert rules for recovery failure metrics. |
 | RC-BACKLOG-003 | All migration-dependent flows | This docs pass did not verify actual environment schema. | Before code changes, verify `schema_migrations` and relevant constraints/indexes. |
 

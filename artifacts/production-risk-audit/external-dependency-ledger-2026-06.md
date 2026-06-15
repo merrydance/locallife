@@ -71,7 +71,7 @@ production code.
 
 | Backlog ID | Flow | Finding | Suggested Follow-Up |
 | --- | --- | --- | --- |
-| ED-BACKLOG-001 | Baofoo payment/refund/share/withdrawal | Baofu source matrix records remaining positive callback evidence gaps for real provider flows. | Use `flows/external-dependency-baofu-provider-evidence-gate-2026-06-15.md`; do not change provider semantics without updating Baofu domain evidence. |
+| ED-BACKLOG-001 | Baofoo payment/refund/share/withdrawal | Baofu source matrix records remaining positive callback evidence gaps for real provider flows; a read-only evidence gate wrapper now exists but does not create provider evidence by itself. | Use `flows/external-dependency-baofu-provider-evidence-gate-2026-06-15.md` and `locallife/scripts/baofu_provider_evidence_gate.sh`; do not change provider semantics without updating Baofu domain evidence. |
 | ED-BACKLOG-002 | Cloud/BLE printing | Merchant device/display and order operations distinguish backend cloud print logs from local BLE receipt side effects. | Keep UI copy and observability separate. |
 | ED-BACKLOG-003 | Map/location | Route planning and location are display/recovery aids, not state transition truth. | Avoid using client/provider route data as delivery authorization. |
 
