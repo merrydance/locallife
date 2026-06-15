@@ -50,6 +50,8 @@ Common options:
   --command-id <id>
   --ledger-row
   --evidence-kind <callback|query|manual-reconciliation|funds-action>
+                   callback/query are supported for every capability;
+                   manual-reconciliation/funds-action are withdrawal-only.
   --ledger-date <yyyy-mm-dd>
   --ledger-env <sandbox|production|provider-real-transaction-env>
   --ledger-endpoint <callback-url-or-query-endpoint>
@@ -226,6 +228,16 @@ if [[ -z "$capability" ]]; then
   exit 2
 fi
 
+case "$capability" in
+  payment|profit-sharing|refund|withdrawal)
+    ;;
+  *)
+    echo "unknown capability: $capability" >&2
+    usage >&2
+    exit 2
+    ;;
+esac
+
 case "$evidence_kind" in
   callback|query|manual-reconciliation|funds-action)
     ;;
@@ -234,6 +246,19 @@ case "$evidence_kind" in
     exit 2
     ;;
 esac
+
+if [[ "$capability" != "withdrawal" ]]; then
+  case "$evidence_kind" in
+    manual-reconciliation)
+      echo "manual-reconciliation evidence is only valid for withdrawal" >&2
+      exit 2
+      ;;
+    funds-action)
+      echo "funds-action evidence is only valid for withdrawal" >&2
+      exit 2
+      ;;
+  esac
+fi
 
 if [[ "$ledger_row" -eq 1 ]]; then
   if [[ -z "$ledger_date" ]]; then
@@ -334,11 +359,6 @@ case "$capability" in
     append_required_arg collector "-fact-id" "$fact_id" "fact-id is required for withdrawal evidence"
     append_required_arg collector "-withdrawal-order-id" "$withdrawal_order_id" "withdrawal-order-id is required for withdrawal evidence"
     append_arg collector "-command-id" "$command_id"
-    ;;
-  *)
-    echo "unknown capability: $capability" >&2
-    usage >&2
-    exit 2
     ;;
 esac
 

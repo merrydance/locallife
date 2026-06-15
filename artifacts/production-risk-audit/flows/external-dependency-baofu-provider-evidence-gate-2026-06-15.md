@@ -409,8 +409,12 @@ PATH="/usr/local/go/bin:$PATH" scripts/baofu_provider_evidence_gate.sh \
 ```
 
 Supported `--capability` values are `payment`, `profit-sharing`, `refund`, and
-`withdrawal`. Callback evidence requires `--ledger-ack`; query evidence rejects
-ACK input so the row cannot invent a callback observation. Withdrawal
+`withdrawal`. `callback` and `query` evidence kinds are valid for every
+capability. `manual-reconciliation` and `funds-action` are withdrawal-only
+evidence kinds; the wrapper rejects those labels for payment, profit-sharing,
+and refund so a normal query/callback row cannot be promoted under a withdrawal
+operations label. Callback evidence requires `--ledger-ack`; query evidence
+rejects ACK input so the row cannot invent a callback observation. Withdrawal
 `--evidence-kind funds-action` also requires `--withdrawal-approver`,
 `--withdrawal-amount-bound`, and `--withdrawal-monitoring-owner`, and still does
 not authorize or execute the withdrawal.
@@ -534,6 +538,8 @@ What this proves:
   read-only collector command.
 - Callback ledger rows are rejected without explicit ACK.
 - Query evidence does not receive a synthetic ACK.
+- Payment, profit-sharing, and refund evidence reject withdrawal-only
+  `manual-reconciliation` and `funds-action` labels.
 - Withdrawal funds-action evidence is rejected unless approval, amount bound,
   and monitoring owner are supplied.
 - Withdrawal manual-reconciliation evidence is rejected unless a manual recovery

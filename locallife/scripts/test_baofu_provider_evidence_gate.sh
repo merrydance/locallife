@@ -6,8 +6,9 @@ BACKEND_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 missing_ack_output="$(mktemp)"
 missing_withdrawal_output="$(mktemp)"
 missing_manual_output="$(mktemp)"
+unsupported_evidence_kind_output="$(mktemp)"
 unknown_capability_output="$(mktemp)"
-trap 'rm -f "$missing_ack_output" "$missing_withdrawal_output" "$missing_manual_output" "$unknown_capability_output"' EXIT
+trap 'rm -f "$missing_ack_output" "$missing_withdrawal_output" "$missing_manual_output" "$unsupported_evidence_kind_output" "$unknown_capability_output"' EXIT
 
 assert_contains() {
   local haystack="$1"
@@ -100,6 +101,54 @@ if (
 fi
 
 assert_contains "$(cat "$missing_ack_output")" "ledger ack is required for callback evidence"
+
+if (
+  cd "$BACKEND_ROOT"
+  scripts/baofu_provider_evidence_gate.sh \
+    --capability payment \
+    --fact-id 11 \
+    --application-id 21 \
+    --payment-order-id 31 \
+    --ledger-row \
+    --evidence-kind manual-reconciliation \
+    --ledger-date 2026-06-15 \
+    --ledger-env provider-real-transaction-env \
+    --ledger-endpoint "https://mch-juhe.baofoo.com/api order_query" \
+    --ledger-commit b6507961 \
+    --ledger-notes "payment query must not be marked manual recovery" \
+    --dry-run
+) >"$unsupported_evidence_kind_output" 2>&1; then
+  echo "non-withdrawal manual-reconciliation evidence unexpectedly succeeded" >&2
+  cat "$unsupported_evidence_kind_output" >&2
+  exit 1
+fi
+
+assert_contains "$(cat "$unsupported_evidence_kind_output")" "manual-reconciliation evidence is only valid for withdrawal"
+
+if (
+  cd "$BACKEND_ROOT"
+  scripts/baofu_provider_evidence_gate.sh \
+    --capability refund \
+    --fact-id 41 \
+    --application-id 51 \
+    --refund-order-id 71 \
+    --payment-order-id 31 \
+    --ledger-row \
+    --evidence-kind funds-action \
+    --ledger-date 2026-06-15 \
+    --ledger-env production \
+    --ledger-endpoint https://llapi.merrydance.cn/v1/webhooks/baofu/refund \
+    --ledger-ack OK \
+    --ledger-commit 7c325e4d \
+    --ledger-notes "refund callback must not be marked withdrawal funds action" \
+    --dry-run
+) >"$unsupported_evidence_kind_output" 2>&1; then
+  echo "non-withdrawal funds-action evidence unexpectedly succeeded" >&2
+  cat "$unsupported_evidence_kind_output" >&2
+  exit 1
+fi
+
+assert_contains "$(cat "$unsupported_evidence_kind_output")" "funds-action evidence is only valid for withdrawal"
 
 if (
   cd "$BACKEND_ROOT"
