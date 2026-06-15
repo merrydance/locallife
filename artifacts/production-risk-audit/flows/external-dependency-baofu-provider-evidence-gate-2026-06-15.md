@@ -203,6 +203,29 @@ This proves local share DB convergence only after a real `SHARING` callback,
 positive `share_query`, or manual recovery fact has already created the rows. It
 does not prove provider reachability, callback ACK, or C4 status by itself.
 
+To generate an explicit candidate row for
+`.github/standards/domains/baofu-payment/SANDBOX_EVIDENCE_LEDGER.md`, rerun the
+same command with `-ledger-row` and supply the observed runtime context rather
+than inferring it from DB rows:
+
+```bash
+PATH="/usr/local/go/bin:$PATH" go run ./cmd/baofu_profit_sharing_evidence \
+  -fact-id <external_payment_facts.id> \
+  -application-id <external_payment_fact_applications.id> \
+  -profit-sharing-order-id <profit_sharing_orders.id> \
+  -command-id <optional external_payment_commands.id> \
+  -ledger-row \
+  -ledger-date <yyyy-mm-dd> \
+  -ledger-env <sandbox|production|provider-real-transaction-env> \
+  -ledger-endpoint <callback-url-or-share-query-endpoint> \
+  -ledger-commit <commit-sha> \
+  -ledger-notes <controlled-run-notes> \
+  -ledger-ack <OK-for-callback-evidence>
+```
+
+The ledger row renderer rejects failing summaries and rejects share callback
+evidence without an explicit observed ACK.
+
 Implemented local refund collector:
 
 ```bash

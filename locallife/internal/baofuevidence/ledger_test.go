@@ -114,3 +114,84 @@ func TestRenderAggregatePaymentLedgerRowRejectsIncompleteSummary(t *testing.T) {
 
 	require.ErrorContains(t, err, "ledger summary fact source is not callback/query/manual_reconciliation")
 }
+
+func TestRenderProfitSharingLedgerRowForCallbackEvidence(t *testing.T) {
+	row, err := RenderProfitSharingLedgerRow(ProfitSharingSummary{
+		Status:                   StatusPass,
+		FactID:                   101,
+		ApplicationID:            201,
+		ProfitSharingOrderID:     61,
+		PaymentOrderID:           31,
+		CommandID:                301,
+		FactSource:               db.ExternalPaymentFactSourceCallback,
+		SourceEventType:          "SHARING",
+		TerminalStatus:           db.ExternalPaymentTerminalStatusSuccess,
+		ApplicationStatus:        db.ExternalPaymentFactApplicationStatusApplied,
+		ProfitSharingOrderStatus: db.ProfitSharingOrderStatusFinished,
+		CommandStatus:            db.ExternalPaymentCommandStatusAccepted,
+		AmountFen:                8900,
+		OutOrderNoMasked:         "BFPS***1O41",
+		TradeNoMasked:            "2605***9999",
+	}, EvidenceLedgerRowContext{
+		Date:     "2026-06-15",
+		Env:      "production",
+		Endpoint: "https://llapi.merrydance.cn/v1/webhooks/baofu/profit-sharing",
+		ACK:      "OK",
+		Commit:   "2d6ebbdf",
+		Notes:    "controlled share callback",
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "Profit Sharing Callback", row.Section)
+	require.Equal(t, "| 2026-06-15 | production | `https://llapi.merrydance.cn/v1/webhooks/baofu/profit-sharing` | `BFPS***1O41` | `2605***9999` | success; share_status=finished | fact_id=101; source=callback; event=SHARING | applied application_id=201 | OK | `2d6ebbdf` | controlled share callback; local_row_ids: profit_sharing_order_id=61, payment_order_id=31, command_id=301 |", row.Row)
+}
+
+func TestRenderProfitSharingLedgerRowForQueryEvidence(t *testing.T) {
+	row, err := RenderProfitSharingLedgerRow(ProfitSharingSummary{
+		Status:                   StatusPass,
+		FactID:                   102,
+		ApplicationID:            202,
+		ProfitSharingOrderID:     62,
+		PaymentOrderID:           32,
+		CommandID:                302,
+		FactSource:               db.ExternalPaymentFactSourceManualReconciliation,
+		TerminalStatus:           db.ExternalPaymentTerminalStatusSuccess,
+		ApplicationStatus:        db.ExternalPaymentFactApplicationStatusApplied,
+		ProfitSharingOrderStatus: db.ProfitSharingOrderStatusFinished,
+		CommandStatus:            db.ExternalPaymentCommandStatusAccepted,
+		AmountFen:                6600,
+		OutOrderNoMasked:         "BFPS***1O42",
+		TradeNoMasked:            "2605***8888",
+	}, EvidenceLedgerRowContext{
+		Date:     "2026-06-15",
+		Env:      "production",
+		Endpoint: "https://mch-juhe.baofoo.com/api share_query",
+		Commit:   "2d6ebbdf",
+		Notes:    "controlled share recovery query",
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "Profit Sharing Query", row.Section)
+	require.Equal(t, "| 2026-06-15 | production | `https://mch-juhe.baofoo.com/api share_query` | `BFPS***1O42` / `2605***8888` | success; fact_source=manual_reconciliation; share_status=finished | fact_id=102; terminal_status=success | applied application_id=202 | `2d6ebbdf` | controlled share recovery query; local_row_ids: profit_sharing_order_id=62, payment_order_id=32, command_id=302 |", row.Row)
+}
+
+func TestRenderProfitSharingLedgerRowRejectsMissingCallbackACK(t *testing.T) {
+	_, err := RenderProfitSharingLedgerRow(ProfitSharingSummary{
+		Status:                   StatusPass,
+		FactID:                   101,
+		ApplicationID:            201,
+		FactSource:               db.ExternalPaymentFactSourceCallback,
+		TerminalStatus:           db.ExternalPaymentTerminalStatusSuccess,
+		ApplicationStatus:        db.ExternalPaymentFactApplicationStatusApplied,
+		ProfitSharingOrderStatus: db.ProfitSharingOrderStatusFinished,
+		OutOrderNoMasked:         "BFPS***1O41",
+	}, EvidenceLedgerRowContext{
+		Date:     "2026-06-15",
+		Env:      "production",
+		Endpoint: "https://llapi.merrydance.cn/v1/webhooks/baofu/profit-sharing",
+		Commit:   "2d6ebbdf",
+		Notes:    "missing callback ack",
+	})
+
+	require.ErrorContains(t, err, "callback ack is required")
+}

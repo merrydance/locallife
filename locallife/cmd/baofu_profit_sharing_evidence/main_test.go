@@ -151,7 +151,7 @@ func TestRenderProfitSharingCommandOutputKeepsSummaryShape(t *testing.T) {
 	output, exitCode, err := renderCommandOutput(baofuevidence.ProfitSharingSummary{
 		Status: baofuevidence.StatusPass,
 		FactID: 101,
-	})
+	}, commandOutputOptions{})
 
 	require.NoError(t, err)
 	require.Equal(t, 0, exitCode)
@@ -159,12 +159,70 @@ func TestRenderProfitSharingCommandOutputKeepsSummaryShape(t *testing.T) {
 	require.NotContains(t, output, "\"summary\"")
 }
 
+func TestRenderProfitSharingCommandOutputIncludesLedgerRowWhenRequested(t *testing.T) {
+	output, exitCode, err := renderCommandOutput(baofuevidence.ProfitSharingSummary{
+		Status:                   baofuevidence.StatusPass,
+		FactID:                   101,
+		ApplicationID:            201,
+		ProfitSharingOrderID:     61,
+		PaymentOrderID:           31,
+		CommandID:                301,
+		FactSource:               db.ExternalPaymentFactSourceCallback,
+		SourceEventType:          "SHARING",
+		TerminalStatus:           db.ExternalPaymentTerminalStatusSuccess,
+		ApplicationStatus:        db.ExternalPaymentFactApplicationStatusApplied,
+		ProfitSharingOrderStatus: db.ProfitSharingOrderStatusFinished,
+		OutOrderNoMasked:         "BFPS***1O41",
+		TradeNoMasked:            "2605***9999",
+	}, commandOutputOptions{
+		LedgerRow: true,
+		LedgerContext: baofuevidence.EvidenceLedgerRowContext{
+			Date:     "2026-06-15",
+			Env:      "production",
+			Endpoint: "https://llapi.merrydance.cn/v1/webhooks/baofu/profit-sharing",
+			ACK:      "OK",
+			Commit:   "2d6ebbdf",
+			Notes:    "controlled share callback",
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, 0, exitCode)
+	require.Contains(t, output, "\"status\": \"pass\"")
+	require.Contains(t, output, "\"section\": \"Profit Sharing Callback\"")
+	require.Contains(t, output, "| 2026-06-15 | production |")
+}
+
+func TestRenderProfitSharingCommandOutputRejectsLedgerRowMissingContext(t *testing.T) {
+	_, _, err := renderCommandOutput(baofuevidence.ProfitSharingSummary{
+		Status:                   baofuevidence.StatusPass,
+		FactID:                   101,
+		ApplicationID:            201,
+		FactSource:               db.ExternalPaymentFactSourceCallback,
+		TerminalStatus:           db.ExternalPaymentTerminalStatusSuccess,
+		ApplicationStatus:        db.ExternalPaymentFactApplicationStatusApplied,
+		ProfitSharingOrderStatus: db.ProfitSharingOrderStatusFinished,
+		OutOrderNoMasked:         "BFPS***1O41",
+	}, commandOutputOptions{
+		LedgerRow: true,
+		LedgerContext: baofuevidence.EvidenceLedgerRowContext{
+			Date:     "2026-06-15",
+			Env:      "production",
+			Endpoint: "https://llapi.merrydance.cn/v1/webhooks/baofu/profit-sharing",
+			Commit:   "2d6ebbdf",
+			Notes:    "missing ack",
+		},
+	})
+
+	require.ErrorContains(t, err, "callback ack is required")
+}
+
 func TestProfitSharingEvidenceExitCodeFailsOnFindings(t *testing.T) {
 	_, exitCode, err := renderCommandOutput(baofuevidence.ProfitSharingSummary{
 		Status:   baofuevidence.StatusFail,
 		FactID:   101,
 		Findings: []string{"profit sharing order is not finished"},
-	})
+	}, commandOutputOptions{})
 
 	require.NoError(t, err)
 	require.Equal(t, 1, exitCode)
