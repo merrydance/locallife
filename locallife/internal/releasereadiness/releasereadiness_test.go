@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/hibiken/asynq"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/util"
 	"github.com/stretchr/testify/require"
@@ -155,6 +156,28 @@ func TestCheckRedisAsynqReadiness(t *testing.T) {
 	report = CheckRedisAsynq(RedisAsynqOptions{RequiredQueues: []string{"critical"}})
 	require.Equal(t, StatusFail, report.Status)
 	require.Equal(t, StatusFail, requireCheck(t, report, "redis:connection").Status)
+}
+
+func TestCheckRedisAsynqReadinessFailsPausedRequiredQueue(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	client := asynq.NewClient(asynq.RedisClientOpt{Addr: redisServer.Addr()})
+	defer client.Close()
+	_, err := client.Enqueue(asynq.NewTask("release-readiness:probe", nil), asynq.Queue("critical"))
+	require.NoError(t, err)
+
+	inspector := asynq.NewInspector(asynq.RedisClientOpt{Addr: redisServer.Addr()})
+	defer inspector.Close()
+	require.NoError(t, inspector.PauseQueue("critical"))
+
+	report := CheckRedisAsynq(RedisAsynqOptions{
+		Address:        redisServer.Addr(),
+		RequiredQueues: []string{"critical"},
+	})
+
+	require.Equal(t, StatusFail, report.Status)
+	check := requireCheck(t, report, "asynq:queue:critical")
+	require.Equal(t, StatusFail, check.Status)
+	require.Contains(t, check.Detail, "paused")
 }
 
 func TestCheckBaofuProviderClientReadiness(t *testing.T) {

@@ -152,7 +152,9 @@ tasks, or call any provider. With `-include-config`, it also loads the same
 `util.Config` source used by startup and checks production fail-fast readiness
 without printing secrets. With `-include-redis`, it pings Redis and reads
 Asynq queue stats for the `critical` and `default` queues without enqueueing
-tasks. With `-include-provider-clients`, it constructs Baofu root, aggregate,
+tasks; required queues fail readiness when they are paused because paused
+queues do not process convergence tasks. With `-include-provider-clients`, it
+constructs Baofu root, aggregate,
 account, and merchant-report clients without making provider requests. With
 `-include-fixture-claimability`, it opens a rollback-only DB transaction and
 claims explicit disposable fixture rows by ID, proving claim SQL reaches
@@ -180,7 +182,7 @@ Current rows:
 | `config:production_data_encryption_key` | `pass/fail` | Confirms production has `DATA_ENCRYPTION_KEY` when `-include-config` is used. |
 | `config:production_payment_runtime` | `pass/fail` | Reuses `ValidateBaofuConfig` and confirms Baofu main-business runtime readiness when `-include-config` is used. |
 | `redis:connection` | `pass/fail` | Confirms Redis ping succeeds when `-include-redis` is used. |
-| `asynq:queue:<name>` | `pass/fail` | Confirms Asynq inspector can read queue stats or an empty queue namespace without enqueueing tasks. |
+| `asynq:queue:<name>` | `pass/fail` | Confirms Asynq inspector can read queue stats or an empty queue namespace without enqueueing tasks; fails when a required existing queue is paused. |
 | `provider:baofu:<client>` | `pass/fail` | Confirms Baofu provider clients can be locally constructed from config without provider requests. |
 | `fixture:payment_fact_application` | `pass/fail` | Confirms an explicit `external_payment_fact_applications` fixture row can be claimed inside a rollback-only transaction. |
 | `fixture:payment_domain_outbox` | `pass/fail` | Confirms an explicit `payment_domain_outbox` fixture row can be claimed inside a rollback-only transaction. |
@@ -227,9 +229,10 @@ Observed result:
   static scheduler and worker registration set.
 - The explicit config mode returned `status=pass` in the local non-production
   environment with production-only rows marked as skipped.
-- Redis/Asynq readiness is covered by a focused miniredis-backed unit test; the
-  local command run did not use `-include-redis` because the local config does
-  not point at a release Redis instance.
+- Redis/Asynq readiness is covered by focused miniredis-backed unit tests,
+  including a paused required queue failure. The local command run did not use
+  `-include-redis` because the local config does not point at a release Redis
+  instance.
 - Baofu provider-client readiness is covered by a focused unit test; the local
   command can construct clients when release-like Baofu config is supplied, but
   does not call Baofoo.
@@ -351,8 +354,9 @@ select arbitrary pending production money records.
 Many audited flows are safe only if callback facts, outbox rows, recovery rows,
 timeouts, and cleanup schedulers actually run in the deployed environment.
 The static/config/Redis/provider-client smoke reduces source-level
-registration, production fail-fast configuration, queue reachability, and local
-provider-client construction drift risk. The fixture claimability mode adds a
+registration, production fail-fast configuration, queue reachability, paused
+required-queue drift, and local provider-client construction drift risk. The
+fixture claimability mode adds a
 rollback-only DB proof for explicit disposable rows, but this implementation
 run did not execute it against a deployed release database. The remaining
 release risk is operational: every release still needs prepared fixture IDs and

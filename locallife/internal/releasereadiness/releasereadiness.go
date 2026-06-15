@@ -343,10 +343,19 @@ func CheckRedisAsynq(opts RedisAsynqOptions) Report {
 			})
 			continue
 		}
+		status := StatusPass
+		if info.Paused {
+			report.Status = StatusFail
+			status = StatusFail
+		}
+		detail := fmt.Sprintf("size=%d pending=%d active=%d paused=%t", info.Size, info.Pending, info.Active, info.Paused)
+		if info.Paused {
+			detail = "queue is paused; tasks will not be processed"
+		}
 		report.Checks = append(report.Checks, CheckResult{
 			ID:     "asynq:queue:" + queue,
-			Status: StatusPass,
-			Detail: fmt.Sprintf("size=%d pending=%d active=%d paused=%t", info.Size, info.Pending, info.Active, info.Paused),
+			Status: status,
+			Detail: detail,
 		})
 	}
 	sort.SliceStable(report.Checks, func(i, j int) bool {
