@@ -4500,7 +4500,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "商家手动结束就餐会话，关闭账单组并释放桌位。",
+                "description": "商家手动结束就餐会话，或顾客在堂食订单已支付后关闭自己的就餐会话；关闭账单组并释放桌位。",
                 "consumes": [
                     "application/json"
                 ],
@@ -4547,6 +4547,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "找不到就餐会话",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "订单未支付或会话状态冲突",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }

@@ -502,11 +502,80 @@ func TransferDiningSessionTable(ctx context.Context, store db.Store, input Trans
 func CheckoutDiningSession(ctx context.Context, store db.Store, input CheckoutDiningSessionInput) (CheckoutDiningSessionResult, error) {
 	var result CheckoutDiningSessionResult
 
-	merchant, err := resolveMerchantForUser(ctx, store, input.UserID)
+	merchant, merchantErr := resolveMerchantForUser(ctx, store, input.UserID)
+	if merchantErr != nil && !errors.Is(merchantErr, db.ErrRecordNotFound) {
+		return result, merchantErr
+	}
+
+	session, err := store.GetDiningSession(ctx, input.SessionID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
-			return result, NewRequestError(http.StatusForbidden, errors.New("您不是商户，无法操作"))
+			return result, NewRequestError(http.StatusNotFound, errors.New("找不到指定的就餐会话"))
 		}
+		return result, err
+	}
+
+	if merchantErr == nil {
+		if merchant.ID == session.MerchantID {
+			return closeDiningSessionWithMerchant(ctx, store, input.SessionID, merchant)
+		}
+		if session.UserID != input.UserID {
+			return result, NewRequestError(http.StatusForbidden, errors.New("dining session does not belong to your merchant"))
+		}
+	}
+
+	if session.UserID == input.UserID {
+		return checkoutPaidDiningSessionAsCustomer(ctx, store, input, session)
+	}
+
+	return result, NewRequestError(http.StatusForbidden, errors.New("dining session does not belong to you"))
+}
+
+func closeDiningSessionWithMerchant(ctx context.Context, store db.Store, sessionID int64, merchant db.Merchant) (CheckoutDiningSessionResult, error) {
+	var result CheckoutDiningSessionResult
+
+	closeResult, err := store.CloseDiningSessionTx(ctx, db.CloseDiningSessionTxParams{
+		ID:         sessionID,
+		MerchantID: merchant.ID,
+	})
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return result, NewRequestError(http.StatusNotFound, errors.New("找不到指定的就餐会话"))
+		}
+		return result, err
+	}
+
+	result.Session = closeResult.Session
+	result.Merchant = merchant
+	return result, nil
+}
+
+func checkoutPaidDiningSessionAsCustomer(ctx context.Context, store db.Store, input CheckoutDiningSessionInput, session db.DiningSession) (CheckoutDiningSessionResult, error) {
+	var result CheckoutDiningSessionResult
+
+	if !session.ActiveOrderID.Valid {
+		return result, NewRequestError(http.StatusConflict, errors.New("active order is required"))
+	}
+
+	order, err := store.GetOrder(ctx, session.ActiveOrderID.Int64)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return result, NewRequestError(http.StatusConflict, errors.New("active order not found"))
+		}
+		return result, err
+	}
+	if order.UserID != input.UserID {
+		return result, NewRequestError(http.StatusForbidden, errors.New("order does not belong to you"))
+	}
+	if order.MerchantID != session.MerchantID || order.OrderType != db.OrderTypeDineIn {
+		return result, NewRequestError(http.StatusConflict, errors.New("active order does not belong to dining session"))
+	}
+	if order.Status != db.OrderStatusPaid {
+		return result, NewRequestError(http.StatusConflict, errors.New("active order is not paid"))
+	}
+
+	merchant, err := store.GetMerchant(ctx, session.MerchantID)
+	if err != nil {
 		return result, err
 	}
 
