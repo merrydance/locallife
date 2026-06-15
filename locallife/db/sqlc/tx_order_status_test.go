@@ -2,6 +2,8 @@ package db
 
 import (
 	"context"
+	"errors"
+	"sync"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -138,6 +140,157 @@ func TestAcceptTakeoutOrderTx_AddsOrderToDeliveryPool(t *testing.T) {
 	require.Equal(t, result.PoolItem.ID, poolItem.ID)
 }
 
+func TestAcceptTakeoutOrderTx_ConcurrentDuplicateAcceptHasSingleWinner(t *testing.T) {
+	user := createRandomUser(t)
+	merchantOwner := createRandomUser(t)
+	merchant := createMerchantWithLocation(t, merchantOwner.ID)
+	address := createRandomUserAddress(t, user)
+
+	createResult, err := testStore.CreateOrderTx(context.Background(), CreateOrderTxParams{
+		CreateOrderParams: CreateOrderParams{
+			OrderNo:          util.RandomString(20),
+			UserID:           user.ID,
+			MerchantID:       merchant.ID,
+			OrderType:        OrderTypeTakeout,
+			AddressID:        pgtype.Int8{Int64: address.ID, Valid: true},
+			DeliveryFee:      1500,
+			DeliveryDistance: pgtype.Int4{Int32: 3600, Valid: true},
+			Subtotal:         5000,
+			TotalAmount:      6500,
+			Status:           OrderStatusPending,
+		},
+		Items: []CreateOrderItemParams{{
+			DishID:    pgtype.Int8{Int64: 1, Valid: true},
+			Name:      "并发接单测试菜品",
+			UnitPrice: 5000,
+			Quantity:  1,
+			Subtotal:  5000,
+		}},
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.ProcessOrderPaymentTx(context.Background(), ProcessOrderPaymentTxParams{
+		OrderID: createResult.Order.ID,
+	})
+	require.NoError(t, err)
+
+	errs := runConcurrently(2, func() error {
+		_, err := testStore.AcceptTakeoutOrderTx(context.Background(), AcceptTakeoutOrderTxParams{
+			OrderID:      createResult.Order.ID,
+			OldStatus:    OrderStatusPaid,
+			OperatorID:   merchantOwner.ID,
+			OperatorType: "merchant",
+		})
+		return err
+	})
+
+	require.Equal(t, 1, countNilErrors(errs))
+	require.Equal(t, 1, countErrorsMatching(errs, ErrRecordNotFound))
+
+	updated, err := testStore.GetOrder(context.Background(), createResult.Order.ID)
+	require.NoError(t, err)
+	require.Equal(t, OrderStatusPreparing, updated.Status)
+
+	logs, err := testStore.ListOrderStatusLogs(context.Background(), createResult.Order.ID)
+	require.NoError(t, err)
+	require.Len(t, logs, 2)
+	require.Equal(t, OrderStatusPending, logs[0].ToStatus)
+	require.Equal(t, OrderStatusPreparing, logs[1].ToStatus)
+
+	delivery, err := testStore.GetDeliveryByOrderID(context.Background(), createResult.Order.ID)
+	require.NoError(t, err)
+	require.Equal(t, createResult.Order.ID, delivery.OrderID)
+
+	poolItem, err := testStore.GetDeliveryPoolByOrderID(context.Background(), createResult.Order.ID)
+	require.NoError(t, err)
+	require.Equal(t, createResult.Order.ID, poolItem.OrderID)
+}
+
+func TestTakeoutOrderTx_ConcurrentAcceptAndRejectHasSingleDurableWinner(t *testing.T) {
+	user := createRandomUser(t)
+	merchantOwner := createRandomUser(t)
+	merchant := createMerchantWithLocation(t, merchantOwner.ID)
+	address := createRandomUserAddress(t, user)
+
+	createResult, err := testStore.CreateOrderTx(context.Background(), CreateOrderTxParams{
+		CreateOrderParams: CreateOrderParams{
+			OrderNo:          util.RandomString(20),
+			UserID:           user.ID,
+			MerchantID:       merchant.ID,
+			OrderType:        OrderTypeTakeout,
+			AddressID:        pgtype.Int8{Int64: address.ID, Valid: true},
+			DeliveryFee:      1500,
+			DeliveryDistance: pgtype.Int4{Int32: 3600, Valid: true},
+			Subtotal:         5000,
+			TotalAmount:      6500,
+			Status:           OrderStatusPending,
+		},
+		Items: []CreateOrderItemParams{{
+			DishID:    pgtype.Int8{Int64: 1, Valid: true},
+			Name:      "接单拒单竞态测试菜品",
+			UnitPrice: 5000,
+			Quantity:  1,
+			Subtotal:  5000,
+		}},
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.ProcessOrderPaymentTx(context.Background(), ProcessOrderPaymentTxParams{
+		OrderID: createResult.Order.ID,
+	})
+	require.NoError(t, err)
+
+	errs := runConcurrentFuncs(
+		func() error {
+			_, err := testStore.AcceptTakeoutOrderTx(context.Background(), AcceptTakeoutOrderTxParams{
+				OrderID:      createResult.Order.ID,
+				OldStatus:    OrderStatusPaid,
+				OperatorID:   merchantOwner.ID,
+				OperatorType: "merchant",
+			})
+			return err
+		},
+		func() error {
+			_, err := testStore.CancelOrderTx(context.Background(), CancelOrderTxParams{
+				OrderID:      createResult.Order.ID,
+				OldStatus:    OrderStatusPaid,
+				CancelReason: "商户拒单：并发竞态",
+				OperatorID:   merchantOwner.ID,
+				OperatorType: "merchant",
+			})
+			return err
+		},
+	)
+
+	require.Equal(t, 1, countNilErrors(errs))
+	require.Equal(t, 1, countErrorsMatching(errs, ErrRecordNotFound))
+
+	updated, err := testStore.GetOrder(context.Background(), createResult.Order.ID)
+	require.NoError(t, err)
+
+	logs, err := testStore.ListOrderStatusLogs(context.Background(), createResult.Order.ID)
+	require.NoError(t, err)
+	require.Len(t, logs, 2)
+	require.Equal(t, OrderStatusPending, logs[0].ToStatus)
+
+	switch updated.Status {
+	case OrderStatusPreparing:
+		require.Equal(t, OrderStatusPreparing, logs[1].ToStatus)
+		_, err = testStore.GetDeliveryByOrderID(context.Background(), createResult.Order.ID)
+		require.NoError(t, err)
+		_, err = testStore.GetDeliveryPoolByOrderID(context.Background(), createResult.Order.ID)
+		require.NoError(t, err)
+	case OrderStatusCancelled:
+		require.Equal(t, OrderStatusCancelled, logs[1].ToStatus)
+		_, err = testStore.GetDeliveryByOrderID(context.Background(), createResult.Order.ID)
+		require.ErrorIs(t, err, ErrRecordNotFound)
+		_, err = testStore.GetDeliveryPoolByOrderID(context.Background(), createResult.Order.ID)
+		require.ErrorIs(t, err, ErrRecordNotFound)
+	default:
+		t.Fatalf("unexpected final order status %q", updated.Status)
+	}
+}
+
 func TestMarkTakeoutOrderReadyTx_DoesNotCreateDeliveryPoolEntry(t *testing.T) {
 	user := createRandomUser(t)
 	merchantOwner := createRandomUser(t)
@@ -197,6 +350,74 @@ func TestMarkTakeoutOrderReadyTx_DoesNotCreateDeliveryPoolEntry(t *testing.T) {
 
 	_, err = testStore.GetDeliveryPoolByOrderID(context.Background(), createResult.Order.ID)
 	require.ErrorIs(t, err, ErrRecordNotFound)
+}
+
+func TestMarkTakeoutOrderReadyTx_ConcurrentDuplicateReadyHasSingleWinner(t *testing.T) {
+	user := createRandomUser(t)
+	merchantOwner := createRandomUser(t)
+	merchant := createMerchantWithLocation(t, merchantOwner.ID)
+	address := createRandomUserAddress(t, user)
+
+	createResult, err := testStore.CreateOrderTx(context.Background(), CreateOrderTxParams{
+		CreateOrderParams: CreateOrderParams{
+			OrderNo:          util.RandomString(20),
+			UserID:           user.ID,
+			MerchantID:       merchant.ID,
+			OrderType:        OrderTypeTakeout,
+			AddressID:        pgtype.Int8{Int64: address.ID, Valid: true},
+			DeliveryFee:      1500,
+			DeliveryDistance: pgtype.Int4{Int32: 3600, Valid: true},
+			Subtotal:         5000,
+			TotalAmount:      6500,
+			Status:           OrderStatusPending,
+		},
+		Items: []CreateOrderItemParams{{
+			DishID:    pgtype.Int8{Int64: 1, Valid: true},
+			Name:      "并发出餐测试菜品",
+			UnitPrice: 5000,
+			Quantity:  1,
+			Subtotal:  5000,
+		}},
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.ProcessOrderPaymentTx(context.Background(), ProcessOrderPaymentTxParams{
+		OrderID: createResult.Order.ID,
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.AcceptTakeoutOrderTx(context.Background(), AcceptTakeoutOrderTxParams{
+		OrderID:      createResult.Order.ID,
+		OldStatus:    OrderStatusPaid,
+		OperatorID:   merchantOwner.ID,
+		OperatorType: "merchant",
+	})
+	require.NoError(t, err)
+
+	errs := runConcurrently(2, func() error {
+		_, err := testStore.MarkTakeoutOrderReadyTx(context.Background(), MarkTakeoutOrderReadyTxParams{
+			OrderID:      createResult.Order.ID,
+			OldStatus:    OrderStatusPreparing,
+			OperatorID:   merchantOwner.ID,
+			OperatorType: "merchant",
+		})
+		return err
+	})
+
+	require.Equal(t, 1, countNilErrors(errs))
+	require.Equal(t, 1, countErrorsMatching(errs, ErrRecordNotFound))
+
+	updated, err := testStore.GetOrder(context.Background(), createResult.Order.ID)
+	require.NoError(t, err)
+	require.Equal(t, OrderStatusReady, updated.Status)
+	require.Equal(t, FulfillmentStatusReady, updated.FulfillmentStatus)
+
+	logs, err := testStore.ListOrderStatusLogs(context.Background(), createResult.Order.ID)
+	require.NoError(t, err)
+	require.Len(t, logs, 3)
+	require.Equal(t, OrderStatusPending, logs[0].ToStatus)
+	require.Equal(t, OrderStatusPreparing, logs[1].ToStatus)
+	require.Equal(t, OrderStatusReady, logs[2].ToStatus)
 }
 
 func TestMarkTakeoutOrderReadyTx_CourierAcceptedKeepsDeliveryStatus(t *testing.T) {
@@ -1178,4 +1399,52 @@ func TestOrderLifecycle_MerchantReject(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "cancelled", result.Order.Status)
 	require.Equal(t, "商户拒单：今日已打烊", result.Order.CancelReason.String)
+}
+
+func runConcurrently(count int, fn func() error) []error {
+	fns := make([]func() error, count)
+	for i := range fns {
+		fns[i] = fn
+	}
+	return runConcurrentFuncs(fns...)
+}
+
+func runConcurrentFuncs(fns ...func() error) []error {
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	errs := make([]error, len(fns))
+
+	for i, fn := range fns {
+		wg.Add(1)
+		go func(i int, fn func() error) {
+			defer wg.Done()
+			<-start
+			errs[i] = fn()
+		}(i, fn)
+	}
+
+	close(start)
+	wg.Wait()
+
+	return errs
+}
+
+func countNilErrors(errs []error) int {
+	count := 0
+	for _, err := range errs {
+		if err == nil {
+			count++
+		}
+	}
+	return count
+}
+
+func countErrorsMatching(errs []error, target error) int {
+	count := 0
+	for _, err := range errs {
+		if errors.Is(err, target) {
+			count++
+		}
+	}
+	return count
 }
