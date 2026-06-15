@@ -8,11 +8,13 @@ import (
 	"strings"
 
 	"github.com/merrydance/locallife/internal/releasereadiness"
+	"github.com/merrydance/locallife/util"
 )
 
 func main() {
 	root := flag.String("root", ".", "backend repository root to scan")
 	format := flag.String("format", "text", "output format: text or json")
+	includeConfig := flag.Bool("include-config", false, "also load config from root and check production fail-fast readiness")
 	flag.Parse()
 
 	report, err := releasereadiness.Check(releasereadiness.Options{
@@ -22,6 +24,14 @@ func main() {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "release readiness smoke failed:", err)
 		os.Exit(2)
+	}
+	if *includeConfig {
+		config, err := util.LoadConfig(*root)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "release readiness config load failed:", err)
+			os.Exit(2)
+		}
+		report = releasereadiness.MergeReports(report, releasereadiness.CheckConfig(config))
 	}
 
 	switch strings.ToLower(strings.TrimSpace(*format)) {

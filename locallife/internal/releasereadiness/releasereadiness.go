@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/merrydance/locallife/util"
 )
 
 const (
@@ -184,6 +186,97 @@ func Check(opts Options) (Report, error) {
 		return report.Checks[i].ID < report.Checks[j].ID
 	})
 	return report, nil
+}
+
+func MergeReports(reports ...Report) Report {
+	merged := Report{Status: StatusPass}
+	for _, report := range reports {
+		if report.Status == StatusFail {
+			merged.Status = StatusFail
+		}
+		merged.Checks = append(merged.Checks, report.Checks...)
+	}
+	sort.SliceStable(merged.Checks, func(i, j int) bool {
+		return merged.Checks[i].ID < merged.Checks[j].ID
+	})
+	return merged
+}
+
+func CheckConfig(config util.Config) Report {
+	report := Report{Status: StatusPass}
+	if strings.TrimSpace(config.Environment) != "production" {
+		report.Checks = append(report.Checks,
+			CheckResult{ID: "config:production_allowed_origins", Status: StatusPass, Detail: "skipped outside production"},
+			CheckResult{ID: "config:production_redis_address", Status: StatusPass, Detail: "skipped outside production"},
+			CheckResult{ID: "config:production_data_encryption_key", Status: StatusPass, Detail: "skipped outside production"},
+			CheckResult{ID: "config:production_payment_runtime", Status: StatusPass, Detail: "skipped outside production"},
+		)
+		return report
+	}
+
+	addConfigCheck := func(id string, ok bool, passDetail string, failDetail string) {
+		status := StatusPass
+		detail := passDetail
+		if !ok {
+			report.Status = StatusFail
+			status = StatusFail
+			detail = failDetail
+		}
+		report.Checks = append(report.Checks, CheckResult{
+			ID:     id,
+			Status: status,
+			Detail: detail,
+		})
+	}
+
+	addConfigCheck(
+		"config:production_allowed_origins",
+		hasExplicitAllowedOrigins(config.AllowedOrigins),
+		"explicit allowed origins configured",
+		"ALLOWED_ORIGINS must be non-empty and must not contain wildcard in production",
+	)
+	addConfigCheck(
+		"config:production_redis_address",
+		strings.TrimSpace(config.RedisAddress) != "",
+		"redis address configured",
+		"REDIS_ADDRESS is required in production",
+	)
+	addConfigCheck(
+		"config:production_data_encryption_key",
+		strings.TrimSpace(config.DataEncryptionKey) != "",
+		"data encryption key configured",
+		"DATA_ENCRYPTION_KEY is required in production",
+	)
+	if config.BaofuMainBusinessEnabled {
+		if err := config.ValidateBaofuConfig(); err != nil {
+			addConfigCheck("config:production_payment_runtime", false, "", err.Error())
+		} else {
+			addConfigCheck("config:production_payment_runtime", true, "baofu main business runtime config valid", "")
+		}
+	} else {
+		addConfigCheck(
+			"config:production_payment_runtime",
+			false,
+			"",
+			"baofu main business runtime config is required in production for main-business payments",
+		)
+	}
+	sort.SliceStable(report.Checks, func(i, j int) bool {
+		return report.Checks[i].ID < report.Checks[j].ID
+	})
+	return report
+}
+
+func hasExplicitAllowedOrigins(origins []string) bool {
+	if len(origins) == 0 {
+		return false
+	}
+	for _, origin := range origins {
+		if strings.TrimSpace(origin) == "*" {
+			return false
+		}
+	}
+	return true
 }
 
 type schedulerRegistration struct {

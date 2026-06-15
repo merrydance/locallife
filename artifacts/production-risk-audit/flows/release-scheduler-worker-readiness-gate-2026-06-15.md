@@ -134,11 +134,14 @@ Implemented command:
 ```bash
 PATH="/usr/local/go/bin:$PATH" go run ./cmd/release_readiness_smoke -format text
 PATH="/usr/local/go/bin:$PATH" go run ./cmd/release_readiness_smoke -format json
+PATH="/usr/local/go/bin:$PATH" go run ./cmd/release_readiness_smoke -include-config -format text
 ```
 
 The command parses `main.go`, `worker/processor.go`, and `worker/*.go` with Go
 AST only. It does not boot the service, connect to Redis/Postgres, enqueue
-tasks, or call any provider. A non-pass report exits non-zero.
+tasks, or call any provider. With `-include-config`, it also loads the same
+`util.Config` source used by startup and checks production fail-fast readiness
+without printing secrets. A non-pass report exits non-zero.
 
 Current rows:
 
@@ -146,6 +149,10 @@ Current rows:
 | --- | --- | --- |
 | `scheduler:<name>` | `pass/fail` | Confirms required scheduler names are registered through production startup source. |
 | `worker:<task_type>` | `pass/fail` | Confirms required task constants match expected queue names and are registered to expected processor handlers. |
+| `config:production_allowed_origins` | `pass/fail` | Confirms production CORS allowlist is non-empty and not wildcard when `-include-config` is used. |
+| `config:production_redis_address` | `pass/fail` | Confirms production has a Redis address when `-include-config` is used. |
+| `config:production_data_encryption_key` | `pass/fail` | Confirms production has `DATA_ENCRYPTION_KEY` when `-include-config` is used. |
+| `config:production_payment_runtime` | `pass/fail` | Reuses `ValidateBaofuConfig` and confirms Baofu main-business runtime readiness when `-include-config` is used. |
 
 Minimum missing task or scheduler names should be literal names from the current
 runtime, for example `payment-fact-application`,
@@ -159,10 +166,9 @@ Rows still planned for a future runtime smoke:
 
 | Row | Status values | Notes |
 | --- | --- | --- |
-| `config.production_fail_fast` | `pass/fail` | Redact all secrets and provider identifiers. |
 | `redis.connection` | `pass/fail` | Include host label only, not password. |
 | `asynq.queues` | `pass/fail/warn` | Verify `critical` and `default`. |
-| `provider.clients` | `pass/fail/warn` | Fail when Baofu main business is enabled but required client is absent. |
+| `provider.clients` | `pass/fail/warn` | Instantiate or otherwise prove Baofu clients are usable when Baofu main business is enabled. |
 | `fixture.claimability` | `pass/fail/skipped` | Skipped unless fixture mode is explicitly enabled. |
 
 ## Phase 1 Implementation Run 2026-06-15
@@ -174,6 +180,7 @@ PATH="/usr/local/go/bin:$PATH" go test ./internal/releasereadiness -run TestChec
 PATH="/usr/local/go/bin:$PATH" go test ./internal/releasereadiness ./cmd/release_readiness_smoke -count=1
 PATH="/usr/local/go/bin:$PATH" go run ./cmd/release_readiness_smoke -format json
 PATH="/usr/local/go/bin:$PATH" go run ./cmd/release_readiness_smoke -format text
+PATH="/usr/local/go/bin:$PATH" go run ./cmd/release_readiness_smoke -include-config -format text
 PATH="/usr/local/go/bin:$PATH" go build ./cmd/release_readiness_smoke
 PATH="/usr/local/go/bin:$PATH" go test ./worker -run 'TestBaofuPaymentRecoveryScheduler|TestPaymentFactApplicationSchedulerRunOnce|TestPaymentDomainOutboxScheduler|TestBaofuWithdrawalRecoveryScheduler|TestRefundRecoveryScheduler' -count=1
 PATH="/usr/local/go/bin:$PATH" go test ./scheduler -run 'Test.*OrderTimeout|Test.*TakeoutAutoComplete|Test.*MerchantOpenStatus|Test.*DataCleanup' -count=1
@@ -185,6 +192,8 @@ Observed result:
 - The command package builds and runs.
 - The generated text and JSON reports returned `status=pass` for the current
   static scheduler and worker registration set.
+- The explicit config mode returned `status=pass` in the local non-production
+  environment with production-only rows marked as skipped.
 - Focused worker and scheduler package tests returned `ok`.
 
 What this proves:
@@ -192,6 +201,9 @@ What this proves:
 - A release operator can now run a side-effect-free static smoke that fails
   when required scheduler registrations or worker handler/task-type bindings
   drift out of production startup source.
+- With `-include-config`, a release operator can also fail closed on the same
+  production CORS, Redis address, data-encryption-key, and Baofu runtime config
+  prerequisites checked during startup, without printing secret values.
 - The static report covers payment fact application, payment outbox, Baofu
   payment/account/withdrawal/merchant-report recovery, refund recovery, order
   timeout, takeout auto-complete, merchant-open status, data cleanup, claim
@@ -201,7 +213,8 @@ What this still does not prove:
 
 - No deployed process was started.
 - No Redis/Asynq queue reachability smoke was executed.
-- No runtime provider-client config branch was executed.
+- No runtime provider-client object was instantiated by the smoke; config
+  readiness is checked through validation only.
 - No disposable fixture row was claimed or enqueued.
 
 ## Phase 1 Validation Run 2026-06-15
@@ -263,17 +276,19 @@ Also run the static release smoke:
 
 ```bash
 go run ./cmd/release_readiness_smoke -format text
+go run ./cmd/release_readiness_smoke -include-config -format text
 ```
 
-Future runtime smoke work should validate config readiness, Redis/Asynq reachability,
-provider-client branch readiness, and optional disposable fixture claimability
-without mutating production money state.
+Future runtime smoke work should validate Redis/Asynq reachability,
+provider-client instantiation/readiness, and optional disposable fixture
+claimability without mutating production money state.
 
 ## Remaining Real Issue
 
 Many audited flows are safe only if callback facts, outbox rows, recovery rows,
 timeouts, and cleanup schedulers actually run in the deployed environment.
-The new static smoke reduces source-level registration drift risk, but deployed
-runtime readiness still needs Redis/Asynq, provider-client, and fixture-level
-proof. This remains a real cross-flow release risk until those runtime checks
-are added to the release path.
+The static/config smoke reduces source-level registration and production
+fail-fast configuration drift risk, but deployed runtime readiness still needs
+Redis/Asynq, provider-client, and fixture-level proof. This remains a real
+cross-flow release risk until those runtime checks are added to the release
+path.
