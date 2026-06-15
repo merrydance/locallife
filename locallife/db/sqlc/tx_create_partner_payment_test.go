@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"net/http"
+	"sync"
 	"testing"
 	"time"
 
@@ -216,4 +217,106 @@ func TestCreatePartnerPaymentTx_PersistsStableSubMchIDInAttach(t *testing.T) {
 	require.True(t, result.PaymentOrder.Attach.Valid)
 	require.Equal(t, "order_id:1234;sub_mchid:"+paymentConfig.SubMchID, result.PaymentOrder.Attach.String)
 	require.Equal(t, paymentConfig.SubMchID, result.SubMchID)
+}
+
+func TestCreatePartnerPaymentTx_ConcurrentOrderPaymentAllowsSinglePendingPayment(t *testing.T) {
+	ctx := context.Background()
+	user := createRandomUser(t)
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	_ = createRandomMerchantPaymentConfig(t, merchant)
+
+	order, err := testStore.CreateOrder(ctx, CreateOrderParams{
+		OrderNo:     util.RandomString(20),
+		UserID:      user.ID,
+		MerchantID:  merchant.ID,
+		OrderType:   OrderTypeTakeout,
+		Subtotal:    3600,
+		TotalAmount: 3600,
+		Status:      OrderStatusPending,
+	})
+	require.NoError(t, err)
+
+	lockTx, err := testStore.(*SQLStore).connPool.Begin(ctx)
+	require.NoError(t, err)
+	defer func() {
+		_ = lockTx.Rollback(ctx)
+	}()
+	var lockedOrderID int64
+	err = lockTx.QueryRow(ctx, `SELECT id FROM orders WHERE id = $1 FOR UPDATE`, order.ID).Scan(&lockedOrderID)
+	require.NoError(t, err)
+	require.Equal(t, order.ID, lockedOrderID)
+
+	type createResult struct {
+		payment PaymentOrder
+		err     error
+	}
+	results := make(chan createResult, 2)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			result, err := testStore.CreatePartnerPaymentTx(ctx, CreatePartnerPaymentTxParams{
+				UserID:                user.ID,
+				MerchantID:            merchant.ID,
+				OrderID:               order.ID,
+				BusinessType:          "order",
+				Amount:                order.TotalAmount,
+				OutTradeNo:            "RO" + util.RandomString(20),
+				ExpiresAt:             time.Now().Add(time.Hour),
+				PaymentChannel:        PaymentChannelBaofuAggregate,
+				RequiresProfitSharing: true,
+			})
+			results <- createResult{payment: result.PaymentOrder, err: err}
+		}()
+	}
+
+	var earlyResults []createResult
+	select {
+	case result := <-results:
+		earlyResults = append(earlyResults, result)
+	case <-time.After(100 * time.Millisecond):
+	}
+	require.NoError(t, lockTx.Commit(ctx))
+	wg.Wait()
+	close(results)
+
+	allResults := append([]createResult{}, earlyResults...)
+	for result := range results {
+		allResults = append(allResults, result)
+	}
+	require.Empty(t, earlyResults, "CreatePartnerPaymentTx must wait for the order row lock before checking pending payments")
+	require.Len(t, allResults, 2)
+
+	var created []PaymentOrder
+	var conflicts int
+	for _, result := range allResults {
+		if result.err == nil {
+			created = append(created, result.payment)
+			continue
+		}
+		status, ok := IsPartnerPaymentRequestError(result.err)
+		require.True(t, ok, "unexpected error: %v", result.err)
+		require.Equal(t, http.StatusConflict, status)
+		require.Contains(t, result.err.Error(), "pending payment order")
+		conflicts++
+	}
+
+	require.Len(t, created, 1)
+	require.Equal(t, 1, conflicts)
+	require.Equal(t, PaymentChannelBaofuAggregate, created[0].PaymentChannel)
+	require.True(t, created[0].RequiresProfitSharing)
+
+	payments, err := testStore.GetPaymentOrdersByOrder(ctx, pgtype.Int8{Int64: order.ID, Valid: true})
+	require.NoError(t, err)
+	var pendingForOrder []PaymentOrder
+	for _, payment := range payments {
+		if payment.BusinessType == "order" && payment.Status == "pending" {
+			pendingForOrder = append(pendingForOrder, payment)
+		}
+	}
+	require.Len(t, pendingForOrder, 1)
+	require.Equal(t, created[0].ID, pendingForOrder[0].ID)
 }

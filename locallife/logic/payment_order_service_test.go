@@ -355,6 +355,55 @@ func TestPaymentOrderServiceCreatePaymentOrder_BaofuWechatChannelNotReadyFailsBe
 	}
 }
 
+func TestPaymentOrderServiceCreatePaymentOrder_TxPendingConflictDoesNotCallBaofu(t *testing.T) {
+	input := CreatePaymentOrderInput{
+		UserID:       1001,
+		OrderID:      2001,
+		PaymentType:  paymentTypeMiniProgram,
+		BusinessType: businessTypeOrder,
+		ClientIP:     "127.0.0.1",
+	}
+	order := db.Order{
+		ID:          input.OrderID,
+		UserID:      input.UserID,
+		MerchantID:  3001,
+		OrderType:   orderTypeTakeaway,
+		Status:      "pending",
+		TotalAmount: 1000,
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	baofuClient := &fakeBaofuAggregatePaymentClient{}
+	baofuPayment := NewBaofuPaymentService(store, baofuClient, BaofuPaymentServiceConfig{
+		CollectMerchantID: "COLLECT_MER",
+		CollectTerminalID: "COLLECT_TER",
+		MiniProgramAppID:  "wxapp",
+		PaymentNotifyURL:  "https://api.example.com/v1/webhooks/baofu/payment",
+	})
+
+	store.EXPECT().GetOrder(gomock.Any(), input.OrderID).Return(order, nil)
+	store.EXPECT().GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+		OrderID:      pgtype.Int8{Int64: input.OrderID, Valid: true},
+		BusinessType: businessTypeOrder,
+	}).Return(db.PaymentOrder{}, db.ErrRecordNotFound)
+	store.EXPECT().GetMerchant(gomock.Any(), order.MerchantID).Return(db.Merchant{ID: order.MerchantID, Name: "Merchant B"}, nil)
+	expectActiveMerchantBaofuBindingForPayment(store, order.MerchantID)
+	store.EXPECT().GetUser(gomock.Any(), input.UserID).Return(db.User{ID: input.UserID, WechatOpenid: "openid-baofu"}, nil)
+	store.EXPECT().CreatePartnerPaymentTx(gomock.Any(), gomock.Any()).Return(db.CreatePartnerPaymentTxResult{}, db.ErrOrderPendingPaymentConflict)
+	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).Times(0)
+
+	svc := NewPaymentOrderServiceWithBaofu(store, nil, baofuPayment)
+	_, err := svc.CreatePaymentOrder(context.Background(), input)
+
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, http.StatusConflict, reqErr.Status)
+	require.Equal(t, "支付订单状态已变化，请刷新后重试", reqErr.Err.Error())
+	require.False(t, baofuClient.called)
+}
+
 func TestPaymentOrderServiceCreatePaymentOrder_ReservationAddonRejectedByGenericPath(t *testing.T) {
 	input := CreatePaymentOrderInput{
 		UserID:       1007,

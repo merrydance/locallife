@@ -3,7 +3,7 @@
 Date: 2026-06-15
 Risk theme: state sequencing / idempotency and retry / transaction consistency
 Risk class: G3 - customer cart, order creation, payment callback/recovery, visible order status
-Status: source-audited, Mini Program contract covered, backend/provider proof pending
+Status: source-audited, Mini Program contract covered, backend payment-create proof covered, order-create/provider proof pending
 
 ## Decision
 
@@ -44,6 +44,23 @@ Mini Program contract follow-up:
   shared payment-result payment wrapper aligned around order create, order
   detail, payment create, payment detail, and payment query endpoints.
 
+Backend payment-create follow-up:
+
+- `locallife/db/sqlc/tx_create_partner_payment.go` locks the target order with
+  `GetOrderForUpdate` before it checks for an existing pending `payment_orders`
+  row and inserts a Baofu aggregate payment order.
+- `locallife/db/sqlc/tx_create_partner_payment_test.go` now covers concurrent
+  same-order `CreatePartnerPaymentTx` calls: exactly one transaction creates a
+  pending Baofu aggregate `payment_orders` row and the loser receives a
+  request-level `409 Conflict` with `pending payment order`.
+- `locallife/logic/payment_order_service_test.go` now covers the upstream
+  service boundary: a transaction-level pending-payment conflict is mapped to
+  `409` / `支付订单状态已变化，请刷新后重试` and does not call Baofu unified order
+  or create an external payment command.
+- This proves duplicate payment-order creation for one already-created order is
+  transaction-owned. It does not prove request-level idempotency for duplicate
+  order creation before an order id exists.
+
 ## Evidence Anchors
 
 - Takeout checkout slice:
@@ -60,6 +77,12 @@ Mini Program contract follow-up:
   `weapp/miniprogram/pages/takeout/order-confirm/index.ts:423` through `:555`.
 - Payment result polling:
   `weapp/miniprogram/pages/payment/result/index.ts:77` through `:157`.
+- Backend payment creation transaction:
+  `locallife/db/sqlc/tx_create_partner_payment.go:44` through `:219`.
+- Concurrent payment creation proof:
+  `locallife/db/sqlc/tx_create_partner_payment_test.go:221`.
+- Logic conflict/no-upstream-call proof:
+  `locallife/logic/payment_order_service_test.go:358`.
 - Backend cart/order/payment routes:
   `locallife/api/server.go:1009`, `locallife/api/server.go:1105`, and
   `locallife/api/server.go:1540`.
@@ -71,7 +94,7 @@ Mini Program contract follow-up:
 | Question | Required answer before code changes |
 | --- | --- |
 | Can a stale event-channel snapshot create an order with stale price/address truth? | Prove backend cart reload/calculation and order create validation are authoritative. |
-| Can duplicate submit create duplicate orders or duplicate payment orders? | Prove frontend guard plus backend constraints/status behavior under concurrent or retried submit. |
+| Can duplicate submit create duplicate orders or duplicate payment orders? | Payment-order duplication for an already-created order is now covered by transaction and logic tests. Duplicate order creation before an order id exists remains a separate proof gap. |
 | Can payment callback/recovery advance visible order state after client leaves result page? | Prove payment fact application and result/detail reads converge independently of `wx.requestPayment`. |
 | What happens if order create succeeds but payment create fails? | Prove partial success copy/readback leads user to existing order rather than repeated blind order creation. |
 | Are copied customer wrappers in sync? | Audit active `_main_shared/api/order.ts` and `payment.ts` copies before contract changes. |
@@ -85,6 +108,13 @@ go test ./api -run 'Test.*Order|Test.*PaymentOrder|Test.*PaymentCallback' -count
 go test ./logic -run 'TestPaymentFactServiceApplyExternalPaymentFactApplication|TestPaymentOrderService|TestCreateOrder' -count=1
 go test ./db/sqlc -run 'TestCreateOrderTx|TestProcessPaymentSuccessTx_OrderSetsPaidFields|TestPaymentOrder' -count=1
 go test ./worker -run 'Test.*Payment.*Timeout|TestPaymentRecoverySchedulerRunOnce' -count=1
+```
+
+Focused backend proof now added:
+
+```bash
+go test ./db/sqlc -run 'TestCreatePartnerPaymentTx_ConcurrentOrderPaymentAllowsSinglePendingPayment' -count=1
+go test ./logic -run 'TestPaymentOrderServiceCreatePaymentOrder_TxPendingConflictDoesNotCallBaofu' -count=1
 ```
 
 From `weapp/`, add or run focused contract scripts for:
@@ -105,7 +135,10 @@ This covers:
 
 Customer takeout checkout now has a Mini Program contract proof for stale draft
 rehydration, pricing-error submit blocking, payment-create failure recovery, and
-payment-result re-entry readback. Remaining proof gaps are backend duplicate
-submit across order/payment creation, real provider callback/recovery evidence,
-and an actual end-to-end run that shows order detail/list visibility after the
-client leaves the payment result page.
+payment-result re-entry readback. It also has backend proof that repeated
+payment creation for the same already-created order cannot create two pending
+Baofu payment orders or call Baofu after the transaction reports a pending
+payment conflict. Remaining proof gaps are duplicate order creation before an
+order id exists, real provider callback/recovery evidence, and an actual
+end-to-end run that shows order detail/list visibility after the client leaves
+the payment result page.
