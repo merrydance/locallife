@@ -331,7 +331,7 @@ if [[ "$ledger_row" -eq 1 ]]; then
     echo "ledger ack is required for callback evidence" >&2
     exit 2
   fi
-  if [[ "$evidence_kind" == "callback" ]]; then
+  if [[ "$evidence_kind" == "callback" || ( "$evidence_kind" == "funds-action" && -n "$ledger_ack" ) ]]; then
     validate_callback_endpoint_for_capability
   fi
   if [[ "$evidence_kind" != "callback" && "$evidence_kind" != "funds-action" && -n "$ledger_ack" ]]; then

@@ -330,7 +330,9 @@ PATH="/usr/local/go/bin:$PATH" go run ./cmd/baofu_withdrawal_evidence \
 The ledger row renderer rejects failing summaries and rejects withdrawal
 callback evidence without an explicit observed ACK. It still does not authorize
 or execute a withdrawal; the operator must separately record who approved the
-funds action and how the amount was bounded.
+funds action and how the amount was bounded. If a withdrawal `funds-action`
+evidence row records a callback ACK, the wrapper treats that ACK as callback
+evidence and requires the endpoint to match `/v1/webhooks/baofu/withdraw`.
 
 ## Provider Evidence Runbook
 
@@ -361,7 +363,9 @@ Execution:
    query endpoint and terminal upstream state instead of inventing an ACK.
    Callback evidence must use the LocalLife webhook path for the same
    capability: `/v1/webhooks/baofu/payment`, `/v1/webhooks/baofu/share`,
-   `/v1/webhooks/baofu/refund`, or `/v1/webhooks/baofu/withdraw`.
+   `/v1/webhooks/baofu/refund`, or `/v1/webhooks/baofu/withdraw`. Withdrawal
+   `funds-action` evidence that records `--ledger-ack` is held to the same
+   withdrawal webhook endpoint check.
 4. Verify local durable rows after the provider event:
    `external_payment_facts`, `external_payment_fact_applications` when the flow
    uses applications, command row, and the relevant business row.

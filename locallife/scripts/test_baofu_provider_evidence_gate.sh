@@ -11,7 +11,8 @@ unsupported_evidence_kind_output="$(mktemp)"
 unknown_capability_output="$(mktemp)"
 wrong_callback_endpoint_output="$(mktemp)"
 query_endpoint_callback_output="$(mktemp)"
-trap 'rm -f "$missing_ack_output" "$malformed_context_output" "$missing_withdrawal_output" "$missing_manual_output" "$unsupported_evidence_kind_output" "$unknown_capability_output" "$wrong_callback_endpoint_output" "$query_endpoint_callback_output"' EXIT
+wrong_funds_action_endpoint_output="$(mktemp)"
+trap 'rm -f "$missing_ack_output" "$malformed_context_output" "$missing_withdrawal_output" "$missing_manual_output" "$unsupported_evidence_kind_output" "$unknown_capability_output" "$wrong_callback_endpoint_output" "$query_endpoint_callback_output" "$wrong_funds_action_endpoint_output"' EXIT
 
 assert_contains() {
   local haystack="$1"
@@ -281,7 +282,7 @@ if (
     --evidence-kind funds-action \
     --ledger-date 2026-06-15 \
     --ledger-env production \
-    --ledger-endpoint https://llapi.merrydance.cn/v1/webhooks/baofu/withdrawal \
+    --ledger-endpoint https://llapi.merrydance.cn/v1/webhooks/baofu/withdraw \
     --ledger-ack OK \
     --ledger-commit 8f0a3b1c \
     --ledger-notes "missing withdrawal approval context" \
@@ -295,6 +296,32 @@ fi
 assert_contains "$(cat "$missing_withdrawal_output")" "withdrawal approver is required"
 assert_contains "$(cat "$missing_withdrawal_output")" "withdrawal amount bound is required"
 assert_contains "$(cat "$missing_withdrawal_output")" "withdrawal monitoring owner is required"
+
+if (
+  cd "$BACKEND_ROOT"
+  scripts/baofu_provider_evidence_gate.sh \
+    --capability withdrawal \
+    --fact-id 301 \
+    --withdrawal-order-id 401 \
+    --ledger-row \
+    --evidence-kind funds-action \
+    --ledger-date 2026-06-15 \
+    --ledger-env production \
+    --ledger-endpoint https://llapi.merrydance.cn/v1/webhooks/baofu/payment \
+    --ledger-ack OK \
+    --ledger-commit 8f0a3b1c \
+    --ledger-notes "withdrawal funds-action endpoint mismatch" \
+    --withdrawal-approver finance-ticket-1 \
+    --withdrawal-amount-bound 100 \
+    --withdrawal-monitoring-owner finance-oncall \
+    --dry-run
+) >"$wrong_funds_action_endpoint_output" 2>&1; then
+  echo "withdrawal funds-action callback evidence with payment endpoint unexpectedly succeeded" >&2
+  cat "$wrong_funds_action_endpoint_output" >&2
+  exit 1
+fi
+
+assert_contains "$(cat "$wrong_funds_action_endpoint_output")" "callback endpoint does not match withdrawal evidence"
 
 if (
   cd "$BACKEND_ROOT"
