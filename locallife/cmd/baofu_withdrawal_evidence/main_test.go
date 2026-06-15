@@ -133,7 +133,7 @@ func TestRenderWithdrawalCommandOutputKeepsSummaryShape(t *testing.T) {
 	output, exitCode, err := renderCommandOutput(baofuevidence.WithdrawalSummary{
 		Status: baofuevidence.StatusPass,
 		FactID: 701,
-	})
+	}, commandOutputOptions{})
 
 	require.NoError(t, err)
 	require.Equal(t, 0, exitCode)
@@ -141,12 +141,74 @@ func TestRenderWithdrawalCommandOutputKeepsSummaryShape(t *testing.T) {
 	require.NotContains(t, output, "\"summary\"")
 }
 
+func TestRenderWithdrawalCommandOutputIncludesLedgerRowWhenRequested(t *testing.T) {
+	output, exitCode, err := renderCommandOutput(baofuevidence.WithdrawalSummary{
+		Status:                baofuevidence.StatusPass,
+		FactID:                701,
+		WithdrawalOrderID:     81,
+		CommandID:             901,
+		FactSource:            db.ExternalPaymentFactSourceCallback,
+		SourceEventType:       "BAOFU_WITHDRAW",
+		TerminalStatus:        db.ExternalPaymentTerminalStatusSuccess,
+		WithdrawalOrderStatus: db.BaofuWithdrawalStatusSucceeded,
+		CommandStatus:         db.ExternalPaymentCommandStatusAccepted,
+		OwnerType:             db.BaofuAccountOwnerTypeRider,
+		OwnerID:               901,
+		AmountFen:             1200,
+		OutRequestNoMasked:    "BFWD***1O41",
+		BaofuWithdrawNoMasked: "2605***7777",
+	}, commandOutputOptions{
+		LedgerRow: true,
+		LedgerContext: baofuevidence.EvidenceLedgerRowContext{
+			Date:     "2026-06-15",
+			Env:      "production",
+			Endpoint: "https://llapi.merrydance.cn/v1/webhooks/baofu/withdrawal",
+			ACK:      "OK",
+			Commit:   "f294dc81",
+			Notes:    "approved bounded withdrawal callback",
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, 0, exitCode)
+	require.Contains(t, output, "\"status\": \"pass\"")
+	require.Contains(t, output, "\"section\": \"Withdrawal\"")
+	require.Contains(t, output, "| 2026-06-15 | production |")
+}
+
+func TestRenderWithdrawalCommandOutputRejectsLedgerRowMissingContext(t *testing.T) {
+	_, _, err := renderCommandOutput(baofuevidence.WithdrawalSummary{
+		Status:                baofuevidence.StatusPass,
+		FactID:                701,
+		WithdrawalOrderID:     81,
+		FactSource:            db.ExternalPaymentFactSourceCallback,
+		TerminalStatus:        db.ExternalPaymentTerminalStatusSuccess,
+		WithdrawalOrderStatus: db.BaofuWithdrawalStatusSucceeded,
+		OwnerType:             db.BaofuAccountOwnerTypeRider,
+		OwnerID:               901,
+		AmountFen:             1200,
+		OutRequestNoMasked:    "BFWD***1O41",
+		BaofuWithdrawNoMasked: "2605***7777",
+	}, commandOutputOptions{
+		LedgerRow: true,
+		LedgerContext: baofuevidence.EvidenceLedgerRowContext{
+			Date:     "2026-06-15",
+			Env:      "production",
+			Endpoint: "https://llapi.merrydance.cn/v1/webhooks/baofu/withdrawal",
+			Commit:   "f294dc81",
+			Notes:    "missing ack",
+		},
+	})
+
+	require.ErrorContains(t, err, "callback ack is required")
+}
+
 func TestWithdrawalEvidenceExitCodeFailsOnFindings(t *testing.T) {
 	_, exitCode, err := renderCommandOutput(baofuevidence.WithdrawalSummary{
 		Status:   baofuevidence.StatusFail,
 		FactID:   701,
 		Findings: []string{"withdrawal order is not succeeded"},
-	})
+	}, commandOutputOptions{})
 
 	require.NoError(t, err)
 	require.Equal(t, 1, exitCode)

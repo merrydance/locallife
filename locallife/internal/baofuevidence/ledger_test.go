@@ -280,3 +280,87 @@ func TestRenderRefundLedgerRowRejectsMissingCallbackACK(t *testing.T) {
 
 	require.ErrorContains(t, err, "callback ack is required")
 }
+
+func TestRenderWithdrawalLedgerRowForCallbackEvidence(t *testing.T) {
+	row, err := RenderWithdrawalLedgerRow(WithdrawalSummary{
+		Status:                StatusPass,
+		FactID:                701,
+		WithdrawalOrderID:     81,
+		CommandID:             901,
+		FactSource:            db.ExternalPaymentFactSourceCallback,
+		SourceEventType:       "BAOFU_WITHDRAW",
+		TerminalStatus:        db.ExternalPaymentTerminalStatusSuccess,
+		WithdrawalOrderStatus: db.BaofuWithdrawalStatusSucceeded,
+		CommandStatus:         db.ExternalPaymentCommandStatusAccepted,
+		OwnerType:             db.BaofuAccountOwnerTypeRider,
+		OwnerID:               901,
+		BusinessOwner:         db.ExternalPaymentBusinessOwnerRiderIncome,
+		AmountFen:             1200,
+		OutRequestNoMasked:    "BFWD***1O41",
+		BaofuWithdrawNoMasked: "2605***7777",
+	}, EvidenceLedgerRowContext{
+		Date:     "2026-06-15",
+		Env:      "production",
+		Endpoint: "https://llapi.merrydance.cn/v1/webhooks/baofu/withdrawal",
+		ACK:      "OK",
+		Commit:   "f294dc81",
+		Notes:    "approved bounded withdrawal callback",
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "Withdrawal", row.Section)
+	require.Equal(t, "| 2026-06-15 | production | `https://llapi.merrydance.cn/v1/webhooks/baofu/withdrawal` | `BFWD***1O41` | rider:901 | 1200 | success; withdrawal_status=succeeded | `2605***7777` | OK | `f294dc81` | approved bounded withdrawal callback; local_row_ids: withdrawal_order_id=81, command_id=901, fact_id=701 |", row.Row)
+}
+
+func TestRenderWithdrawalLedgerRowForQueryEvidence(t *testing.T) {
+	row, err := RenderWithdrawalLedgerRow(WithdrawalSummary{
+		Status:                StatusPass,
+		FactID:                702,
+		WithdrawalOrderID:     82,
+		CommandID:             902,
+		FactSource:            db.ExternalPaymentFactSourceManualReconciliation,
+		TerminalStatus:        db.ExternalPaymentTerminalStatusSuccess,
+		WithdrawalOrderStatus: db.BaofuWithdrawalStatusSucceeded,
+		CommandStatus:         db.ExternalPaymentCommandStatusAccepted,
+		OwnerType:             db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:               701,
+		BusinessOwner:         db.ExternalPaymentBusinessOwnerMerchantFunds,
+		AmountFen:             2500,
+		OutRequestNoMasked:    "BFWD***1O42",
+		BaofuWithdrawNoMasked: "2605***8888",
+	}, EvidenceLedgerRowContext{
+		Date:     "2026-06-15",
+		Env:      "production",
+		Endpoint: "https://vgw.baofoo.com/union-gw/api/T-1001-013-15/transReq.do",
+		Commit:   "f294dc81",
+		Notes:    "controlled withdrawal query recovery",
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "Withdrawal Query", row.Section)
+	require.Equal(t, "| 2026-06-15 | production | `https://vgw.baofoo.com/union-gw/api/T-1001-013-15/transReq.do` | `BFWD***1O42` | - | success; fact_source=manual_reconciliation; withdrawal_status=succeeded | fact_id=702; terminal_status=success; baofu_withdraw_no=`2605***8888` | `f294dc81` | controlled withdrawal query recovery; local_row_ids: withdrawal_order_id=82, command_id=902 |", row.Row)
+}
+
+func TestRenderWithdrawalLedgerRowRejectsMissingCallbackACK(t *testing.T) {
+	_, err := RenderWithdrawalLedgerRow(WithdrawalSummary{
+		Status:                StatusPass,
+		FactID:                701,
+		WithdrawalOrderID:     81,
+		FactSource:            db.ExternalPaymentFactSourceCallback,
+		TerminalStatus:        db.ExternalPaymentTerminalStatusSuccess,
+		WithdrawalOrderStatus: db.BaofuWithdrawalStatusSucceeded,
+		OutRequestNoMasked:    "BFWD***1O41",
+		BaofuWithdrawNoMasked: "2605***7777",
+		AmountFen:             1200,
+		OwnerType:             db.BaofuAccountOwnerTypeRider,
+		OwnerID:               901,
+	}, EvidenceLedgerRowContext{
+		Date:     "2026-06-15",
+		Env:      "production",
+		Endpoint: "https://llapi.merrydance.cn/v1/webhooks/baofu/withdrawal",
+		Commit:   "f294dc81",
+		Notes:    "missing callback ack",
+	})
+
+	require.ErrorContains(t, err, "callback ack is required")
+}

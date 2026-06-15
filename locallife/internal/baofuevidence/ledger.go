@@ -198,6 +198,61 @@ func RenderRefundLedgerRow(summary RefundSummary, context EvidenceLedgerRowConte
 	}
 }
 
+func RenderWithdrawalLedgerRow(summary WithdrawalSummary, context EvidenceLedgerRowContext) (EvidenceLedgerRow, error) {
+	if summary.Status != StatusPass {
+		return EvidenceLedgerRow{}, fmt.Errorf("cannot render failing evidence summary: %s", strings.Join(summary.Findings, "; "))
+	}
+	if err := validateWithdrawalLedgerSummary(summary); err != nil {
+		return EvidenceLedgerRow{}, err
+	}
+	if err := validateWithdrawalLedgerRowContext(summary, context); err != nil {
+		return EvidenceLedgerRow{}, err
+	}
+
+	localIDs := withdrawalLocalRowIDs(summary, strings.TrimSpace(summary.FactSource) == db.ExternalPaymentFactSourceCallback)
+	notes := strings.TrimSpace(context.Notes)
+	if localIDs != "" {
+		notes = strings.TrimSpace(notes + "; local_row_ids: " + localIDs)
+	}
+
+	switch strings.TrimSpace(summary.FactSource) {
+	case db.ExternalPaymentFactSourceCallback:
+		return EvidenceLedgerRow{
+			Section: "Withdrawal",
+			Row: fmt.Sprintf("| %s | %s | `%s` | `%s` | %s | %d | success; withdrawal_status=%s | `%s` | %s | `%s` | %s |",
+				context.Date,
+				context.Env,
+				context.Endpoint,
+				summary.OutRequestNoMasked,
+				withdrawalLedgerOwner(summary),
+				summary.AmountFen,
+				summary.WithdrawalOrderStatus,
+				emptyDash(summary.BaofuWithdrawNoMasked),
+				context.ACK,
+				context.Commit,
+				notes,
+			),
+		}, nil
+	default:
+		return EvidenceLedgerRow{
+			Section: "Withdrawal Query",
+			Row: fmt.Sprintf("| %s | %s | `%s` | `%s` | - | success; fact_source=%s; withdrawal_status=%s | fact_id=%d; terminal_status=%s; baofu_withdraw_no=`%s` | `%s` | %s |",
+				context.Date,
+				context.Env,
+				context.Endpoint,
+				summary.OutRequestNoMasked,
+				summary.FactSource,
+				summary.WithdrawalOrderStatus,
+				summary.FactID,
+				summary.TerminalStatus,
+				emptyDash(summary.BaofuWithdrawNoMasked),
+				context.Commit,
+				notes,
+			),
+		}, nil
+	}
+}
+
 func validateLedgerSummary(summary AggregatePaymentSummary) error {
 	if summary.FactID <= 0 {
 		return fmt.Errorf("ledger summary fact id is required")
@@ -270,6 +325,37 @@ func validateRefundLedgerSummary(summary RefundSummary) error {
 	return nil
 }
 
+func validateWithdrawalLedgerSummary(summary WithdrawalSummary) error {
+	if summary.FactID <= 0 {
+		return fmt.Errorf("ledger summary fact id is required")
+	}
+	if summary.WithdrawalOrderID <= 0 {
+		return fmt.Errorf("ledger summary withdrawal order id is required")
+	}
+	if !isAcceptedPaymentFactSource(summary.FactSource) {
+		return fmt.Errorf("ledger summary fact source is not callback/query/manual_reconciliation")
+	}
+	if summary.TerminalStatus != db.ExternalPaymentTerminalStatusSuccess {
+		return fmt.Errorf("ledger summary terminal status is not success")
+	}
+	if strings.TrimSpace(summary.WithdrawalOrderStatus) != db.BaofuWithdrawalStatusSucceeded {
+		return fmt.Errorf("ledger summary withdrawal order is not succeeded")
+	}
+	if strings.TrimSpace(summary.OutRequestNoMasked) == "" {
+		return fmt.Errorf("ledger summary masked out request no is required")
+	}
+	if strings.TrimSpace(summary.BaofuWithdrawNoMasked) == "" {
+		return fmt.Errorf("ledger summary masked baofu withdraw no is required")
+	}
+	if summary.AmountFen <= 0 {
+		return fmt.Errorf("ledger summary withdrawal amount is not positive")
+	}
+	if strings.TrimSpace(summary.OwnerType) == "" || summary.OwnerID <= 0 {
+		return fmt.Errorf("ledger summary withdrawal owner is required")
+	}
+	return nil
+}
+
 func validateLedgerRowContext(summary AggregatePaymentSummary, context AggregatePaymentLedgerRowContext) error {
 	if strings.TrimSpace(context.Date) == "" {
 		return fmt.Errorf("ledger evidence date is required")
@@ -336,6 +422,28 @@ func validateRefundLedgerRowContext(summary RefundSummary, context EvidenceLedge
 	return nil
 }
 
+func validateWithdrawalLedgerRowContext(summary WithdrawalSummary, context EvidenceLedgerRowContext) error {
+	if strings.TrimSpace(context.Date) == "" {
+		return fmt.Errorf("ledger evidence date is required")
+	}
+	if strings.TrimSpace(context.Env) == "" {
+		return fmt.Errorf("ledger evidence env is required")
+	}
+	if strings.TrimSpace(context.Endpoint) == "" {
+		return fmt.Errorf("ledger evidence endpoint is required")
+	}
+	if strings.TrimSpace(context.Commit) == "" {
+		return fmt.Errorf("ledger evidence commit is required")
+	}
+	if strings.TrimSpace(context.Notes) == "" {
+		return fmt.Errorf("ledger evidence notes are required")
+	}
+	if strings.TrimSpace(summary.FactSource) == db.ExternalPaymentFactSourceCallback && strings.TrimSpace(context.ACK) == "" {
+		return fmt.Errorf("callback ack is required")
+	}
+	return nil
+}
+
 func aggregatePaymentLocalRowIDs(summary AggregatePaymentSummary) string {
 	parts := []string{}
 	if summary.PaymentOrderID > 0 {
@@ -348,6 +456,28 @@ func aggregatePaymentLocalRowIDs(summary AggregatePaymentSummary) string {
 		parts = append(parts, fmt.Sprintf("profit_sharing_order_id=%d", summary.ProfitSharingOrderID))
 	}
 	return strings.Join(parts, ", ")
+}
+
+func withdrawalLocalRowIDs(summary WithdrawalSummary, includeFactID bool) string {
+	parts := []string{}
+	if summary.WithdrawalOrderID > 0 {
+		parts = append(parts, fmt.Sprintf("withdrawal_order_id=%d", summary.WithdrawalOrderID))
+	}
+	if summary.CommandID > 0 {
+		parts = append(parts, fmt.Sprintf("command_id=%d", summary.CommandID))
+	}
+	if includeFactID && summary.FactID > 0 {
+		parts = append(parts, fmt.Sprintf("fact_id=%d", summary.FactID))
+	}
+	return strings.Join(parts, ", ")
+}
+
+func withdrawalLedgerOwner(summary WithdrawalSummary) string {
+	ownerType := emptyDash(summary.OwnerType)
+	if summary.OwnerID <= 0 {
+		return ownerType
+	}
+	return fmt.Sprintf("%s:%d", ownerType, summary.OwnerID)
 }
 
 func refundLocalRowIDs(summary RefundSummary) string {

@@ -308,6 +308,30 @@ status, or authorization to perform a live withdrawal by itself. The funds-actio
 approval and bounded amount must still be recorded separately before any
 withdrawal evidence can be claimed as a real provider run.
 
+To generate an explicit candidate row for
+`.github/standards/domains/baofu-payment/SANDBOX_EVIDENCE_LEDGER.md`, rerun the
+same command with `-ledger-row` and supply the observed runtime context rather
+than inferring it from DB rows:
+
+```bash
+PATH="/usr/local/go/bin:$PATH" go run ./cmd/baofu_withdrawal_evidence \
+  -fact-id <external_payment_facts.id> \
+  -withdrawal-order-id <baofu_withdrawal_orders.id> \
+  -command-id <optional external_payment_commands.id> \
+  -ledger-row \
+  -ledger-date <yyyy-mm-dd> \
+  -ledger-env <sandbox|production|provider-real-transaction-env> \
+  -ledger-endpoint <callback-url-or-withdrawal-query-endpoint> \
+  -ledger-commit <commit-sha> \
+  -ledger-notes <controlled-run-notes-including-funds-action-approval> \
+  -ledger-ack <OK-for-callback-evidence>
+```
+
+The ledger row renderer rejects failing summaries and rejects withdrawal
+callback evidence without an explicit observed ACK. It still does not authorize
+or execute a withdrawal; the operator must separately record who approved the
+funds action and how the amount was bounded.
+
 ## Phase 1 Release Gate Checklist
 
 Before any Baofu-affecting release, answer every item below in the change
