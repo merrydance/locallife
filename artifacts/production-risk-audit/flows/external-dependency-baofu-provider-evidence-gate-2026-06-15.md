@@ -425,7 +425,10 @@ rejects ACK input so the row cannot invent a callback observation. Callback
 ledger endpoints must also match the selected capability's LocalLife webhook
 path exactly after URL parsing, so a query endpoint, another Baofu callback
 route, or a prefixed fake route such as `payment-extra` cannot be recorded as
-positive callback evidence for the wrong capability. Withdrawal
+positive callback evidence for the wrong capability. The wrapper and local
+collector both enforce this, including the runtime share path
+`/v1/webhooks/baofu/share` and withdrawal path `/v1/webhooks/baofu/withdraw`.
+Withdrawal
 `--evidence-kind funds-action` also requires `--withdrawal-approver`,
 `--withdrawal-amount-bound`, and `--withdrawal-monitoring-owner`, and still does
 not authorize or execute the withdrawal. Both the wrapper and local collector
@@ -555,6 +558,9 @@ What this proves:
 - Callback ledger rows are rejected when the endpoint does not match the
   selected capability's exact LocalLife Baofu webhook path; prefix lookalikes
   such as `payment-extra` are rejected.
+- Direct collector ledger rendering uses the same endpoint guard, so bypassing
+  the wrapper cannot render callback rows for old share or withdrawal route
+  names.
 - Query evidence does not receive a synthetic ACK.
 - Payment, profit-sharing, and refund evidence reject withdrawal-only
   `manual-reconciliation` and `funds-action` labels.

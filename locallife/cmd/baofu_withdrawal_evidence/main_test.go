@@ -162,7 +162,7 @@ func TestRenderWithdrawalCommandOutputIncludesLedgerRowWhenRequested(t *testing.
 		LedgerContext: baofuevidence.EvidenceLedgerRowContext{
 			Date:     "2026-06-15",
 			Env:      "production",
-			Endpoint: "https://llapi.merrydance.cn/v1/webhooks/baofu/withdrawal",
+			Endpoint: "https://llapi.merrydance.cn/v1/webhooks/baofu/withdraw",
 			ACK:      "OK",
 			Commit:   "f294dc81",
 			Notes:    "approved bounded withdrawal callback",
@@ -194,7 +194,7 @@ func TestRenderWithdrawalCommandOutputRejectsLedgerRowMissingContext(t *testing.
 		LedgerContext: baofuevidence.EvidenceLedgerRowContext{
 			Date:     "2026-06-15",
 			Env:      "production",
-			Endpoint: "https://llapi.merrydance.cn/v1/webhooks/baofu/withdrawal",
+			Endpoint: "https://llapi.merrydance.cn/v1/webhooks/baofu/withdraw",
 			Commit:   "f294dc81",
 			Notes:    "missing ack",
 		},

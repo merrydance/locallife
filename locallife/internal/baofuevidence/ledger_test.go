@@ -81,6 +81,50 @@ func TestRenderAggregatePaymentLedgerRowRejectsIncompleteContext(t *testing.T) {
 	require.ErrorContains(t, err, "callback ack is required")
 }
 
+func TestRenderAggregatePaymentLedgerRowRejectsWrongCallbackEndpoint(t *testing.T) {
+	_, err := RenderAggregatePaymentLedgerRow(AggregatePaymentSummary{
+		Status:             StatusPass,
+		FactID:             11,
+		ApplicationID:      21,
+		FactSource:         db.ExternalPaymentFactSourceCallback,
+		TerminalStatus:     db.ExternalPaymentTerminalStatusSuccess,
+		ApplicationStatus:  db.ExternalPaymentFactApplicationStatusApplied,
+		PaymentOrderStatus: "paid",
+		OutTradeNoMasked:   "BAOF***0001",
+	}, AggregatePaymentLedgerRowContext{
+		Date:     "2026-06-15",
+		Env:      "production",
+		Endpoint: "https://llapi.merrydance.cn/v1/webhooks/baofu/payment-extra",
+		ACK:      "OK",
+		Commit:   "b6507961",
+		Notes:    "wrong payment callback endpoint",
+	})
+
+	require.ErrorContains(t, err, "callback endpoint does not match payment evidence")
+}
+
+func TestRenderProfitSharingLedgerRowRejectsWrongCallbackEndpoint(t *testing.T) {
+	_, err := RenderProfitSharingLedgerRow(ProfitSharingSummary{
+		Status:                   StatusPass,
+		FactID:                   101,
+		ApplicationID:            201,
+		FactSource:               db.ExternalPaymentFactSourceCallback,
+		TerminalStatus:           db.ExternalPaymentTerminalStatusSuccess,
+		ApplicationStatus:        db.ExternalPaymentFactApplicationStatusApplied,
+		ProfitSharingOrderStatus: db.ProfitSharingOrderStatusFinished,
+		OutOrderNoMasked:         "BFPS***1O41",
+	}, EvidenceLedgerRowContext{
+		Date:     "2026-06-15",
+		Env:      "production",
+		Endpoint: "https://llapi.merrydance.cn/v1/webhooks/baofu/profit-sharing",
+		ACK:      "OK",
+		Commit:   "2d6ebbdf",
+		Notes:    "wrong share callback endpoint",
+	})
+
+	require.ErrorContains(t, err, "callback endpoint does not match profit-sharing evidence")
+}
+
 func TestRenderAggregatePaymentLedgerRowRejectsMalformedContext(t *testing.T) {
 	validSummary := AggregatePaymentSummary{
 		Status:             StatusPass,
@@ -194,7 +238,7 @@ func TestRenderProfitSharingLedgerRowForCallbackEvidence(t *testing.T) {
 	}, EvidenceLedgerRowContext{
 		Date:     "2026-06-15",
 		Env:      "production",
-		Endpoint: "https://llapi.merrydance.cn/v1/webhooks/baofu/profit-sharing",
+		Endpoint: "https://llapi.merrydance.cn/v1/webhooks/baofu/share",
 		ACK:      "OK",
 		Commit:   "2d6ebbdf",
 		Notes:    "controlled share callback",
@@ -202,7 +246,7 @@ func TestRenderProfitSharingLedgerRowForCallbackEvidence(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, "Profit Sharing Callback", row.Section)
-	require.Equal(t, "| 2026-06-15 | production | `https://llapi.merrydance.cn/v1/webhooks/baofu/profit-sharing` | `BFPS***1O41` | `2605***9999` | success; share_status=finished | fact_id=101; source=callback; event=SHARING | applied application_id=201 | OK | `2d6ebbdf` | controlled share callback; local_row_ids: profit_sharing_order_id=61, payment_order_id=31, command_id=301 |", row.Row)
+	require.Equal(t, "| 2026-06-15 | production | `https://llapi.merrydance.cn/v1/webhooks/baofu/share` | `BFPS***1O41` | `2605***9999` | success; share_status=finished | fact_id=101; source=callback; event=SHARING | applied application_id=201 | OK | `2d6ebbdf` | controlled share callback; local_row_ids: profit_sharing_order_id=61, payment_order_id=31, command_id=301 |", row.Row)
 }
 
 func TestRenderProfitSharingLedgerRowForQueryEvidence(t *testing.T) {
@@ -247,7 +291,7 @@ func TestRenderProfitSharingLedgerRowRejectsMissingCallbackACK(t *testing.T) {
 	}, EvidenceLedgerRowContext{
 		Date:     "2026-06-15",
 		Env:      "production",
-		Endpoint: "https://llapi.merrydance.cn/v1/webhooks/baofu/profit-sharing",
+		Endpoint: "https://llapi.merrydance.cn/v1/webhooks/baofu/share",
 		Commit:   "2d6ebbdf",
 		Notes:    "missing callback ack",
 	})
@@ -360,7 +404,7 @@ func TestRenderWithdrawalLedgerRowForCallbackEvidence(t *testing.T) {
 	}, EvidenceLedgerRowContext{
 		Date:     "2026-06-15",
 		Env:      "production",
-		Endpoint: "https://llapi.merrydance.cn/v1/webhooks/baofu/withdrawal",
+		Endpoint: "https://llapi.merrydance.cn/v1/webhooks/baofu/withdraw",
 		ACK:      "OK",
 		Commit:   "f294dc81",
 		Notes:    "approved bounded withdrawal callback",
@@ -368,7 +412,7 @@ func TestRenderWithdrawalLedgerRowForCallbackEvidence(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, "Withdrawal", row.Section)
-	require.Equal(t, "| 2026-06-15 | production | `https://llapi.merrydance.cn/v1/webhooks/baofu/withdrawal` | `BFWD***1O41` | rider:901 | 1200 | success; withdrawal_status=succeeded | `2605***7777` | OK | `f294dc81` | approved bounded withdrawal callback; local_row_ids: withdrawal_order_id=81, command_id=901, fact_id=701 |", row.Row)
+	require.Equal(t, "| 2026-06-15 | production | `https://llapi.merrydance.cn/v1/webhooks/baofu/withdraw` | `BFWD***1O41` | rider:901 | 1200 | success; withdrawal_status=succeeded | `2605***7777` | OK | `f294dc81` | approved bounded withdrawal callback; local_row_ids: withdrawal_order_id=81, command_id=901, fact_id=701 |", row.Row)
 }
 
 func TestRenderWithdrawalLedgerRowForQueryEvidence(t *testing.T) {
@@ -416,10 +460,35 @@ func TestRenderWithdrawalLedgerRowRejectsMissingCallbackACK(t *testing.T) {
 	}, EvidenceLedgerRowContext{
 		Date:     "2026-06-15",
 		Env:      "production",
-		Endpoint: "https://llapi.merrydance.cn/v1/webhooks/baofu/withdrawal",
+		Endpoint: "https://llapi.merrydance.cn/v1/webhooks/baofu/withdraw",
 		Commit:   "f294dc81",
 		Notes:    "missing callback ack",
 	})
 
 	require.ErrorContains(t, err, "callback ack is required")
+}
+
+func TestRenderWithdrawalLedgerRowRejectsWrongCallbackEndpoint(t *testing.T) {
+	_, err := RenderWithdrawalLedgerRow(WithdrawalSummary{
+		Status:                StatusPass,
+		FactID:                701,
+		WithdrawalOrderID:     81,
+		FactSource:            db.ExternalPaymentFactSourceCallback,
+		TerminalStatus:        db.ExternalPaymentTerminalStatusSuccess,
+		WithdrawalOrderStatus: db.BaofuWithdrawalStatusSucceeded,
+		OwnerType:             db.BaofuAccountOwnerTypeRider,
+		OwnerID:               901,
+		AmountFen:             1200,
+		OutRequestNoMasked:    "BFWD***1O41",
+		BaofuWithdrawNoMasked: "2605***7777",
+	}, EvidenceLedgerRowContext{
+		Date:     "2026-06-15",
+		Env:      "production",
+		Endpoint: "https://llapi.merrydance.cn/v1/webhooks/baofu/withdrawal",
+		ACK:      "OK",
+		Commit:   "f294dc81",
+		Notes:    "wrong withdrawal callback endpoint",
+	})
+
+	require.ErrorContains(t, err, "callback endpoint does not match withdrawal evidence")
 }

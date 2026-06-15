@@ -179,7 +179,7 @@ func TestRenderProfitSharingCommandOutputIncludesLedgerRowWhenRequested(t *testi
 		LedgerContext: baofuevidence.EvidenceLedgerRowContext{
 			Date:     "2026-06-15",
 			Env:      "production",
-			Endpoint: "https://llapi.merrydance.cn/v1/webhooks/baofu/profit-sharing",
+			Endpoint: "https://llapi.merrydance.cn/v1/webhooks/baofu/share",
 			ACK:      "OK",
 			Commit:   "2d6ebbdf",
 			Notes:    "controlled share callback",
@@ -208,7 +208,7 @@ func TestRenderProfitSharingCommandOutputRejectsLedgerRowMissingContext(t *testi
 		LedgerContext: baofuevidence.EvidenceLedgerRowContext{
 			Date:     "2026-06-15",
 			Env:      "production",
-			Endpoint: "https://llapi.merrydance.cn/v1/webhooks/baofu/profit-sharing",
+			Endpoint: "https://llapi.merrydance.cn/v1/webhooks/baofu/share",
 			Commit:   "2d6ebbdf",
 			Notes:    "missing ack",
 		},

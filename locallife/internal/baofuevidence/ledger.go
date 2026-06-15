@@ -2,6 +2,7 @@ package baofuevidence
 
 import (
 	"fmt"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -367,6 +368,11 @@ func validateLedgerRowContext(summary AggregatePaymentSummary, context Aggregate
 	if strings.TrimSpace(summary.FactSource) == db.ExternalPaymentFactSourceCallback && strings.TrimSpace(context.ACK) == "" {
 		return fmt.Errorf("callback ack is required")
 	}
+	if strings.TrimSpace(summary.FactSource) == db.ExternalPaymentFactSourceCallback {
+		if err := validateCallbackEndpointPath("payment", context.Endpoint, "/v1/webhooks/baofu/payment"); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -376,6 +382,11 @@ func validateProfitSharingLedgerRowContext(summary ProfitSharingSummary, context
 	}
 	if strings.TrimSpace(summary.FactSource) == db.ExternalPaymentFactSourceCallback && strings.TrimSpace(context.ACK) == "" {
 		return fmt.Errorf("callback ack is required")
+	}
+	if strings.TrimSpace(summary.FactSource) == db.ExternalPaymentFactSourceCallback {
+		if err := validateCallbackEndpointPath("profit-sharing", context.Endpoint, "/v1/webhooks/baofu/share"); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -387,6 +398,11 @@ func validateRefundLedgerRowContext(summary RefundSummary, context EvidenceLedge
 	if strings.TrimSpace(summary.FactSource) == db.ExternalPaymentFactSourceCallback && strings.TrimSpace(context.ACK) == "" {
 		return fmt.Errorf("callback ack is required")
 	}
+	if strings.TrimSpace(summary.FactSource) == db.ExternalPaymentFactSourceCallback {
+		if err := validateCallbackEndpointPath("refund", context.Endpoint, "/v1/webhooks/baofu/refund"); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -397,7 +413,32 @@ func validateWithdrawalLedgerRowContext(summary WithdrawalSummary, context Evide
 	if strings.TrimSpace(summary.FactSource) == db.ExternalPaymentFactSourceCallback && strings.TrimSpace(context.ACK) == "" {
 		return fmt.Errorf("callback ack is required")
 	}
+	if strings.TrimSpace(summary.FactSource) == db.ExternalPaymentFactSourceCallback {
+		if err := validateCallbackEndpointPath("withdrawal", context.Endpoint, "/v1/webhooks/baofu/withdraw"); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+func validateCallbackEndpointPath(capability, endpoint, expectedPath string) error {
+	if normalizeEndpointPath(endpoint) != expectedPath {
+		return fmt.Errorf("callback endpoint does not match %s evidence; expected endpoint path %s", capability, expectedPath)
+	}
+	return nil
+}
+
+func normalizeEndpointPath(endpoint string) string {
+	endpoint = strings.TrimSpace(endpoint)
+	endpoint = strings.TrimSuffix(endpoint, "\r")
+	if parsed, err := url.Parse(endpoint); err == nil && parsed.IsAbs() {
+		if parsed.Path == "" {
+			return "/"
+		}
+		return parsed.Path
+	}
+	endpoint = strings.SplitN(endpoint, "#", 2)[0]
+	return strings.SplitN(endpoint, "?", 2)[0]
 }
 
 func validateLedgerContextShape(context EvidenceLedgerRowContext) error {
