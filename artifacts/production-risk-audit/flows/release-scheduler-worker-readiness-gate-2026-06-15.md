@@ -363,7 +363,9 @@ missing or non-pass rows for production config, Redis/Asynq, Baofu provider
 client construction, rollback-only fixture claimability,
 `scheduler:dine-in-checkout-recovery`,
 `worker:payment:process_fact_application`, and
-`worker:payment:process_domain_outbox`.
+`worker:payment:process_domain_outbox`. If the filled target evidence points
+to a local dine-in recovery alert `.md` file, the checker also rejects alert
+templates and runs the Mini Program alert evidence checker against that file.
 
 ## Remaining Real Issue
 
@@ -378,9 +380,9 @@ rows, and target wrapper mode now fails if the loaded config is not
 `make check-release-readiness-target-evidence` before this release-readiness
 gap is closed for a target environment. This implementation run did not execute
 the target smoke against a deployed release database. The remaining release risk
-is operational: every release still needs prepared fixture IDs and an actual
-smoke run in the target production environment before claiming deployed runtime
-readiness.
+is operational: every release still needs prepared fixture IDs, an actual
+smoke run in the target production environment, and filled alert evidence
+instead of a template reference before claiming deployed runtime readiness.
 
 For dine-in checkout recovery specifically, the deployed Prometheus or
 equivalent monitor must have a filled target-environment evidence file that
