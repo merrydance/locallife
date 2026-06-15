@@ -4,7 +4,7 @@ Date: 2026-06-15
 Risk theme: external dependencies / release configuration
 Risk class: G3 - provider money movement, callbacks, query recovery, funds action
 Status: evidence gate in progress
-Phase 1 status: source/config/test-surface recon completed; focused local validation passed; local payment, profit-sharing, and refund evidence collectors added for post-callback/query DB rows
+Phase 1 status: source/config/test-surface recon completed; focused local validation passed; local payment, profit-sharing, refund, and withdrawal evidence collectors added for post-callback/query DB rows
 
 ## Decision
 
@@ -231,6 +231,36 @@ It does not prove provider reachability, callback ACK, or C4 status by itself.
 Closed/failed refund evidence remains a separate negative-evidence use case and
 is intentionally not treated as a passing positive refund proof here.
 
+Implemented local withdrawal collector:
+
+```bash
+PATH="/usr/local/go/bin:$PATH" go run ./cmd/baofu_withdrawal_evidence \
+  -fact-id <external_payment_facts.id> \
+  -withdrawal-order-id <baofu_withdrawal_orders.id> \
+  -command-id <optional external_payment_commands.id>
+```
+
+The command is read-only and does not call Baofoo, enqueue tasks, or execute a
+funds action. It loads the local withdrawal fact, `baofu_withdrawal_orders` row,
+and create-withdraw command proof. When `-command-id` is omitted it attempts a
+read-only command lookup by the Baofu withdrawal external object key
+(`baofu_withdrawal_orders.out_request_no`). It emits a masked JSON summary and
+fails incomplete convergence evidence such as non-callback/query/manual fact
+source, non-success terminal status, non-terminal fact, unsupported withdrawal
+owner, mismatched business owner, missing or mismatched `out_request_no`,
+missing `baofu_withdraw_no`, mismatched amount, withdrawal order not
+`succeeded`, missing `finished_at`, missing command proof, or a command row that
+is not accepted.
+
+Unlike payment, profit sharing, and refund, the current withdrawal application
+worker updates `baofu_withdrawal_orders` directly and does not create an
+`external_payment_fact_applications` row. Withdrawal evidence therefore proves
+local success convergence from fact + withdrawal order + accepted command rows.
+It does not prove provider reachability, callback ACK, query recovery, C4
+status, or authorization to perform a live withdrawal by itself. The funds-action
+approval and bounded amount must still be recorded separately before any
+withdrawal evidence can be claimed as a real provider run.
+
 ## Phase 1 Release Gate Checklist
 
 Before any Baofu-affecting release, answer every item below in the change
@@ -258,10 +288,11 @@ make check-baofu-contract
 PATH="/usr/local/go/bin:$PATH" go test ./api -run 'TestBaofu.*Callback|TestHandleBaofu.*Notify' -count=1
 PATH="/usr/local/go/bin:$PATH" go test ./logic -run 'TestBaofu|TestPaymentFactServiceApplyExternalPaymentFactApplication' -count=1
 PATH="/usr/local/go/bin:$PATH" go test ./worker -run 'TestBaofuPaymentRecoveryScheduler|TestProcessTaskBaofuProfitSharing|TestBaofuWithdrawal|TestRefundRecovery|TestPaymentFactApplicationSchedulerRunOnce|TestPaymentDomainOutboxScheduler|TestBaofuWithdrawalRecoveryScheduler' -count=1
-PATH="/usr/local/go/bin:$PATH" go test ./internal/baofuevidence ./cmd/baofu_payment_evidence ./cmd/baofu_profit_sharing_evidence ./cmd/baofu_refund_evidence -count=1
+PATH="/usr/local/go/bin:$PATH" go test ./internal/baofuevidence ./cmd/baofu_payment_evidence ./cmd/baofu_profit_sharing_evidence ./cmd/baofu_refund_evidence ./cmd/baofu_withdrawal_evidence -count=1
 PATH="/usr/local/go/bin:$PATH" go build -o /tmp/baofu_payment_evidence ./cmd/baofu_payment_evidence
 PATH="/usr/local/go/bin:$PATH" go build -o /tmp/baofu_profit_sharing_evidence ./cmd/baofu_profit_sharing_evidence
 PATH="/usr/local/go/bin:$PATH" go build -o /tmp/baofu_refund_evidence ./cmd/baofu_refund_evidence
+PATH="/usr/local/go/bin:$PATH" go build -o /tmp/baofu_withdrawal_evidence ./cmd/baofu_withdrawal_evidence
 ```
 
 Observed result:
@@ -269,7 +300,8 @@ Observed result:
 - `make check-baofu-contract` printed `baofu contract drift guard passed`.
 - Focused `api`, `logic`, and `worker` packages returned `ok`.
 - The local Baofu evidence collector package and the payment/profit-sharing/
-  refund command packages returned `ok`; all three command builds succeeded.
+  refund/withdrawal command packages returned `ok`; all four command builds
+  succeeded.
 - The initial `go test` attempt failed because `go` was not in the default
   shell `PATH`; rerun with `/usr/local/go/bin` prepended succeeded.
 
@@ -278,8 +310,8 @@ What this proves:
 - Existing drift guards and focused local callback/fact/recovery tests are
   currently green for the checked package patterns.
 - Read-only local evidence commands can now convert real payment,
-  profit-sharing, and refund callback/query persistence rows into masked JSON
-  summaries and fail incomplete local convergence evidence.
+  profit-sharing, refund, and withdrawal callback/query persistence rows into
+  masked JSON summaries and fail incomplete local convergence evidence.
 - With explicit operator-supplied runtime context, the command can render a
   candidate Payment Callback or Payment Query ledger row without inventing env,
   endpoint, ACK, or commit facts.
@@ -292,8 +324,8 @@ What this still does not prove:
 - No C4 or production-readiness claim is made by this validation run.
 - The local collectors do not discover all rows automatically and do not prove
   provider reachability; operators must supply the DB row IDs from a controlled
-  callback/query/recovery run. The profit-sharing and refund collectors can only
-  infer command proof by existing external object keys.
+  callback/query/recovery run. The profit-sharing, refund, and withdrawal
+  collectors can only infer command proof by existing external object keys.
 - The local collector currently does not read `payment_domain_outbox`
   automatically; outbox proof still needs either an explicit future query or
   manual evidence from the controlled run.
@@ -325,7 +357,7 @@ make check-baofu-contract
 go test ./api -run 'TestBaofu.*Callback|TestHandleBaofu.*Notify' -count=1
 go test ./logic -run 'TestBaofu|TestPaymentFactServiceApplyExternalPaymentFactApplication' -count=1
 go test ./worker -run 'TestBaofuPaymentRecoveryScheduler|TestProcessTaskBaofuProfitSharing|TestBaofuWithdrawal|TestRefundRecovery' -count=1
-go test ./internal/baofuevidence ./cmd/baofu_payment_evidence ./cmd/baofu_profit_sharing_evidence ./cmd/baofu_refund_evidence -count=1
+go test ./internal/baofuevidence ./cmd/baofu_payment_evidence ./cmd/baofu_profit_sharing_evidence ./cmd/baofu_refund_evidence ./cmd/baofu_withdrawal_evidence -count=1
 ```
 
 Use narrower patterns if the target capability is smaller. Runtime provider
