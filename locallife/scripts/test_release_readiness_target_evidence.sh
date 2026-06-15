@@ -20,6 +20,7 @@ assert_contains() {
 
 write_valid_evidence() {
   local path="$1"
+  local alert_evidence="$2"
   cat >"$path" <<'EVIDENCE'
 # Release Readiness Target Evidence
 
@@ -67,7 +68,45 @@ worker:payment:process_domain_outbox: pass
 
 ## Alert Evidence
 
-Dine-in recovery alert evidence: artifacts/production-risk-audit/flows/dine-in-checkout-recovery-alert-evidence-2026-06-15.md
+Dine-in recovery alert evidence: __ALERT_EVIDENCE__
+
+## Result
+
+Verdict: pass
+EVIDENCE
+  sed -i "s#__ALERT_EVIDENCE__#$alert_evidence#" "$path"
+}
+
+write_valid_alert_evidence() {
+  local path="$1"
+  cat >"$path" <<'EVIDENCE'
+# Dine-In Checkout Recovery Alert Evidence
+
+## Alert Target
+
+Alert rule owner: platform-sre
+Target environment: production
+Rule config link or evidence id: monitoring/rules/dine-in-checkout-recovery.yml#L1
+
+## Metric Coverage
+
+Metric list_error: dine_in_checkout_recovery_scans_total{result="list_error"}
+Metric close_failed: dine_in_checkout_recovery_sessions_total{result="close_failed"}
+
+## Rule Definition
+
+PromQL or equivalent expression: increase(dine_in_checkout_recovery_scans_total{result="list_error"}[10m]) > 0 or increase(dine_in_checkout_recovery_sessions_total{result="close_failed"}[10m]) > 0
+Threshold and window: any increase over 10 minutes pages the checkout recovery route
+
+## Routing And Ownership
+
+Receiver or on-call route: checkout-recovery-primary
+Notification channel: PagerDuty checkout-recovery-primary
+
+## Verification Evidence
+
+Firing or dry-run evidence: controlled firing evidence AR-2026-06-15-001 evaluated both expressions in production
+Backend version or commit: 994c10db
 
 ## Result
 
@@ -76,7 +115,9 @@ EVIDENCE
 }
 
 valid_evidence="$tmp_dir/release-readiness-target-evidence.md"
-write_valid_evidence "$valid_evidence"
+valid_alert_evidence="$tmp_dir/dine-in-checkout-recovery-alert-evidence.md"
+write_valid_alert_evidence "$valid_alert_evidence"
+write_valid_evidence "$valid_evidence" "$valid_alert_evidence"
 
 valid_output="$("$CHECKER" "$valid_evidence")"
 assert_contains "$valid_output" "release readiness target evidence is complete"
@@ -132,5 +173,13 @@ if "$CHECKER" "$verdict_evidence" >"$tmp_dir/verdict.out" 2>&1; then
   exit 1
 fi
 assert_contains "$(cat "$tmp_dir/verdict.out")" "Verdict must be pass"
+
+alert_template_evidence="$tmp_dir/alert-template.md"
+sed 's#Dine-in recovery alert evidence: .*#Dine-in recovery alert evidence: ../artifacts/production-risk-audit/flows/dine-in-checkout-recovery-alert-evidence-template-2026-06-15.md#' "$valid_evidence" >"$alert_template_evidence"
+if "$CHECKER" "$alert_template_evidence" >"$tmp_dir/alert-template.out" 2>&1; then
+  echo "template alert evidence unexpectedly passed" >&2
+  exit 1
+fi
+assert_contains "$(cat "$tmp_dir/alert-template.out")" "dine-in recovery alert evidence must not reference a template"
 
 echo "release readiness target evidence contract passed"
