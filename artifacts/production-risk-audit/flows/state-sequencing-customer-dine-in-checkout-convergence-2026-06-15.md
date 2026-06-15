@@ -183,6 +183,17 @@ go test ./scheduler -run TestDineInCheckoutRecoveryScheduler_Records -count=1
 go test ./scheduler -run TestDineInCheckoutRecoveryScheduler -count=1
 ```
 
+Mini Program device/E2E evidence gate:
+
+```bash
+cd weapp
+npm run check:dine-in-device-e2e-evidence
+npm run check:dine-in-device-e2e-evidence -- ../artifacts/production-risk-audit/flows/dine-in-checkout-device-e2e-evidence-YYYY-MM-DD.md
+```
+
+Evidence template:
+`artifacts/production-risk-audit/flows/dine-in-checkout-device-e2e-evidence-template-2026-06-15.md`.
+
 From `weapp/`, add or run a focused script covering:
 
 ```bash
@@ -222,7 +233,8 @@ The original authz blocker, backend post-paid recovery gap, and Mini Program
 re-entry/polling contract gap are fixed and covered. Remaining follow-ups are:
 
 1. Add an actual Mini Program device/E2E run for pending checkout context
-   survival across result-page reload and paid-status polling.
+   survival across result-page reload and paid-status polling, then validate the
+   filled evidence file with `check:dine-in-device-e2e-evidence`.
 2. Wire target-environment Prometheus alerting for repeated
    `dine_in_checkout_recovery_scans_total{result="list_error"}` or
    `dine_in_checkout_recovery_sessions_total{result="close_failed"}` increases.
