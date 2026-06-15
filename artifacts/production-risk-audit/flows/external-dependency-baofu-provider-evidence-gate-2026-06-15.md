@@ -359,6 +359,9 @@ Execution:
    trade no, refund id, withdrawal no, or secondary merchant id as applicable.
 3. Confirm callback ACK exactly as observed. For query recovery, record the
    query endpoint and terminal upstream state instead of inventing an ACK.
+   Callback evidence must use the LocalLife webhook path for the same
+   capability: `/v1/webhooks/baofu/payment`, `/v1/webhooks/baofu/share`,
+   `/v1/webhooks/baofu/refund`, or `/v1/webhooks/baofu/withdraw`.
 4. Verify local durable rows after the provider event:
    `external_payment_facts`, `external_payment_fact_applications` when the flow
    uses applications, command row, and the relevant business row.
@@ -414,7 +417,10 @@ capability. `manual-reconciliation` and `funds-action` are withdrawal-only
 evidence kinds; the wrapper rejects those labels for payment, profit-sharing,
 and refund so a normal query/callback row cannot be promoted under a withdrawal
 operations label. Callback evidence requires `--ledger-ack`; query evidence
-rejects ACK input so the row cannot invent a callback observation. Withdrawal
+rejects ACK input so the row cannot invent a callback observation. Callback
+ledger endpoints must also match the selected capability's LocalLife webhook
+path, so a query endpoint or another Baofu callback route cannot be recorded as
+positive callback evidence for the wrong capability. Withdrawal
 `--evidence-kind funds-action` also requires `--withdrawal-approver`,
 `--withdrawal-amount-bound`, and `--withdrawal-monitoring-owner`, and still does
 not authorize or execute the withdrawal. Both the wrapper and local collector
@@ -541,6 +547,8 @@ What this proves:
   `scripts/release_readiness_smoke.sh --static --format text`, and the matching
   read-only collector command.
 - Callback ledger rows are rejected without explicit ACK.
+- Callback ledger rows are rejected when the endpoint does not match the
+  selected capability's LocalLife Baofu webhook path.
 - Query evidence does not receive a synthetic ACK.
 - Payment, profit-sharing, and refund evidence reject withdrawal-only
   `manual-reconciliation` and `funds-action` labels.

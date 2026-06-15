@@ -241,6 +241,32 @@ validate_ledger_context_shape() {
   fi
 }
 
+expected_callback_endpoint_path() {
+  case "$capability" in
+    payment)
+      echo "/v1/webhooks/baofu/payment"
+      ;;
+    profit-sharing)
+      echo "/v1/webhooks/baofu/share"
+      ;;
+    refund)
+      echo "/v1/webhooks/baofu/refund"
+      ;;
+    withdrawal)
+      echo "/v1/webhooks/baofu/withdraw"
+      ;;
+  esac
+}
+
+validate_callback_endpoint_for_capability() {
+  local expected_path
+  expected_path="$(expected_callback_endpoint_path)"
+  if [[ "$ledger_endpoint" != *"$expected_path"* ]]; then
+    echo "callback endpoint does not match ${capability} evidence; expected endpoint containing ${expected_path}" >&2
+    exit 2
+  fi
+}
+
 if [[ -z "$capability" ]]; then
   echo "capability is required" >&2
   usage >&2
@@ -304,6 +330,9 @@ if [[ "$ledger_row" -eq 1 ]]; then
   if [[ "$evidence_kind" == "callback" && -z "$ledger_ack" ]]; then
     echo "ledger ack is required for callback evidence" >&2
     exit 2
+  fi
+  if [[ "$evidence_kind" == "callback" ]]; then
+    validate_callback_endpoint_for_capability
   fi
   if [[ "$evidence_kind" != "callback" && "$evidence_kind" != "funds-action" && -n "$ledger_ack" ]]; then
     echo "ledger ack is only valid for callback or funds-action callback evidence" >&2

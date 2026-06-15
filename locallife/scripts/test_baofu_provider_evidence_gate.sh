@@ -9,7 +9,9 @@ missing_withdrawal_output="$(mktemp)"
 missing_manual_output="$(mktemp)"
 unsupported_evidence_kind_output="$(mktemp)"
 unknown_capability_output="$(mktemp)"
-trap 'rm -f "$missing_ack_output" "$malformed_context_output" "$missing_withdrawal_output" "$missing_manual_output" "$unsupported_evidence_kind_output" "$unknown_capability_output"' EXIT
+wrong_callback_endpoint_output="$(mktemp)"
+query_endpoint_callback_output="$(mktemp)"
+trap 'rm -f "$missing_ack_output" "$malformed_context_output" "$missing_withdrawal_output" "$missing_manual_output" "$unsupported_evidence_kind_output" "$unknown_capability_output" "$wrong_callback_endpoint_output" "$query_endpoint_callback_output"' EXIT
 
 assert_contains() {
   local haystack="$1"
@@ -102,6 +104,55 @@ if (
 fi
 
 assert_contains "$(cat "$missing_ack_output")" "ledger ack is required for callback evidence"
+
+if (
+  cd "$BACKEND_ROOT"
+  scripts/baofu_provider_evidence_gate.sh \
+    --capability payment \
+    --fact-id 11 \
+    --application-id 21 \
+    --payment-order-id 31 \
+    --ledger-row \
+    --evidence-kind callback \
+    --ledger-date 2026-06-15 \
+    --ledger-env production \
+    --ledger-endpoint https://llapi.merrydance.cn/v1/webhooks/baofu/refund \
+    --ledger-ack OK \
+    --ledger-commit b6507961 \
+    --ledger-notes "payment callback endpoint mismatch" \
+    --dry-run
+) >"$wrong_callback_endpoint_output" 2>&1; then
+  echo "payment callback evidence with refund endpoint unexpectedly succeeded" >&2
+  cat "$wrong_callback_endpoint_output" >&2
+  exit 1
+fi
+
+assert_contains "$(cat "$wrong_callback_endpoint_output")" "callback endpoint does not match payment evidence"
+
+if (
+  cd "$BACKEND_ROOT"
+  scripts/baofu_provider_evidence_gate.sh \
+    --capability refund \
+    --fact-id 41 \
+    --application-id 51 \
+    --refund-order-id 71 \
+    --payment-order-id 31 \
+    --ledger-row \
+    --evidence-kind callback \
+    --ledger-date 2026-06-15 \
+    --ledger-env production \
+    --ledger-endpoint "https://mch-juhe.baofoo.com/api refund_query" \
+    --ledger-ack OK \
+    --ledger-commit 7c325e4d \
+    --ledger-notes "refund query endpoint must not be marked callback evidence" \
+    --dry-run
+) >"$query_endpoint_callback_output" 2>&1; then
+  echo "refund callback evidence with query endpoint unexpectedly succeeded" >&2
+  cat "$query_endpoint_callback_output" >&2
+  exit 1
+fi
+
+assert_contains "$(cat "$query_endpoint_callback_output")" "callback endpoint does not match refund evidence"
 
 if (
   cd "$BACKEND_ROOT"
