@@ -38,6 +38,8 @@ const forbiddenPlaceholders = [
   '<required',
   'TBD',
   'TODO',
+  'no device run recorded',
+  'Keep this template',
 ]
 
 function readEvidence(filePath) {
@@ -64,10 +66,16 @@ function assertEvidence(content) {
   for (const needle of requiredNeedles) {
     assert(content.includes(needle), `missing required evidence field: ${needle}`)
   }
+  assert(!/Status:\s*template only/i.test(content), 'template evidence cannot be used as release evidence')
   for (const placeholder of forbiddenPlaceholders) {
     assert(!content.toLowerCase().includes(placeholder.toLowerCase()), `evidence still contains placeholder: ${placeholder}`)
   }
-  assert(/Verdict:\s*(pass|fail)/i.test(content), 'Verdict must be pass or fail')
+  assert(!/:\s*record\b/im.test(content), 'evidence still contains template instructions')
+  assert(/Verdict:\s*pass\b/i.test(content), 'Verdict must be pass for release evidence')
+}
+
+function assertEvidenceRejected(content, expectedMessage) {
+  assert.throws(() => assertEvidence(content), expectedMessage)
 }
 
 function runFixtureSelfCheck() {
@@ -106,6 +114,15 @@ Verdict: pass
 `
   fs.writeFileSync(evidencePath, evidence)
   assertEvidence(readEvidence(evidencePath))
+  assertEvidenceRejected(
+    evidence.replace('Verdict: pass', 'Status: template only; no device run recorded\nVerdict: pass'),
+    /template evidence/i
+  )
+  assertEvidenceRejected(evidence.replace('Verdict: pass', 'Verdict: fail'), /Verdict must be pass/i)
+  assertEvidenceRejected(
+    evidence.replace('Device model: iPhone 15', 'Device model: record the physical device model'),
+    /template instructions/i
+  )
   fs.rmSync(tmpDir, { recursive: true, force: true })
 }
 
@@ -115,13 +132,12 @@ function main() {
   const evidencePath = process.argv[2]
   if (!evidencePath) {
     runFixtureSelfCheck()
-    console.log('check-dine-in-device-e2e-evidence: evidence schema contract passed')
+    console.log('check-dine-in-device-e2e-evidence: release evidence contract passed')
     return
   }
   const content = readEvidence(evidencePath)
   assertEvidence(content)
-  const kind = content.includes('Status: template only') ? 'template schema' : 'evidence'
-  console.log(`check-dine-in-device-e2e-evidence: ${evidencePath} ${kind} is complete`)
+  console.log(`check-dine-in-device-e2e-evidence: ${evidencePath} release evidence is complete`)
 }
 
 main()

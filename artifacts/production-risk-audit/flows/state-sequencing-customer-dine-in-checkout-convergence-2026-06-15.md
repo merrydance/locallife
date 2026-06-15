@@ -235,8 +235,9 @@ The remaining high-value device/E2E regression is:
 ## Remaining Follow-Ups
 
 The original authz blocker, backend post-paid recovery gap, Mini Program
-re-entry/polling contract gap, and target-alert evidence schema gap are fixed
-and covered. Remaining follow-ups are:
+re-entry/polling contract gap, and release evidence gate gap are fixed and
+covered. The dine-in device/E2E and target-alert evidence checks now reject
+template-only, non-pass, or placeholder proof. Remaining follow-ups are:
 
 1. Add an actual Mini Program device/E2E run for pending checkout context
    survival across result-page reload and paid-status polling, then validate the
