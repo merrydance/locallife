@@ -417,7 +417,11 @@ operations label. Callback evidence requires `--ledger-ack`; query evidence
 rejects ACK input so the row cannot invent a callback observation. Withdrawal
 `--evidence-kind funds-action` also requires `--withdrawal-approver`,
 `--withdrawal-amount-bound`, and `--withdrawal-monitoring-owner`, and still does
-not authorize or execute the withdrawal.
+not authorize or execute the withdrawal. Both the wrapper and local collector
+reject malformed ledger runtime context: `--ledger-date` must be `yyyy-mm-dd`,
+`--ledger-env` must be one of `sandbox`, `production`, or
+`provider-real-transaction-env`, and `--ledger-commit` must be a 7-40 character
+hex git SHA.
 
 For withdrawal ambiguous-create or timeout recovery, use
 `--evidence-kind manual-reconciliation` only after an operator has checked the
@@ -540,6 +544,8 @@ What this proves:
 - Query evidence does not receive a synthetic ACK.
 - Payment, profit-sharing, and refund evidence reject withdrawal-only
   `manual-reconciliation` and `funds-action` labels.
+- Ledger rows reject malformed date, environment, and commit context before a
+  candidate evidence row can be rendered.
 - Withdrawal funds-action evidence is rejected unless approval, amount bound,
   and monitoring owner are supplied.
 - Withdrawal manual-reconciliation evidence is rejected unless a manual recovery

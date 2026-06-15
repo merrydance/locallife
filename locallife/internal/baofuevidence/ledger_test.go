@@ -81,6 +81,65 @@ func TestRenderAggregatePaymentLedgerRowRejectsIncompleteContext(t *testing.T) {
 	require.ErrorContains(t, err, "callback ack is required")
 }
 
+func TestRenderAggregatePaymentLedgerRowRejectsMalformedContext(t *testing.T) {
+	validSummary := AggregatePaymentSummary{
+		Status:             StatusPass,
+		FactID:             11,
+		ApplicationID:      21,
+		FactSource:         db.ExternalPaymentFactSourceQuery,
+		TerminalStatus:     db.ExternalPaymentTerminalStatusSuccess,
+		ApplicationStatus:  db.ExternalPaymentFactApplicationStatusApplied,
+		PaymentOrderStatus: "paid",
+		OutTradeNoMasked:   "BAOF***0001",
+	}
+	validContext := AggregatePaymentLedgerRowContext{
+		Date:     "2026-06-15",
+		Env:      "production",
+		Endpoint: "https://mch-juhe.baofoo.com/api order_query",
+		Commit:   "b6507961",
+		Notes:    "controlled recovery query",
+	}
+
+	tests := []struct {
+		name        string
+		mutate      func(*AggregatePaymentLedgerRowContext)
+		expectedErr string
+	}{
+		{
+			name: "date",
+			mutate: func(context *AggregatePaymentLedgerRowContext) {
+				context.Date = "06/15/2026"
+			},
+			expectedErr: "ledger evidence date must use yyyy-mm-dd",
+		},
+		{
+			name: "env",
+			mutate: func(context *AggregatePaymentLedgerRowContext) {
+				context.Env = "prod"
+			},
+			expectedErr: "ledger evidence env is not supported",
+		},
+		{
+			name: "commit",
+			mutate: func(context *AggregatePaymentLedgerRowContext) {
+				context.Commit = "not-a-sha"
+			},
+			expectedErr: "ledger evidence commit must be a git SHA",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			context := validContext
+			tt.mutate(&context)
+
+			_, err := RenderAggregatePaymentLedgerRow(validSummary, context)
+
+			require.ErrorContains(t, err, tt.expectedErr)
+		})
+	}
+}
+
 func TestRenderAggregatePaymentLedgerRowRejectsFailingSummary(t *testing.T) {
 	_, err := RenderAggregatePaymentLedgerRow(AggregatePaymentSummary{
 		Status:   StatusFail,

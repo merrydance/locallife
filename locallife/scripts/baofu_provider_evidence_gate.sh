@@ -56,7 +56,7 @@ Common options:
   --ledger-env <sandbox|production|provider-real-transaction-env>
   --ledger-endpoint <callback-url-or-query-endpoint>
   --ledger-ack <OK>                      Required for callback evidence; allowed for withdrawal funds-action callbacks.
-  --ledger-commit <sha>
+  --ledger-commit <sha>                   7-40 hex chars.
   --ledger-notes <controlled-run-notes>
   --withdrawal-approver <name-or-ticket> Required for withdrawal funds-action evidence.
   --withdrawal-amount-bound <amount>     Required for withdrawal funds-action evidence.
@@ -222,6 +222,25 @@ append_required_arg() {
   target+=("$flag" "$value")
 }
 
+validate_ledger_context_shape() {
+  if [[ ! "$ledger_date" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+    echo "ledger date must use yyyy-mm-dd" >&2
+    exit 2
+  fi
+  case "$ledger_env" in
+    sandbox|production|provider-real-transaction-env)
+      ;;
+    *)
+      echo "ledger env is not supported" >&2
+      exit 2
+      ;;
+  esac
+  if [[ ! "$ledger_commit" =~ ^[0-9a-fA-F]{7,40}$ ]]; then
+    echo "ledger commit must be a git SHA" >&2
+    exit 2
+  fi
+}
+
 if [[ -z "$capability" ]]; then
   echo "capability is required" >&2
   usage >&2
@@ -281,6 +300,7 @@ if [[ "$ledger_row" -eq 1 ]]; then
     echo "ledger notes are required with --ledger-row" >&2
     exit 2
   fi
+  validate_ledger_context_shape
   if [[ "$evidence_kind" == "callback" && -z "$ledger_ack" ]]; then
     echo "ledger ack is required for callback evidence" >&2
     exit 2

@@ -2,10 +2,14 @@ package baofuevidence
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
+	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
 )
+
+var gitSHAPattern = regexp.MustCompile(`^[0-9a-fA-F]{7,40}$`)
 
 type AggregatePaymentLedgerRowContext struct {
 	Date     string
@@ -357,20 +361,8 @@ func validateWithdrawalLedgerSummary(summary WithdrawalSummary) error {
 }
 
 func validateLedgerRowContext(summary AggregatePaymentSummary, context AggregatePaymentLedgerRowContext) error {
-	if strings.TrimSpace(context.Date) == "" {
-		return fmt.Errorf("ledger evidence date is required")
-	}
-	if strings.TrimSpace(context.Env) == "" {
-		return fmt.Errorf("ledger evidence env is required")
-	}
-	if strings.TrimSpace(context.Endpoint) == "" {
-		return fmt.Errorf("ledger evidence endpoint is required")
-	}
-	if strings.TrimSpace(context.Commit) == "" {
-		return fmt.Errorf("ledger evidence commit is required")
-	}
-	if strings.TrimSpace(context.Notes) == "" {
-		return fmt.Errorf("ledger evidence notes are required")
+	if err := validateLedgerContextShape(context); err != nil {
+		return err
 	}
 	if strings.TrimSpace(summary.FactSource) == db.ExternalPaymentFactSourceCallback && strings.TrimSpace(context.ACK) == "" {
 		return fmt.Errorf("callback ack is required")
@@ -379,20 +371,8 @@ func validateLedgerRowContext(summary AggregatePaymentSummary, context Aggregate
 }
 
 func validateProfitSharingLedgerRowContext(summary ProfitSharingSummary, context EvidenceLedgerRowContext) error {
-	if strings.TrimSpace(context.Date) == "" {
-		return fmt.Errorf("ledger evidence date is required")
-	}
-	if strings.TrimSpace(context.Env) == "" {
-		return fmt.Errorf("ledger evidence env is required")
-	}
-	if strings.TrimSpace(context.Endpoint) == "" {
-		return fmt.Errorf("ledger evidence endpoint is required")
-	}
-	if strings.TrimSpace(context.Commit) == "" {
-		return fmt.Errorf("ledger evidence commit is required")
-	}
-	if strings.TrimSpace(context.Notes) == "" {
-		return fmt.Errorf("ledger evidence notes are required")
+	if err := validateLedgerContextShape(context); err != nil {
+		return err
 	}
 	if strings.TrimSpace(summary.FactSource) == db.ExternalPaymentFactSourceCallback && strings.TrimSpace(context.ACK) == "" {
 		return fmt.Errorf("callback ack is required")
@@ -401,20 +381,8 @@ func validateProfitSharingLedgerRowContext(summary ProfitSharingSummary, context
 }
 
 func validateRefundLedgerRowContext(summary RefundSummary, context EvidenceLedgerRowContext) error {
-	if strings.TrimSpace(context.Date) == "" {
-		return fmt.Errorf("ledger evidence date is required")
-	}
-	if strings.TrimSpace(context.Env) == "" {
-		return fmt.Errorf("ledger evidence env is required")
-	}
-	if strings.TrimSpace(context.Endpoint) == "" {
-		return fmt.Errorf("ledger evidence endpoint is required")
-	}
-	if strings.TrimSpace(context.Commit) == "" {
-		return fmt.Errorf("ledger evidence commit is required")
-	}
-	if strings.TrimSpace(context.Notes) == "" {
-		return fmt.Errorf("ledger evidence notes are required")
+	if err := validateLedgerContextShape(context); err != nil {
+		return err
 	}
 	if strings.TrimSpace(summary.FactSource) == db.ExternalPaymentFactSourceCallback && strings.TrimSpace(context.ACK) == "" {
 		return fmt.Errorf("callback ack is required")
@@ -423,23 +391,44 @@ func validateRefundLedgerRowContext(summary RefundSummary, context EvidenceLedge
 }
 
 func validateWithdrawalLedgerRowContext(summary WithdrawalSummary, context EvidenceLedgerRowContext) error {
-	if strings.TrimSpace(context.Date) == "" {
-		return fmt.Errorf("ledger evidence date is required")
-	}
-	if strings.TrimSpace(context.Env) == "" {
-		return fmt.Errorf("ledger evidence env is required")
-	}
-	if strings.TrimSpace(context.Endpoint) == "" {
-		return fmt.Errorf("ledger evidence endpoint is required")
-	}
-	if strings.TrimSpace(context.Commit) == "" {
-		return fmt.Errorf("ledger evidence commit is required")
-	}
-	if strings.TrimSpace(context.Notes) == "" {
-		return fmt.Errorf("ledger evidence notes are required")
+	if err := validateLedgerContextShape(context); err != nil {
+		return err
 	}
 	if strings.TrimSpace(summary.FactSource) == db.ExternalPaymentFactSourceCallback && strings.TrimSpace(context.ACK) == "" {
 		return fmt.Errorf("callback ack is required")
+	}
+	return nil
+}
+
+func validateLedgerContextShape(context EvidenceLedgerRowContext) error {
+	date := strings.TrimSpace(context.Date)
+	if date == "" {
+		return fmt.Errorf("ledger evidence date is required")
+	}
+	if parsed, err := time.Parse("2006-01-02", date); err != nil || parsed.Format("2006-01-02") != date {
+		return fmt.Errorf("ledger evidence date must use yyyy-mm-dd")
+	}
+
+	switch strings.TrimSpace(context.Env) {
+	case "sandbox", "production", "provider-real-transaction-env":
+	case "":
+		return fmt.Errorf("ledger evidence env is required")
+	default:
+		return fmt.Errorf("ledger evidence env is not supported")
+	}
+
+	if strings.TrimSpace(context.Endpoint) == "" {
+		return fmt.Errorf("ledger evidence endpoint is required")
+	}
+	commit := strings.TrimSpace(context.Commit)
+	if commit == "" {
+		return fmt.Errorf("ledger evidence commit is required")
+	}
+	if !gitSHAPattern.MatchString(commit) {
+		return fmt.Errorf("ledger evidence commit must be a git SHA")
+	}
+	if strings.TrimSpace(context.Notes) == "" {
+		return fmt.Errorf("ledger evidence notes are required")
 	}
 	return nil
 }

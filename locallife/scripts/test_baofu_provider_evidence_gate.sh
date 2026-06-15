@@ -4,11 +4,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 missing_ack_output="$(mktemp)"
+malformed_context_output="$(mktemp)"
 missing_withdrawal_output="$(mktemp)"
 missing_manual_output="$(mktemp)"
 unsupported_evidence_kind_output="$(mktemp)"
 unknown_capability_output="$(mktemp)"
-trap 'rm -f "$missing_ack_output" "$missing_withdrawal_output" "$missing_manual_output" "$unsupported_evidence_kind_output" "$unknown_capability_output"' EXIT
+trap 'rm -f "$missing_ack_output" "$malformed_context_output" "$missing_withdrawal_output" "$missing_manual_output" "$unsupported_evidence_kind_output" "$unknown_capability_output"' EXIT
 
 assert_contains() {
   local haystack="$1"
@@ -101,6 +102,75 @@ if (
 fi
 
 assert_contains "$(cat "$missing_ack_output")" "ledger ack is required for callback evidence"
+
+if (
+  cd "$BACKEND_ROOT"
+  scripts/baofu_provider_evidence_gate.sh \
+    --capability payment \
+    --fact-id 11 \
+    --application-id 21 \
+    --payment-order-id 31 \
+    --ledger-row \
+    --evidence-kind query \
+    --ledger-date 06/15/2026 \
+    --ledger-env prod \
+    --ledger-endpoint "https://mch-juhe.baofoo.com/api order_query" \
+    --ledger-commit not-a-sha \
+    --ledger-notes "malformed context" \
+    --dry-run
+) >"$malformed_context_output" 2>&1; then
+  echo "ledger row with malformed runtime context unexpectedly succeeded" >&2
+  cat "$malformed_context_output" >&2
+  exit 1
+fi
+
+assert_contains "$(cat "$malformed_context_output")" "ledger date must use yyyy-mm-dd"
+
+if (
+  cd "$BACKEND_ROOT"
+  scripts/baofu_provider_evidence_gate.sh \
+    --capability payment \
+    --fact-id 11 \
+    --application-id 21 \
+    --payment-order-id 31 \
+    --ledger-row \
+    --evidence-kind query \
+    --ledger-date 2026-06-15 \
+    --ledger-env prod \
+    --ledger-endpoint "https://mch-juhe.baofoo.com/api order_query" \
+    --ledger-commit b6507961 \
+    --ledger-notes "malformed env" \
+    --dry-run
+) >"$malformed_context_output" 2>&1; then
+  echo "ledger row with malformed environment unexpectedly succeeded" >&2
+  cat "$malformed_context_output" >&2
+  exit 1
+fi
+
+assert_contains "$(cat "$malformed_context_output")" "ledger env is not supported"
+
+if (
+  cd "$BACKEND_ROOT"
+  scripts/baofu_provider_evidence_gate.sh \
+    --capability payment \
+    --fact-id 11 \
+    --application-id 21 \
+    --payment-order-id 31 \
+    --ledger-row \
+    --evidence-kind query \
+    --ledger-date 2026-06-15 \
+    --ledger-env production \
+    --ledger-endpoint "https://mch-juhe.baofoo.com/api order_query" \
+    --ledger-commit not-a-sha \
+    --ledger-notes "malformed commit" \
+    --dry-run
+) >"$malformed_context_output" 2>&1; then
+  echo "ledger row with malformed commit unexpectedly succeeded" >&2
+  cat "$malformed_context_output" >&2
+  exit 1
+fi
+
+assert_contains "$(cat "$malformed_context_output")" "ledger commit must be a git SHA"
 
 if (
   cd "$BACKEND_ROOT"
