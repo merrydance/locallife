@@ -164,6 +164,8 @@ entrypoint. `--static` keeps the side-effect-free source report. `--target`
 requires `PAYMENT_FACT_APPLICATION_FIXTURE_ID` and
 `PAYMENT_DOMAIN_OUTBOX_FIXTURE_ID`, then always runs config, Redis/Asynq,
 Baofu provider-client, and rollback-only fixture claimability checks together.
+The wrapper rejects missing, zero, or non-numeric fixture IDs before invoking
+the Go smoke command.
 
 Current rows:
 
@@ -233,7 +235,7 @@ Observed result:
   IDs, successful claim returns, and unclaimable rows.
 - The wrapper contract test proves target mode includes config, Redis/Asynq,
   Baofu provider-client, and rollback-only fixture checks and refuses to run
-  without fixture IDs.
+  without positive-integer fixture IDs.
 - Focused worker and scheduler package tests returned `ok`.
 
 What this proves:
@@ -337,8 +339,8 @@ go run ./cmd/release_readiness_smoke -include-config -include-fixture-claimabili
 ```
 
 Fixture IDs must point at disposable release-smoke rows prepared by the release
-operator; the command does not create rows or select arbitrary pending
-production money records.
+operator and must be positive integers; the command does not create rows or
+select arbitrary pending production money records.
 
 ## Remaining Real Issue
 

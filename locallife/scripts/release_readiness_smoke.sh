@@ -25,6 +25,16 @@ Fixture IDs must point at disposable release-smoke rows prepared by the release 
 USAGE
 }
 
+validate_positive_integer() {
+  local name="$1"
+  local value="$2"
+  if [[ ! "$value" =~ ^[1-9][0-9]*$ ]]; then
+    echo "$name must be a positive integer" >&2
+    return 1
+  fi
+  return 0
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --target)
@@ -71,9 +81,13 @@ if [[ "$mode" == "target" ]]; then
   if [[ -z "${PAYMENT_FACT_APPLICATION_FIXTURE_ID:-}" ]]; then
     echo "PAYMENT_FACT_APPLICATION_FIXTURE_ID is required for target release readiness smoke" >&2
     missing=1
+  elif ! validate_positive_integer "PAYMENT_FACT_APPLICATION_FIXTURE_ID" "$PAYMENT_FACT_APPLICATION_FIXTURE_ID"; then
+    missing=1
   fi
   if [[ -z "${PAYMENT_DOMAIN_OUTBOX_FIXTURE_ID:-}" ]]; then
     echo "PAYMENT_DOMAIN_OUTBOX_FIXTURE_ID is required for target release readiness smoke" >&2
+    missing=1
+  elif ! validate_positive_integer "PAYMENT_DOMAIN_OUTBOX_FIXTURE_ID" "$PAYMENT_DOMAIN_OUTBOX_FIXTURE_ID"; then
     missing=1
   fi
   if [[ "$missing" -ne 0 ]]; then

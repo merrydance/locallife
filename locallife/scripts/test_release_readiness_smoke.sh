@@ -4,7 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 missing_fixture_output="$(mktemp)"
-trap 'rm -f "$missing_fixture_output"' EXIT
+invalid_fixture_output="$(mktemp)"
+trap 'rm -f "$missing_fixture_output" "$invalid_fixture_output"' EXIT
 
 assert_contains() {
   local haystack="$1"
@@ -60,5 +61,20 @@ fi
 missing_output="$(cat "$missing_fixture_output")"
 assert_contains "$missing_output" "PAYMENT_FACT_APPLICATION_FIXTURE_ID is required"
 assert_contains "$missing_output" "PAYMENT_DOMAIN_OUTBOX_FIXTURE_ID is required"
+
+if (
+  cd "$BACKEND_ROOT"
+  PAYMENT_FACT_APPLICATION_FIXTURE_ID=abc \
+    PAYMENT_DOMAIN_OUTBOX_FIXTURE_ID=0 \
+    scripts/release_readiness_smoke.sh --dry-run
+) >"$invalid_fixture_output" 2>&1; then
+  echo "target dry-run with invalid fixture IDs unexpectedly succeeded" >&2
+  cat "$invalid_fixture_output" >&2
+  exit 1
+fi
+
+invalid_output="$(cat "$invalid_fixture_output")"
+assert_contains "$invalid_output" "PAYMENT_FACT_APPLICATION_FIXTURE_ID must be a positive integer"
+assert_contains "$invalid_output" "PAYMENT_DOMAIN_OUTBOX_FIXTURE_ID must be a positive integer"
 
 echo "release readiness smoke wrapper contract passed"
