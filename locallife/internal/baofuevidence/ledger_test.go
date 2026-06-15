@@ -61,6 +61,30 @@ func TestRenderAggregatePaymentLedgerRowForQueryEvidence(t *testing.T) {
 	require.Equal(t, "| 2026-06-15 | production | `https://mch-juhe.baofoo.com/api order_query` | `BAOF***0002` / `2605***1966` | success; fact_source=manual_reconciliation; payment_status=paid | fact_id=12; terminal_status=success | applied application_id=22 | `b6507961` | controlled recovery query; local_row_ids: payment_order_id=32 |", row.Row)
 }
 
+func TestRenderAggregatePaymentLedgerRowRejectsQueryACK(t *testing.T) {
+	_, err := RenderAggregatePaymentLedgerRow(AggregatePaymentSummary{
+		Status:             StatusPass,
+		FactID:             12,
+		ApplicationID:      22,
+		PaymentOrderID:     32,
+		FactSource:         db.ExternalPaymentFactSourceManualReconciliation,
+		TerminalStatus:     db.ExternalPaymentTerminalStatusSuccess,
+		ApplicationStatus:  db.ExternalPaymentFactApplicationStatusApplied,
+		PaymentOrderStatus: "paid",
+		OutTradeNoMasked:   "BAOF***0002",
+		TradeNoMasked:      "2605***1966",
+	}, AggregatePaymentLedgerRowContext{
+		Date:     "2026-06-15",
+		Env:      "production",
+		Endpoint: "https://mch-juhe.baofoo.com/api order_query",
+		ACK:      "OK",
+		Commit:   "b6507961",
+		Notes:    "query evidence must not include callback ack",
+	})
+
+	require.ErrorContains(t, err, "callback ack is only valid for callback evidence")
+}
+
 func TestRenderAggregatePaymentLedgerRowRejectsIncompleteContext(t *testing.T) {
 	_, err := RenderAggregatePaymentLedgerRow(AggregatePaymentSummary{
 		Status:             StatusPass,
@@ -442,6 +466,34 @@ func TestRenderWithdrawalLedgerRowForQueryEvidence(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "Withdrawal Query", row.Section)
 	require.Equal(t, "| 2026-06-15 | production | `https://vgw.baofoo.com/union-gw/api/T-1001-013-15/transReq.do` | `BFWD***1O42` | - | success; fact_source=manual_reconciliation; withdrawal_status=succeeded | fact_id=702; terminal_status=success; baofu_withdraw_no=`2605***8888` | `f294dc81` | controlled withdrawal query recovery; local_row_ids: withdrawal_order_id=82, command_id=902 |", row.Row)
+}
+
+func TestRenderWithdrawalLedgerRowRejectsManualReconciliationACK(t *testing.T) {
+	_, err := RenderWithdrawalLedgerRow(WithdrawalSummary{
+		Status:                StatusPass,
+		FactID:                702,
+		WithdrawalOrderID:     82,
+		CommandID:             902,
+		FactSource:            db.ExternalPaymentFactSourceManualReconciliation,
+		TerminalStatus:        db.ExternalPaymentTerminalStatusSuccess,
+		WithdrawalOrderStatus: db.BaofuWithdrawalStatusSucceeded,
+		CommandStatus:         db.ExternalPaymentCommandStatusAccepted,
+		OwnerType:             db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:               701,
+		BusinessOwner:         db.ExternalPaymentBusinessOwnerMerchantFunds,
+		AmountFen:             2500,
+		OutRequestNoMasked:    "BFWD***1O42",
+		BaofuWithdrawNoMasked: "2605***8888",
+	}, EvidenceLedgerRowContext{
+		Date:     "2026-06-15",
+		Env:      "production",
+		Endpoint: "https://vgw.baofoo.com/union-gw/api/T-1001-013-15/transReq.do",
+		ACK:      "OK",
+		Commit:   "f294dc81",
+		Notes:    "manual reconciliation must not include callback ack",
+	})
+
+	require.ErrorContains(t, err, "callback ack is only valid for callback evidence")
 }
 
 func TestRenderWithdrawalLedgerRowRejectsMissingCallbackACK(t *testing.T) {

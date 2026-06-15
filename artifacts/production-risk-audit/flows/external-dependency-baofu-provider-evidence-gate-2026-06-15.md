@@ -428,6 +428,8 @@ route, or a prefixed fake route such as `payment-extra` cannot be recorded as
 positive callback evidence for the wrong capability. The wrapper and local
 collector both enforce this, including the runtime share path
 `/v1/webhooks/baofu/share` and withdrawal path `/v1/webhooks/baofu/withdraw`.
+Direct collector rendering also rejects `ACK` on query or manual-reconciliation
+rows, so bypassing the wrapper cannot invent a callback observation.
 Withdrawal
 `--evidence-kind funds-action` also requires `--withdrawal-approver`,
 `--withdrawal-amount-bound`, and `--withdrawal-monitoring-owner`, and still does
@@ -561,6 +563,7 @@ What this proves:
 - Direct collector ledger rendering uses the same endpoint guard, so bypassing
   the wrapper cannot render callback rows for old share or withdrawal route
   names.
+- Direct collector ledger rendering rejects `ACK` on non-callback rows.
 - Query evidence does not receive a synthetic ACK.
 - Payment, profit-sharing, and refund evidence reject withdrawal-only
   `manual-reconciliation` and `funds-action` labels.

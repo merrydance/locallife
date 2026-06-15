@@ -365,10 +365,10 @@ func validateLedgerRowContext(summary AggregatePaymentSummary, context Aggregate
 	if err := validateLedgerContextShape(context); err != nil {
 		return err
 	}
-	if strings.TrimSpace(summary.FactSource) == db.ExternalPaymentFactSourceCallback && strings.TrimSpace(context.ACK) == "" {
-		return fmt.Errorf("callback ack is required")
+	if err := validateCallbackACK(summary.FactSource, context.ACK); err != nil {
+		return err
 	}
-	if strings.TrimSpace(summary.FactSource) == db.ExternalPaymentFactSourceCallback {
+	if isCallbackFactSource(summary.FactSource) {
 		if err := validateCallbackEndpointPath("payment", context.Endpoint, "/v1/webhooks/baofu/payment"); err != nil {
 			return err
 		}
@@ -380,10 +380,10 @@ func validateProfitSharingLedgerRowContext(summary ProfitSharingSummary, context
 	if err := validateLedgerContextShape(context); err != nil {
 		return err
 	}
-	if strings.TrimSpace(summary.FactSource) == db.ExternalPaymentFactSourceCallback && strings.TrimSpace(context.ACK) == "" {
-		return fmt.Errorf("callback ack is required")
+	if err := validateCallbackACK(summary.FactSource, context.ACK); err != nil {
+		return err
 	}
-	if strings.TrimSpace(summary.FactSource) == db.ExternalPaymentFactSourceCallback {
+	if isCallbackFactSource(summary.FactSource) {
 		if err := validateCallbackEndpointPath("profit-sharing", context.Endpoint, "/v1/webhooks/baofu/share"); err != nil {
 			return err
 		}
@@ -395,10 +395,10 @@ func validateRefundLedgerRowContext(summary RefundSummary, context EvidenceLedge
 	if err := validateLedgerContextShape(context); err != nil {
 		return err
 	}
-	if strings.TrimSpace(summary.FactSource) == db.ExternalPaymentFactSourceCallback && strings.TrimSpace(context.ACK) == "" {
-		return fmt.Errorf("callback ack is required")
+	if err := validateCallbackACK(summary.FactSource, context.ACK); err != nil {
+		return err
 	}
-	if strings.TrimSpace(summary.FactSource) == db.ExternalPaymentFactSourceCallback {
+	if isCallbackFactSource(summary.FactSource) {
 		if err := validateCallbackEndpointPath("refund", context.Endpoint, "/v1/webhooks/baofu/refund"); err != nil {
 			return err
 		}
@@ -410,15 +410,32 @@ func validateWithdrawalLedgerRowContext(summary WithdrawalSummary, context Evide
 	if err := validateLedgerContextShape(context); err != nil {
 		return err
 	}
-	if strings.TrimSpace(summary.FactSource) == db.ExternalPaymentFactSourceCallback && strings.TrimSpace(context.ACK) == "" {
-		return fmt.Errorf("callback ack is required")
+	if err := validateCallbackACK(summary.FactSource, context.ACK); err != nil {
+		return err
 	}
-	if strings.TrimSpace(summary.FactSource) == db.ExternalPaymentFactSourceCallback {
+	if isCallbackFactSource(summary.FactSource) {
 		if err := validateCallbackEndpointPath("withdrawal", context.Endpoint, "/v1/webhooks/baofu/withdraw"); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func validateCallbackACK(factSource, ack string) error {
+	if isCallbackFactSource(factSource) {
+		if strings.TrimSpace(ack) == "" {
+			return fmt.Errorf("callback ack is required")
+		}
+		return nil
+	}
+	if strings.TrimSpace(ack) != "" {
+		return fmt.Errorf("callback ack is only valid for callback evidence")
+	}
+	return nil
+}
+
+func isCallbackFactSource(factSource string) bool {
+	return strings.TrimSpace(factSource) == db.ExternalPaymentFactSourceCallback
 }
 
 func validateCallbackEndpointPath(capability, endpoint, expectedPath string) error {
