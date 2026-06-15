@@ -527,7 +527,7 @@ What this still does not prove:
 Commands run from `locallife/`:
 
 ```bash
-PATH="/usr/local/go/bin:$PATH" bash scripts/test_baofu_provider_evidence_gate.sh
+make check-baofu-provider-evidence-gate
 ```
 
 Observed result:
