@@ -21247,6 +21247,12 @@ const docTemplate = `{
                 "summary": "创建订单",
                 "parameters": [
                     {
+                        "type": "string",
+                        "description": "可选幂等键，同一次创建订单重试建议复用同一个值",
+                        "name": "Idempotency-Key",
+                        "in": "header"
+                    },
+                    {
                         "description": "订单创建参数",
                         "name": "request",
                         "in": "body",
@@ -21257,7 +21263,7 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "200": {
+                    "201": {
                         "description": "创建成功",
                         "schema": {
                             "$ref": "#/definitions/api.orderResponse"
@@ -21283,6 +21289,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "商户/地址/桌台/菜品不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "重复提交或订单请求状态已变化",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }

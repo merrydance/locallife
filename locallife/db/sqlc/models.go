@@ -1739,6 +1739,17 @@ type Order struct {
 	DeliveryLatitudeSnapshot     pgtype.Numeric `json:"delivery_latitude_snapshot"`
 }
 
+type OrderCreateRequestIdempotency struct {
+	ID             int64       `json:"id"`
+	OperationScope string      `json:"operation_scope"`
+	ActorUserID    int64       `json:"actor_user_id"`
+	IdempotencyKey string      `json:"idempotency_key"`
+	RequestHash    string      `json:"request_hash"`
+	OrderID        pgtype.Int8 `json:"order_id"`
+	CreatedAt      time.Time   `json:"created_at"`
+	UpdatedAt      time.Time   `json:"updated_at"`
+}
+
 type OrderDisplayConfig struct {
 	ID                   int64              `json:"id"`
 	MerchantID           int64              `json:"merchant_id"`

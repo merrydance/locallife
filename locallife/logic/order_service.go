@@ -2,9 +2,14 @@ package logic
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -15,6 +20,11 @@ import (
 )
 
 const orderPaymentTimeoutMinutes = 30
+
+const (
+	orderCreateIdempotencyScope        = "customer_order_create"
+	orderCreateMaxIdempotencyKeyLength = 256
+)
 
 const (
 	printTriggerAccepted = "accepted"
@@ -81,6 +91,9 @@ func NewOrderService(
 func (s *OrderService) CreateOrder(ctx context.Context, input CreateOrderCommandInput) (CreateOrderCommandResult, error) {
 	if err := s.orderPolicy.ValidateCreateInput(input); err != nil {
 		return CreateOrderCommandResult{}, NewRequestError(http.StatusBadRequest, err)
+	}
+	if idempotencyKey := strings.TrimSpace(input.IdempotencyKey); len(idempotencyKey) > orderCreateMaxIdempotencyKeyLength {
+		return CreateOrderCommandResult{}, NewRequestError(http.StatusBadRequest, errors.New("Idempotency-Key header is too long"))
 	}
 
 	merchant, err := ValidateMerchantForOrder(ctx, s.store, input.MerchantID)
@@ -317,6 +330,10 @@ func (s *OrderService) CreateOrder(ctx context.Context, input CreateOrderCommand
 		Items:                               items,
 		BillingGroupID:                      input.BillingGroupID,
 		EnforceSingleActiveReservationOrder: reservation != nil && reservation.PaymentMode == "deposit",
+		IdempotencyOperationScope:           orderCreateIdempotencyOperationScope(input),
+		IdempotencyActorUserID:              orderCreateIdempotencyActor(input),
+		IdempotencyKey:                      strings.TrimSpace(input.IdempotencyKey),
+		IdempotencyRequestHash:              orderCreateRequestHash(input),
 		UserVoucherID:                       userVoucherID,
 		VoucherAmount:                       voucherAmount,
 		MembershipID:                        membershipID,
@@ -339,13 +356,19 @@ func (s *OrderService) CreateOrder(ctx context.Context, input CreateOrderCommand
 		if errors.Is(err, db.ErrVoucherTemplateUnavailable) {
 			return CreateOrderCommandResult{}, NewRequestErrorWithCause(http.StatusBadRequest, errors.New("优惠券已停用或已失效"), err)
 		}
+		if errors.Is(err, db.ErrOrderCreateIdempotencyConflict) {
+			return CreateOrderCommandResult{}, NewRequestErrorWithCause(http.StatusConflict, errors.New("订单请求状态已变化，请刷新后重试"), err)
+		}
+		if statusCode, ok := db.IsTxRequestError(err); ok && statusCode == http.StatusConflict {
+			return CreateOrderCommandResult{}, NewRequestErrorWithCause(http.StatusConflict, errors.New("订单请求状态已变化，请刷新后重试"), err)
+		}
 		if err.Error() == "insufficient balance" {
 			return CreateOrderCommandResult{}, NewRequestError(http.StatusBadRequest, errors.New("会员余额不足"))
 		}
 		return CreateOrderCommandResult{}, err
 	}
 
-	if s.taskScheduler != nil && txResult.Order.Status == db.OrderStatusPending {
+	if s.taskScheduler != nil && txResult.Order.Status == db.OrderStatusPending && !txResult.IdempotencyReplayed {
 		timeoutAt := s.clock.Now().Add(orderPaymentTimeoutMinutes * time.Minute)
 		_ = s.taskScheduler.ScheduleOrderPaymentTimeout(ctx, txResult.Order.ID, timeoutAt)
 	}
@@ -384,6 +407,81 @@ func (s *OrderService) CreateOrder(ctx context.Context, input CreateOrderCommand
 		RuleDecision: ruleDecision,
 		HasRule:      hasRule,
 	}, nil
+}
+
+func orderCreateIdempotencyOperationScope(input CreateOrderCommandInput) string {
+	if strings.TrimSpace(input.IdempotencyKey) == "" {
+		return ""
+	}
+	return orderCreateIdempotencyScope
+}
+
+func orderCreateIdempotencyActor(input CreateOrderCommandInput) int64 {
+	if strings.TrimSpace(input.IdempotencyKey) == "" {
+		return 0
+	}
+	return input.UserID
+}
+
+func orderCreateRequestHash(input CreateOrderCommandInput) string {
+	if strings.TrimSpace(input.IdempotencyKey) == "" {
+		return ""
+	}
+	parts := []string{
+		"v1",
+		orderCreateIdempotencyScope,
+		strconv.FormatInt(input.UserID, 10),
+		strconv.FormatInt(input.MerchantID, 10),
+		strings.TrimSpace(input.OrderType),
+		nullableInt64HashPart(input.AddressID),
+		nullableInt64HashPart(input.TableID),
+		nullableInt64HashPart(input.ReservationID),
+		nullableInt64HashPart(input.BillingGroupID),
+		nullableInt64HashPart(input.UserVoucherID),
+		strconv.FormatBool(input.UseBalance),
+		strings.TrimSpace(input.Notes),
+		orderItemsHashPart(input.Items),
+	}
+	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
+	return fmt.Sprintf("sha256:%x", sum[:])
+}
+
+func nullableInt64HashPart(value *int64) string {
+	if value == nil {
+		return ""
+	}
+	return strconv.FormatInt(*value, 10)
+}
+
+func orderItemsHashPart(items []OrderItemInput) string {
+	parts := make([]string, 0, len(items))
+	for _, item := range items {
+		customizations := ""
+		if len(item.Customizations) > 0 {
+			customizationJSON, err := json.Marshal(item.Customizations)
+			if err == nil {
+				customizations = string(customizationJSON)
+			} else {
+				keys := make([]string, 0, len(item.Customizations))
+				for key := range item.Customizations {
+					keys = append(keys, key)
+				}
+				sort.Strings(keys)
+				customizationParts := make([]string, 0, len(keys))
+				for _, key := range keys {
+					customizationParts = append(customizationParts, key+"="+fmt.Sprint(item.Customizations[key]))
+				}
+				customizations = strings.Join(customizationParts, "\x1f")
+			}
+		}
+		parts = append(parts, strings.Join([]string{
+			nullableInt64HashPart(item.DishID),
+			nullableInt64HashPart(item.ComboID),
+			strconv.FormatInt(int64(item.Quantity), 10),
+			customizations,
+		}, "\x1e"))
+	}
+	return strings.Join(parts, "\x1d")
 }
 
 func (s *OrderService) CancelOrder(ctx context.Context, input CancelOrderInput) (CancelOrderResult, error) {

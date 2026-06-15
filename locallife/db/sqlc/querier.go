@@ -68,6 +68,7 @@ type Querier interface {
 	BatchCreateRiderLocations(ctx context.Context, arg []BatchCreateRiderLocationsParams) (int64, error)
 	// 批量更新菜品上下架状态（只更新属于指定商户的菜品）
 	BatchUpdateDishOnlineStatus(ctx context.Context, arg BatchUpdateDishOnlineStatusParams) ([]int64, error)
+	BindOrderRequestIdempotencyOrder(ctx context.Context, arg BindOrderRequestIdempotencyOrderParams) (OrderCreateRequestIdempotency, error)
 	CancelActiveMerchantOnboardingReviewRunsForApplication(ctx context.Context, arg CancelActiveMerchantOnboardingReviewRunsForApplicationParams) ([]OnboardingReviewRun, error)
 	// 商户熔断时自动取消所有未来的预订
 	CancelMerchantFutureReservations(ctx context.Context, arg CancelMerchantFutureReservationsParams) (int64, error)
@@ -457,6 +458,7 @@ type Querier interface {
 	CreateOrderDisplayConfig(ctx context.Context, arg CreateOrderDisplayConfigParams) (OrderDisplayConfig, error)
 	CreateOrderItem(ctx context.Context, arg CreateOrderItemParams) (OrderItem, error)
 	CreateOrderPaymentFeeLedger(ctx context.Context, arg CreateOrderPaymentFeeLedgerParams) (OrderPaymentFeeLedger, error)
+	CreateOrderRequestIdempotency(ctx context.Context, arg CreateOrderRequestIdempotencyParams) (OrderCreateRequestIdempotency, error)
 	CreateOrderStatusLog(ctx context.Context, arg CreateOrderStatusLogParams) (OrderStatusLog, error)
 	CreatePaymentDomainOutbox(ctx context.Context, arg CreatePaymentDomainOutboxParams) (PaymentDomainOutbox, error)
 	CreatePaymentDomainOutboxOnce(ctx context.Context, arg CreatePaymentDomainOutboxOnceParams) (PaymentDomainOutbox, error)
@@ -971,6 +973,7 @@ type Querier interface {
 	GetOrderDisplayConfigByMerchant(ctx context.Context, merchantID int64) (OrderDisplayConfig, error)
 	GetOrderForUpdate(ctx context.Context, id int64) (Order, error)
 	GetOrderItem(ctx context.Context, id int64) (OrderItem, error)
+	GetOrderRequestIdempotencyForUpdate(ctx context.Context, arg GetOrderRequestIdempotencyForUpdateParams) (OrderCreateRequestIdempotency, error)
 	GetOrderStats(ctx context.Context, arg GetOrderStatsParams) (GetOrderStatsRow, error)
 	GetOrderWithDetails(ctx context.Context, id int64) (GetOrderWithDetailsRow, error)
 	// ==========================================

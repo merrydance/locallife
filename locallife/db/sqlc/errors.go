@@ -22,3 +22,7 @@ var ErrMembershipBalanceInsufficient = errors.New("insufficient membership balan
 // ErrMembershipAdjustmentIdempotencyConflict is returned when the same
 // idempotency key is reused for a different manual membership adjustment.
 var ErrMembershipAdjustmentIdempotencyConflict = errors.New("membership adjustment idempotency conflict")
+
+// ErrOrderCreateIdempotencyConflict is returned when the same order-create
+// idempotency key is reused for a different request.
+var ErrOrderCreateIdempotencyConflict = errors.New("order create idempotency conflict")

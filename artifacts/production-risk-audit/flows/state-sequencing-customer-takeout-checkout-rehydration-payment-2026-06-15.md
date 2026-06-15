@@ -3,7 +3,7 @@
 Date: 2026-06-15
 Risk theme: state sequencing / idempotency and retry / transaction consistency
 Risk class: G3 - customer cart, order creation, payment callback/recovery, visible order status
-Status: source-audited, Mini Program contract covered, backend payment-create proof covered, order-create/provider proof pending
+Status: source-audited, Mini Program contract covered, backend payment-create proof covered, backend order-create guard covered when `Idempotency-Key` is supplied, frontend stable-key/provider proof pending
 
 ## Decision
 
@@ -61,6 +61,26 @@ Backend payment-create follow-up:
   transaction-owned. It does not prove request-level idempotency for duplicate
   order creation before an order id exists.
 
+Backend order-create idempotency follow-up:
+
+- `POST /v1/orders` accepts an optional `Idempotency-Key` header. When callers
+  supply a stable key, `OrderService.CreateOrder` canonicalizes the
+  actor/order target/items/options into a request hash and passes the scoped
+  key/hash to `CreateOrderTx`.
+- `locallife/db/migration/000270_add_order_create_idempotency.up.sql` adds
+  `order_create_request_idempotency` with a unique
+  `(operation_scope, actor_user_id, idempotency_key)` guard. `CreateOrderTx`
+  creates or locks the guard row, replays the bound `order_id` for the same
+  hash, rejects same-key/different-hash reuse with `409 Conflict`, and binds
+  the created order inside the same transaction.
+- Focused backend tests cover sequential replay/conflict, concurrent same-key
+  single-order creation, API header propagation, logic conflict mapping, and
+  skipping duplicate payment-timeout scheduling on replay.
+- This closes the backend duplicate order-create window only for callers that
+  reuse a stable key. The Mini Program takeout submit path still needs to
+  generate and reuse that key across duplicate submit/retry before the
+  user-facing flow is fully closed.
+
 ## Evidence Anchors
 
 - Takeout checkout slice:
@@ -83,6 +103,14 @@ Backend payment-create follow-up:
   `locallife/db/sqlc/tx_create_partner_payment_test.go:221`.
 - Logic conflict/no-upstream-call proof:
   `locallife/logic/payment_order_service_test.go:358`.
+- Backend order-create request idempotency:
+  `locallife/db/sqlc/tx_create_order.go:58` through `:340`,
+  `locallife/db/migration/000270_add_order_create_idempotency.up.sql`, and
+  `locallife/api/order.go:544`.
+- Order-create replay/conflict/concurrency proof:
+  `locallife/db/sqlc/tx_create_order_test.go:245`,
+  `locallife/logic/order_service_create_test.go:51`, and
+  `locallife/api/order_test.go:428`.
 - Backend cart/order/payment routes:
   `locallife/api/server.go:1009`, `locallife/api/server.go:1105`, and
   `locallife/api/server.go:1540`.
@@ -94,7 +122,7 @@ Backend payment-create follow-up:
 | Question | Required answer before code changes |
 | --- | --- |
 | Can a stale event-channel snapshot create an order with stale price/address truth? | Prove backend cart reload/calculation and order create validation are authoritative. |
-| Can duplicate submit create duplicate orders or duplicate payment orders? | Payment-order duplication for an already-created order is now covered by transaction and logic tests. Duplicate order creation before an order id exists remains a separate proof gap. |
+| Can duplicate submit create duplicate orders or duplicate payment orders? | Payment-order duplication for an already-created order is now covered by transaction and logic tests. Backend order-create duplication is covered when the caller supplies a stable `Idempotency-Key`; Mini Program stable-key propagation remains open. |
 | Can payment callback/recovery advance visible order state after client leaves result page? | Prove payment fact application and result/detail reads converge independently of `wx.requestPayment`. |
 | What happens if order create succeeds but payment create fails? | Prove partial success copy/readback leads user to existing order rather than repeated blind order creation. |
 | Are copied customer wrappers in sync? | Audit active `_main_shared/api/order.ts` and `payment.ts` copies before contract changes. |
@@ -115,6 +143,9 @@ Focused backend proof now added:
 ```bash
 go test ./db/sqlc -run 'TestCreatePartnerPaymentTx_ConcurrentOrderPaymentAllowsSinglePendingPayment' -count=1
 go test ./logic -run 'TestPaymentOrderServiceCreatePaymentOrder_TxPendingConflictDoesNotCallBaofu' -count=1
+go test ./db/sqlc -run 'TestCreateOrderTx_(RequestIdempotencyReplayAndConflict|ConcurrentSameIdempotencyKeyCreatesSingleOrder)' -count=1
+go test ./logic -run 'TestOrderServiceCreateOrder_(PassesIdempotencyMetadataAndSkipsTimeoutOnReplay|MapsIdempotencyConflict)' -count=1
+go test ./api -run 'TestCreateOrderAPI/PassesIdempotencyKey' -count=1
 ```
 
 From `weapp/`, add or run focused contract scripts for:
@@ -138,7 +169,10 @@ rehydration, pricing-error submit blocking, payment-create failure recovery, and
 payment-result re-entry readback. It also has backend proof that repeated
 payment creation for the same already-created order cannot create two pending
 Baofu payment orders or call Baofu after the transaction reports a pending
-payment conflict. Remaining proof gaps are duplicate order creation before an
-order id exists, real provider callback/recovery evidence, and an actual
-end-to-end run that shows order detail/list visibility after the client leaves
-the payment result page.
+payment conflict. Backend order creation now has request-level idempotency when
+callers supply a stable `Idempotency-Key`, including same-key replay,
+same-key/different-hash `409`, and same-key concurrent single-order proof.
+Remaining proof gaps are Mini Program stable-key propagation for takeout
+submit/retry, real provider callback/recovery evidence, and an actual end-to-end
+run that shows order detail/list visibility after the client leaves the payment
+result page.

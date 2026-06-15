@@ -45,6 +45,38 @@ FOR UPDATE;
 SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
 WHERE order_no = $1 LIMIT 1;
 
+-- name: CreateOrderRequestIdempotency :one
+INSERT INTO order_create_request_idempotency (
+    operation_scope,
+    actor_user_id,
+    idempotency_key,
+    request_hash
+) VALUES (
+    sqlc.arg(operation_scope),
+    sqlc.arg(actor_user_id),
+    sqlc.arg(idempotency_key),
+    sqlc.arg(request_hash)
+)
+ON CONFLICT (operation_scope, actor_user_id, idempotency_key) DO NOTHING
+RETURNING id, operation_scope, actor_user_id, idempotency_key, request_hash, order_id, created_at, updated_at;
+
+-- name: GetOrderRequestIdempotencyForUpdate :one
+SELECT id, operation_scope, actor_user_id, idempotency_key, request_hash, order_id, created_at, updated_at
+FROM order_create_request_idempotency
+WHERE operation_scope = sqlc.arg(operation_scope)
+  AND actor_user_id = sqlc.arg(actor_user_id)
+  AND idempotency_key = sqlc.arg(idempotency_key)
+LIMIT 1
+FOR UPDATE;
+
+-- name: BindOrderRequestIdempotencyOrder :one
+UPDATE order_create_request_idempotency
+SET order_id = sqlc.arg(order_id),
+    updated_at = now()
+WHERE id = sqlc.arg(id)
+  AND order_id IS NULL
+RETURNING id, operation_scope, actor_user_id, idempotency_key, request_hash, order_id, created_at, updated_at;
+
 -- name: GetOrderWithDetails :one
 SELECT 
     o.id, o.order_no, o.user_id, o.merchant_id, o.order_type, o.address_id, o.delivery_fee, o.delivery_distance, o.table_id, o.reservation_id, o.subtotal, o.discount_amount, o.delivery_fee_discount, o.total_amount, o.status, o.payment_method, o.paid_at, o.notes, o.created_at, o.updated_at, o.completed_at, o.cancelled_at, o.cancel_reason, o.final_amount, o.platform_commission, o.user_voucher_id, o.voucher_amount, o.balance_paid, o.membership_id, o.fulfillment_status, o.replaced_by_order_id, o.pickup_code, o.dispatch_order_id, o.flow_id, o.status_hint, o.badges, o.exception_state, o.claim_channel, o.overtime, o.prep_start_at, o.ready_at, o.courier_accept_at, o.picked_at, o.rider_delivered_at, o.user_delivered_at, o.auto_user_delivered_at, o.delivery_duration, o.delivery_contact_name_snapshot, o.delivery_contact_phone_snapshot, o.delivery_address_snapshot, o.delivery_longitude_snapshot, o.delivery_latitude_snapshot,

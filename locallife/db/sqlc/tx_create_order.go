@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -18,6 +20,10 @@ type CreateOrderTxParams struct {
 	Items                               []CreateOrderItemParams
 	BillingGroupID                      *int64
 	EnforceSingleActiveReservationOrder bool
+	IdempotencyOperationScope           string
+	IdempotencyActorUserID              int64
+	IdempotencyKey                      string
+	IdempotencyRequestHash              string
 
 	// 优惠券相关（可选）
 	UserVoucherID *int64 // 用户优惠券ID
@@ -39,11 +45,12 @@ type CreateOrderTxParams struct {
 
 // CreateOrderTxResult contains the result of the create order transaction
 type CreateOrderTxResult struct {
-	Order       Order
-	Items       []OrderItem
-	UserVoucher *UserVoucher           // 如果使用了优惠券
-	Membership  *MerchantMembership    // 如果使用了余额
-	Transaction *MembershipTransaction // 余额消费记录
+	Order               Order
+	Items               []OrderItem
+	UserVoucher         *UserVoucher           // 如果使用了优惠券
+	Membership          *MerchantMembership    // 如果使用了余额
+	Transaction         *MembershipTransaction // 余额消费记录
+	IdempotencyReplayed bool
 }
 
 // CreateOrderTx creates an order with all its items in a single transaction
@@ -53,6 +60,29 @@ func (store *SQLStore) CreateOrderTx(ctx context.Context, arg CreateOrderTxParam
 
 	err := store.execTx(ctx, func(q *Queries) error {
 		var err error
+		var idempotencyBinding *OrderCreateRequestIdempotency
+
+		binding, err := ensureOrderCreateIdempotencyBinding(ctx, q, arg)
+		if err != nil {
+			return err
+		}
+		if binding != nil {
+			idempotencyBinding = binding
+			if binding.OrderID.Valid {
+				order, getErr := q.GetOrder(ctx, binding.OrderID.Int64)
+				if getErr != nil {
+					return fmt.Errorf("get idempotent order: %w", getErr)
+				}
+				items, listErr := q.ListOrderItemsByOrder(ctx, order.ID)
+				if listErr != nil {
+					return fmt.Errorf("list idempotent order items: %w", listErr)
+				}
+				result.Order = order
+				result.Items = items
+				result.IdempotencyReplayed = true
+				return nil
+			}
+		}
 
 		if orderTypeUsesDailyPickupCode(arg.CreateOrderParams.OrderType) && !arg.CreateOrderParams.PickupCode.Valid {
 			pickupTime := arg.PickupTime
@@ -251,10 +281,62 @@ func (store *SQLStore) CreateOrderTx(ctx context.Context, arg CreateOrderTxParam
 			result.Order = paymentResult.Order
 		}
 
+		if idempotencyBinding != nil {
+			if _, err := q.BindOrderRequestIdempotencyOrder(ctx, BindOrderRequestIdempotencyOrderParams{
+				ID:      idempotencyBinding.ID,
+				OrderID: pgtype.Int8{Int64: result.Order.ID, Valid: true},
+			}); err != nil {
+				return fmt.Errorf("bind order request idempotency: %w", err)
+			}
+		}
+
 		return nil
 	})
 
 	return result, err
+}
+
+func ensureOrderCreateIdempotencyBinding(ctx context.Context, q *Queries, arg CreateOrderTxParams) (*OrderCreateRequestIdempotency, error) {
+	useIdempotency := strings.TrimSpace(arg.IdempotencyOperationScope) != "" ||
+		arg.IdempotencyActorUserID != 0 ||
+		strings.TrimSpace(arg.IdempotencyKey) != "" ||
+		strings.TrimSpace(arg.IdempotencyRequestHash) != ""
+	if !useIdempotency {
+		return nil, nil
+	}
+	if strings.TrimSpace(arg.IdempotencyOperationScope) == "" ||
+		arg.IdempotencyActorUserID == 0 ||
+		strings.TrimSpace(arg.IdempotencyKey) == "" ||
+		strings.TrimSpace(arg.IdempotencyRequestHash) == "" {
+		return nil, &requestError{statusCode: http.StatusBadRequest, err: errors.New("order idempotency metadata is incomplete")}
+	}
+
+	createParams := CreateOrderRequestIdempotencyParams{
+		OperationScope: strings.TrimSpace(arg.IdempotencyOperationScope),
+		ActorUserID:    arg.IdempotencyActorUserID,
+		IdempotencyKey: strings.TrimSpace(arg.IdempotencyKey),
+		RequestHash:    strings.TrimSpace(arg.IdempotencyRequestHash),
+	}
+	binding, err := q.CreateOrderRequestIdempotency(ctx, createParams)
+	if err == nil {
+		return &binding, nil
+	}
+	if !errors.Is(err, ErrRecordNotFound) {
+		return nil, fmt.Errorf("create order request idempotency: %w", err)
+	}
+
+	existing, err := q.GetOrderRequestIdempotencyForUpdate(ctx, GetOrderRequestIdempotencyForUpdateParams{
+		OperationScope: createParams.OperationScope,
+		ActorUserID:    createParams.ActorUserID,
+		IdempotencyKey: createParams.IdempotencyKey,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get order request idempotency: %w", err)
+	}
+	if strings.TrimSpace(existing.RequestHash) != createParams.RequestHash {
+		return nil, &requestError{statusCode: http.StatusConflict, err: fmt.Errorf("idempotency key already used by a different order create request: %w", ErrOrderCreateIdempotencyConflict)}
+	}
+	return &existing, nil
 }
 
 func orderTypeUsesDailyPickupCode(orderType string) bool {
