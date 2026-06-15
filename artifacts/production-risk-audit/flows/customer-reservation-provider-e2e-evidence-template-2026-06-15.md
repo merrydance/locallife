@@ -43,7 +43,9 @@ Provider application ID: record the external payment fact application id.
 
 Callback or query evidence: record the callback/query fact and terminal status.
 Baofu evidence gate command: record the exact `scripts/baofu_provider_evidence_gate.sh`
-command used with masked notes and the LocalLife callback/query endpoint.
+command used with masked notes and the LocalLife callback/query endpoint. If
+the command uses `--ledger-env production`, include the filled target readiness
+file with `--release-target-evidence`.
 
 ## Recovery And Visibility
 

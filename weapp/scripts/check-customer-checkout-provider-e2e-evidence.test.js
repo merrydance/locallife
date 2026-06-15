@@ -77,12 +77,51 @@ function assertEvidence(content) {
     `Flow type must be one of: ${allowedFlowTypes.join(', ')}`
   )
   assert(content.includes('scripts/baofu_provider_evidence_gate.sh'), 'Baofu evidence gate command must be recorded')
+  assertProductionBaofuEvidenceHasReleaseTarget(content)
   assert(!/Status:\s*template only/i.test(content), 'template evidence cannot be used as release evidence')
   for (const placeholder of forbiddenPlaceholders) {
     assert(!content.toLowerCase().includes(placeholder.toLowerCase()), `evidence still contains placeholder: ${placeholder}`)
   }
   assert(!/:\s*record\b/im.test(content), 'evidence still contains template instructions')
   assert(/Verdict:\s*pass\b/i.test(content), 'Verdict must be pass for release evidence')
+}
+
+function extractFieldBlock(content, label) {
+  const lines = content.split(/\r?\n/)
+  const start = lines.findIndex((line) => line.startsWith(label))
+  if (start === -1) {
+    return ''
+  }
+
+  const block = [lines[start]]
+  for (let i = start + 1; i < lines.length; i += 1) {
+    const line = lines[i]
+    if (line.startsWith('## ')) {
+      break
+    }
+    if (/^[A-Z0-9][^:]{1,80}:\s*/.test(line)) {
+      break
+    }
+    if (line.trim() === '') {
+      break
+    }
+    block.push(line)
+  }
+
+  return block.join('\n')
+}
+
+function assertProductionBaofuEvidenceHasReleaseTarget(content) {
+  const command = extractFieldBlock(content, 'Baofu evidence gate command:')
+  if (!/scripts\/baofu_provider_evidence_gate\.sh/.test(command)) {
+    return
+  }
+  if (/--ledger-env\s+production\b/.test(command)) {
+    assert(
+      /--release-target-evidence\b/.test(command),
+      'production Baofu ledger evidence must include --release-target-evidence'
+    )
+  }
 }
 
 function assertEvidenceRejected(content, expectedMessage) {
@@ -116,7 +155,7 @@ Provider application ID: 5005
 ## Provider Evidence
 
 Callback or query evidence: Baofu callback row applied with masked provider ids
-Baofu evidence gate command: PATH="/usr/local/go/bin:$PATH" scripts/baofu_provider_evidence_gate.sh --capability payment --fact-id 4004 --application-id 5005 --payment-order-id 3003 --ledger-row --evidence-kind callback --ledger-date 2026-06-15 --ledger-env production --ledger-endpoint https://llapi.merrydance.cn/v1/webhooks/baofu/payment --ledger-ack OK --ledger-commit 994c10db --ledger-notes controlled-customer-checkout-e2e
+Baofu evidence gate command: PATH="/usr/local/go/bin:$PATH" scripts/baofu_provider_evidence_gate.sh --capability payment --fact-id 4004 --application-id 5005 --payment-order-id 3003 --ledger-row --evidence-kind callback --ledger-date 2026-06-15 --ledger-env production --ledger-endpoint https://llapi.merrydance.cn/v1/webhooks/baofu/payment --ledger-ack OK --ledger-commit 994c10db --ledger-notes controlled-customer-checkout-e2e --release-target-evidence ../artifacts/production-risk-audit/flows/release-readiness-target-evidence-2026-06-15.md
 
 ## Recovery And Visibility
 
@@ -145,6 +184,13 @@ Verdict: pass
   assertEvidenceRejected(
     evidence.replace('Device model: iPhone 15', 'Device model: record the physical device model'),
     /template instructions/i
+  )
+  assertEvidenceRejected(
+    evidence.replace(
+      ' --release-target-evidence ../artifacts/production-risk-audit/flows/release-readiness-target-evidence-2026-06-15.md',
+      ''
+    ),
+    /production Baofu ledger evidence must include --release-target-evidence/i
   )
   fs.rmSync(tmpDir, { recursive: true, force: true })
 }
