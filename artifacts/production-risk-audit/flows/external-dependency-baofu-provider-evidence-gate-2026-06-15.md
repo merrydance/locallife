@@ -332,6 +332,59 @@ callback evidence without an explicit observed ACK. It still does not authorize
 or execute a withdrawal; the operator must separately record who approved the
 funds action and how the amount was bounded.
 
+## Provider Evidence Runbook
+
+Use this runbook only for a controlled provider evidence run. It is not part of
+ordinary CI and must not run hidden funds actions.
+
+Preflight:
+
+1. Name the capability: payment, share, refund, or withdrawal.
+2. Check the matching capability row in
+   `.github/standards/domains/baofu-payment/CONTRACT_SOURCE_MATRIX.md` and run
+   `make check-baofu-contract`.
+3. Confirm environment and config without printing secrets: Baofu endpoint,
+   callback URL, S(10) cert indexes, public key, Redis, and
+   `DATA_ENCRYPTION_KEY`.
+4. Create or identify the LocalLife business row before provider evidence is
+   claimed. Standalone smoke rows do not count.
+5. For withdrawal, record the approver, maximum amount, owner, account binding,
+   and rollback/monitoring owner before any funds action is attempted.
+
+Execution:
+
+1. Run the provider action or wait for the provider callback in the controlled
+   environment.
+2. Record masked provider identifiers only: out trade/order/refund/request no,
+   trade no, refund id, withdrawal no, or secondary merchant id as applicable.
+3. Confirm callback ACK exactly as observed. For query recovery, record the
+   query endpoint and terminal upstream state instead of inventing an ACK.
+4. Verify local durable rows after the provider event:
+   `external_payment_facts`, `external_payment_fact_applications` when the flow
+   uses applications, command row, and the relevant business row.
+5. Run the matching local collector with the exact DB row IDs. Use
+   `-ledger-row` only after all runtime context fields are known.
+
+Writeback:
+
+1. Paste the generated row into the matching section of
+   `.github/standards/domains/baofu-payment/SANDBOX_EVIDENCE_LEDGER.md`.
+2. Label the row honestly as C4, production first-order, sandbox-shape,
+   fake-order, provider-error, or funds-action evidence.
+3. Keep raw payloads, secrets, full provider identifiers, phone, card, identity,
+   certificate, signature, and private key material out of the repository.
+4. If any required local row is missing, record a negative evidence row or an
+   open gap. Do not promote the capability.
+
+Non-claims:
+
+- A collector pass is not provider reachability.
+- A candidate ledger row is not C4 until it is backed by the controlled runtime
+  event and written to the ledger with masked identifiers.
+- A fake-order `ORDER_NOT_EXIST` or withdrawal missing-serial response is
+  transport/error-classification evidence only.
+- A withdrawal query result is not approval to execute a withdrawal.
+
 ## Phase 1 Release Gate Checklist
 
 Before any Baofu-affecting release, answer every item below in the change
