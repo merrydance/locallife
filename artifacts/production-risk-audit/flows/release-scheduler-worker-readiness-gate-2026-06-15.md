@@ -351,7 +351,18 @@ rollback-only DB proof for explicit disposable rows, but this implementation
 run did not execute it against a deployed release database. The remaining
 release risk is operational: every release still needs prepared fixture IDs and
 an actual smoke run in the target environment before claiming deployed runtime
-readiness. For dine-in checkout recovery specifically, the deployed Prometheus
-or equivalent monitor should alert on repeated increases of
-`dine_in_checkout_recovery_scans_total{result="list_error"}` and
-`dine_in_checkout_recovery_sessions_total{result="close_failed"}`.
+readiness.
+
+For dine-in checkout recovery specifically, the deployed Prometheus or
+equivalent monitor must have a filled target-environment evidence file that
+passes:
+
+```bash
+cd weapp
+npm run check:dine-in-recovery-alert-evidence -- ../artifacts/production-risk-audit/flows/dine-in-checkout-recovery-alert-evidence-YYYY-MM-DD.md
+```
+
+That evidence must prove repeated increases of
+`dine_in_checkout_recovery_scans_total{result="list_error"}` or
+`dine_in_checkout_recovery_sessions_total{result="close_failed"}` page or
+notify the accountable route.

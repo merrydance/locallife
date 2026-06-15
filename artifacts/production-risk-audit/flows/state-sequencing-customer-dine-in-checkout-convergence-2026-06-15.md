@@ -189,10 +189,15 @@ Mini Program device/E2E evidence gate:
 cd weapp
 npm run check:dine-in-device-e2e-evidence
 npm run check:dine-in-device-e2e-evidence -- ../artifacts/production-risk-audit/flows/dine-in-checkout-device-e2e-evidence-YYYY-MM-DD.md
+npm run check:dine-in-recovery-alert-evidence
+npm run check:dine-in-recovery-alert-evidence -- ../artifacts/production-risk-audit/flows/dine-in-checkout-recovery-alert-evidence-YYYY-MM-DD.md
 ```
 
 Evidence template:
 `artifacts/production-risk-audit/flows/dine-in-checkout-device-e2e-evidence-template-2026-06-15.md`.
+
+Alert evidence template:
+`artifacts/production-risk-audit/flows/dine-in-checkout-recovery-alert-evidence-template-2026-06-15.md`.
 
 From `weapp/`, add or run a focused script covering:
 
@@ -229,14 +234,17 @@ The remaining high-value device/E2E regression is:
 
 ## Remaining Follow-Ups
 
-The original authz blocker, backend post-paid recovery gap, and Mini Program
-re-entry/polling contract gap are fixed and covered. Remaining follow-ups are:
+The original authz blocker, backend post-paid recovery gap, Mini Program
+re-entry/polling contract gap, and target-alert evidence schema gap are fixed
+and covered. Remaining follow-ups are:
 
 1. Add an actual Mini Program device/E2E run for pending checkout context
    survival across result-page reload and paid-status polling, then validate the
    filled evidence file with `check:dine-in-device-e2e-evidence`.
-2. Wire target-environment Prometheus alerting for repeated
+2. Add a filled target-environment alert evidence file proving repeated
    `dine_in_checkout_recovery_scans_total{result="list_error"}` or
-   `dine_in_checkout_recovery_sessions_total{result="close_failed"}` increases.
+   `dine_in_checkout_recovery_sessions_total{result="close_failed"}` increases
+   page or notify the accountable route, then validate it with
+   `check:dine-in-recovery-alert-evidence`.
 3. Keep this card as the rerun checklist before changing dine-in checkout,
    shared payment result, or dining-session close behavior.
