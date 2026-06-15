@@ -99,6 +99,7 @@ if [[ "$mode" == "target" ]]; then
     -include-redis
     -include-provider-clients
     -include-fixture-claimability
+    -require-production
     -payment-fact-application-fixture-id "$PAYMENT_FACT_APPLICATION_FIXTURE_ID"
     -payment-domain-outbox-fixture-id "$PAYMENT_DOMAIN_OUTBOX_FIXTURE_ID"
     -format "$format"

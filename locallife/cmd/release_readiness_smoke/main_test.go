@@ -3,6 +3,7 @@ package main
 import (
 	"testing"
 
+	"github.com/merrydance/locallife/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -15,4 +16,12 @@ func TestValidateFixtureClaimabilityFlagIDs(t *testing.T) {
 
 	err = validateFixtureClaimabilityFlagIDs(true, 101, -1)
 	require.ErrorContains(t, err, "payment-domain-outbox-fixture-id must be a positive integer")
+}
+
+func TestValidateRequiredProductionEnvironment(t *testing.T) {
+	require.NoError(t, validateRequiredProductionEnvironment(false, util.Config{Environment: "test"}))
+	require.NoError(t, validateRequiredProductionEnvironment(true, util.Config{Environment: "production"}))
+
+	err := validateRequiredProductionEnvironment(true, util.Config{Environment: "test"})
+	require.ErrorContains(t, err, "ENVIRONMENT must be production")
 }

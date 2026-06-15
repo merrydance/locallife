@@ -166,10 +166,11 @@ entrypoint. `--static` keeps the side-effect-free source report. `--target`
 requires `PAYMENT_FACT_APPLICATION_FIXTURE_ID` and
 `PAYMENT_DOMAIN_OUTBOX_FIXTURE_ID`, then always runs config, Redis/Asynq,
 Baofu provider-client, and rollback-only fixture claimability checks together.
-The wrapper rejects missing, zero, or non-numeric fixture IDs before invoking
-the Go smoke command. The Go command also rejects non-positive fixture IDs
-before opening a DB connection when run directly with
-`-include-fixture-claimability`.
+Target mode also passes `-require-production`, so a release smoke pointed at a
+test/staging config fails instead of skipping production-only config checks. The
+wrapper rejects missing, zero, or non-numeric fixture IDs before invoking the Go
+smoke command. The Go command also rejects non-positive fixture IDs before
+opening a DB connection when run directly with `-include-fixture-claimability`.
 
 Current rows:
 
@@ -239,10 +240,13 @@ Observed result:
 - Fixture claimability is covered by focused unit tests for explicit fixture
   IDs, successful claim returns, and unclaimable rows.
 - The wrapper contract test proves target mode includes config, Redis/Asynq,
-  Baofu provider-client, and rollback-only fixture checks and refuses to run
-  without positive-integer fixture IDs.
+  Baofu provider-client, rollback-only fixture checks, and
+  `-require-production`, and refuses to run without positive-integer fixture
+  IDs.
 - The Go command test proves direct `-include-fixture-claimability` runs reject
   non-positive fixture IDs before DB claimability checks.
+- The Go command test proves `-require-production` rejects non-production
+  config before a target smoke can be recorded as release evidence.
 - Focused worker and scheduler package tests returned `ok`.
 
 What this proves:
@@ -356,12 +360,12 @@ timeouts, and cleanup schedulers actually run in the deployed environment.
 The static/config/Redis/provider-client smoke reduces source-level
 registration, production fail-fast configuration, queue reachability, paused
 required-queue drift, and local provider-client construction drift risk. The
-fixture claimability mode adds a
-rollback-only DB proof for explicit disposable rows, but this implementation
-run did not execute it against a deployed release database. The remaining
-release risk is operational: every release still needs prepared fixture IDs and
-an actual smoke run in the target environment before claiming deployed runtime
-readiness.
+fixture claimability mode adds a rollback-only DB proof for explicit disposable
+rows, and target wrapper mode now fails if the loaded config is not
+`ENVIRONMENT=production`. This implementation run did not execute it against a
+deployed release database. The remaining release risk is operational: every
+release still needs prepared fixture IDs and an actual smoke run in the target
+production environment before claiming deployed runtime readiness.
 
 For dine-in checkout recovery specifically, the deployed Prometheus or
 equivalent monitor must have a filled target-environment evidence file that

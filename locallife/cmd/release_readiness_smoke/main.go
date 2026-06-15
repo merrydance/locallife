@@ -22,6 +22,7 @@ func main() {
 	includeRedis := flag.Bool("include-redis", false, "also ping Redis and read Asynq queue stats using loaded config")
 	includeProviderClients := flag.Bool("include-provider-clients", false, "also construct provider clients using loaded config without making provider requests")
 	includeFixtureClaimability := flag.Bool("include-fixture-claimability", false, "also claim explicit disposable DB fixture rows inside a rollback-only transaction")
+	requireProduction := flag.Bool("require-production", false, "fail unless loaded config has ENVIRONMENT=production")
 	paymentFactApplicationFixtureID := flag.Int64("payment-fact-application-fixture-id", 0, "external_payment_fact_applications id to claim inside rollback-only fixture mode")
 	paymentDomainOutboxFixtureID := flag.Int64("payment-domain-outbox-fixture-id", 0, "payment_domain_outbox id to claim inside rollback-only fixture mode")
 	flag.Parse()
@@ -39,12 +40,16 @@ func main() {
 		fmt.Fprintln(os.Stderr, "release readiness fixture claimability failed:", err)
 		os.Exit(2)
 	}
-	if *includeConfig || *includeRedis || *includeProviderClients || *includeFixtureClaimability {
+	if *includeConfig || *includeRedis || *includeProviderClients || *includeFixtureClaimability || *requireProduction {
 		config, err = util.LoadConfig(*root)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "release readiness config load failed:", err)
 			os.Exit(2)
 		}
+	}
+	if err := validateRequiredProductionEnvironment(*requireProduction, config); err != nil {
+		fmt.Fprintln(os.Stderr, "release readiness target environment failed:", err)
+		os.Exit(2)
 	}
 	if *includeConfig {
 		report = releasereadiness.MergeReports(report, releasereadiness.CheckConfig(config))
@@ -102,6 +107,16 @@ func validateFixtureClaimabilityFlagIDs(includeFixtureClaimability bool, payment
 	}
 	if paymentDomainOutboxFixtureID <= 0 {
 		return fmt.Errorf("payment-domain-outbox-fixture-id must be a positive integer")
+	}
+	return nil
+}
+
+func validateRequiredProductionEnvironment(requireProduction bool, config util.Config) error {
+	if !requireProduction {
+		return nil
+	}
+	if strings.TrimSpace(config.Environment) != "production" {
+		return fmt.Errorf("ENVIRONMENT must be production for target release readiness smoke")
 	}
 	return nil
 }
