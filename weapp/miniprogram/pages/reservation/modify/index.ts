@@ -353,6 +353,21 @@ Page({
                 })
                 return
             }
+            if (result.outcome === 'refund_initiated') {
+                const refundAmountText = typeof result.refund_amount === 'number'
+                    ? `，预计退款¥${formatPriceNoSymbol(result.refund_amount)}`
+                    : ''
+                wx.showModal({
+                    title: '退款处理中',
+                    content: `改菜已生效${refundAmountText}，到账结果以预订详情同步为准。`,
+                    showCancel: false,
+                    confirmText: '查看详情',
+                    success: () => {
+                        wx.navigateBack()
+                    }
+                })
+                return
+            }
             wx.navigateBack()
         } catch (error) {
             const errMessage = getErrorUserMessage(error, '修改失败，请稍后重试')

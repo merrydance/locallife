@@ -3,7 +3,7 @@
 Date: 2026-06-15
 Risk theme: state sequencing / idempotency and retry / transaction consistency / authorization boundaries
 Risk class: G3 - reservation availability, deposit/full payment, add-on payment, refund, no-show attribution, table/session handoff
-Status: source-audited; backend transaction and worker proof exists; dedicated customer-side Mini Program contract and real provider proof still pending
+Status: source-audited; backend transaction and worker proof exists; customer-side Mini Program contract gate exists; real provider proof still pending
 
 ## Decision
 
@@ -101,7 +101,7 @@ using the takeout checkout card as a proxy.
 | Can a negative modify over-refund after funds changed? | Logic computes allocations from paid reservation payment orders and rejects incomplete refund allocation; `ReplaceReservationItemsWithRefundOrdersTx` has current-total and refund guard tests. |
 | Can no-show punish the staff account for phone/walk-in reservations? | `MarkNoShowTx` leaves `behavior_decisions.user_id` null for offline/phone sources and records offline identity in the fact snapshot. |
 | Can merchant terminal actions bypass active add-on/refund uncertainty? | Complete, cancel, no-show, cooking-start, and item replacement all check active adjustments. |
-| Does the customer have a re-entry path after unknown reservation payment result? | Payment result polling and reservation detail/list payment restart exist, but there is no dedicated customer reservation contract script equivalent to takeout checkout. |
+| Does the customer have a re-entry path after unknown reservation payment result? | Payment result polling and reservation detail/list payment restart exist, and `npm run check:reservation-checkout-addon-recovery-contract` now locks the customer reservation payment/add-on recovery contract. |
 | Does real provider callback/recovery evidence exist for reservation deposit/add-on/refund? | Not from this local audit; this remains part of the Baofu evidence gap. |
 
 ## Human-Centered UI Check
@@ -141,12 +141,13 @@ From `weapp/`:
 ```bash
 npm run check:merchant-reservation-table-status-contract
 npm run check:merchant-reservation-actions-contract
+npm run check:reservation-checkout-addon-recovery-contract
 npm run check:payment-refund-terminal-flow
 npm run check:payment-workflow-boundary
 ```
 
-Before any customer reservation checkout/add-on UI change, add or run a
-dedicated customer reservation contract script that proves:
+Before any customer reservation checkout/add-on UI change, run
+`npm run check:reservation-checkout-addon-recovery-contract` to prove:
 
 - create -> deposit payment-create failure routes to persisted reservation
   detail/list truth;
@@ -173,6 +174,7 @@ PATH="/usr/local/go/bin:$PATH" go test ./worker -run 'Test.*Reservation.*|TestRe
 cd ../weapp
 PATH="$HOME/.local/bin:$PATH" npm run check:merchant-reservation-table-status-contract
 PATH="$HOME/.local/bin:$PATH" npm run check:merchant-reservation-actions-contract
+PATH="$HOME/.local/bin:$PATH" npm run check:reservation-checkout-addon-recovery-contract
 PATH="$HOME/.local/bin:$PATH" npm run check:payment-refund-terminal-flow
 PATH="$HOME/.local/bin:$PATH" npm run gate:payment-workflow-boundary
 ```
@@ -188,10 +190,10 @@ locked room creation, terminal status transitions, active adjustment blocking,
 positive add-on payment application, negative modify refund creation,
 inventory release/sync, offline no-show attribution, and refund recovery.
 
-The remaining issue is evidence: customer reservation checkout/add-on does not
-yet have a dedicated Mini Program contract script equivalent to takeout
-checkout, and real Baofu callback/query/funds evidence for reservation
-deposit, add-on, and refund paths is still external-provider evidence, not
-local unit-test proof. Do not treat reservation payment/add-on/no-show changes
-as release-ready until those checks are added or explicitly run with masked
-target evidence.
+The remaining issue is provider evidence: customer reservation checkout/add-on
+now has a dedicated Mini Program contract gate equivalent to the takeout
+checkout static contract, but real Baofu callback/query/funds evidence for
+reservation deposit, add-on, and refund paths is still external-provider
+evidence, not local unit-test proof. Do not treat reservation
+payment/add-on/no-show changes as release-ready until that masked target
+evidence is supplied or the gap is explicitly accepted.
