@@ -319,6 +319,7 @@ func main() {
 	schedulerManager.Register("claim-recovery", worker.NewClaimRecoveryScheduler(store, taskDistributor))
 	schedulerManager.Register("order-timeout", scheduler.NewOrderTimeoutScheduler(store))
 	schedulerManager.Register("takeout-auto-complete", scheduler.NewTakeoutAutoCompleteScheduler(store, taskDistributor))
+	schedulerManager.Register("dine-in-checkout-recovery", scheduler.NewDineInCheckoutRecoveryScheduler(store))
 	if cloudPrinterManager.Supported(string(cloudprint.ProviderShangpeng)) {
 		schedulerManager.Register("cloud-printer-status-poll", worker.NewCloudPrinterStatusPollScheduler(store, cloudPrinterManager, config))
 	}

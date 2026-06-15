@@ -16146,6 +16146,21 @@ func (mr *MockStoreMockRecorder) ListOrdersByUserWithFilters(ctx, arg any) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListOrdersByUserWithFilters", reflect.TypeOf((*MockStore)(nil).ListOrdersByUserWithFilters), ctx, arg)
 }
 
+// ListPaidOpenDineInSessionsForCheckoutRecovery mocks base method.
+func (m *MockStore) ListPaidOpenDineInSessionsForCheckoutRecovery(ctx context.Context, arg db.ListPaidOpenDineInSessionsForCheckoutRecoveryParams) ([]db.DiningSession, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListPaidOpenDineInSessionsForCheckoutRecovery", ctx, arg)
+	ret0, _ := ret[0].([]db.DiningSession)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListPaidOpenDineInSessionsForCheckoutRecovery indicates an expected call of ListPaidOpenDineInSessionsForCheckoutRecovery.
+func (mr *MockStoreMockRecorder) ListPaidOpenDineInSessionsForCheckoutRecovery(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPaidOpenDineInSessionsForCheckoutRecovery", reflect.TypeOf((*MockStore)(nil).ListPaidOpenDineInSessionsForCheckoutRecovery), ctx, arg)
+}
+
 // ListPaidUnprocessedPaymentOrders mocks base method.
 func (m *MockStore) ListPaidUnprocessedPaymentOrders(ctx context.Context, arg db.ListPaidUnprocessedPaymentOrdersParams) ([]db.PaymentOrder, error) {
 	m.ctrl.T.Helper()

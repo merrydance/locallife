@@ -3,7 +3,7 @@
 Date: 2026-06-15
 Risk theme: state sequencing / transaction consistency / release configuration
 Risk class: G3 - table session, billing group, order payment, post-paid session checkout
-Status: source-audited, fixed, validated
+Status: source-audited, fixed, backend recovery implemented, validated
 
 ## Decision
 
@@ -16,6 +16,13 @@ drift: the Mini Program paid-result path calls
 Fix commit:
 
 - `ad0e609d fix: allow paid dine-in customer checkout`
+
+Follow-up implementation in this change set:
+
+- backend scheduler recovery for paid open dine-in sessions;
+- SQL/sqlc query that scans only open sessions with active paid dine-in orders;
+- partial index for the recovery scan; and
+- scheduler registration in the runtime composition root.
 
 The backend now allows a customer to close only their own dining session when
 the session has an active dine-in order owned by that customer and that order is
@@ -39,13 +46,17 @@ and reservation completion remain in the transaction-owned close boundary.
    and calls backend `checkoutDiningSession`.
 6. Backend `checkoutDiningSession` calls `logic.CheckoutDiningSession`, closes
    the dining session, and publishes table/reservation updates.
+7. If the customer checkout API call fails transiently after payment success,
+   `DineInCheckoutRecoveryScheduler` scans paid open dine-in sessions after a
+   short buffer and reuses `CloseDiningSessionTx` to close the session, billing
+   groups, table occupancy, and reservation state.
 
 ## Source-Audit Answers
 
 | Question | Answer |
 | --- | --- |
 | Does a paid order always have enough context to locate the dining session? | The Mini Program saves pending checkout context with `session_id`, `order_id`, and optional `payment_order_id` before navigating to the payment result page. Backend closure uses the trusted `session_id` to read the session and validates `active_order_id` server-side. |
-| What happens if payment succeeds but `checkoutDiningSession` fails once? | The result page catches the failure and leaves a user-visible sync note, but there is still no backend worker/scheduler that auto-closes paid sessions later. This remains a retry/release follow-up, not an authz blocker. |
+| What happens if payment succeeds but `checkoutDiningSession` fails once? | The result page catches the failure and leaves a user-visible sync note. Backend recovery now scans paid open dine-in sessions older than the recovery buffer and closes them through `CloseDiningSessionTx`. |
 | Is `checkoutDiningSession` idempotent for an already closed session? | `CloseDiningSessionTx` returns an already closed session as success. The new customer path still requires the session's active paid order guard before reaching the transaction. |
 | Does billing group membership block an otherwise paid session close? | No. Checkout close is authorized by merchant ownership or by session owner plus active paid dine-in order; it does not require billing group membership. Billing groups are closed by `CloseDiningSessionTx`. |
 | Do table/reservation websocket failures affect durable session closure? | No. Handler websocket sends happen after logic returns a closed session; durable close is already committed by the transaction. |
@@ -65,6 +76,20 @@ and reservation completion remain in the transaction-owned close boundary.
 - `locallife/logic/dining_session_test.go`: logic coverage includes paid
   customer checkout, customer who also owns a different merchant, unpaid active
   order rejection, and non-owner rejection.
+- `locallife/db/query/dining_session.sql`: adds a recovery query that requires
+  `dining_sessions.status = 'open'`, non-null active order via the join, order
+  `status = 'paid'`, order `order_type = 'dine_in'`, and matching merchant/user.
+- `locallife/scheduler/dine_in_checkout_recovery.go`: adds the recurring
+  recovery job and per-session failure isolation while reusing
+  `CloseDiningSessionTx`.
+- `locallife/main.go`: registers `dine-in-checkout-recovery` with the existing
+  scheduler manager.
+- `locallife/db/migration/000269_add_dine_in_checkout_recovery_index.up.sql`:
+  adds the partial index used by the recovery scan.
+- `locallife/db/sqlc/tx_dining_session_test.go` and
+  `locallife/scheduler/dine_in_checkout_recovery_test.go`: cover recovery
+  query filters, index presence, scheduler success, list failure, and
+  per-session close failure continuation.
 
 ## Evidence Anchors
 
@@ -77,6 +102,12 @@ and reservation completion remain in the transaction-owned close boundary.
   `locallife/logic/dining_session.go:501`.
 - Session close SQL:
   `locallife/db/query/dining_session.sql:32`.
+- Paid open session recovery SQL:
+  `locallife/db/query/dining_session.sql`.
+- Backend scheduler recovery:
+  `locallife/scheduler/dine_in_checkout_recovery.go`.
+- Recovery scan index:
+  `locallife/db/migration/000269_add_dine_in_checkout_recovery_index.up.sql`.
 - Billing group/order session validation:
   `locallife/logic/order_session.go:169` through `:213`.
 - Payment result polling and dine-in close trigger:
@@ -92,7 +123,7 @@ and reservation completion remain in the transaction-owned close boundary.
 | Question | Closure status |
 | --- | --- |
 | Does a paid order always have enough context to locate the dining session? | Closed for current path: frontend pending checkout context carries `session_id`; backend verifies server-side active order. |
-| What happens if payment succeeds but `checkoutDiningSession` fails once? | Residual risk: no backend retry worker or scheduler closes paid sessions after a transient checkout API failure. |
+| What happens if payment succeeds but `checkoutDiningSession` fails once? | Closed for backend convergence: recovery scheduler closes eligible paid open sessions through the same transaction boundary. |
 | Is `checkoutDiningSession` idempotent for an already closed session? | Closed at transaction layer via `CloseDiningSessionTx`; caller still must satisfy authz/order guard. |
 | Does billing group membership block an otherwise paid session close? | Closed: not required for close. |
 | Do table/reservation websocket failures affect durable session closure? | Closed: websocket emits are post-close best effort. |
@@ -120,6 +151,18 @@ make swagger
 make check-generated
 ```
 
+Executed backend recovery validation:
+
+```bash
+make migrateup
+go test ./db/sqlc -run 'TestPaidOpenDineInCheckoutRecoveryIndexExists|TestListPaidOpenDineInSessionsForCheckoutRecovery' -count=1
+go test ./db/sqlc -run 'Test.*DiningSession' -count=1
+go test ./scheduler -run TestDineInCheckoutRecoveryScheduler -count=1
+go test ./scheduler -count=1
+go test . -run '^$' -count=1
+make check-generated
+```
+
 From `weapp/`, add or run a focused script covering:
 
 ```bash
@@ -137,14 +180,14 @@ The missing high-value regression is:
 7. Backend session is closed and subsequent menu/session read rehydrates closed
    or non-actionable state.
 
-## Remaining Real Issue
+## Remaining Follow-Ups
 
-The original authz blocker is fixed and covered. Remaining follow-ups are:
+The original authz blocker and backend post-paid recovery gap are fixed and
+covered. Remaining follow-ups are:
 
-1. Add a backend-owned retry/recovery path for paid dine-in sessions that remain
-   open after payment success because the customer checkout API failed
-   transiently.
-2. Add Mini Program contract/E2E coverage for pending checkout context survival
+1. Add Mini Program contract/E2E coverage for pending checkout context survival
    across result-page reload and paid-status polling.
+2. Consider an operational alert if the recovery scheduler repeatedly fails to
+   list or close eligible sessions.
 3. Keep this card as the rerun checklist before changing dine-in checkout,
    shared payment result, or dining-session close behavior.

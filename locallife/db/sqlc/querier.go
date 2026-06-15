@@ -1470,6 +1470,7 @@ type Querier interface {
 	ListOrdersByUser(ctx context.Context, arg ListOrdersByUserParams) ([]ListOrdersByUserRow, error)
 	ListOrdersByUserAndStatus(ctx context.Context, arg ListOrdersByUserAndStatusParams) ([]ListOrdersByUserAndStatusRow, error)
 	ListOrdersByUserWithFilters(ctx context.Context, arg ListOrdersByUserWithFiltersParams) ([]ListOrdersByUserWithFiltersRow, error)
+	ListPaidOpenDineInSessionsForCheckoutRecovery(ctx context.Context, arg ListPaidOpenDineInSessionsForCheckoutRecoveryParams) ([]DiningSession, error)
 	ListPaidUnprocessedPaymentOrders(ctx context.Context, arg ListPaidUnprocessedPaymentOrdersParams) ([]PaymentOrder, error)
 	ListPaidUnrefundedPaymentOrders(ctx context.Context, limit int32) ([]PaymentOrder, error)
 	ListPaidUnrefundedReservationPaymentOrders(ctx context.Context, limit int32) ([]PaymentOrder, error)

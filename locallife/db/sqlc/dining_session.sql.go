@@ -251,6 +251,57 @@ func (q *Queries) ListOpenDiningSessionsBefore(ctx context.Context, arg ListOpen
 	return items, nil
 }
 
+const listPaidOpenDineInSessionsForCheckoutRecovery = `-- name: ListPaidOpenDineInSessionsForCheckoutRecovery :many
+SELECT ds.id, ds.merchant_id, ds.table_id, ds.reservation_id, ds.user_id, ds.active_order_id, ds.status, ds.opened_at, ds.closed_at, ds.created_at, ds.updated_at
+FROM dining_sessions ds
+INNER JOIN orders o ON o.id = ds.active_order_id
+WHERE ds.status = 'open'
+  AND ds.opened_at < $1
+  AND o.status = 'paid'
+  AND o.order_type = 'dine_in'
+  AND o.merchant_id = ds.merchant_id
+  AND o.user_id = ds.user_id
+ORDER BY ds.opened_at ASC, ds.id ASC
+LIMIT $2
+`
+
+type ListPaidOpenDineInSessionsForCheckoutRecoveryParams struct {
+	OpenedBefore time.Time `json:"opened_before"`
+	Limit        int32     `json:"limit"`
+}
+
+func (q *Queries) ListPaidOpenDineInSessionsForCheckoutRecovery(ctx context.Context, arg ListPaidOpenDineInSessionsForCheckoutRecoveryParams) ([]DiningSession, error) {
+	rows, err := q.db.Query(ctx, listPaidOpenDineInSessionsForCheckoutRecovery, arg.OpenedBefore, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []DiningSession{}
+	for rows.Next() {
+		var i DiningSession
+		if err := rows.Scan(
+			&i.ID,
+			&i.MerchantID,
+			&i.TableID,
+			&i.ReservationID,
+			&i.UserID,
+			&i.ActiveOrderID,
+			&i.Status,
+			&i.OpenedAt,
+			&i.ClosedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateDiningSessionActiveOrder = `-- name: UpdateDiningSessionActiveOrder :one
 UPDATE dining_sessions
 SET active_order_id = $2,

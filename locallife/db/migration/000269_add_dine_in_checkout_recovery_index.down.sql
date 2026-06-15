@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_dining_sessions_open_active_order_opened_at;
