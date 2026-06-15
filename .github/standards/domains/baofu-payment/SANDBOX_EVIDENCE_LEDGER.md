@@ -17,6 +17,7 @@
 - withdrawal 的正向 C4 至少要同时引用真实或宝付批准的小额资金动作、授权人和金额上限、`baofu_withdrawal_orders`、`external_payment_facts`、create-withdraw command row、观察到的 callback ACK 或 query recovery 结果。
 - fake-order、synthetic order、standalone smoke、parser test、shape-only sandbox probe、provider error classification 只能标为负向或形态证据；不得写成真实支付、真实分账、真实退款或真实提现成功。
 - 若 evidence row 来自 collector 的 `-ledger-row` 输出，`Notes` 必须写明原始运行背景：环境、操作人、是否真实资金动作、相关业务单、脱敏 provider 标识和本地 row id 来源。
+- 若 evidence row 标记为生产环境，必须先让填好的目标环境 release readiness evidence 通过 `make check-release-readiness-target-evidence evidence=...`，并在 `locallife/scripts/baofu_provider_evidence_gate.sh --ledger-row --ledger-env production` 中用 `--release-target-evidence <evidence.md>` 引用同一文件；静态 preflight、dry-run、模板 evidence 或本地 collector 输出都不能单独关闭生产 C4/production-readiness 证据。
 
 ## Ready For Next Sandbox Test
 
