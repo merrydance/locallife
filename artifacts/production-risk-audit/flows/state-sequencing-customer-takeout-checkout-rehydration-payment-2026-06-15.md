@@ -3,7 +3,7 @@
 Date: 2026-06-15
 Risk theme: state sequencing / idempotency and retry / transaction consistency
 Risk class: G3 - customer cart, order creation, payment callback/recovery, visible order status
-Status: execution card, documentation-only
+Status: source-audited, Mini Program contract covered, backend/provider proof pending
 
 ## Decision
 
@@ -28,6 +28,21 @@ reservation payment/add-on changes.
    payment status.
 6. Provider callback, payment fact application, timeout workers, and recovery
    schedulers own terminal payment/order truth.
+
+Mini Program contract follow-up:
+
+- `weapp/scripts/check-takeout-checkout-rehydration-payment-contract.test.js`
+  now locks the order-confirm and payment-result contract for stale snapshot
+  rehydration and payment recovery.
+- The check proves event-channel snapshots are draft-only until backend
+  `calculateCart` replaces pricing, delivery-fee, and payment-assessment truth.
+- The check proves `pricingError` blocks order creation, partial order creation
+  sends the customer to the durable order list, payment-create failure sends the
+  customer to the created order detail, and payment-result reload/re-entry polls
+  backend payment truth before rendering terminal status.
+- The check also keeps the active takeout order/payment wrapper copies and the
+  shared payment-result payment wrapper aligned around order create, order
+  detail, payment create, payment detail, and payment query endpoints.
 
 ## Evidence Anchors
 
@@ -74,12 +89,23 @@ go test ./worker -run 'Test.*Payment.*Timeout|TestPaymentRecoverySchedulerRunOnc
 
 From `weapp/`, add or run focused contract scripts for:
 
-- stale event-channel snapshot -> backend cart rehydration -> submit
-- order create -> payment create -> pending result -> callback/query paid -> result/detail refresh
-- wrapper-copy drift for order/payment APIs
+```bash
+npm run check:takeout-checkout-rehydration-payment-contract
+```
+
+This covers:
+
+- stale event-channel snapshot -> backend cart rehydration -> submit guard
+- order create -> payment create failure -> durable order detail recovery
+- pending payment result -> backend payment query/polling -> result/detail/list
+  recovery
+- wrapper-copy drift for active order/payment APIs
 
 ## Remaining Real Issue
 
-Customer takeout checkout still lacks focused proof for stale draft rehydration,
-duplicate submit across order/payment creation, and payment callback/recovery
-visibility. This should be closed before changing checkout contracts.
+Customer takeout checkout now has a Mini Program contract proof for stale draft
+rehydration, pricing-error submit blocking, payment-create failure recovery, and
+payment-result re-entry readback. Remaining proof gaps are backend duplicate
+submit across order/payment creation, real provider callback/recovery evidence,
+and an actual end-to-end run that shows order detail/list visibility after the
+client leaves the payment result page.
