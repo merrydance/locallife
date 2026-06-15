@@ -27,6 +27,8 @@ ledger_notes=""
 withdrawal_approver=""
 withdrawal_amount_bound=""
 withdrawal_monitoring_owner=""
+manual_recovery_owner=""
+provider_query_result=""
 
 usage() {
   cat <<'USAGE'
@@ -57,6 +59,8 @@ Common options:
   --withdrawal-approver <name-or-ticket> Required for withdrawal funds-action evidence.
   --withdrawal-amount-bound <amount>     Required for withdrawal funds-action evidence.
   --withdrawal-monitoring-owner <owner>  Required for withdrawal funds-action evidence.
+  --manual-recovery-owner <owner>        Required for withdrawal manual-reconciliation evidence.
+  --provider-query-result <summary>      Required for withdrawal manual-reconciliation evidence.
   --dry-run                              Print commands without executing them.
 
 Examples:
@@ -169,6 +173,16 @@ while [[ $# -gt 0 ]]; do
       withdrawal_monitoring_owner="$2"
       shift 2
       ;;
+    --manual-recovery-owner)
+      require_value "$1" "${2:-}"
+      manual_recovery_owner="$2"
+      shift 2
+      ;;
+    --provider-query-result)
+      require_value "$1" "${2:-}"
+      provider_query_result="$2"
+      shift 2
+      ;;
     --dry-run)
       dry_run=1
       shift
@@ -270,6 +284,22 @@ if [[ "$capability" == "withdrawal" && "$evidence_kind" == "funds-action" ]]; th
     exit 2
   fi
   ledger_notes="${ledger_notes}; withdrawal_approver=${withdrawal_approver}; withdrawal_amount_bound=${withdrawal_amount_bound}; withdrawal_monitoring_owner=${withdrawal_monitoring_owner}"
+fi
+
+if [[ "$capability" == "withdrawal" && "$evidence_kind" == "manual-reconciliation" ]]; then
+  missing_manual=0
+  if [[ -z "$manual_recovery_owner" ]]; then
+    echo "manual recovery owner is required for withdrawal manual-reconciliation evidence" >&2
+    missing_manual=1
+  fi
+  if [[ -z "$provider_query_result" ]]; then
+    echo "provider query result is required for withdrawal manual-reconciliation evidence" >&2
+    missing_manual=1
+  fi
+  if [[ "$missing_manual" -ne 0 ]]; then
+    exit 2
+  fi
+  ledger_notes="${ledger_notes}; manual_recovery_owner=${manual_recovery_owner}; provider_query_result=${provider_query_result}"
 fi
 
 preflight_contract=(make check-baofu-contract)

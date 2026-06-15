@@ -415,6 +415,29 @@ ACK input so the row cannot invent a callback observation. Withdrawal
 `--withdrawal-amount-bound`, and `--withdrawal-monitoring-owner`, and still does
 not authorize or execute the withdrawal.
 
+For withdrawal ambiguous-create or timeout recovery, use
+`--evidence-kind manual-reconciliation` only after an operator has checked the
+provider query or other Baofoo-authoritative source. The wrapper requires
+`--manual-recovery-owner` and `--provider-query-result`; those values are added
+to ledger notes so manual recovery cannot be recorded as an unexplained success.
+
+```bash
+PATH="/usr/local/go/bin:$PATH" scripts/baofu_provider_evidence_gate.sh \
+  --capability withdrawal \
+  --fact-id <external_payment_facts.id> \
+  --withdrawal-order-id <baofu_withdrawal_orders.id> \
+  --command-id <external_payment_commands.id> \
+  --ledger-row \
+  --evidence-kind manual-reconciliation \
+  --ledger-date <yyyy-mm-dd> \
+  --ledger-env <sandbox|production|provider-real-transaction-env> \
+  --ledger-endpoint <withdrawal-query-endpoint> \
+  --ledger-commit <commit-sha> \
+  --ledger-notes <controlled-manual-recovery-notes> \
+  --manual-recovery-owner <owner-or-ticket> \
+  --provider-query-result <masked-terminal-query-result>
+```
+
 The wrapper has a `--dry-run` mode for release/runbook review. Dry-run prints
 the exact commands and performs no DB, provider, or funds-action work.
 
@@ -434,6 +457,8 @@ handoff.
   persistence and application?
 - If a withdrawal path is claimed, who approved the funds action and how was
   the amount bounded?
+- If a withdrawal manual-reconciliation path is claimed, who owned the manual
+  recovery and what masked provider query result backed it?
 - Did `scripts/baofu_provider_evidence_gate.sh` run, or was its `--dry-run`
   output reviewed before the controlled evidence run?
 - Which provider identifiers were masked in the evidence ledger?
@@ -511,6 +536,8 @@ What this proves:
 - Query evidence does not receive a synthetic ACK.
 - Withdrawal funds-action evidence is rejected unless approval, amount bound,
   and monitoring owner are supplied.
+- Withdrawal manual-reconciliation evidence is rejected unless a manual recovery
+  owner and masked provider query result are supplied.
 
 What this still does not prove:
 

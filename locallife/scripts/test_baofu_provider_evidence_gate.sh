@@ -5,8 +5,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 missing_ack_output="$(mktemp)"
 missing_withdrawal_output="$(mktemp)"
+missing_manual_output="$(mktemp)"
 unknown_capability_output="$(mktemp)"
-trap 'rm -f "$missing_ack_output" "$missing_withdrawal_output" "$unknown_capability_output"' EXIT
+trap 'rm -f "$missing_ack_output" "$missing_withdrawal_output" "$missing_manual_output" "$unknown_capability_output"' EXIT
 
 assert_contains() {
   local haystack="$1"
@@ -124,6 +125,58 @@ fi
 assert_contains "$(cat "$missing_withdrawal_output")" "withdrawal approver is required"
 assert_contains "$(cat "$missing_withdrawal_output")" "withdrawal amount bound is required"
 assert_contains "$(cat "$missing_withdrawal_output")" "withdrawal monitoring owner is required"
+
+if (
+  cd "$BACKEND_ROOT"
+  scripts/baofu_provider_evidence_gate.sh \
+    --capability withdrawal \
+    --fact-id 302 \
+    --withdrawal-order-id 402 \
+    --ledger-row \
+    --evidence-kind manual-reconciliation \
+    --ledger-date 2026-06-15 \
+    --ledger-env provider-real-transaction-env \
+    --ledger-endpoint "https://vgw.baofoo.com/union-gw/api/T-1001-013-15/transReq.do" \
+    --ledger-commit 8f0a3b1d \
+    --ledger-notes "missing manual recovery context" \
+    --dry-run
+) >"$missing_manual_output" 2>&1; then
+  echo "withdrawal manual-reconciliation without recovery context unexpectedly succeeded" >&2
+  cat "$missing_manual_output" >&2
+  exit 1
+fi
+
+assert_contains "$(cat "$missing_manual_output")" "manual recovery owner is required"
+assert_contains "$(cat "$missing_manual_output")" "provider query result is required"
+
+withdrawal_manual_output="$(
+  cd "$BACKEND_ROOT"
+  scripts/baofu_provider_evidence_gate.sh \
+    --capability withdrawal \
+    --fact-id 302 \
+    --withdrawal-order-id 402 \
+    --command-id 602 \
+    --ledger-row \
+    --evidence-kind manual-reconciliation \
+    --ledger-date 2026-06-15 \
+    --ledger-env provider-real-transaction-env \
+    --ledger-endpoint "https://vgw.baofoo.com/union-gw/api/T-1001-013-15/transReq.do" \
+    --ledger-commit 8f0a3b1d \
+    --ledger-notes "controlled withdrawal manual recovery" \
+    --manual-recovery-owner finance-oncall \
+    --provider-query-result "query returned state=1 with masked baofu withdraw no" \
+    --dry-run
+)"
+
+assert_contains "$withdrawal_manual_output" "go run ./cmd/baofu_withdrawal_evidence"
+assert_contains "$withdrawal_manual_output" "-command-id 602"
+assert_contains "$withdrawal_manual_output" "manual_recovery_owner=finance-oncall"
+assert_contains "$withdrawal_manual_output" "provider_query_result=query\\ returned\\ state=1\\ with\\ masked\\ baofu\\ withdraw\\ no"
+if [[ "$withdrawal_manual_output" == *"-ledger-ack"* ]]; then
+  echo "manual-reconciliation evidence dry-run must not invent a callback ACK" >&2
+  echo "$withdrawal_manual_output" >&2
+  exit 1
+fi
 
 if (
   cd "$BACKEND_ROOT"
