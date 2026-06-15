@@ -4,7 +4,7 @@ Date: 2026-06-15
 Risk theme: external dependencies / release configuration
 Risk class: G3 - provider money movement, callbacks, query recovery, funds action
 Status: evidence gate in progress
-Phase 1 status: source/config/test-surface recon completed; focused local validation passed; local evidence collector added for post-callback DB rows
+Phase 1 status: source/config/test-surface recon completed; focused local validation passed; local payment and profit-sharing evidence collectors added for post-callback/query DB rows
 
 ## Decision
 
@@ -179,6 +179,30 @@ PATH="/usr/local/go/bin:$PATH" go run ./cmd/baofu_payment_evidence \
 The ledger row renderer rejects failing summaries and rejects callback evidence
 without an explicit observed ACK.
 
+Implemented local profit-sharing collector:
+
+```bash
+PATH="/usr/local/go/bin:$PATH" go run ./cmd/baofu_profit_sharing_evidence \
+  -fact-id <external_payment_facts.id> \
+  -application-id <external_payment_fact_applications.id> \
+  -profit-sharing-order-id <profit_sharing_orders.id> \
+  -command-id <optional external_payment_commands.id>
+```
+
+The command is read-only and does not call Baofoo. It loads the local share
+fact, application, profit-sharing order, and create-share command proof. When
+`-command-id` is omitted it attempts a read-only command lookup by the
+Baofu profit-sharing external object key (`profit_sharing_orders.out_order_no`).
+It emits a masked JSON summary and fails incomplete convergence evidence such as
+non-callback/query/manual fact source, non-success terminal status,
+non-terminalized fact, unapplied application, unfinished profit-sharing order,
+missing `finished_at`, missing or mismatched out-order/external object key,
+mismatched amount, missing command proof, or a command row that is not accepted.
+
+This proves local share DB convergence only after a real `SHARING` callback,
+positive `share_query`, or manual recovery fact has already created the rows. It
+does not prove provider reachability, callback ACK, or C4 status by itself.
+
 ## Phase 1 Release Gate Checklist
 
 Before any Baofu-affecting release, answer every item below in the change
@@ -206,16 +230,17 @@ make check-baofu-contract
 PATH="/usr/local/go/bin:$PATH" go test ./api -run 'TestBaofu.*Callback|TestHandleBaofu.*Notify' -count=1
 PATH="/usr/local/go/bin:$PATH" go test ./logic -run 'TestBaofu|TestPaymentFactServiceApplyExternalPaymentFactApplication' -count=1
 PATH="/usr/local/go/bin:$PATH" go test ./worker -run 'TestBaofuPaymentRecoveryScheduler|TestProcessTaskBaofuProfitSharing|TestBaofuWithdrawal|TestRefundRecovery|TestPaymentFactApplicationSchedulerRunOnce|TestPaymentDomainOutboxScheduler|TestBaofuWithdrawalRecoveryScheduler' -count=1
-PATH="/usr/local/go/bin:$PATH" go test ./internal/baofuevidence ./cmd/baofu_payment_evidence -count=1
+PATH="/usr/local/go/bin:$PATH" go test ./internal/baofuevidence ./cmd/baofu_payment_evidence ./cmd/baofu_profit_sharing_evidence -count=1
 PATH="/usr/local/go/bin:$PATH" go build -o /tmp/baofu_payment_evidence ./cmd/baofu_payment_evidence
+PATH="/usr/local/go/bin:$PATH" go build -o /tmp/baofu_profit_sharing_evidence ./cmd/baofu_profit_sharing_evidence
 ```
 
 Observed result:
 
 - `make check-baofu-contract` printed `baofu contract drift guard passed`.
 - Focused `api`, `logic`, and `worker` packages returned `ok`.
-- The local Baofu evidence collector package returned `ok` and command build
-  succeeded.
+- The local Baofu evidence collector package and the payment/profit-sharing
+  command packages returned `ok`; both command builds succeeded.
 - The initial `go test` attempt failed because `go` was not in the default
   shell `PATH`; rerun with `/usr/local/go/bin` prepended succeeded.
 
@@ -223,9 +248,9 @@ What this proves:
 
 - Existing drift guards and focused local callback/fact/recovery tests are
   currently green for the checked package patterns.
-- A read-only local evidence command can now convert real callback/query
-  persistence rows into a masked JSON summary and fail incomplete local
-  convergence evidence.
+- Read-only local evidence commands can now convert real payment and
+  profit-sharing callback/query persistence rows into masked JSON summaries and
+  fail incomplete local convergence evidence.
 - With explicit operator-supplied runtime context, the command can render a
   candidate Payment Callback or Payment Query ledger row without inventing env,
   endpoint, ACK, or commit facts.
@@ -236,9 +261,10 @@ What this still does not prove:
   positive share/refund, withdrawal funds action, or masked evidence-ledger
   writeback was executed in this phase.
 - No C4 or production-readiness claim is made by this validation run.
-- The local collector does not discover rows automatically and does not prove
+- The local collectors do not discover all rows automatically and do not prove
   provider reachability; operators must supply the DB row IDs from a controlled
-  callback/query/recovery run.
+  callback/query/recovery run. The profit-sharing collector can only infer the
+  create-share command by its existing external object key.
 - The local collector currently does not read `payment_domain_outbox`
   automatically; outbox proof still needs either an explicit future query or
   manual evidence from the controlled run.
@@ -270,7 +296,7 @@ make check-baofu-contract
 go test ./api -run 'TestBaofu.*Callback|TestHandleBaofu.*Notify' -count=1
 go test ./logic -run 'TestBaofu|TestPaymentFactServiceApplyExternalPaymentFactApplication' -count=1
 go test ./worker -run 'TestBaofuPaymentRecoveryScheduler|TestProcessTaskBaofuProfitSharing|TestBaofuWithdrawal|TestRefundRecovery' -count=1
-go test ./internal/baofuevidence ./cmd/baofu_payment_evidence -count=1
+go test ./internal/baofuevidence ./cmd/baofu_payment_evidence ./cmd/baofu_profit_sharing_evidence -count=1
 ```
 
 Use narrower patterns if the target capability is smaller. Runtime provider
