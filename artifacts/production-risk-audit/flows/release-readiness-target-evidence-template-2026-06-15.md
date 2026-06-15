@@ -64,7 +64,7 @@ worker:payment:process_domain_outbox: fail
 
 ## Alert Evidence
 
-Dine-in recovery alert evidence: record the filled target-environment alert evidence file path or evidence id. If this is a local `.md` file, it must pass `npm run check:dine-in-recovery-alert-evidence -- <file>` and must not be this template or an alert template.
+Dine-in recovery alert evidence: record the filled target-environment alert evidence file path or evidence id. If this is a local `.md` file, it must pass `npm run check:dine-in-recovery-alert-evidence -- <file>`, must not be this template or an alert template, must target production, and must not be dry-run alert evidence.
 
 ## Result
 

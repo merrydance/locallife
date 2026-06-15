@@ -365,7 +365,8 @@ client construction, rollback-only fixture claimability,
 `worker:payment:process_fact_application`, and
 `worker:payment:process_domain_outbox`. If the filled target evidence points
 to a local dine-in recovery alert `.md` file, the checker also rejects alert
-templates and runs the Mini Program alert evidence checker against that file.
+templates, non-production alert targets, and dry-run alert proof, then runs the
+Mini Program alert evidence checker against that file.
 
 ## Remaining Real Issue
 

@@ -182,4 +182,24 @@ if "$CHECKER" "$alert_template_evidence" >"$tmp_dir/alert-template.out" 2>&1; th
 fi
 assert_contains "$(cat "$tmp_dir/alert-template.out")" "dine-in recovery alert evidence must not reference a template"
 
+staging_alert_evidence="$tmp_dir/staging-alert.md"
+sed 's/Target environment: production/Target environment: staging/' "$valid_alert_evidence" >"$staging_alert_evidence"
+staging_release_evidence="$tmp_dir/staging-alert-release.md"
+write_valid_evidence "$staging_release_evidence" "$staging_alert_evidence"
+if "$CHECKER" "$staging_release_evidence" >"$tmp_dir/staging-alert.out" 2>&1; then
+  echo "staging alert evidence unexpectedly passed" >&2
+  exit 1
+fi
+assert_contains "$(cat "$tmp_dir/staging-alert.out")" "dine-in recovery alert evidence target must be production"
+
+dry_run_alert_evidence="$tmp_dir/dry-run-alert.md"
+sed 's/controlled firing evidence/alert dry-run/' "$valid_alert_evidence" >"$dry_run_alert_evidence"
+dry_run_release_evidence="$tmp_dir/dry-run-alert-release.md"
+write_valid_evidence "$dry_run_release_evidence" "$dry_run_alert_evidence"
+if "$CHECKER" "$dry_run_release_evidence" >"$tmp_dir/dry-run-alert.out" 2>&1; then
+  echo "dry-run alert evidence unexpectedly passed" >&2
+  exit 1
+fi
+assert_contains "$(cat "$tmp_dir/dry-run-alert.out")" "dine-in recovery alert evidence must not be dry-run"
+
 echo "release readiness target evidence contract passed"

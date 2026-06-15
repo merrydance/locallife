@@ -81,6 +81,12 @@ check_dine_in_alert_evidence() {
       fail "dine-in recovery alert evidence file not found: $alert_evidence"
     fi
     (cd "$repo_root/weapp" && node scripts/check-dine-in-recovery-alert-evidence.test.js "$resolved_alert_evidence") >/dev/null
+    if ! grep -Eq 'Target environment:[[:space:]]*production\b' "$resolved_alert_evidence"; then
+      fail "dine-in recovery alert evidence target must be production"
+    fi
+    if grep -Eiq 'Firing or dry-run evidence:.*dry-run|Firing or dry-run evidence:.*dry run' "$resolved_alert_evidence"; then
+      fail "dine-in recovery alert evidence must not be dry-run"
+    fi
   fi
 }
 
