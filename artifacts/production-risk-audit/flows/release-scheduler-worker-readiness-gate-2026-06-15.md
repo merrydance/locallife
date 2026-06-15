@@ -35,7 +35,8 @@ explicit flags.
   `claim-payout-recovery`, `claim-behavior-action-recovery`,
   `claim-recovery`.
 - Order/delivery/lifecycle:
-  `order-timeout`, `takeout-auto-complete`, `data-cleanup`.
+  `order-timeout`, `takeout-auto-complete`,
+  `dine-in-checkout-recovery`, `data-cleanup`.
 - Printer status:
   `cloud-printer-status-poll` when supported.
 - Merchant availability:
@@ -92,8 +93,8 @@ Confirmed local readiness:
 - Scheduler registration in `main.go` covers payment fact application, payment
   outbox, Baofu payment recovery, Baofu account opening recovery, Baofu
   withdrawal recovery, Baofu merchant report recovery, refund recovery, claim
-  recovery, order timeout, takeout auto-complete, data cleanup, and merchant
-  open status.
+  recovery, order timeout, takeout auto-complete, dine-in checkout recovery,
+  data cleanup, and merchant open status.
 
 Still not proven by CI/release gates:
 
@@ -103,8 +104,9 @@ Still not proven by CI/release gates:
   reachability with production-like Redis.
 - No process-level gate proves `payment-fact-application`,
   `payment-domain-outbox`, `baofu-payment-recovery`,
-  `baofu-withdrawal-recovery`, `refund-recovery`, `order-timeout`, and
-  `merchant-open-status` are all active in the deployed process shape.
+  `baofu-withdrawal-recovery`, `refund-recovery`, `order-timeout`,
+  `dine-in-checkout-recovery`, and `merchant-open-status` are all active in
+  the deployed process shape.
 - No gate fails the release when provider-dependent recovery schedulers are
   disabled while Baofu main business is enabled.
 - No release smoke proves a pending fixture row can be claimed or enqueued by
@@ -125,7 +127,7 @@ before exercising DB claimability.
 | Baofu recovery | Aggregate/account/merchant-report clients are configured when Baofu main business is enabled; disabled branches are release failures or explicit approved warnings. | `locallife/main.go:253` through `:296`; `locallife/main.go:402` through `:441`. |
 | Withdrawal recovery | `baofu-withdrawal-recovery`, withdrawal command dispatch, and withdrawal fact application are present together. | `locallife/main.go:281` through `:285`; `locallife/worker/processor.go:351` through `:352`. |
 | Refund recovery | Direct and Baofu branches match payment mode and do not silently run without provider capability. | `locallife/main.go:298` through `:311`. |
-| Order lifecycle | `order-timeout`, `takeout-auto-complete`, and order payment timeout worker handlers are live. | `locallife/main.go:320` through `:321`; `locallife/worker/processor.go:322` through `:324`. |
+| Order lifecycle | `order-timeout`, `takeout-auto-complete`, `dine-in-checkout-recovery`, and order payment timeout worker handlers are live. | `locallife/main.go:320` through `:322`; `locallife/worker/processor.go:322` through `:324`. |
 | Merchant availability | `merchant-open-status` starts inside `runGinServer` with the server publisher. | `locallife/main.go:551` through `:553`. |
 | Cleanup/reconciliation | `data-cleanup` starts with a non-nil publisher strategy in the intended environment. | `locallife/main.go:325`. |
 
@@ -175,7 +177,8 @@ Minimum missing task or scheduler names should be literal names from the current
 runtime, for example `payment-fact-application`,
 `payment-domain-outbox`, `baofu-payment-recovery`,
 `baofu-withdrawal-recovery`, `refund-recovery`, `order-timeout`,
-`merchant-open-status`, `payment:process_fact_application`,
+`dine-in-checkout-recovery`, `merchant-open-status`,
+`payment:process_fact_application`,
 `baofu:process_profit_sharing`, and
 `baofu:process_withdrawal_fact_application`.
 
@@ -239,8 +242,9 @@ What this proves:
   are claimable inside a rollback-only DB transaction.
 - The static report covers payment fact application, payment outbox, Baofu
   payment/account/withdrawal/merchant-report recovery, refund recovery, order
-  timeout, takeout auto-complete, merchant-open status, data cleanup, claim
-  recovery, OCR, notification, print, and risk task handler registration.
+  timeout, takeout auto-complete, dine-in checkout recovery, merchant-open
+  status, data cleanup, claim recovery, OCR, notification, print, and risk task
+  handler registration.
 
 What this still does not prove:
 
@@ -294,7 +298,7 @@ report a pass/fail matrix with these rows:
 | Baofu recovery | Aggregate/account/merchant-report clients are configured when Baofu main business is enabled; disabled branches are explicit warnings. |
 | Refund recovery | Direct and Baofu refund recovery branches are configured according to payment mode. |
 | Withdrawal recovery | Baofu withdrawal recovery scheduler and command/fact workers are present when withdrawal is enabled. |
-| Order timeout | `order-timeout` and order-payment timeout workers are present. |
+| Order timeout | `order-timeout`, `dine-in-checkout-recovery`, and order-payment timeout workers are present. |
 | Merchant open status | `merchant-open-status` scheduler starts with websocket publisher available. |
 | Data cleanup | credit expiry, stale print anomaly, stale delivery cleanup, and related cleanup jobs are in the deployed scheduler set. |
 

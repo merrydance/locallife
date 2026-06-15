@@ -32,6 +32,7 @@ func TestCheckDefaultReportCoversReleaseCriticalSchedulersAndWorkerHandlers(t *t
 		"refund-recovery",
 		"order-timeout",
 		"takeout-auto-complete",
+		"dine-in-checkout-recovery",
 		"merchant-open-status",
 	} {
 		check := requireCheck(t, report, "scheduler:"+name)

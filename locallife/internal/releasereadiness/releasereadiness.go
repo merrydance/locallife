@@ -90,6 +90,7 @@ func DefaultExpectations() Expectations {
 			"claim-recovery",
 			"order-timeout",
 			"takeout-auto-complete",
+			"dine-in-checkout-recovery",
 			"data-cleanup",
 			"merchant-open-status",
 		},
