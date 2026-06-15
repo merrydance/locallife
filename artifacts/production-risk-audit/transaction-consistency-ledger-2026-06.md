@@ -1,0 +1,81 @@
+# Production Risk Audit: Transaction Consistency Ledger
+
+Month: 2026-06
+Risk theme: transaction consistency
+Status: active
+
+## Scope
+
+This ledger records whether durable state transitions, ledgers, row locks,
+outbox writes, provider commands, and best-effort side effects are consistently
+separated for the 40 reusable flows. It is documentation-only and does not
+modify production code.
+
+## Consistency Rules
+
+- Critical state and its audit/ledger record should be written in the same
+  transaction when the business invariant requires them to move together.
+- External provider calls, websocket emits, notifications, and print dispatches
+  should not be required for the core database transaction to commit.
+- Retryable post-commit work needs an outbox, command/fact row, scheduler, or
+  another durable recovery handle.
+- Multi-writer state must have conditional updates, row locks, or a single
+  owning transaction boundary.
+
+## Flow Ledger
+
+| Flow ID | Flow | Critical Transaction Boundary | Side Effects Boundary | Gap / Residual Risk | Decision |
+| --- | --- | --- | --- | --- | --- |
+| TC-BAOFU-AGGREGATE-PAYMENT | Baofoo aggregate payment | Payment fact application and `ProcessPaymentSuccessTx`; payment/order status and inventory inside transaction. | Outbox/profit-sharing bill after payment success; share command/callback separate. | Bill/outbox failure after `processed_at` relies on application retry. | Preserve fact/application/outbox separation. |
+| TC-BAOFU-REFUND | Baofoo refund | `CreateRefundOrderTx`, refund fact application, reservation prepaid decrement on success. | Provider command/facts, outbox notification, recovery scheduler. | Refund/profit-share race remains the critical lock boundary. | Preserve pre-share refund guard in refund transaction. |
+| TC-CUSTOMER-DINE-IN-CHECKOUT | Dine-in checkout | Backend session/billing/cart/order/payment tables own durable state. | Client local session and payment result refresh are draft/read-side. | `checkoutDiningSession` after payment deserves focused transaction proof. | Promote before code changes. |
+| TC-CUSTOMER-DISCOVERY-BROWSE | Discovery/browse | Mostly read-only; coupon/wanted writes own durable rows. | Search history and local region/cache are side effects. | Voucher claim quantity/duplicate enforcement should be source-audited before changes. | Keep writes backend-constrained. |
+| TC-CUSTOMER-ORDER-AFTER-SALES | Order/refund/claims | Order/refund/claim/food-safety transactions own mutations; provider facts terminalize payments/refunds. | Tracking route planning and refresh are read-side. | Claim/food-safety result side effects cross roles. | Keep each downstream domain's transaction owner explicit. |
+| TC-CUSTOMER-PROFILE-WALLET | Profile/address/wallet | Profile/address/review/membership ledgers own writes. | Avatar media sync and payment/member recharge recovery are async boundaries. | Media + profile update consistency should be reviewed before media changes. | Keep media asset id persistence source-owned. |
+| TC-CUSTOMER-RESERVATION | Reservation lifecycle | Reservation/table/payment/refund transactions own status and inventory holds. | Payment/refund provider facts, dine-in handoff, alerts are async/read-side. | Reservation add-on and no-show transitions need dedicated proof before changes. | Keep reservation state transaction-owned. |
+| TC-CUSTOMER-RUNTIME-AUTH | Runtime auth/session | Sessions and web-login sessions are durable auth state. | Error logging/telemetry is secondary. | Token/session rotation ordering requires source audit before modification. | Keep auth state writes fail-closed and durable. |
+| TC-CUSTOMER-TAKEOUT-CHECKOUT | Takeout checkout | Order/cart/payment SQL own checkout truth; payment callback applies order paid. | Payment result page and frontend snapshots are read-side. | Duplicate order create/payment create transaction proof remains high value. | Backend rehydration remains required before money moves. |
+| TC-MERCHANT-APP-BIND | App bind/device | Bind-code consumption and token/session issuance must be atomic around credential validity. | Device heartbeat/push cleanup are async/maintenance side effects. | Source audit before changing token/device persistence. | Keep long-lived credentials transaction-backed. |
+| TC-MERCHANT-ONBOARDING | Merchant onboarding | Application draft/submit/review/credential/user-role transactions own state. | OCR worker and stale cleanup are async convergence. | OCR writeback vs explicit edit/reset ordering is sensitive. | Preserve review-run and credential repair boundaries. |
+| TC-MERCHANT-BIZ-HOURS-AUTO | Business-hours auto | Business-hour persistence and scheduler open/close writes mutate merchant availability. | Websocket status publish is post-write. | Manual/auto writer ordering needs tests before refactor. | Keep open-state writer semantics explicit. |
+| TC-MERCHANT-CLAIM-RECOVERY | Merchant claim recovery | Claim recovery creation/dispute/release/payment facts own durable state. | Notifications, delayed release visibility, async workers. | Inline plus async result processing can duplicate if guards regress. | Keep recovery events/transactions together. |
+| TC-MERCHANT-COMBO-CATALOG | Combo/catalog | Catalog/category/combo rows own product truth. | Public menu/cart/order readers are downstream. | Reader drift after writes is a contract risk. | Revalidate downstream readers before schema changes. |
+| TC-MERCHANT-DEVICE-DISPLAY | Device/display | Display config/device rows own auto-accept/print configuration. | Print tasks/provider calls/reconciliation are async side effects. | BLE local print has no backend transaction. | Keep BLE as local receipt side effect, not durable print truth. |
+| TC-MERCHANT-DISH-INVENTORY | Dish/inventory | Dish/customization/inventory rows own menu/orderability. | Customer menu/order readers consume after commit. | Multiple writers can cause lost updates without locks/versioning. | Source audit before inventory writer refactor. |
+| TC-MERCHANT-FINANCE-WITHDRAWAL | Merchant finance withdrawal | Withdrawal-create transaction, command rows, fact application schema idempotency. | Provider calls/callbacks/recovery scheduler. | Provider/local balance truth boundary remains sensitive. | Preserve command/fact and transaction split. |
+| TC-MERCHANT-MANUAL-OPEN | Manual open | Manual open write and scheduler writes share merchant availability state. | Websocket refresh is post-write. | Multiple writers require explicit precedence. | Keep status writes conditional/time-bounded. |
+| TC-MERCHANT-MARKETING-RULES | Marketing rules | Rule/voucher/recharge config rows and voucher transactions. | Checkout preview/order creation are downstream readers. | Stale preview vs rule update is a consistency risk. | Always re-read rules at order creation. |
+| TC-MERCHANT-MEMBER-BALANCE | Member balance adjustment | Balance transaction and durable ledger are one write path. | Checkout eligibility reads aggregate state. | Direct balance writers would break ledger consistency. | Maintain ledger-owned transaction boundary. |
+| TC-MERCHANT-MEMBERSHIP-SETTINGS | Membership settings | Settings row writes; checkout readers use current backend state. | Preview UI is read-side. | Stale preview on concurrent setting change. | Revalidate at order creation. |
+| TC-MERCHANT-ORDER-OPS | Merchant order operations | Order status and status log in same transaction; cancel also rolls back vouchers/balance/delivery/inventory. | Notifications, websocket, delivery-pool event, print tasks, refunds after reject. | Reject cancels first, refund submission second; result surface must keep refund truth distinct. | Preserve refund_submission truth and status logs. |
+| TC-MERCHANT-PROFILE-UPDATE | Merchant profile | Profile/category/media/shop image writes use optimistic locking and scoped latest rows. | Media pending sync/recovery is async. | Schema hardening is already partly applied; future changes need source audit. | Keep profile/media truth separated but reconciled. |
+| TC-MERCHANT-RESERVATION-TABLE | Reservation/table | Reservation/table/session/payment/refund transactions. | Alerts/payment facts/refund recovery. | Table occupancy and reservation no-show transitions cross domains. | Dedicated transaction audit before changes. |
+| TC-MERCHANT-REVIEW-REPLY | Review reply | Reply write after content-safety check. | Content-safety provider call is external boundary. | Do not write public reply if moderation result ambiguous. | Keep moderation acceptance before durable publish. |
+| TC-MERCHANT-STAFF-GROUP | Staff/group | Staff/group/invite/credential rows own affiliation. | OCR writeback async. | Multi-store affiliation transitions need transaction proof. | Keep invite consumption and role writes atomic. |
+| TC-MERCHANT-STATS-ANALYTICS | Stats | Read-only aggregate SQL over orders/reservations/users/dishes. | None except possible read-state. | Analytics staleness is read-consistency, not mutation. | No transaction fix from this pass. |
+| TC-OPERATOR-DASHBOARD | Dashboard | Read aggregates and notification read-state writes. | Dashboard refresh/degraded UI. | Finance summary aggregation consistency depends on money ledgers. | Keep reads traceable to source ledgers. |
+| TC-OPERATOR-DISPATCH-HALL | Dispatch hall | Alert scheduler writes dedupe ledger before enqueue and rolls it back on enqueue failure. | Worker notification send retry via Asynq. | End-to-end list handoff not run. | Preserve enqueue rollback pattern. |
+| TC-OPERATOR-FINANCE-WITHDRAWAL | Operator finance | Finance reads over profit-sharing/withdrawal records; provider money transactions owned elsewhere. | Provider callbacks/workers. | Legacy withdrawal boundary. | Do not introduce operator-side money mutation without dedicated transaction design. |
+| TC-OPERATOR-MERCHANT-MGMT | Merchant management | Capability transaction and system-label reconciliation. | Food-safety/recovery side paths external. | Capability write side effects should remain transaction-owned. | Preserve system-label reconciliation with capability write. |
+| TC-OPERATOR-REGION-RULES | Region rules | Delivery-fee/peak-hour/region-rule config writes; weather cache invalidation. | Rule-engine proxy/read hit; cache invalidation after write. | Cache invalidation failure can leave stale pricing. | Treat as external/dependency risk too. |
+| TC-OPERATOR-RIDER-MGMT | Rider management | Read-only regional queries. | Rule-driven suspension/deposit handled elsewhere. | No mutation in this slice. | Track as read consistency only. |
+| TC-OPERATOR-SAFETY-RECOVERY | Safety/recovery | `ResolveFoodSafetyCaseTx` resolves case/incidents and releases only owned suspension/order pause state. | Recovery dispute automatic result processing through workers. | Cross-role recovery effects need guarded retries. | Preserve food-safety-owned release transaction. |
+| TC-RIDER-ONBOARDING | Rider onboarding | Application/review/credential/rider_profile/user_role writes. | OCR async writeback/recovery. | Review/credential restore ordering needs tests before changes. | Keep role activation transactional. |
+| TC-RIDER-CLAIMS-RECOVERY | Claims/recovery | Recovery payment/dispute transactions and result side effects. | Automatic resolution worker/inline fallback. | Inline fallback plus worker retry must not duplicate penalties/compensation. | Preserve durable action/event guards. |
+| TC-RIDER-DELIVERY-LIFECYCLE | Delivery lifecycle | Grab transaction assigns delivery, removes pool row, freezes deposit, updates order/log; complete transaction unfreezes and updates stats. | Broadcasts/notifications/estimate recalculation post-commit. | Timeout cancel/refund spans scheduler/payment flows. | Keep broadcasts best-effort after commit. |
+| TC-RIDER-DEPOSIT | Rider deposit | Recharge payment fact transaction creates deposit log/credit once; withdrawal preparation stores request idempotency, reserves credits, records refund order ids, and freezes deposit. | Payment/refund facts, outbox, credit expiry scheduler. | No active repeated-POST transaction gap found after current-code sync; focused tests were not rerun in this documentation pass. | Preserve request idempotency and run focused transaction tests before changes. |
+| TC-RIDER-INCOME-WITHDRAWAL | Rider income withdrawal | Profit-sharing rows and Baofu withdrawal orders/commands own money state; shared Baofu withdrawal create stores key/hash and writes withdrawal order plus submitted command in one transaction. | Account-opening callbacks/recovery, submitted-command dispatch, callback/query facts, and withdrawal recovery. | Withdrawal does not reserve local income rows by design; provider/local balance truth and manual recovery after ambiguous provider create must stay explicit. | Add source audit before altering withdrawal consistency. |
+| TC-RIDER-WORKBENCH-LOCATION | Workbench/location | Online/offline writes and location append; geofence event dedupe table. | Frontend upload queue and geofence auto-advance are best effort. | Append-only location duplicates can affect analytics. | Consider dedupe only if downstream requires it. |
+
+## Cross-Flow Backlog
+
+| Backlog ID | Flow | Finding | Suggested Follow-Up |
+| --- | --- | --- | --- |
+| TC-BACKLOG-001 | Dine-in checkout | Paid order to session checkout convergence is a transaction-critical gap. | Promote to source-level transaction audit before code changes. |
+| TC-BACKLOG-002 | Merchant order reject | Order cancellation commits before refund submission; response must preserve refund truth. | Keep regression tests around `refund_submission` if changing reject flow. |
+| TC-BACKLOG-003 | Rider delivery timeout | 60-minute cancel/refund crosses scheduler, order, delivery, pool, and payment recovery. | Keep a dedicated timeout consistency test before any scheduler changes. |
+
+## Validation Notes
+
+This ledger was validated as a documentation artifact only. No database,
+transaction, migration, or package tests were run by this pass.

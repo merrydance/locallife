@@ -100,8 +100,8 @@ Rider income and income withdrawal must keep three durable truths separate:
 22. Rider online and grab gates consume Baofu readiness from the shared rider readiness helper; income withdrawal itself requires the same active binding through `readyBinding`.
     Evidence: `locallife/api/rider_baofu_readiness.go:10`, `locallife/api/rider.go:840`, `locallife/logic/delivery_grab.go:75`, `locallife/logic/baofu_withdraw_service.go:101`, `locallife/logic/baofu_withdraw_service.go:142`.
 
-23. Baofu withdrawal frontend wrapper maps rider role to `/v1/rider/income/baofu-withdrawal`; create page loads provider balance, validates amount, creates withdrawal, and redirects to detail.
-    Evidence: `weapp/miniprogram/pages/rider/_main_shared/api/baofu-withdrawal.ts:59`, `weapp/miniprogram/pages/rider/_main_shared/api/baofu-withdrawal.ts:68`, `weapp/miniprogram/pages/rider/_main_shared/api/baofu-withdrawal.ts:72`, `weapp/miniprogram/pages/rider/_main_shared/api/baofu-withdrawal.ts:79`, `weapp/miniprogram/pages/rider/_main_shared/api/baofu-withdrawal.ts:90`, `weapp/miniprogram/pages/rider/_main_shared/api/baofu-withdrawal.ts:97`, `weapp/miniprogram/pages/rider/income/withdrawals/create/index.ts:52`, `weapp/miniprogram/pages/rider/income/withdrawals/create/index.ts:92`.
+23. Baofu withdrawal frontend wrapper maps rider role to `/v1/rider/income/baofu-withdrawal`; create page loads provider balance, validates amount, keeps a stable withdrawal draft idempotency key, submits it as `Idempotency-Key`, and redirects to durable detail.
+    Evidence: `weapp/miniprogram/pages/rider/_main_shared/api/baofu-withdrawal.ts:55`, `weapp/miniprogram/pages/rider/_main_shared/api/baofu-withdrawal.ts:59`, `weapp/miniprogram/pages/rider/_main_shared/api/baofu-withdrawal.ts:97`, `weapp/miniprogram/pages/rider/_main_shared/api/baofu-withdrawal.ts:106`, `weapp/miniprogram/pages/rider/_main_shared/api/baofu-withdrawal.ts:115`, `weapp/miniprogram/pages/rider/income/withdrawals/create/index.ts:30`, `weapp/miniprogram/pages/rider/income/withdrawals/create/index.ts:98`, `weapp/miniprogram/pages/rider/income/withdrawals/create/index.ts:101`.
 
 24. Rider withdrawal handlers use `GetRiderFromContext`, force `owner_type='rider'` and `owner_id=rider.id`, and use shared balance/list/detail/create handlers. Detail/list are owner-scoped.
     Evidence: `locallife/api/baofu_withdrawal.go:164`, `locallife/api/baofu_withdrawal.go:170`, `locallife/api/baofu_withdrawal.go:173`, `locallife/api/baofu_withdrawal.go:179`, `locallife/api/baofu_withdrawal.go:182`, `locallife/api/baofu_withdrawal.go:188`, `locallife/api/baofu_withdrawal.go:191`, `locallife/api/baofu_withdrawal.go:197`, `locallife/api/baofu_withdrawal.go:236`, `locallife/api/baofu_withdrawal.go:241`, `locallife/api/baofu_withdrawal.go:374`.
@@ -109,8 +109,8 @@ Rider income and income withdrawal must keep three durable truths separate:
 25. Balance queries require Baofu withdrawal service config, active binding, collect merchant/terminal, and provider balance. Response exposes available/pending/ledger/frozen and min/max withdraw thresholds.
     Evidence: `locallife/api/baofu_withdrawal.go:249`, `locallife/api/baofu_withdrawal.go:253`, `locallife/api/baofu_withdrawal.go:261`, `locallife/api/baofu_withdrawal.go:264`, `locallife/api/baofu_withdrawal.go:268`, `locallife/api/baofu_withdrawal.go:270`, `locallife/logic/baofu_withdraw_service.go:92`, `locallife/logic/baofu_withdraw_service.go:98`, `locallife/logic/baofu_withdraw_service.go:101`, `locallife/logic/baofu_withdraw_service.go:107`.
 
-26. Withdrawal create validates amount/service config, re-queries provider balance, rejects insufficient balance, creates `baofu_withdrawal_orders(status='processing')`, calls Baofu create-withdraw, and records accepted/rejected/unknown external command audit.
-    Evidence: `locallife/api/baofu_withdrawal.go:275`, `locallife/api/baofu_withdrawal.go:288`, `locallife/api/baofu_withdrawal.go:292`, `locallife/logic/baofu_withdraw_service.go:126`, `locallife/logic/baofu_withdraw_service.go:135`, `locallife/logic/baofu_withdraw_service.go:150`, `locallife/logic/baofu_withdraw_service.go:162`, `locallife/logic/baofu_withdraw_service.go:166`, `locallife/logic/baofu_withdraw_service.go:179`, `locallife/logic/baofu_withdraw_service.go:188`, `locallife/logic/baofu_withdraw_service.go:210`, `locallife/logic/baofu_withdraw_service.go:249`.
+26. Withdrawal create validates amount/service config, requires `Idempotency-Key`, replays same owner/key/request-hash orders, rejects same owner/key with a different request hash, re-queries provider balance, rejects insufficient balance, and persists `baofu_withdrawal_orders(status='processing')` plus a submitted async-worker `external_payment_commands` row in one transaction. New create requests return `202 Accepted` and do not call Baofu provider create inside the HTTP request.
+    Evidence: `locallife/api/baofu_withdrawal.go:278`, `locallife/api/baofu_withdrawal.go:295`, `locallife/api/baofu_withdrawal.go:304`, `locallife/api/baofu_withdrawal.go:315`, `locallife/logic/baofu_withdraw_service.go:136`, `locallife/logic/baofu_withdraw_service.go:140`, `locallife/logic/baofu_withdraw_service.go:141`, `locallife/logic/baofu_withdraw_service.go:176`, `locallife/logic/baofu_withdraw_service.go:198`, `locallife/logic/baofu_withdraw_service.go:225`, `locallife/db/sqlc/tx_baofu_withdrawal.go:23`, `locallife/db/sqlc/tx_baofu_withdrawal.go:37`, `locallife/db/migration/000260_add_baofu_withdrawal_idempotency.up.sql:1`, `locallife/db/migration/000261_harden_baofu_withdrawal_idempotency_pair.up.sql:31`.
 
 27. Provider create rejection marks the local withdrawal failed; unknown create result stays processing for recovery. Accepted processing stores Baofu withdraw no when present.
     Evidence: `locallife/logic/baofu_withdraw_service.go:189`, `locallife/logic/baofu_withdraw_service.go:192`, `locallife/logic/baofu_withdraw_service.go:210`, `locallife/logic/baofu_withdraw_service.go:231`, `locallife/logic/baofu_withdraw_service.go:249`, `locallife/logic/baofu_withdraw_service.go:260`.
@@ -133,7 +133,7 @@ Rider income and income withdrawal must keep three durable truths separate:
 - `baofu_account_opening_flows`: profile/verify-fee/provider/opening state machine for owner `rider`.
 - `baofu_account_bindings`: active rider settlement account binding, contract no, sharing member id, and readiness truth.
 - `payment_orders`, `external_payment_commands`, `external_payment_facts`, and `external_payment_fact_applications`: Baofu verify-fee payment and provider command/fact evidence for account opening.
-- `baofu_withdrawal_orders`: rider income withdrawal intent, owner scope, amount, provider withdraw no, processing/terminal status, and raw provider snapshot.
+- `baofu_withdrawal_orders`: rider income withdrawal intent, owner scope, amount, provider withdraw no, processing/terminal status, raw provider snapshot, `idempotency_key`, and `idempotency_request_hash`.
 
 ## Trust, Authorization, And Tenant Checks
 
@@ -150,8 +150,8 @@ Rider income and income withdrawal must keep three durable truths separate:
 - Baofu profit-sharing command can be retried for pending/failed rows; terminal fact application does not regress finished/failed rows.
 - Settlement account GET/POST reuses active bindings and active flows; an incomplete profile returns `profile_pending`, and in-progress provider states can be recovered.
 - Verify-fee payment is reused while pending/paid through the shared onboarding service.
-- Withdrawal create currently has no client idempotency key; every accepted POST can create a new `baofu_withdrawal_orders` row after balance check.
-- Provider create `unknown` is intentionally treated as submitted/processing and converges through recovery query.
+- Withdrawal create now has a real client/server `Idempotency-Key`. Backend stores key/hash on `baofu_withdrawal_orders`, enforces a per-owner partial unique index and key/hash pair check, replays same-key/same-request attempts without provider dispatch, and rejects same-key/different-amount conflicts.
+- Provider create dispatch is represented by a submitted command row and runs outside the HTTP request. Claimed `unknown` command rows are not blindly replayed; accepted provider orders converge through callback/query, while rows without provider acceptance evidence require evidence-appending manual recovery.
 - Withdrawal fact application is terminal-idempotent and only updates rows still `processing`.
 
 ## Recovery And Async Convergence Paths
@@ -159,7 +159,7 @@ Rider income and income withdrawal must keep three durable truths separate:
 - Baofu account opening can converge through frontend polling, verify-fee payment fact application, account-open callback fact, `baofu:process_account_opening` worker, and provider-progress recovery.
 - Rider income status can converge through completed-order scheduling, Baofu share command retry, share callback, share query recovery, and payment fact application retries.
 - Online/grab readiness recovers automatically once `baofu_account_bindings.open_state='active'`.
-- Baofu withdrawal converges through callback or five-minute recovery scans of processing rows.
+- Baofu withdrawal creation converges through submitted-command dispatch, callback or five-minute recovery scans of processing rows.
 - Frontend withdrawal detail/list refresh is only a read-side recovery handle; backend `baofu_withdrawal_orders` is canonical.
 
 ## Frontend Draft And Backend Rehydration
@@ -167,7 +167,7 @@ Rider income and income withdrawal must keep three durable truths separate:
 - Income page treats income/settlement/withdrawal balance responses as authoritative after each load.
 - Income page does not force status convergence; it rehydrates whatever `profit_sharing_orders.status` currently says after callback/query fact application.
 - Settlement submit page keeps a local personal form but refreshes account state through the shared onboarding wait workflow.
-- Withdrawal create page redirects to detail after a created order id; detail/list pages rehydrate from the backend owner-scoped withdrawal order.
+- Withdrawal create page keeps a stable per-draft idempotency key and redirects to detail after a backend-returned durable order id; detail/list pages rehydrate from the backend owner-scoped withdrawal order.
 
 ## Test Coverage Signals
 
@@ -176,21 +176,23 @@ Observed tests:
 - `locallife/api/rider_income_test.go` covers rider income summary, ledger, and daily API branches.
 - `locallife/logic/baofu_profit_sharing_service_test.go`, `locallife/worker/task_baofu_profit_sharing_test.go`, `locallife/worker/baofu_payment_recovery_scheduler_test.go`, and `locallife/logic/payment_fact_application_service_test.go` cover share command/fact/status convergence branches.
 - `locallife/api/baofu_settlement_account_test.go` covers rider settlement account GET/POST owner/account-type restrictions and readiness variants.
-- `locallife/api/baofu_withdrawal_contract_test.go` covers rider Baofu withdrawal route contracts.
+- `locallife/api/baofu_withdrawal_contract_test.go` covers Baofu withdrawal route contracts including required idempotency header, same-key replay, conflicting same-key rejection, async `202 Accepted` guidance, and no provider dispatch during API create.
+- `locallife/logic/baofu_withdraw_service_test.go`, `locallife/db/sqlc/tx_baofu_withdrawal_test.go`, and `locallife/db/sqlc/baofu_withdrawal_order_test.go` cover idempotent replay/conflict behavior, atomic withdrawal-order plus submitted-command creation, per-owner uniqueness, terminal-status non-regression, and DB rejection of partial key/hash pairs.
 - `locallife/worker/task_baofu_account_opening_test.go`, `locallife/worker/task_payment_fact_application_test.go`, and Baofu onboarding logic tests cover account-opening async convergence.
-- `locallife/worker/baofu_withdrawal_recovery_scheduler.go` and `locallife/worker/task_baofu_withdrawal_fact_application.go` have adjacent scheduler/fact application tests in the Baofu withdrawal suite.
+- `locallife/worker/baofu_withdrawal_recovery_scheduler_test.go`, `locallife/worker/task_baofu_withdrawal_command_dispatch_test.go`, and `locallife/worker/task_baofu_withdrawal_fact_application_test.go` cover submitted-command enqueue, provider create accepted/rejected/unknown command outcomes, repair from persisted order traces without provider redispatch, provider query enqueue, and terminal fact application.
+- `weapp/scripts/check-baofu-withdrawal-workflow.js` covers the shared rider/merchant/operator/platform withdrawal wrapper contract, required client idempotency key, rider create-page draft key, durable-id detail redirect, and terminal polling cleanup.
 
 Missing high-value tests:
 
 - Mini Program settlement-account long-wait workflow through verify-fee payment and active binding refresh.
 - End-to-end completed rider delivery -> Baofu share callback/recovery -> rider income ledger status `finished` refresh.
-- Rider withdrawal duplicate submit after provider timeout/unknown create result.
+- Broader provider-timeout/manual-recovery drill for rider withdrawal after submitted/unknown create result, using provider-authoritative callback/query evidence or abnormal/manual closure.
 - End-to-end rider income withdrawal create -> callback/recovery -> terminal detail refresh.
 - Cross-check that rider personal account never enters merchant-report continuation states.
 
 ## Gaps And Refactor Notes
 
-- Add a durable idempotency key to rider income withdrawal create to avoid double withdrawal on network retries.
+- Fixed before this synchronization pass: rider income withdrawal create uses the shared Baofu withdrawal durable `Idempotency-Key` contract and async submitted-command dispatch. Before changing this path, rerun focused Baofu withdrawal API/logic/sqlc/worker/weapp contract tests.
 - Consider surfacing provider `unknown` create results explicitly in withdrawal detail copy.
 - Rider-facing income may remain `processing` or `failed` when Baofu share amount mismatch blocks unsafe success; the platform/manual reconciliation loop is tracked outside this rider slice.
 - Keep rider personal-account Baofu docs separate from merchant business-account report continuation to avoid future shared-code regressions.

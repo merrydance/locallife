@@ -1,0 +1,101 @@
+# Production Risk Audit: State Sequencing Ledger
+
+Month: 2026-06
+Risk theme: state sequencing
+Status: completed for all 40 reusable codegraph flows
+
+## Scope
+
+This ledger tracks the first production-risk audit phase from
+`artifacts/production-risk-audit-and-refactor-charter-2026-06-14.md`.
+
+Current phase rules:
+
+- Focus only on state sequencing.
+- Use one business flow as the audit and delivery unit.
+- Default to source-only documentation before production code changes.
+- Record idempotency, authorization, transaction, provider, and release risks as
+  side findings unless they block the state-sequencing decision.
+- Do not modify production Go, SQL, generated, frontend, Flutter, migration, or
+  config source during this audit pass.
+
+## Status Legend
+
+- `source-audited`: dedicated flow document traced against current source.
+- `slice-ledgered`: documented from reviewed codegraph slice, evidence anchors,
+  and source paths listed in the slice; promote to a dedicated flow document
+  before production-code changes.
+- `read-only`: no production-code change was made by this audit pass.
+
+## Flow Ledger
+
+| Flow ID | Flow | Risk | Status | State Sequence Summary | Decision |
+| --- | --- | --- | --- | --- | --- |
+| SS-BAOFU-ORDER-PAY-001 | Baofoo aggregate payment success callback -> order paid -> outbox/profit-sharing bill boundary | G3 | source-audited, read-only | `external_payment_facts` dedupe -> application `pending/failed -> processing -> applied/failed` -> `payment_orders.pending -> paid` -> `orders.pending -> paid` -> `payment_orders.processed_at` -> outbox/profit-sharing bill boundary. | No immediate production-code change recommended from this state-sequencing pass; keep existing fact/application/outbox separation and conditional transitions. |
+| SS-BAOFU-REFUND-002 | Baofoo pre-share refund command -> refund callback/query fact -> terminal refund application | G3 | slice-ledgered, read-only | `refund_orders.pending -> processing -> success|failed|closed`; `payment_orders` becomes `refunded` only after total successful refund amount covers the payment. Callback and query facts converge through the same application path. | No code change from this pass; preserve command acceptance vs terminal fact separation and the pre-share refund/profit-sharing race guard. |
+| SS-CUSTOMER-DINE-IN-003 | Customer dine-in scan/session/menu/checkout/payment convergence | G3 | slice-ledgered, read-only | QR/table scan and local session context are draft; backend `dining_sessions`, `billing_groups`, cart/order/payment state and paid-session checkout own durable convergence. | Promote to dedicated flow audit before changing paid-session `checkoutDiningSession` behavior. |
+| SS-CUSTOMER-DISCOVERY-004 | Customer discovery, merchant browse, coupon claim, wanted merchant | G2 | slice-ledgered, read-only | Mostly read-side state over merchant/dish/combo/room visibility; writes are coupon claim, search history, and wanted-merchant vote/leaderboard rows. | No state-machine fix identified; keep backend visibility/orderability and claim/vote constraints authoritative. |
+| SS-CUSTOMER-AFTER-SALES-005 | Customer order tracking, cancellation/refund, claims, food-safety, reviews | G3 | slice-ledgered, read-only | Customer pages read durable `orders`, `payment_orders`, `refund_orders`, claims, food-safety, and reviews. Cancel/confirm/urge/claim/report/review writes must be status- and owner-gated, while payment/refund/payout converge asynchronously. | Promote claim/food-safety and payout subflows before changing cross-role state transitions. |
+| SS-CUSTOMER-PROFILE-WALLET-006 | Customer profile, address, wallet, membership, coupons, favorites, reviews | G2/G3 | slice-ledgered, read-only | Profile/address/favorite/review settings are user-scoped writes; wallet/membership/payment state is durable ledger/provider truth; frontend optimistic updates must rehydrate from backend. | No state-sequencing repair from this pass; source-audit media/profile and membership recharge before code changes. |
+| SS-CUSTOMER-RESERVATION-007 | Customer reservation lifecycle, deposit/add-on payment, cancel/refund, dine-in handoff | G3 | slice-ledgered, read-only | Reservation status, availability, deposit/prepaid amount, add-on adjustments, payment orders, and refund orders are backend truth; payment/refund callbacks and timeout workers converge pending states. | Promote reservation modify/add-on/no-show paths before state-machine changes. |
+| SS-CUSTOMER-AUTH-008 | Customer runtime auth, token refresh, web-login confirmation, telemetry | G3 | slice-ledgered, read-only | `sessions` and `web_login_sessions` own auth state: login/refresh/session row lock, web-login `pending -> confirmed|consumed|expired`, duplicate same-user confirmation accepted, conflict user rejected. | Treat as auth-critical; source-audit before token/session lifecycle changes. |
+| SS-CUSTOMER-TAKEOUT-CHECKOUT-009 | Customer takeout cart/order/payment/refund checkout | G3 | slice-ledgered, read-only | Local cart/order-confirm snapshots are draft; backend cart/order/payment calculation and payment callback/fact/recovery advance paid order state. Timeout workers close stale pending state. | Promote duplicate submit and order-create/payment-create source audit before checkout changes. |
+| SS-MERCHANT-APP-BIND-010 | Merchant App bind code, App session, device registration | G3 | slice-ledgered, read-only | One-time public bind credential is exchanged for long-lived App auth; device registration/heartbeat and stale cleanup maintain push-device state. | Preserve consume-after-recheck; source-audit before bind-code, token, or device lifecycle changes. |
+| SS-MERCHANT-ONBOARDING-011 | Merchant application, OCR, review, credential/user-role activation | G3 | slice-ledgered, read-only | Draft/edit/reset -> submit/queued review -> OCR writeback/review -> merchant/profile/staff/user-role/credential activation or recovery. Recent slice notes record multiple repaired review/reset/OCR races. | Keep review-run and credential repair boundaries; source-audit before onboarding state changes. |
+| SS-MERCHANT-BIZ-HOURS-012 | Merchant business-hours automatic open/close | G2 | slice-ledgered, read-only | Business-hour rows and `auto_open_by_business_hours` persist in one transaction; scheduler computes desired `is_open`, respects payment readiness, writes only when distinct, then publishes websocket status. | No current state-sequencing gap; audit together with manual-open flow when open-state contract changes. |
+| SS-MERCHANT-CLAIM-RECOVERY-013 | Merchant claim recovery, dispute, payment, suspension/release | G3 | slice-ledgered, read-only | Claim/recovery state, payment facts, dispute review, delayed release, and suspension release converge through durable claim/recovery rows, fact application, and workers. | Preserve fact-driven release convergence; source-audit before recovery payment or release state changes. |
+| SS-MERCHANT-COMBO-CATALOG-014 | Merchant combo/category/catalog state | G2 | slice-ledgered, read-only | Merchant catalog writes update durable combo/category/dish organization; public menu/search/cart/order/reservation readers consume visible/orderable state. | No state repair from this pass; revalidate downstream readers before catalog contract changes. |
+| SS-MERCHANT-DEVICE-DISPLAY-015 | Merchant display config, printer config, auto-accept, print side effects | G2/G3 | slice-ledgered, read-only | Display config controls auto-accept/print; backend config is durable truth; print logs/provider callbacks/reconciliation own cloud-print state; Flutter BLE print is local side effect. | Keep backend auto-accept truth separate from local BLE receipt state. |
+| SS-MERCHANT-DISH-INVENTORY-016 | Merchant dish availability, customization, inventory | G2 | slice-ledgered, read-only | Dish/customization/inventory writers affect downstream menu/order/reservation readers; durable backend state remains ordering truth. | Multiple-writer inventory changes need source-level state audit before refactor. |
+| SS-MERCHANT-FINANCE-WITHDRAWAL-017 | Merchant finance, settlement account, Baofu withdrawal | G3 | slice-ledgered, read-only | Settlement account onboarding, withdrawal order creation, command submission, callback/query facts, and recovery scheduler advance finance states. | Preserve withdrawal command/fact and transaction split; source-audit before money movement changes. |
+| SS-MERCHANT-MANUAL-OPEN-018 | Merchant manual open/close status | G2 | slice-ledgered, read-only | Manual PATCH writes `is_open`, `auto_close_at`, and `manual_open_status_until`; scheduler auto-close/business-hours writers converge after override boundary or payment invalidation. | No current state-sequencing gap; preserve manual override semantics and DB-clock alignment. |
+| SS-MERCHANT-MARKETING-019 | Merchant marketing rules, vouchers, recharge, delivery-fee discounts | G2 | slice-ledgered, read-only | Merchant rule/config writes update durable rule/voucher/recharge/delivery-fee state; checkout preview/order creation and voucher expiry consume later. | Re-read rules at order creation; source-audit stacking/version changes before implementation. |
+| SS-MERCHANT-MEMBER-BALANCE-020 | Merchant member balance adjustment | G3 | slice-ledgered, read-only | Staff adjustment mutates stored-value balance through durable transaction/ledger; repaired slice notes direct writers retired and idempotency covered. | Preserve ledger-only balance mutation path. |
+| SS-MERCHANT-MEMBERSHIP-SETTINGS-021 | Merchant membership settings | G2 | slice-ledgered, read-only | Membership settings row changes customer balance-payment eligibility; checkout preview/order creation read backend settings. | No state repair from this pass; validate stale preview vs order-create behavior before changes. |
+| SS-MERCHANT-ORDER-OPS-022 | Merchant order accept/reject/ready/complete/refund/print operations | G3/G2 | slice-ledgered, read-only | Merchant/kitchen actions lock/condition order status; status logs write with transitions; reject cancels first then submits refund; refund and print converge through provider/worker paths. | Preserve conditional transitions, status logs, refund_submission truth, and backend readback. |
+| SS-MERCHANT-PROFILE-UPDATE-023 | Merchant profile/category/media/shop image update | G2 | slice-ledgered, read-only | Profile/category/media/shop-image writes use owner scoping, latest-row scoping, optimistic locking, and media pending-sync recovery. | Source-audit before media/profile schema or recovery changes. |
+| SS-MERCHANT-RESERVATION-TABLE-024 | Merchant reservation workbench and table management | G3 | slice-ledgered, read-only | Merchant reservation/table actions share reservation status, table occupancy, dine-in session, payment fact, inventory, alert, and refund/recovery state with customer flows. | Promote table occupancy/no-show/payment-refund paths before changing state semantics. |
+| SS-MERCHANT-REVIEW-REPLY-025 | Merchant public review reply after content safety | G2 | slice-ledgered, read-only | Reply is written only after external content-safety acceptance and then becomes public customer-visible review state. | Keep ambiguous moderation failures fail-closed before durable reply publish. |
+| SS-MERCHANT-STAFF-GROUP-026 | Merchant staff, invites, group onboarding, OCR | G3 | slice-ledgered, read-only | Invite credential -> staff/group membership -> OCR/private docs -> durable affiliation/role state. | Preserve invite consumption and affiliation transitions; source-audit before role/group changes. |
+| SS-MERCHANT-STATS-027 | Merchant stats and analytics | G2 | slice-ledgered, read-only | Primarily read-only aggregate state over orders/reservations/users/dishes/print logs; no production state machine mutation in slice. | No state-sequencing repair; treat as read consistency/privacy risk in later changes. |
+| SS-OPERATOR-DASHBOARD-028 | Operator dashboard, analytics, notifications | G2 | slice-ledgered, read-only | Regional dashboard/analytics read aggregate state; notification mark/read state is operator-scoped. | Keep region/user-scoped notification state; no state repair from this pass. |
+| SS-OPERATOR-DISPATCH-029 | Operator dispatch hall and pending-dispatch alert | G2/G3 | slice-ledgered, read-only | Pending delivery alert scheduler writes `delivery_timeout_alerts`, enqueues worker, rolls back ledger on enqueue failure; worker rechecks pending/age before notifications. | Preserve alert ledger and enqueue rollback pattern. |
+| SS-OPERATOR-FINANCE-030 | Operator finance and Baofu withdrawal visibility | G3 | slice-ledgered, read-only | Operator finance reads profit-sharing and Baofu settlement/withdrawal state; provider callbacks/workers own terminal money state. | Keep operator finance read paths separate from provider money mutation. |
+| SS-OPERATOR-MERCHANT-MGMT-031 | Operator merchant management and capability writes | G2 | slice-ledgered, read-only | Region-scoped operator reads/writes merchant capability state; capability transaction reconciles system labels. | Preserve region authority and capability transaction boundary. |
+| SS-OPERATOR-REGION-RULES-032 | Operator region rules, delivery fee, weather, expansion | G2/G3 | slice-ledgered, read-only | Region-level configs, peak-hour rows, rider deposit/weather rules, rule-engine scope, and cache invalidation update pricing/eligibility state. | Source-audit cache/weather/rule version ordering before modifying pricing rules. |
+| SS-OPERATOR-RIDER-MGMT-033 | Operator rider management | G2 | slice-ledgered, read-only | Region-scoped rider/deposit/status/performance reads; rule-driven suspension/deposit mutation is owned by adjacent flows. | No state mutation repair from this pass. |
+| SS-OPERATOR-SAFETY-RECOVERY-034 | Operator food safety and recovery visibility | G3 | slice-ledgered, read-only | Food-safety resolution transaction resolves case/incidents and releases only food-safety-owned merchant/takeout/order pause state; recovery dispute effects flow through dedicated workers. | Preserve food-safety-owned release checks; source-audit before cross-role recovery mutation changes. |
+| SS-RIDER-ONBOARDING-035 | Rider application, OCR, review, role/credential activation | G3 | slice-ledgered, read-only | Application draft/submit/review, OCR writeback, health certificate validity, rider role activation, and credential ledger restore/suspension define onboarding state. | Source-audit before identity/review/credential state changes. |
+| SS-RIDER-CLAIMS-RECOVERY-036 | Rider claims, recovery payment, dispute, compensation | G3 | slice-ledgered, read-only | Claim/recovery/dispute/payment states converge through assigned-rider ownership, recovery payment facts, dispute review transactions, and worker result effects. | Preserve durable action/event guards before result-effect changes. |
+| SS-RIDER-DELIVERY-037 | Rider delivery pool, grab, pickup, delivery, timeout | G3 | slice-ledgered, read-only | `delivery_pool` visibility -> grab transaction assigns delivery/removes pool/freezes deposit/updates order -> `assigned -> picking -> picked -> delivering -> delivered`; timeout scheduler cancels/refunds stale pending deliveries and removes pool. | Preserve transaction-owned grab/status transitions and post-commit best-effort broadcasts. |
+| SS-RIDER-DEPOSIT-038 | Rider deposit recharge, refund withdrawal, credit expiry | G3 | slice-ledgered, read-only | Recharge payment fact creates deposit log/credit once; withdrawal request idempotency binds user/key/hash to refund order ids, first-time withdrawal reserves refundable credits, creates refund orders, freezes deposit, and refund facts restore/terminalize; expiry scheduler advances credit lifecycle. | State sequencing is documented; previous duplicate-withdrawal idempotency note was stale relative to current code. |
+| SS-RIDER-INCOME-WITHDRAWAL-039 | Rider income, Baofu settlement, sharing, withdrawal | G3 | slice-ledgered, read-only | Profit-sharing rows own rider income status; account-opening/verify-fee/callback/recovery advances settlement readiness; withdrawal orders/callback/query advance provider withdrawal state. | Source-audit before rider income withdrawal changes; keep provider/local balance boundary explicit. |
+| SS-RIDER-WORKBENCH-LOCATION-040 | Rider online/offline, workbench, location, geofence | G3 | slice-ledgered, read-only | Online requires region/status/deposit/Baofu readiness; offline blocked by active deliveries; location appends accepted samples; geofence auto-advance is best-effort with manual buttons as recovery. | No code change from this pass; consider location dedupe only if downstream analytics/geofence noise becomes material. |
+
+## Cross-Flow Backlog
+
+| Backlog ID | Theme | Finding | Suggested Follow-Up |
+| --- | --- | --- | --- |
+| SS-BACKLOG-001 | State sequencing validation | This pass did not run fresh Go, Mini Program, Flutter, web, provider, or database tests. Existing focused tests were identified in codegraph slices, but their current pass/fail state was not asserted. | Before any production-code change in a flow, run the smallest relevant focused tests listed by that flow's slice or dedicated audit. |
+| SS-BACKLOG-002 | Provider/event ordering | Baofoo payment/refund/share/withdrawal flows depend on callback/query/fact ordering and provider evidence. | Start from `flows/external-dependency-baofu-provider-evidence-gate-2026-06-15.md` and the Baofu domain source matrix before provider semantic changes. |
+| SS-BACKLOG-003 | Dine-in checkout | Paid order -> session checkout convergence is state-critical and currently ledgered from the slice only. | Use `flows/state-sequencing-customer-dine-in-checkout-convergence-2026-06-15.md` as the source-audit execution card before modifying session checkout. |
+| SS-BACKLOG-004 | Customer checkout duplicate/late payment | Takeout and reservation checkout flows need focused proof for stale frontend draft -> backend rehydration -> payment callback/recovery -> visible status. | Use `flows/state-sequencing-customer-takeout-checkout-rehydration-payment-2026-06-15.md` for takeout; create a separate reservation card before reservation contract changes. |
+| SS-BACKLOG-005 | Merchant open-state multi-writer | Manual open/close and business-hours scheduler intentionally write the same merchant availability state. Existing slice records repaired/tested semantics. | Audit both flows together if product changes manual override, auto close, or business-hours precedence. |
+| SS-BACKLOG-006 | Withdrawal create evidence | Rider deposit and rider income withdrawal request idempotency is now code-backed in current source. Merchant/rider Baofu withdrawal remains provider-money high risk because real callback/funds-action evidence and manual-recovery drills are still limited. | Preserve existing idempotency; focus next on provider evidence, manual recovery, and fresh validation before code changes. |
+
+## Validation Notes
+
+This ledger is a documentation artifact. Runtime behavior was checked against
+reviewed codegraph slices, their evidence anchors, current routing rules, and
+the dedicated source-level Baofoo payment audit.
+
+No production code, SQL, generated code, migrations, frontend files, Flutter
+files, or tests were changed in this pass. No Go, Mini Program, Flutter, web,
+provider, migration, or database tests were run by this pass.
+
+## Next Step
+
+The next production-code change in any flow should first promote that flow from
+`slice-ledgered` to a dedicated source-level material under
+`artifacts/production-risk-audit/flows/`, then run the smallest relevant
+validation named by that material.

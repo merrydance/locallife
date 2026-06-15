@@ -115,20 +115,26 @@ Impact: a rider can see recommended orders that are guaranteed to fail at grab t
 
 Discussion direction: decide whether order visibility should share the grab-readiness gate or display a settlement-readiness blocker before showing actionable cards.
 
-### F9 [Medium] Rider deposit withdrawal lacks a durable request idempotency key and request recovery handle
+### F9 [Medium, historical/fixed] Rider deposit withdrawal formerly lacked durable request idempotency
+
+Current-code status, 2026-06-15 sync: fixed/stale finding. Current code requires `Idempotency-Key` on `POST /v1/rider/withdraw`, persists `rider_deposit_withdrawal_requests` with `(user_id, idempotency_key)` uniqueness and request hash, replays same user/key/hash refund plans, rejects conflicting reuse, and the Mini Program stores the draft key with the pending withdrawal context. Keep this item as historical context only; future work should run the focused idempotency tests before changing the flow.
 
 Flow: rider deposit.
 
-Evidence:
-- `POST /v1/rider/withdraw` accepts only amount/remark and passes them to the service at `locallife/api/rider.go:521` through `:534`.
-- Each accepted call reaches `PrepareRiderDepositRefundTx` at `locallife/logic/rider_deposit_refund_service.go:110` through `:114`.
-- The transaction creates fresh `refund_orders` with generated `out_refund_no` at `locallife/db/sqlc/tx_rider_refund.go:126` through `:138`, writes freeze logs at `:143` through `:155`, and increases `riders.frozen_deposit` at `:170` through `:174`.
-- Status recovery requires caller-provided `refund_order_ids` at `locallife/api/rider_withdrawal_status.go:168` through `:183`.
-- The Mini Program pending context is built only from returned `refund_order_id` values at `weapp/miniprogram/pages/rider/_services/rider-deposit-withdrawal.ts:95` through `:110`.
+Historical finding basis:
+- The original review found a request-level retry gap: a lost 202 response could leave the client without the refund order ids needed for status recovery, and the review snapshot did not show a durable operation key bound to the withdrawal request.
+- That finding is retained here only to explain why the fix was made; the evidence below supersedes the older source anchors.
 
-Impact: current frozen-deposit checks reduce immediate duplicate execution, but if the 202 response is lost before the client stores refund IDs, the rider has no durable operation key to recover that exact withdrawal. Support/ops must infer from aggregate frozen/processing amounts.
+Current code evidence:
+- `POST /v1/rider/withdraw` now documents and requires `Idempotency-Key`, rejects missing or too-long keys, and passes the key to `SubmitWithdrawal` at `locallife/api/rider.go:540` through `:575`.
+- `SubmitWithdrawal` trims/requires the key, derives a request hash, and passes both into `PrepareRiderDepositRefundTx` at `locallife/logic/rider_deposit_refund_service.go:76` through `:126`.
+- `PrepareRiderDepositRefundTx` locks the rider, looks up `rider_deposit_withdrawal_requests` by `(user_id, idempotency_key)`, replays the same hash by loading the original refund plan, rejects same-key/different-hash reuse, and only creates refund orders for a first-time request at `locallife/db/sqlc/tx_rider_refund.go:67` through `:258`.
+- Replayed requests skip new WeChat refund creation for already non-pending refund orders at `locallife/logic/rider_deposit_refund_service.go:151` through `:164`.
+- Schema support lives in `locallife/db/migration/000268_add_rider_deposit_withdrawal_idempotency.up.sql`.
 
-Discussion direction: add a rider-supplied or server-issued withdrawal operation id that can be safely retried and queried even when the first response is lost.
+Impact after sync: repeated same-key rider-deposit withdrawal retries now resolve to the original refund plan instead of producing another local refund plan. The remaining work is validation discipline: rerun focused API/logic/sqlc/Mini Program idempotency tests before changing this flow, and keep provider refund callback/query recovery evidence tracked separately.
+
+Discussion direction: no new idempotency design is needed for this item unless fresh tests or source review uncover drift.
 
 ### F10 [Medium] Rider deposit recharge reuses a pending local payment row but recreates the WeChat order with the same out_trade_no
 
@@ -145,21 +151,25 @@ Impact: if the first prepay creation succeeded but the client retries before pay
 
 Discussion direction: when reusing a pending payment order with a prepay id, regenerate pay params from the stored prepay id or query the remote order instead of recreating and closing on duplicate create.
 
-### F11 [High] Rider Baofu income withdrawal lacks request idempotency/local reservation and can create duplicate provider withdrawals
+### F11 [High, partially fixed] Rider Baofu income withdrawal formerly lacked request idempotency
+
+Current-code status, 2026-06-15 sync: request-idempotency portion fixed/stale. Current shared Baofu withdrawal create requires `Idempotency-Key`, stores `idempotency_key` plus `idempotency_request_hash` on `baofu_withdrawal_orders`, enforces per-owner key uniqueness and key/hash pair checks, replays same owner/key/request, rejects conflicting reuse, and writes a submitted async-worker provider command before dispatch. Remaining risk is provider-positive evidence and ambiguous create/manual recovery, not missing request idempotency.
 
 Flow: rider income and Baofu withdrawal.
 
-Evidence:
-- The Mini Program create page only has a local `submitting` flag at `weapp/miniprogram/pages/rider/income/withdrawals/create/index.ts:79` through `:92`.
-- The API wrapper posts only `{ amount }` at `weapp/miniprogram/pages/rider/_main_shared/api/baofu-withdrawal.ts:97` through `:105`.
-- The backend generates a fresh out request number for every request at `locallife/api/baofu_withdrawal.go:292` through `:297`.
-- `CreateWithdrawal` re-queries provider balance, creates a new `baofu_withdrawal_orders(status='processing')`, and then calls the provider at `locallife/logic/baofu_withdraw_service.go:150` through `:184`.
-- The table has uniqueness only on `out_request_no` at `locallife/db/migration/000227_add_baofu_payment_foundation.up.sql:102` through `:118`; insert is a raw create at `locallife/db/query/baofu_withdrawal_order.sql:1` through `:18`.
-- Unknown provider create results deliberately keep the local order processing for recovery at `locallife/logic/baofu_withdraw_service.go:188` through `:201`.
+Historical finding basis:
+- The original review found that rider income withdrawal creation had only frontend submit suppression and fresh backend request numbers, so a retry could create multiple local/provider withdrawal attempts before provider balance changed.
+- That request-idempotency gap has since been fixed. This item remains open only for the provider-evidence/manual-recovery side of the original money-movement risk.
 
-Impact: a network retry or cross-process double submit can create multiple local/provider withdrawal requests while provider balance still appears sufficient. Unlike rider deposit withdrawal, this flow does not reserve local income rows or freeze a local ledger, so duplicate payout risk is real.
+Current code evidence:
+- Shared Baofu withdrawal create now requires `Idempotency-Key`, rejects missing or too-long keys, and returns `200 OK` on replay at `locallife/api/baofu_withdrawal.go:278` through `:325`.
+- `CreateWithdrawal` computes a request hash from `(owner_type, owner_id, amount)`, replays same owner/key/hash, rejects conflicting reuse, checks provider balance, and persists the withdrawal order with `idempotency_key` plus `idempotency_request_hash` at `locallife/logic/baofu_withdraw_service.go:124` through `:247`.
+- The order and submitted async provider command are written in one transaction by `CreateBaofuWithdrawalOrderWithSubmittedCommandTx` at `locallife/db/sqlc/tx_baofu_withdrawal.go:23` through `:58`.
+- SQL and migrations support lookup and enforcement through `GetBaofuWithdrawalOrderByIdempotency` at `locallife/db/query/baofu_withdrawal_order.sql:36` through `:42`, migration `000260_add_baofu_withdrawal_idempotency.up.sql`, and migration `000261_harden_baofu_withdrawal_idempotency_pair.up.sql`.
 
-Discussion direction: require an idempotency key/operation id, persist it with owner/amount, and return the existing processing/terminal withdrawal for retries. Consider a local pending-reservation guard if provider balance alone is not enough.
+Impact after sync: duplicate local Baofu withdrawal order creation from repeated same-key requests is no longer an active finding. The active residual risk is different: provider-positive withdrawal callback/funds evidence, ambiguous provider-create recovery, and manual reconciliation drills still need stronger proof.
+
+Discussion direction: preserve the existing shared Baofu withdrawal idempotency contract; focus follow-up work on provider evidence and recovery operations instead of another request-idempotency redesign.
 
 ### F12 [Medium] Claim-recovery payment success resolves recovery by claim id instead of recovery id/target
 

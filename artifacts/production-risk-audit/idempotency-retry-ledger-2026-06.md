@@ -1,0 +1,89 @@
+# Production Risk Audit: Idempotency And Retry Ledger
+
+Month: 2026-06
+Risk theme: idempotency and retry
+Status: active
+
+## Scope
+
+This ledger tracks duplicate submit, duplicate callback, worker retry,
+scheduler retry, recovery replay, provider query replay, and read-side
+rehydration behavior for the 40 reusable flows inventoried in
+`artifacts/production-risk-audit/flow-inventory-2026-06.md`.
+
+This is a documentation-only pass. It records existing guards and gaps from
+reviewed codegraph slices and source evidence anchors. It does not modify
+production code.
+
+## Decision Rules
+
+- Request-level duplicate submit should use a durable idempotency key only when
+  the business operation creates money movement, long-lived credentials, or
+  non-convergent state.
+- Callback, worker, scheduler, and recovery duplicates should be guarded by
+  durable facts, commands, unique keys, conditional status transitions, task
+  claim rows, or transaction-owned checks.
+- Frontend `submitting` flags are UX guards only. They are not counted as
+  production idempotency unless the backend path is also safe.
+- Read-only flows are idempotent when they do not mutate read state; read-state
+  mutations such as notification mark-read still need ownership and repeated
+  execution semantics.
+
+## Flow Ledger
+
+| Flow ID | Flow | Risk | Existing Guard | Gap / Residual Risk | Decision |
+| --- | --- | --- | --- | --- | --- |
+| IR-BAOFU-AGGREGATE-PAYMENT | Baofoo aggregate payment success callback and share boundary | G3 | Fact dedupe, application claim/retry, payment/order conditional transitions, outbox dedupe, recovery scheduler. | Real provider duplicate/late callback evidence remains limited to source/tests listed by the slice. | Preserve fact/application/outbox retry boundaries. |
+| IR-BAOFU-REFUND | Baofoo pre-share refund command, callback, query recovery | G3 | Refund order status gates, command audit, callback/query fact dedupe, application scheduler, outbox scheduler. | Provider positive refund callback evidence remains a future validation gap. | Keep synchronous refund command acceptance separate from terminal refund fact application. |
+| IR-CUSTOMER-DINE-IN-CHECKOUT | Scan/open session, billing group, dine-in checkout/payment | G3 | Frontend submit guards, backend session/group convergence, payment callback/recovery convergence. | Needs focused proof for QR/session double-open and paid-session checkout convergence. | Treat local session context as draft; backend session/order/payment state owns convergence. |
+| IR-CUSTOMER-DISCOVERY-BROWSE | Search/browse, coupon claim, wanted merchant | G2 | Read paths are idempotent; wanted submit/coupon claim rely on backend constraints plus frontend in-flight guards. | Coupon and wanted-merchant duplicate behavior should be verified before changing write contracts. | Backend constraints remain required; frontend guards are not sufficient. |
+| IR-CUSTOMER-ORDER-AFTER-SALES | Cancel, confirm, urge, refund/claim/food-safety/review | G3 | Refund create requires idempotency key; provider facts dedupe; action buttons and cooldowns are UI guards. | Customer claim/food-safety duplicate-open semantics need source-level proof before modification. | Keep money/refund operations on durable idempotency; log other duplicate actions as flow-specific. |
+| IR-CUSTOMER-PROFILE-WALLET | Profile/address/favorite/review/membership/wallet | G2/G3 | Ownership-scoped reads, backend duplicate favorite/review/payment constraints, payment pending-confirmation recovery. | Address/review repeated writes rely on status/ownership rather than explicit request keys. | Add request keys only for future non-convergent writes. |
+| IR-CUSTOMER-RESERVATION | Reservation create/modify/cancel/deposit/add-on/refund | G3 | Payment/refund fact dedupe and scheduler recovery; reservation handlers/transactions own status convergence. | Reservation create/modify duplicate submit and add-on payment replay need focused tests before code changes. | Treat payment/refund as provider-fact driven; do not rely on client payment result. |
+| IR-CUSTOMER-RUNTIME-AUTH | Login/session/web-login confirmation/error logging | G3 | Session/token persistence, web-login session status, authenticated telemetry. | Web-login scan/confirm duplicate and token rotation semantics need dedicated source audit before auth changes. | Fail closed on identity ambiguity; avoid frontend-only duplicate assumptions. |
+| IR-CUSTOMER-TAKEOUT-CHECKOUT | Cart/order/payment/refund checkout | G3 | Frontend double-submit guards, backend order/payment status constraints, refund idempotency key, callback/fact dedupe. | End-to-end duplicate submit across order create/payment create remains high-value validation. | Durable backend order/payment constraints are authoritative. |
+| IR-MERCHANT-APP-BIND | Merchant App bind code and device registration | G3 | One-time bind code consumption, platform payload, device unregister/stale cleanup. | Device heartbeat/register replay and bind-code race should stay covered by source-level proof before changes. | Long-lived credential issuance must remain consume-after-recheck and one-time. |
+| IR-MERCHANT-ONBOARDING | Merchant application, OCR, review, credential activation | G3 | Active review-run idempotency, queued-review supersede, OCR stale cleanup, post-approval repair. | GPS duplicate-location hard reject was narrowed; future onboarding retries need source-level review. | Preserve explicit edit/reset and review-run convergence. |
+| IR-MERCHANT-BIZ-HOURS-AUTO | Business-hours automatic open/close | G2 | Scheduler-driven convergence and websocket refresh; repeated same status converges. | Multi-writer open-state ordering remains release/transaction-sensitive. | Keep scheduler writes conditional and observable. |
+| IR-MERCHANT-CLAIM-RECOVERY | Merchant claim recovery, dispute, payment, release | G3 | Payment facts, dispute uniqueness, delayed-release visibility, async retry workers. | Recovery payment/dispute duplicate behavior should be revalidated before money-flow changes. | Keep fact-driven release convergence and tenant-scoped dispute uniqueness. |
+| IR-MERCHANT-COMBO-CATALOG | Combo/catalog/category state | G2 | Tested repair items closed; repeated config writes converge through durable state. | Contract drift across public menu/cart/order readers remains the main retry risk. | Treat backend catalog state as source; avoid frontend-only duplicate semantics. |
+| IR-MERCHANT-DEVICE-DISPLAY | Display config, printer config, auto-accept, print side effects | G2/G3 | Backend-truth auto-accept, print task keys, reconciliation UI, provider callback/log status. | BLE local print is not backend idempotent; cloud-printer provider retries need per-provider proof. | Keep local BLE receipts separate from backend print logs. |
+| IR-MERCHANT-DISH-INVENTORY | Dish availability/customization/inventory | G2 | Durable dish/customization/inventory writes and downstream readers. | Multiple writers can drift; duplicate inventory mutation behavior requires focused transaction review before changes. | Use backend state as menu/order truth. |
+| IR-MERCHANT-FINANCE-WITHDRAWAL | Merchant settlement account and Baofu withdrawal | G3 | Withdrawal idempotency, transaction boundary, command/fact durability, recovery scheduler. | Real Baofu withdrawal callback evidence remains a provider gap. | Preserve command/fact separation and durable withdrawal-create idempotency. |
+| IR-MERCHANT-MANUAL-OPEN | Merchant manual open/close status | G2 | Manual writes and scheduler convergence; same-value writes converge. | Auto/manual writer ordering should be tested before changing open-state rules. | Keep manual and scheduler semantics explicit. |
+| IR-MERCHANT-MARKETING-RULES | Marketing/voucher/recharge/rules config | G2 | Rule writes converge in durable config tables; voucher transactions own duplicate claim/expiry. | Stacking and rule-version replay can affect checkout totals. | Revalidate checkout readers before rule-contract changes. |
+| IR-MERCHANT-MEMBER-BALANCE | Staff adjustment of customer balance | G3 | Idempotency repaired; ledger-backed balance transaction; retired direct writers. | Future adjustment endpoints must not bypass ledger/idempotency table. | Preserve one ledger-owned write path. |
+| IR-MERCHANT-MEMBERSHIP-SETTINGS | Membership settings affecting checkout | G2 | Settings writes converge; checkout reads backend setting row. | Duplicate writes are low risk but stale checkout preview is possible. | Keep order preview/create re-reading backend settings. |
+| IR-MERCHANT-ORDER-OPS | Accept/reject/ready/complete/refund/print | G3/G2 | Conditional status writes, manual refund idempotency key, refund recovery, print task dedupe, Flutter single-flight accept. | Merchant status actions lack request idempotency keys and rely on state gates; this is acceptable but should be tested for concurrent clients. | Preserve conditional transitions and backend readback after actions. |
+| IR-MERCHANT-PROFILE-UPDATE | Merchant profile/category/media/shop images | G2 | Optimistic locking, pending media sync proof, latest-row scoping. | Media async retry and schema hardening remain sensitive to stale rows. | Keep media recovery and owner-scoped live truth. |
+| IR-MERCHANT-RESERVATION-TABLE | Merchant reservation/table/session/refund | G3 | Reservation/payment/refund recovery, table/session state boundaries. | No-show/table occupancy duplicate flows need source-level review before changes. | Keep shared customer/merchant reservation state conditional. |
+| IR-MERCHANT-REVIEW-REPLY | Merchant review reply after content safety | G2 | Content safety boundary and durable reply state; duplicate reply behavior is status-owned. | Provider moderation retry/failure behavior should be rechecked before changing reply submission. | Do not publish reply before content-safety acceptance. |
+| IR-MERCHANT-STAFF-GROUP | Staff invites, group onboarding, OCR | G3 | Invite credentials, OCR worker, durable staff/group truth. | Reusable invite replay and OCR retry remain auth-sensitive. | Keep group/staff activation behind durable owner checks and invite constraints. |
+| IR-MERCHANT-STATS-ANALYTICS | Merchant stats read paths | G2 | Mostly read-only; no production state mutation except analytics/read-state if present. | Cache/aggregation staleness is not covered by runtime tests here. | Treat as read-side consistency risk, not mutation idempotency. |
+| IR-OPERATOR-DASHBOARD | Operator dashboard, analytics, notifications | G2 | Read paths plus notification read-state operations. | Mark-read/replay behavior should be verified before notification contract changes. | Region authority plus user-scoped notification state is required. |
+| IR-OPERATOR-DISPATCH-HALL | Pending-dispatch visibility and alert scheduler | G2/G3 | `delivery_timeout_alerts` dedupe ledger; enqueue failure rolls ledger back; worker retries. | End-to-end operator notification list handoff remains a validation gap. | Preserve ledger rollback on enqueue failure. |
+| IR-OPERATOR-FINANCE-WITHDRAWAL | Operator finance and Baofu withdrawal | G3 | Baofu command/fact/recovery semantics inherited from provider flows; finance reads are read-only. | Legacy withdrawal boundary and provider callback evidence need source audit before changes. | Keep finance reads separate from provider money commands. |
+| IR-OPERATOR-MERCHANT-MGMT | Regional merchant visibility/capability writes | G2 | Region checks and capability transaction/system-label reconciliation. | Repeated capability writes and recovery interactions need focused test before changes. | Keep capability writes transaction-owned and region-scoped. |
+| IR-OPERATOR-REGION-RULES | Region rules, deposit, fee, weather, expansion | G2/G3 | Same-value config writes converge; rule proxy scopes region; cache invalidation. | Region-expansion approval handoff and weather cache replay need focused validation. | Preserve region authority and rule-version scoping. |
+| IR-OPERATOR-RIDER-MGMT | Regional rider visibility/status/deposit reads | G2 | Read-only regional scope; rule-driven suspension/deposit boundary owned elsewhere. | Repeated operator reads are safe; mutation boundaries remain out of this slice. | Keep rider status mutations in rider/rule-owned flows. |
+| IR-OPERATOR-SAFETY-RECOVERY | Food safety resolution and recovery dispute visibility | G3 | Food-safety resolution transaction; recovery dispute uniqueness and async result retry. | Operator read/write split for recovery disputes can be misread; source audit before mutation changes. | Preserve food-safety-owned release checks. |
+| IR-RIDER-ONBOARDING | Rider application/OCR/review/role activation | G3 | OCR retry, submit/review lifecycle, credential ledger restoration/suspension. | Duplicate application submit and OCR writeback need source proof before changes. | Keep role activation behind review/credential ledger. |
+| IR-RIDER-CLAIMS-RECOVERY | Rider claims, recovery payment, disputes | G3 | Payment-order reuse, direct payment facts, dispute uniqueness, async result retry. | Result effects may run inline or worker; duplicate side-effect tests remain important. | Preserve claim/recovery status guards and idempotent payment facts. |
+| IR-RIDER-DELIVERY-LIFECYCLE | Delivery pool, grab, pickup, delivery, timeout | G3 | Pool row lock/removal, assigned-rider status gates, timeout alert ledger, best-effort broadcasts. | Repeated confirm pickup/delivery after success returns state errors, not idempotent success; UI must rehydrate. | Preserve transaction-owned grab and delivery transitions. |
+| IR-RIDER-DEPOSIT | Rider deposit recharge/refund/credit expiry | G3 | Payment-order reuse, fact dedupe, deposit log/credit existence checks, refund recovery, and durable withdrawal `Idempotency-Key` backed by `rider_deposit_withdrawal_requests`. | Focused tests and the Mini Program contract script exist, but this documentation sync did not rerun them. | Treat previous duplicate-withdrawal finding as stale; before changing the flow, rerun focused API/logic/sqlc/weapp idempotency tests. |
+| IR-RIDER-INCOME-WITHDRAWAL | Rider income, Baofu settlement, withdrawal | G3 | Share command retry, terminal fact non-regression, account-opening active-flow reuse, verify-fee payment reuse, and shared Baofu withdrawal key/hash idempotency on `baofu_withdrawal_orders`. | Real Baofu withdrawal callback/positive funds evidence and broader provider-timeout/manual-recovery drill remain gaps. | Preserve shared Baofu withdrawal idempotency and command/fact boundaries. |
+| IR-RIDER-WORKBENCH-LOCATION | Rider online/offline/location/geofence | G3 | Online/offline idempotence, active-delivery guard, location accepted only for current active delivery. | Location upload is append-only and not deduped by client id/timestamp. | Consider batch/client idempotency if analytics noise becomes material. |
+
+## Cross-Flow Backlog
+
+| Backlog ID | Flow | Finding | Suggested Follow-Up |
+| --- | --- | --- | --- |
+| IR-BACKLOG-001 | Rider deposit withdrawal | Prior duplicate-withdrawal entry was stale; current code requires `Idempotency-Key` and replays same user/key/hash from `rider_deposit_withdrawal_requests`. | Keep as a validation reminder only: rerun focused idempotency tests before changing this flow. |
+| IR-BACKLOG-002 | Rider income withdrawal | Prior no-idempotency entry was stale; current shared Baofu withdrawal create stores key/hash and replays same owner/key/request. | Remaining follow-up is provider-timeout/manual-recovery evidence, not request-idempotency design. |
+| IR-BACKLOG-003 | Merchant order status actions | Status actions rely on conditional transitions and client readback, not request keys; Flutter duplicate accept/print coalescing is covered, but cross-client API-level concurrent accept/ready/reject proof is still valuable. | Use `flows/idempotency-merchant-order-actions-concurrent-validation-2026-06-15.md`; add concurrent multi-client accept/ready/reject validation before changing action APIs. |
+| IR-BACKLOG-004 | Dine-in checkout | Paid-session checkout convergence is a high-value duplicate/late-payment scenario. | Use `flows/state-sequencing-customer-dine-in-checkout-convergence-2026-06-15.md` before code changes. |
+
+## Validation Notes
+
+This ledger was validated as a documentation artifact only. No Go, Mini Program,
+Flutter, or web tests were run by this pass.

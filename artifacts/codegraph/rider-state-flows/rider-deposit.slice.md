@@ -69,8 +69,8 @@ Rider deposit balance must converge through one durable ledger:
 12. Withdrawal submission service rejects missing rider, inactive rider status, any frozen deposit, insufficient available deposit after pending refunds, and active deliveries.
     Evidence: `locallife/api/rider.go:521`, `locallife/logic/rider_deposit_refund_service.go:71`, `locallife/logic/rider_deposit_refund_service.go:78`, `locallife/logic/rider_deposit_refund_service.go:86`, `locallife/logic/rider_deposit_refund_service.go:94`, `locallife/logic/rider_deposit_refund_service.go:99`, `locallife/logic/rider_deposit_refund_service.go:104`.
 
-13. Withdrawal preparation locks the rider, subtracts pending refunds, locks refundable credits oldest-first, consumes refundable amounts, creates `refund_orders`, writes withdrawal-freeze logs, and increases `riders.frozen_deposit`.
-    Evidence: `locallife/db/sqlc/tx_rider_refund.go:59`, `locallife/db/sqlc/tx_rider_refund.go:63`, `locallife/db/sqlc/tx_rider_refund.go:73`, `locallife/db/sqlc/tx_rider_refund.go:83`, `locallife/db/sqlc/tx_rider_refund.go:101`, `locallife/db/sqlc/tx_rider_refund.go:127`, `locallife/db/sqlc/tx_rider_refund.go:143`, `locallife/db/sqlc/tx_rider_refund.go:167`.
+13. Withdrawal preparation requires a client/server `Idempotency-Key`, stores a request hash in `rider_deposit_withdrawal_requests`, and replays the same user/key/request by loading the original refund-order plan instead of creating new refund orders. A same key with a different request hash is rejected before refund creation. First-time preparation locks the rider, subtracts pending refunds, locks refundable credits oldest-first, consumes refundable amounts, creates `refund_orders`, writes withdrawal-freeze logs, records the refund order ids on the request row, and increases `riders.frozen_deposit`.
+    Evidence: `locallife/api/rider.go:551`, `locallife/api/rider.go:559`, `locallife/api/rider.go:574`, `locallife/logic/rider_deposit_refund_service.go:79`, `locallife/logic/rider_deposit_refund_service.go:83`, `locallife/logic/rider_deposit_refund_service.go:119`, `locallife/db/sqlc/tx_rider_refund.go:76`, `locallife/db/sqlc/tx_rider_refund.go:85`, `locallife/db/sqlc/tx_rider_refund.go:90`, `locallife/db/sqlc/tx_rider_refund.go:93`, `locallife/db/sqlc/tx_rider_refund.go:112`, `locallife/db/sqlc/tx_rider_refund.go:184`, `locallife/db/sqlc/tx_rider_refund.go:233`, `locallife/db/sqlc/tx_rider_refund.go:242`, `locallife/db/migration/000268_add_rider_deposit_withdrawal_idempotency.up.sql:1`.
 
 14. Withdrawal submits one direct refund request per source payment credit. Create failure is compensated by resolving the refund as failed; provider success/processing/closed/abnormal responses are marked processing and converge through facts.
     Evidence: `locallife/logic/rider_deposit_refund_service.go:124`, `locallife/logic/rider_deposit_refund_service.go:149`, `locallife/logic/rider_deposit_refund_service.go:164`, `locallife/logic/rider_deposit_refund_service.go:177`, `locallife/logic/rider_deposit_refund_service.go:183`, `locallife/logic/rider_deposit_refund_service.go:189`, `locallife/logic/rider_deposit_refund_service.go:195`.
@@ -98,6 +98,7 @@ Rider deposit balance must converge through one durable ledger:
 - `riders`: aggregate deposit amount, frozen deposit, current operational status, active delivery status inputs.
 - `rider_deposits`: visible deposit/withdraw/unfreeze/deduct ledger plus hidden withdrawal-freeze records.
 - `rider_deposit_credits`: refundable credit source, active/partially_refunded/fully_refunded/expired statuses, paid/refundable-until/reminder timestamps.
+- `rider_deposit_withdrawal_requests`: durable request-level idempotency source for rider deposit withdrawal, unique by `(user_id, idempotency_key)`, with request hash, requested/accepted amounts, and linked refund order ids.
 - `refund_orders`: direct refund intent and terminal status for rider deposit withdrawals.
 - `payment_domain_outbox`: abnormal refund alert handoff.
 
@@ -114,7 +115,7 @@ Rider deposit balance must converge through one durable ledger:
 - Recharge reuses pending payment order by user/business/amount.
 - Payment success transaction checks existing deposit log and credit before creating missing artifacts.
 - Payment query fact dedupe uses provider/out-trade/status keys; query-triggered application may no-op when the order is already processed.
-- Withdrawal preparation is transactional, but every accepted POST can create new refund orders; frontend blocks duplicate submit locally and pending-withdrawal recovery stores status.
+- Withdrawal POST now requires `Idempotency-Key`. The backend stores a request hash in `rider_deposit_withdrawal_requests`; same user/key/hash replays the original refund order ids, and same user/key with a different hash returns conflict. The Mini Program deposit page keeps a stable draft key and stores it with the pending withdrawal context for re-entry.
 - Refund terminal application is idempotent for already success/failed/closed rows.
 - Fact dedupe keys are callback/query based; scheduler retries applications every minute.
 
@@ -139,10 +140,12 @@ Rider deposit balance must converge through one durable ledger:
 Observed tests:
 
 - `locallife/api/rider_test.go` covers deposit balance, recharge, withdrawal, withdrawal status, and deposit ledger API branches.
-- `locallife/db/sqlc/tx_rider_refund_test.go` covers refund preparation, split credits, ledger anomalies, terminal success/closed restore, and stale credit reconciliation.
+- `locallife/db/sqlc/tx_rider_refund_test.go` covers refund preparation, request idempotency replay/conflict/split-plan loading, split credits, ledger anomalies, terminal success/closed restore, and stale credit reconciliation.
+- `locallife/logic/rider_deposit_refund_service_test.go` covers required idempotency key, key/hash propagation, and replay handling that skips new WeChat refund create calls for already non-pending refund rows.
 - `locallife/api/payment_callback_test.go`, `locallife/worker/payment_recovery_scheduler_test.go`, `locallife/worker/refund_recovery_scheduler_test.go`, and `locallife/logic/payment_fact_application_service_test.go` include rider deposit fact/application coverage.
 - `locallife/scheduler/rider_deposit_credit_scheduler_test.go` covers reminders and expiry.
 - `locallife/worker/task_process_payment_test.go` covers legacy refund-result skip for rider deposit.
+- `weapp/scripts/check-rider-deposit-withdrawal-idempotency-contract.test.js` covers the Mini Program `Idempotency-Key` header, stable draft key, pending-withdrawal context persistence, and legacy pending-withdrawal recovery compatibility.
 
 Missing high-value tests:
 
@@ -154,7 +157,7 @@ Missing high-value tests:
 
 ## Gaps And Refactor Notes
 
-- Consider a durable idempotency key for withdrawal POST to protect against network retry after a 202 response.
+- Fixed before this synchronization pass: rider deposit withdrawal POST has durable request idempotency through `Idempotency-Key`, `rider_deposit_withdrawal_requests`, request hash replay/conflict checks, and Mini Program draft-key persistence. Before changing this path, run the focused API/logic/sqlc/weapp contract tests rather than relying on this documentation snapshot.
 - Decide whether withdrawal freeze ledger should remain hidden from all rider-visible list variants or exposed in an audit-only view.
 - Add operational docs for `rider_deposit_credits` expiry and stale credit reconciliation.
 
