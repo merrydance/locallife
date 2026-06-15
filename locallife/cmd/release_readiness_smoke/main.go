@@ -16,6 +16,7 @@ func main() {
 	format := flag.String("format", "text", "output format: text or json")
 	includeConfig := flag.Bool("include-config", false, "also load config from root and check production fail-fast readiness")
 	includeRedis := flag.Bool("include-redis", false, "also ping Redis and read Asynq queue stats using loaded config")
+	includeProviderClients := flag.Bool("include-provider-clients", false, "also construct provider clients using loaded config without making provider requests")
 	flag.Parse()
 
 	var config util.Config
@@ -27,7 +28,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "release readiness smoke failed:", err)
 		os.Exit(2)
 	}
-	if *includeConfig || *includeRedis {
+	if *includeConfig || *includeRedis || *includeProviderClients {
 		config, err = util.LoadConfig(*root)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "release readiness config load failed:", err)
@@ -43,6 +44,9 @@ func main() {
 			Password:       config.RedisPassword,
 			RequiredQueues: []string{"critical", "default"},
 		}))
+	}
+	if *includeProviderClients {
+		report = releasereadiness.MergeReports(report, releasereadiness.CheckBaofuProviderClients(config))
 	}
 
 	switch strings.ToLower(strings.TrimSpace(*format)) {

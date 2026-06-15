@@ -136,6 +136,7 @@ PATH="/usr/local/go/bin:$PATH" go run ./cmd/release_readiness_smoke -format text
 PATH="/usr/local/go/bin:$PATH" go run ./cmd/release_readiness_smoke -format json
 PATH="/usr/local/go/bin:$PATH" go run ./cmd/release_readiness_smoke -include-config -format text
 PATH="/usr/local/go/bin:$PATH" go run ./cmd/release_readiness_smoke -include-config -include-redis -format text
+PATH="/usr/local/go/bin:$PATH" go run ./cmd/release_readiness_smoke -include-config -include-provider-clients -format text
 ```
 
 The command parses `main.go`, `worker/processor.go`, and `worker/*.go` with Go
@@ -144,7 +145,9 @@ tasks, or call any provider. With `-include-config`, it also loads the same
 `util.Config` source used by startup and checks production fail-fast readiness
 without printing secrets. With `-include-redis`, it pings Redis and reads
 Asynq queue stats for the `critical` and `default` queues without enqueueing
-tasks. A non-pass report exits non-zero.
+tasks. With `-include-provider-clients`, it constructs Baofu root, aggregate,
+account, and merchant-report clients without making provider requests. A
+non-pass report exits non-zero.
 
 Current rows:
 
@@ -158,6 +161,7 @@ Current rows:
 | `config:production_payment_runtime` | `pass/fail` | Reuses `ValidateBaofuConfig` and confirms Baofu main-business runtime readiness when `-include-config` is used. |
 | `redis:connection` | `pass/fail` | Confirms Redis ping succeeds when `-include-redis` is used. |
 | `asynq:queue:<name>` | `pass/fail` | Confirms Asynq inspector can read queue stats or an empty queue namespace without enqueueing tasks. |
+| `provider:baofu:<client>` | `pass/fail` | Confirms Baofu provider clients can be locally constructed from config without provider requests. |
 
 Minimum missing task or scheduler names should be literal names from the current
 runtime, for example `payment-fact-application`,
@@ -171,7 +175,6 @@ Rows still planned for a future runtime smoke:
 
 | Row | Status values | Notes |
 | --- | --- | --- |
-| `provider.clients` | `pass/fail/warn` | Instantiate or otherwise prove Baofu clients are usable when Baofu main business is enabled. |
 | `fixture.claimability` | `pass/fail/skipped` | Skipped unless fixture mode is explicitly enabled. |
 
 ## Phase 1 Implementation Run 2026-06-15
@@ -184,8 +187,10 @@ PATH="/usr/local/go/bin:$PATH" go test ./internal/releasereadiness ./cmd/release
 PATH="/usr/local/go/bin:$PATH" go run ./cmd/release_readiness_smoke -format json
 PATH="/usr/local/go/bin:$PATH" go run ./cmd/release_readiness_smoke -format text
 PATH="/usr/local/go/bin:$PATH" go run ./cmd/release_readiness_smoke -include-config -format text
+PATH="/usr/local/go/bin:$PATH" go run ./cmd/release_readiness_smoke -include-config -include-provider-clients -format text
 PATH="/usr/local/go/bin:$PATH" go build ./cmd/release_readiness_smoke
 PATH="/usr/local/go/bin:$PATH" go test ./internal/releasereadiness -run TestCheckRedisAsynqReadiness -count=1
+PATH="/usr/local/go/bin:$PATH" go test ./internal/releasereadiness -run TestCheckBaofuProviderClientReadiness -count=1
 PATH="/usr/local/go/bin:$PATH" go test ./worker -run 'TestBaofuPaymentRecoveryScheduler|TestPaymentFactApplicationSchedulerRunOnce|TestPaymentDomainOutboxScheduler|TestBaofuWithdrawalRecoveryScheduler|TestRefundRecoveryScheduler' -count=1
 PATH="/usr/local/go/bin:$PATH" go test ./scheduler -run 'Test.*OrderTimeout|Test.*TakeoutAutoComplete|Test.*MerchantOpenStatus|Test.*DataCleanup' -count=1
 ```
@@ -201,6 +206,9 @@ Observed result:
 - Redis/Asynq readiness is covered by a focused miniredis-backed unit test; the
   local command run did not use `-include-redis` because the local config does
   not point at a release Redis instance.
+- Baofu provider-client readiness is covered by a focused unit test; the local
+  command can construct clients when release-like Baofu config is supplied, but
+  does not call Baofoo.
 - Focused worker and scheduler package tests returned `ok`.
 
 What this proves:
@@ -214,6 +222,9 @@ What this proves:
 - With `-include-redis`, a release operator can prove Redis ping and read-only
   Asynq queue namespace access for `critical` and `default` without enqueueing
   tasks.
+- With `-include-provider-clients`, a release operator can prove Baofu root,
+  aggregate, account, and merchant-report clients can be locally constructed
+  from loaded config without calling Baofoo.
 - The static report covers payment fact application, payment outbox, Baofu
   payment/account/withdrawal/merchant-report recovery, refund recovery, order
   timeout, takeout auto-complete, merchant-open status, data cleanup, claim
@@ -224,8 +235,7 @@ What this still does not prove:
 - No deployed process was started.
 - Redis/Asynq reachability was unit-tested with miniredis; it was not executed
   against a deployed Redis instance in this implementation run.
-- No runtime provider-client object was instantiated by the smoke; config
-  readiness is checked through validation only.
+- No provider network request was made.
 - No disposable fixture row was claimed or enqueued.
 
 ## Phase 1 Validation Run 2026-06-15
@@ -289,18 +299,18 @@ Also run the static release smoke:
 go run ./cmd/release_readiness_smoke -format text
 go run ./cmd/release_readiness_smoke -include-config -format text
 go run ./cmd/release_readiness_smoke -include-config -include-redis -format text
+go run ./cmd/release_readiness_smoke -include-config -include-provider-clients -format text
 ```
 
-Future runtime smoke work should validate provider-client
-instantiation/readiness and optional disposable fixture claimability without
-mutating production money state.
+Future runtime smoke work should validate optional disposable fixture
+claimability without mutating production money state.
 
 ## Remaining Real Issue
 
 Many audited flows are safe only if callback facts, outbox rows, recovery rows,
 timeouts, and cleanup schedulers actually run in the deployed environment.
-The static/config/Redis smoke reduces source-level registration, production
-fail-fast configuration, and queue reachability drift risk, but deployed runtime
-readiness still needs provider-client and fixture-level proof. This remains a
-real cross-flow release risk until those runtime checks are added to the
-release path.
+The static/config/Redis/provider-client smoke reduces source-level
+registration, production fail-fast configuration, queue reachability, and local
+provider-client construction drift risk, but deployed runtime readiness still
+needs fixture-level proof. This remains a real cross-flow release risk until
+those runtime checks are added to the release path.

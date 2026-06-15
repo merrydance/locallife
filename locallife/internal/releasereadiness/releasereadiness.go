@@ -13,6 +13,10 @@ import (
 
 	"github.com/go-redis/redis/v8"
 	"github.com/hibiken/asynq"
+	"github.com/merrydance/locallife/baofu"
+	baofuaccount "github.com/merrydance/locallife/baofu/account"
+	"github.com/merrydance/locallife/baofu/aggregatepay"
+	"github.com/merrydance/locallife/baofu/merchantreport"
 	"github.com/merrydance/locallife/util"
 )
 
@@ -330,6 +334,56 @@ func CheckRedisAsynq(opts RedisAsynqOptions) Report {
 			Status: StatusPass,
 			Detail: fmt.Sprintf("size=%d pending=%d active=%d paused=%t", info.Size, info.Pending, info.Active, info.Paused),
 		})
+	}
+	sort.SliceStable(report.Checks, func(i, j int) bool {
+		return report.Checks[i].ID < report.Checks[j].ID
+	})
+	return report
+}
+
+func CheckBaofuProviderClients(config util.Config) Report {
+	report := Report{Status: StatusPass}
+	if !config.BaofuMainBusinessEnabled && !config.HasBaofuRuntimeConfig() {
+		report.Checks = append(report.Checks,
+			CheckResult{ID: "provider:baofu:root", Status: StatusPass, Detail: "skipped: baofu runtime config disabled"},
+			CheckResult{ID: "provider:baofu:aggregate", Status: StatusPass, Detail: "skipped: baofu runtime config disabled"},
+			CheckResult{ID: "provider:baofu:account", Status: StatusPass, Detail: "skipped: baofu runtime config disabled"},
+			CheckResult{ID: "provider:baofu:merchant_report", Status: StatusPass, Detail: "skipped: baofu runtime config disabled"},
+		)
+		return report
+	}
+
+	root, err := baofu.NewClient(config.ToBaofuConfig(), nil)
+	if err != nil {
+		return Report{
+			Status: StatusFail,
+			Checks: []CheckResult{
+				{ID: "provider:baofu:root", Status: StatusFail, Detail: err.Error()},
+			},
+		}
+	}
+	report.Checks = append(report.Checks, CheckResult{
+		ID:     "provider:baofu:root",
+		Status: StatusPass,
+		Detail: "baofu root client constructed",
+	})
+	if aggregateClient := aggregatepay.NewClient(root); aggregateClient == nil {
+		report.Status = StatusFail
+		report.Checks = append(report.Checks, CheckResult{ID: "provider:baofu:aggregate", Status: StatusFail, Detail: "aggregate client constructor returned nil"})
+	} else {
+		report.Checks = append(report.Checks, CheckResult{ID: "provider:baofu:aggregate", Status: StatusPass, Detail: "aggregate client constructed"})
+	}
+	if accountClient := baofuaccount.NewClient(root); accountClient == nil {
+		report.Status = StatusFail
+		report.Checks = append(report.Checks, CheckResult{ID: "provider:baofu:account", Status: StatusFail, Detail: "account client constructor returned nil"})
+	} else {
+		report.Checks = append(report.Checks, CheckResult{ID: "provider:baofu:account", Status: StatusPass, Detail: "account client constructed"})
+	}
+	if merchantReportClient := merchantreport.NewClient(root); merchantReportClient == nil {
+		report.Status = StatusFail
+		report.Checks = append(report.Checks, CheckResult{ID: "provider:baofu:merchant_report", Status: StatusFail, Detail: "merchant report client constructor returned nil"})
+	} else {
+		report.Checks = append(report.Checks, CheckResult{ID: "provider:baofu:merchant_report", Status: StatusPass, Detail: "merchant report client constructed"})
 	}
 	sort.SliceStable(report.Checks, func(i, j int) bool {
 		return report.Checks[i].ID < report.Checks[j].ID

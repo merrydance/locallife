@@ -96,38 +96,7 @@ func (processor *RedisTaskProcessor) Start() error {
 }
 
 func TestCheckProductionConfigReadiness(t *testing.T) {
-	base := util.Config{
-		Environment:                    "production",
-		AllowedOrigins:                 []string{"https://admin.example.com"},
-		RedisAddress:                   "redis:6379",
-		DataEncryptionKey:              "dummy-test-data-encryption-key",
-		BaofuMainBusinessEnabled:       true,
-		WechatMiniAppID:                "wx-app",
-		BaofuEnvironment:               "sandbox",
-		BaofuAccountGatewayBaseURL:     "https://vgw.baofoo.com/union-gw/api",
-		BaofuAggregatePayBaseURL:       "https://mch-juhe.baofoo.com/api",
-		BaofuMerchantReportBaseURL:     "https://mch-juhe.baofoo.com/mch-service/api",
-		BaofuCollectMerchantID:         "collect-merchant",
-		BaofuCollectTerminalID:         "collect-terminal",
-		BaofuPayoutMerchantID:          "payout-merchant",
-		BaofuPayoutTerminalID:          "payout-terminal",
-		BaofuAppID:                     "baofu-app",
-		BaofuPrivateKeyPEM:             testPrivateKeyPEM,
-		BaofuPublicKeyPEM:              testPublicKeyPEM,
-		BaofuSignSerialNo:              "1234567890",
-		BaofuEncryptionSerialNo:        "1234567891",
-		BaofuNotifyBaseURL:             "https://api.example.com/v1/webhooks/baofu",
-		BaofuPaymentNotifyURL:          "https://api.example.com/v1/webhooks/baofu/payment",
-		BaofuProfitSharingNotifyURL:    "https://api.example.com/v1/webhooks/baofu/share",
-		BaofuRefundNotifyURL:           "https://api.example.com/v1/webhooks/baofu/refund",
-		BaofuWithdrawNotifyURL:         "https://api.example.com/v1/webhooks/baofu/withdraw",
-		BaofuHTTPTimeout:               5,
-		BaofuAccountVerifyFeeFen:       1,
-		BaofuBusinessIndustryID:        "industry",
-		BaofuMerchantReportChannelID:   "channel",
-		BaofuMerchantReportChannelName: "channel-name",
-		BaofuMerchantReportBusiness:    "business",
-	}
+	base := validProductionBaofuReadinessConfig()
 
 	report := CheckConfig(base)
 	require.Equal(t, StatusPass, report.Status)
@@ -184,6 +153,22 @@ func TestCheckRedisAsynqReadiness(t *testing.T) {
 	require.Equal(t, StatusFail, requireCheck(t, report, "redis:connection").Status)
 }
 
+func TestCheckBaofuProviderClientReadiness(t *testing.T) {
+	config := validProductionBaofuReadinessConfig()
+
+	report := CheckBaofuProviderClients(config)
+	require.Equal(t, StatusPass, report.Status)
+	require.Equal(t, StatusPass, requireCheck(t, report, "provider:baofu:root").Status)
+	require.Equal(t, StatusPass, requireCheck(t, report, "provider:baofu:aggregate").Status)
+	require.Equal(t, StatusPass, requireCheck(t, report, "provider:baofu:account").Status)
+	require.Equal(t, StatusPass, requireCheck(t, report, "provider:baofu:merchant_report").Status)
+
+	config.BaofuPublicKeyPEM = ""
+	report = CheckBaofuProviderClients(config)
+	require.Equal(t, StatusFail, report.Status)
+	require.Equal(t, StatusFail, requireCheck(t, report, "provider:baofu:root").Status)
+}
+
 func requireCheck(t *testing.T, report Report, id string) CheckResult {
 	t.Helper()
 	for _, check := range report.Checks {
@@ -193,6 +178,41 @@ func requireCheck(t *testing.T, report Report, id string) CheckResult {
 	}
 	t.Fatalf("missing check %q in report: %#v", id, report.Checks)
 	return CheckResult{}
+}
+
+func validProductionBaofuReadinessConfig() util.Config {
+	return util.Config{
+		Environment:                    "production",
+		AllowedOrigins:                 []string{"https://admin.example.com"},
+		RedisAddress:                   "redis:6379",
+		DataEncryptionKey:              "dummy-test-data-encryption-key",
+		BaofuMainBusinessEnabled:       true,
+		WechatMiniAppID:                "wx-app",
+		BaofuEnvironment:               "sandbox",
+		BaofuAccountGatewayBaseURL:     "https://vgw.baofoo.com/union-gw/api",
+		BaofuAggregatePayBaseURL:       "https://mch-juhe.baofoo.com/api",
+		BaofuMerchantReportBaseURL:     "https://mch-juhe.baofoo.com/mch-service/api",
+		BaofuCollectMerchantID:         "collect-merchant",
+		BaofuCollectTerminalID:         "collect-terminal",
+		BaofuPayoutMerchantID:          "payout-merchant",
+		BaofuPayoutTerminalID:          "payout-terminal",
+		BaofuAppID:                     "baofu-app",
+		BaofuPrivateKeyPEM:             testPrivateKeyPEM,
+		BaofuPublicKeyPEM:              testPublicKeyPEM,
+		BaofuSignSerialNo:              "1234567890",
+		BaofuEncryptionSerialNo:        "1234567891",
+		BaofuNotifyBaseURL:             "https://api.example.com/v1/webhooks/baofu",
+		BaofuPaymentNotifyURL:          "https://api.example.com/v1/webhooks/baofu/payment",
+		BaofuProfitSharingNotifyURL:    "https://api.example.com/v1/webhooks/baofu/share",
+		BaofuRefundNotifyURL:           "https://api.example.com/v1/webhooks/baofu/refund",
+		BaofuWithdrawNotifyURL:         "https://api.example.com/v1/webhooks/baofu/withdraw",
+		BaofuHTTPTimeout:               5,
+		BaofuAccountVerifyFeeFen:       1,
+		BaofuBusinessIndustryID:        "industry",
+		BaofuMerchantReportChannelID:   "channel",
+		BaofuMerchantReportChannelName: "channel-name",
+		BaofuMerchantReportBusiness:    "business",
+	}
 }
 
 const testPrivateKeyPEM = `-----BEGIN RSA PRIVATE KEY-----
