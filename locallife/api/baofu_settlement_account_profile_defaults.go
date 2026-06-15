@@ -398,6 +398,19 @@ func (server *Server) loadMerchantBaofuSettlementAccountProfileDefaults(ctx cont
 		merchantFound = true
 		ownerUserID = merchant.OwnerUserID
 	}
+	merchantID := scope.OwnerID
+	if merchantFound && merchant.ID > 0 {
+		merchantID = merchant.ID
+	}
+	if merchantID > 0 {
+		defaults, found, err := server.loadMerchantBaofuSettlementAccountProfileDefaultsFromSubjectProfile(ctx, merchantID)
+		if err != nil {
+			return baofuSettlementAccountProfileDefaultsWithSecrets{}, false, err
+		}
+		if found {
+			return defaults, true, nil
+		}
+	}
 	if ownerUserID <= 0 {
 		return baofuSettlementAccountProfileDefaultsWithSecrets{}, false, nil
 	}
@@ -411,6 +424,25 @@ func (server *Server) loadMerchantBaofuSettlementAccountProfileDefaults(ctx cont
 	defaults := baofuProfileDefaultsFromMerchantApplication(app)
 	if defaults.isZero() {
 		return server.loadMerchantBaofuSettlementAccountProfileDefaultsFromSnapshot(ctx, scope, merchant, merchantFound)
+	}
+	return defaults, true, nil
+}
+
+func (server *Server) loadMerchantBaofuSettlementAccountProfileDefaultsFromSubjectProfile(ctx context.Context, merchantID int64) (baofuSettlementAccountProfileDefaultsWithSecrets, bool, error) {
+	subjectProfileService := logic.NewMerchantSubjectProfileService(server.store)
+	if subjectProfileService == nil {
+		return baofuSettlementAccountProfileDefaultsWithSecrets{}, false, nil
+	}
+	profile, found, err := subjectProfileService.GetByMerchant(ctx, merchantID)
+	if err != nil {
+		return baofuSettlementAccountProfileDefaultsWithSecrets{}, false, err
+	}
+	if !found {
+		return baofuSettlementAccountProfileDefaultsWithSecrets{}, false, nil
+	}
+	defaults := baofuProfileDefaultsFromMerchantSubjectProfile(profile)
+	if defaults.isZero() {
+		return baofuSettlementAccountProfileDefaultsWithSecrets{}, false, nil
 	}
 	return defaults, true, nil
 }
@@ -452,6 +484,38 @@ func baofuProfileDefaultsFromMerchantApplication(app db.MerchantApplication) bao
 	return baofuSettlementAccountProfileDefaultsWithSecrets{
 		defaults: baofuSettlementAccountProfileDefaults{
 			Source:                        "merchant_application",
+			LegalName:                     legalName,
+			BusinessLicenseNumber:         businessLicenseNumber,
+			LegalPersonName:               legalPersonName,
+			CardUserName:                  cardUserName,
+			LegalPersonIDNumber:           legalPersonIDNumber,
+			LegalPersonIDNumberMask:       maskSensitiveTail(legalPersonIDNumber, 4),
+			SettlementAccountAllowedTypes: allowedTypes,
+			HasLegalPersonIDNumber:        legalPersonIDNumber != "",
+			HasSavedSensitiveDefaults:     legalPersonIDNumber != "",
+		},
+		legalName:                 legalName,
+		businessLicenseNumber:     businessLicenseNumber,
+		legalPersonName:           legalPersonName,
+		legalPersonIDNumber:       legalPersonIDNumber,
+		cardUserName:              cardUserName,
+		accountTypesAuthoritative: accountTypesAuthoritative,
+	}
+}
+
+func baofuProfileDefaultsFromMerchantSubjectProfile(profile logic.MerchantSubjectProfile) baofuSettlementAccountProfileDefaultsWithSecrets {
+	legalName := strings.TrimSpace(profile.BusinessLicense.Name)
+	businessLicenseNumber := strings.TrimSpace(profile.BusinessLicense.Number)
+	legalPersonName := strings.TrimSpace(profile.LegalPerson.Name)
+	legalPersonIDNumber := strings.TrimSpace(profile.LegalPerson.IDNumber)
+	allowedTypes, accountTypesAuthoritative := baofuSettlementAccountAllowedTypesFromMerchantBusinessLicenseOCR(profile.BusinessLicensePayload, legalName)
+	cardUserName := ""
+	if baofuSettlementAccountAllowsPrivate(allowedTypes) {
+		cardUserName = legalPersonName
+	}
+	return baofuSettlementAccountProfileDefaultsWithSecrets{
+		defaults: baofuSettlementAccountProfileDefaults{
+			Source:                        "merchant_subject_profile",
 			LegalName:                     legalName,
 			BusinessLicenseNumber:         businessLicenseNumber,
 			LegalPersonName:               legalPersonName,

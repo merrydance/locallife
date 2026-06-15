@@ -22,6 +22,7 @@ type MerchantOnboardingReviewService struct {
 	store                       merchantOnboardingReviewStore
 	onboardingReviewService     *OnboardingReviewService
 	credentialGovernanceService *CredentialGovernanceService
+	subjectProfileService       *MerchantSubjectProfileService
 }
 
 type MerchantOnboardingReviewResult struct {
@@ -49,6 +50,7 @@ type MerchantReviewOCRConfirmation struct {
 type MerchantReviewBusinessLicenseOCRData struct {
 	Readiness           *MerchantReviewOCRReadiness    `json:"readiness,omitempty"`
 	Confirmation        *MerchantReviewOCRConfirmation `json:"confirmation,omitempty"`
+	Correction          json.RawMessage                `json:"correction,omitempty"`
 	OCRJobID            *int64                         `json:"ocr_job_id,omitempty"`
 	RegNum              string                         `json:"reg_num,omitempty"`
 	EnterpriseName      string                         `json:"enterprise_name,omitempty"`
@@ -57,11 +59,13 @@ type MerchantReviewBusinessLicenseOCRData struct {
 	BusinessScope       string                         `json:"business_scope,omitempty"`
 	ValidPeriod         string                         `json:"valid_period,omitempty"`
 	CreditCode          string                         `json:"credit_code,omitempty"`
+	TypeOfEnterprise    string                         `json:"type_of_enterprise,omitempty"`
 }
 
 type MerchantReviewFoodPermitOCRData struct {
 	Readiness    *MerchantReviewOCRReadiness    `json:"readiness,omitempty"`
 	Confirmation *MerchantReviewOCRConfirmation `json:"confirmation,omitempty"`
+	Correction   json.RawMessage                `json:"correction,omitempty"`
 	OCRJobID     *int64                         `json:"ocr_job_id,omitempty"`
 	RawText      string                         `json:"raw_text,omitempty"`
 	PermitNo     string                         `json:"permit_no,omitempty"`
@@ -88,6 +92,14 @@ func NewMerchantOnboardingReviewService(store merchantOnboardingReviewStore, onb
 		onboardingReviewService:     onboardingReviewService,
 		credentialGovernanceService: credentialGovernanceService,
 	}
+}
+
+func (service *MerchantOnboardingReviewService) WithSubjectProfileService(subjectProfileService *MerchantSubjectProfileService) *MerchantOnboardingReviewService {
+	if service == nil {
+		return service
+	}
+	service.subjectProfileService = subjectProfileService
+	return service
 }
 
 func (service *MerchantOnboardingReviewService) ProcessApplication(ctx context.Context, applicationID int64, requestedBy int64, existingRunID *int64) (MerchantOnboardingReviewResult, error) {
@@ -117,8 +129,13 @@ func (service *MerchantOnboardingReviewService) ProcessSubmittedApplication(ctx 
 		return MerchantOnboardingReviewResult{}, fmt.Errorf("merchant application %d status %s is not submitted", application.ID, application.Status)
 	}
 
+	subjectProfile, err := service.subjectProfileForSubmittedApplication(application)
+	if err != nil {
+		return MerchantOnboardingReviewResult{}, err
+	}
+
 	decision := merchantAutoApprovedDecision(application, requestedBy)
-	txArg, err := buildMerchantApprovalTxParams(application)
+	txArg, err := buildMerchantApprovalTxParamsFromSubjectProfile(application, subjectProfile)
 	if err != nil {
 		return MerchantOnboardingReviewResult{}, err
 	}
@@ -131,6 +148,13 @@ func (service *MerchantOnboardingReviewService) ProcessSubmittedApplication(ctx 
 	result := MerchantOnboardingReviewResult{
 		Application: txResult.Application,
 		Merchant:    &txResult.Merchant,
+	}
+	if txResult.SubjectProfile.ID > 0 {
+		approvedSubjectProfile, err := merchantSubjectProfileFromDB(txResult.SubjectProfile)
+		if err != nil {
+			return MerchantOnboardingReviewResult{}, fmt.Errorf("decode approved merchant subject profile: %w", err)
+		}
+		subjectProfile = approvedSubjectProfile
 	}
 
 	if service.onboardingReviewService != nil {
@@ -152,7 +176,7 @@ func (service *MerchantOnboardingReviewService) ProcessSubmittedApplication(ctx 
 	}
 
 	if service.credentialGovernanceService != nil && result.Merchant != nil {
-		entries, err := buildMerchantCredentialActivationInputs(result.Application)
+		entries, err := buildMerchantCredentialActivationInputsFromSubjectProfile(result.Application, subjectProfile)
 		if err != nil {
 			return MerchantOnboardingReviewResult{}, fmt.Errorf("build merchant credential activation inputs: %w", err)
 		}
@@ -186,6 +210,17 @@ func (service *MerchantOnboardingReviewService) repairApprovedMerchantApplicatio
 		return MerchantOnboardingReviewResult{}, fmt.Errorf("get approved merchant for application repair: %w", err)
 	}
 	result.Merchant = &merchant
+	subjectProfile, err := service.subjectProfileForSubmittedApplication(application)
+	if err != nil {
+		return MerchantOnboardingReviewResult{}, err
+	}
+	approvedSubjectProfile, err := service.attachApprovedSubjectProfile(ctx, subjectProfile, result.Application, result.Merchant)
+	if err != nil {
+		return MerchantOnboardingReviewResult{}, err
+	}
+	if approvedSubjectProfile.ApplicationID > 0 {
+		subjectProfile = approvedSubjectProfile
+	}
 
 	decision := merchantAutoApprovedDecision(application, requestedBy)
 	reviewRun, err := service.onboardingReviewService.RepairApprovedMerchantReviewRun(ctx, runID, application.ID, decision)
@@ -200,7 +235,7 @@ func (service *MerchantOnboardingReviewService) repairApprovedMerchantApplicatio
 	result.Application.ReviewSummary = summaryJSON
 
 	if service.credentialGovernanceService != nil {
-		entries, err := buildMerchantCredentialActivationInputs(result.Application)
+		entries, err := buildMerchantCredentialActivationInputsFromSubjectProfile(result.Application, subjectProfile)
 		if err != nil {
 			return MerchantOnboardingReviewResult{}, fmt.Errorf("build merchant credential activation inputs: %w", err)
 		}
@@ -242,6 +277,21 @@ func (service *MerchantOnboardingReviewService) activateMissingMerchantCredentia
 		Entries:               missingEntries,
 	})
 	return err
+}
+
+func (service *MerchantOnboardingReviewService) subjectProfileForSubmittedApplication(application db.MerchantApplication) (MerchantSubjectProfile, error) {
+	return BuildMerchantSubjectProfileFromApplication(application)
+}
+
+func (service *MerchantOnboardingReviewService) attachApprovedSubjectProfile(ctx context.Context, profile MerchantSubjectProfile, application db.MerchantApplication, merchant *db.Merchant) (MerchantSubjectProfile, error) {
+	if service == nil || service.subjectProfileService == nil || merchant == nil || merchant.ID <= 0 {
+		return profile, nil
+	}
+	approvedProfile, err := service.subjectProfileService.SaveApplicationProfile(ctx, application, merchant.ID)
+	if err != nil {
+		return MerchantSubjectProfile{}, fmt.Errorf("save approved merchant subject profile: %w", err)
+	}
+	return approvedProfile, nil
 }
 
 func missingMerchantCredentialEntries(entries []CredentialActivationInput, applicationID int64, reviewRunID *int64, activeLedgers []db.CredentialLedger) []CredentialActivationInput {
@@ -318,129 +368,6 @@ func merchantAutoApprovedDecision(application db.MerchantApplication, requestedB
 			"merchant_name":    application.MerchantName,
 		},
 	}
-}
-
-func buildMerchantApprovalTxParams(application db.MerchantApplication) (db.ApproveMerchantApplicationTxParams, error) {
-	if !application.RegionID.Valid {
-		return db.ApproveMerchantApplicationTxParams{}, fmt.Errorf("merchant application %d missing region_id", application.ID)
-	}
-
-	storefrontImages, merchantStorefrontImages := merchantApprovalImagePayload(application.StorefrontImages, 3)
-	environmentImages, merchantEnvironmentImages := merchantApprovalImagePayload(application.EnvironmentImages, 5)
-
-	appData, err := json.Marshal(map[string]any{
-		"business_license_number":         application.BusinessLicenseNumber,
-		"legal_person_name":               application.LegalPersonName,
-		"legal_person_id_number":          application.LegalPersonIDNumber,
-		"business_license_media_asset_id": application.BusinessLicenseMediaAssetID.Int64,
-		"id_card_front_media_asset_id":    application.IDCardFrontMediaAssetID.Int64,
-		"id_card_back_media_asset_id":     application.IDCardBackMediaAssetID.Int64,
-		"food_permit_media_asset_id":      application.FoodPermitMediaAssetID.Int64,
-		"storefront_images":               storefrontImages,
-		"environment_images":              environmentImages,
-	})
-	if err != nil {
-		return db.ApproveMerchantApplicationTxParams{}, fmt.Errorf("marshal merchant application data: %w", err)
-	}
-
-	return db.ApproveMerchantApplicationTxParams{
-		ApplicationID:     application.ID,
-		UserID:            application.UserID,
-		MerchantName:      application.MerchantName,
-		Phone:             application.ContactPhone,
-		Address:           application.BusinessAddress,
-		Latitude:          application.Latitude,
-		Longitude:         application.Longitude,
-		RegionID:          application.RegionID.Int64,
-		AppData:           appData,
-		StorefrontImages:  merchantStorefrontImages,
-		EnvironmentImages: merchantEnvironmentImages,
-	}, nil
-}
-
-func merchantApprovalImagePayload(raw []byte, maxCount int) ([]string, []byte) {
-	if len(raw) == 0 {
-		return []string{}, nil
-	}
-	var rawImages []json.RawMessage
-	if err := json.Unmarshal(raw, &rawImages); err != nil {
-		return []string{}, nil
-	}
-	if len(rawImages) > maxCount {
-		return []string{}, nil
-	}
-	images := make([]string, 0, len(rawImages))
-	for _, rawImage := range rawImages {
-		var image any
-		if err := json.Unmarshal(rawImage, &image); err != nil {
-			return []string{}, nil
-		}
-		imageString, ok := image.(string)
-		if !ok {
-			return []string{}, nil
-		}
-		images = append(images, imageString)
-	}
-	return images, raw
-}
-
-func buildMerchantCredentialActivationInputs(application db.MerchantApplication) ([]CredentialActivationInput, error) {
-	businessLicenseOCR, err := decodeMerchantReviewOCRData[MerchantReviewBusinessLicenseOCRData](application.BusinessLicenseOcr)
-	if err != nil || businessLicenseOCR == nil {
-		return nil, fmt.Errorf("business_license payload missing")
-	}
-	if !application.BusinessLicenseMediaAssetID.Valid {
-		return nil, fmt.Errorf("business_license media missing")
-	}
-	businessLicenseExpiry, err := parseMerchantCredentialExpiry(businessLicenseOCR.ValidPeriod)
-	if err != nil {
-		return nil, fmt.Errorf("parse business license expiry: %w", err)
-	}
-
-	foodPermitOCR, err := decodeMerchantReviewOCRData[MerchantReviewFoodPermitOCRData](application.FoodPermitOcr)
-	if err != nil || foodPermitOCR == nil {
-		return nil, fmt.Errorf("food_permit payload missing")
-	}
-	if !application.FoodPermitMediaAssetID.Valid {
-		return nil, fmt.Errorf("food_permit media missing")
-	}
-	foodPermitExpiry, err := parseMerchantCredentialExpiry(foodPermitOCR.ValidTo)
-	if err != nil {
-		return nil, fmt.Errorf("parse food permit expiry: %w", err)
-	}
-	businessLicenseNumber := strings.TrimSpace(businessLicenseOCR.RegNum)
-	if businessLicenseNumber == "" {
-		businessLicenseNumber = strings.TrimSpace(businessLicenseOCR.CreditCode)
-	}
-
-	return []CredentialActivationInput{
-		{
-			DocumentType: db.CredentialDocumentTypeBusinessLicense,
-			MediaAssetID: application.BusinessLicenseMediaAssetID.Int64,
-			ExpiresAt:    businessLicenseExpiry,
-			NormalizedPayload: map[string]any{
-				"license_number":       businessLicenseNumber,
-				"credit_code":          strings.TrimSpace(businessLicenseOCR.CreditCode),
-				"enterprise_name":      strings.TrimSpace(businessLicenseOCR.EnterpriseName),
-				"legal_representative": strings.TrimSpace(businessLicenseOCR.LegalRepresentative),
-				"address":              strings.TrimSpace(businessLicenseOCR.Address),
-				"business_scope":       strings.TrimSpace(businessLicenseOCR.BusinessScope),
-				"valid_period":         strings.TrimSpace(businessLicenseOCR.ValidPeriod),
-			},
-		},
-		{
-			DocumentType: db.CredentialDocumentTypeFoodPermit,
-			MediaAssetID: application.FoodPermitMediaAssetID.Int64,
-			ExpiresAt:    foodPermitExpiry,
-			NormalizedPayload: map[string]any{
-				"permit_number": strings.TrimSpace(foodPermitOCR.PermitNo),
-				"company_name":  strings.TrimSpace(foodPermitOCR.CompanyName),
-				"operator_name": strings.TrimSpace(foodPermitOCR.OperatorName),
-				"valid_from":    strings.TrimSpace(foodPermitOCR.ValidFrom),
-				"valid_to":      strings.TrimSpace(foodPermitOCR.ValidTo),
-			},
-		},
-	}, nil
 }
 
 func merchantReviewOCRJobRefs(application db.MerchantApplication) []int64 {

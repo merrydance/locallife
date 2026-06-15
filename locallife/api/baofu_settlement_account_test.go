@@ -33,6 +33,13 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+func expectMerchantSubjectProfileNotFound(store *mockdb.MockStore, merchantID int64, times int) {
+	store.EXPECT().
+		GetMerchantSubjectProfileByMerchant(gomock.Any(), pgtype.Int8{Int64: merchantID, Valid: true}).
+		Return(db.MerchantSubjectProfile{}, db.ErrRecordNotFound).
+		Times(times)
+}
+
 func TestBaofuSettlementAccountMerchantOwnerCanReadSafeSummary(t *testing.T) {
 	owner, _ := randomUser(t)
 	merchant := randomMerchant(owner.ID)
@@ -518,6 +525,7 @@ func TestBaofuSettlementAccountMerchantProfileDefaultsUseApprovedApplication(t *
 
 	store := mockdb.NewMockStore(ctrl)
 	expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+	expectMerchantSubjectProfileNotFound(store, merchant.ID, 1)
 	store.EXPECT().
 		GetBaofuAccountBindingByOwner(gomock.Any(), gomock.Eq(db.GetBaofuAccountBindingByOwnerParams{
 			OwnerType: db.BaofuAccountOwnerTypeMerchant,
@@ -584,6 +592,7 @@ func TestBaofuSettlementAccountMerchantFailedFlowReturnsProfileDefaultsForRetry(
 
 	store := mockdb.NewMockStore(ctrl)
 	expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+	expectMerchantSubjectProfileNotFound(store, merchant.ID, 1)
 	store.EXPECT().
 		GetBaofuAccountBindingByOwner(gomock.Any(), gomock.Eq(db.GetBaofuAccountBindingByOwnerParams{
 			OwnerType: db.BaofuAccountOwnerTypeMerchant,
@@ -652,6 +661,7 @@ func TestBaofuSettlementAccountMerchantApplicationDefaultsOverrideMistypedBaofuP
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
+	expectMerchantSubjectProfileNotFound(store, merchant.ID, 2)
 	store.EXPECT().
 		GetBaofuAccountOpeningProfileByOwner(gomock.Any(), gomock.Eq(db.GetBaofuAccountOpeningProfileByOwnerParams{
 			OwnerType: db.BaofuAccountOwnerTypeMerchant,
@@ -701,6 +711,138 @@ func TestBaofuSettlementAccountMerchantApplicationDefaultsOverrideMistypedBaofuP
 	require.Equal(t, "邢台市", merged.DepositBankCity)
 }
 
+func TestBaofuSettlementAccountMerchantSubjectProfileOverridesMistypedBaofuProfileIdentity(t *testing.T) {
+	owner, _ := randomUser(t)
+	merchant := randomMerchant(owner.ID)
+	existingProfile := db.BaofuAccountOpeningProfile{
+		OwnerType:                 db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:                   merchant.ID,
+		AccountType:               db.BaofuAccountTypeBusiness,
+		ProfileStatus:             db.BaofuAccountOpeningProfileStatusIncomplete,
+		LegalName:                 pgtype.Text{String: "OCR错误餐饮店", Valid: true},
+		CertificateNoCiphertext:   pgtype.Text{String: "91330100OCRWRONG01", Valid: true},
+		CorporateName:             pgtype.Text{String: "张三", Valid: true},
+		CorporateCertIDCiphertext: pgtype.Text{String: "110101199001010011", Valid: true},
+		EmailCiphertext:           pgtype.Text{String: "merchant@example.com", Valid: true},
+		BankAccountNoCiphertext:   pgtype.Text{String: "6222020202020202", Valid: true},
+		BankName:                  pgtype.Text{String: "招商银行", Valid: true},
+		DepositBankProvince:       pgtype.Text{String: "河北省", Valid: true},
+		DepositBankCity:           pgtype.Text{String: "邢台市", Valid: true},
+		DepositBankName:           pgtype.Text{String: "招商银行邢台分行", Valid: true},
+	}
+	subjectProfile := db.MerchantSubjectProfile{
+		ID:                          501,
+		MerchantApplicationID:       41,
+		MerchantID:                  pgtype.Int8{Int64: merchant.ID, Valid: true},
+		UserID:                      owner.ID,
+		BusinessLicenseNumber:       "91330100MANUAL0001",
+		BusinessLicenseName:         "人工修正后的餐饮店",
+		BusinessLicenseAddress:      "杭州市西湖区修正路1号",
+		LegalPersonName:             "李四",
+		LegalPersonIDNumber:         "110101199001010099",
+		FoodPermitNumber:            "JY11105000000001",
+		FoodPermitCompanyName:       "人工修正后的餐饮店",
+		BusinessLicenseMediaAssetID: pgtype.Int8{Int64: 11, Valid: true},
+		FoodPermitMediaAssetID:      pgtype.Int8{Int64: 12, Valid: true},
+		IDCardFrontMediaAssetID:     pgtype.Int8{Int64: 13, Valid: true},
+		IDCardBackMediaAssetID:      pgtype.Int8{Int64: 14, Valid: true},
+		BusinessLicensePayload:      []byte(`{"type_of_enterprise":"个体工商户","business_scope":"餐饮服务","valid_period":"2020年01月01日至2040年01月01日"}`),
+		FoodPermitPayload:           []byte(`{"operator_name":"李四","valid_to":"2030年12月31日"}`),
+		LegalPersonPayload:          []byte(`{"id_card_valid_date":"2020.01.01-2035.01.01"}`),
+		SourceSnapshot:              []byte(`{"source":"test"}`),
+		Version:                     2,
+		CreatedAt:                   time.Now(),
+		UpdatedAt:                   time.Now(),
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetBaofuAccountOpeningProfileByOwner(gomock.Any(), gomock.Eq(db.GetBaofuAccountOpeningProfileByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:   merchant.ID,
+		})).
+		Return(existingProfile, nil).
+		Times(2)
+	store.EXPECT().
+		GetMerchantSubjectProfileByMerchant(gomock.Any(), pgtype.Int8{Int64: merchant.ID, Valid: true}).
+		Return(subjectProfile, nil).
+		Times(2)
+
+	server := newTestServer(t, store)
+	scope := baofuSettlementAccountScope{
+		OwnerType:   db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:     merchant.ID,
+		OwnerUserID: owner.ID,
+		AccountType: db.BaofuAccountTypeBusiness,
+		Audience:    "merchant",
+	}
+	defaults, found, err := server.loadBaofuSettlementAccountProfileDefaults(context.Background(), scope)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, "merchant_subject_profile", defaults.defaults.Source)
+	require.Equal(t, "人工修正后的餐饮店", defaults.defaults.LegalName)
+	require.Equal(t, "91330100MANUAL0001", defaults.defaults.BusinessLicenseNumber)
+	require.Equal(t, "李四", defaults.defaults.LegalPersonName)
+	require.Equal(t, "110101199001010099", defaults.defaults.LegalPersonIDNumber)
+	require.Equal(t, "6222020202020202", defaults.bankAccountNo)
+	require.Equal(t, "招商银行", defaults.bankName)
+	require.Equal(t, []string{"ACCOUNT_TYPE_BUSINESS", "ACCOUNT_TYPE_PRIVATE"}, defaults.defaults.SettlementAccountAllowedTypes)
+
+	merged, err := server.baofuSettlementAccountProfileInputWithDefaults(context.Background(), scope, &logic.BaofuAccountOpeningProfileInput{
+		Email: "new-contact@example.com",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, merged)
+	require.Equal(t, "人工修正后的餐饮店", merged.LegalName)
+	require.Equal(t, "91330100MANUAL0001", merged.BusinessLicenseNo)
+	require.Equal(t, "李四", merged.LegalPersonName)
+	require.Equal(t, "110101199001010099", merged.LegalPersonIDNumber)
+	require.Equal(t, "new-contact@example.com", merged.Email)
+	require.Equal(t, "6222020202020202", merged.BankAccountNo)
+	require.Equal(t, "招商银行", merged.BankName)
+}
+
+func TestBaofuSettlementAccountMerchantSubjectProfileDraftDoesNotOverrideApprovedSnapshot(t *testing.T) {
+	owner, _ := randomUser(t)
+	merchant := randomMerchant(owner.ID)
+	merchant.Name = "已审核餐饮店"
+	merchant.ApplicationData = []byte(`{"business_license_number":"91330100APPROVED01","legal_person_name":"张三","legal_person_id_number":"110101199001010011"}`)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetMerchantSubjectProfileByMerchant(gomock.Any(), pgtype.Int8{Int64: merchant.ID, Valid: true}).
+		Return(db.MerchantSubjectProfile{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetUserMerchantApplication(gomock.Any(), owner.ID).
+		Return(db.MerchantApplication{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchant.ID).
+		Return(merchant, nil)
+
+	server := newTestServer(t, store)
+	defaults, found, err := server.loadMerchantBaofuSettlementAccountProfileDefaults(context.Background(), baofuSettlementAccountScope{
+		OwnerType:   db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:     merchant.ID,
+		OwnerUserID: owner.ID,
+		AccountType: db.BaofuAccountTypeBusiness,
+		Audience:    "merchant",
+	})
+
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, "merchant_application_snapshot", defaults.defaults.Source)
+	require.Equal(t, "已审核餐饮店", defaults.defaults.LegalName)
+	require.Equal(t, "91330100APPROVED01", defaults.defaults.BusinessLicenseNumber)
+	require.Equal(t, "张三", defaults.defaults.LegalPersonName)
+	require.Equal(t, "110101199001010011", defaults.defaults.LegalPersonIDNumber)
+}
+
 func TestBaofuSettlementAccountMerchantPersonalDefaultsDoNotMergeBusinessIdentity(t *testing.T) {
 	owner, _ := randomUser(t)
 	merchant := randomMerchant(owner.ID)
@@ -723,6 +865,7 @@ func TestBaofuSettlementAccountMerchantPersonalDefaultsDoNotMergeBusinessIdentit
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
+	expectMerchantSubjectProfileNotFound(store, merchant.ID, 1)
 	store.EXPECT().
 		GetBaofuAccountOpeningProfileByOwner(gomock.Any(), gomock.Eq(db.GetBaofuAccountOpeningProfileByOwnerParams{
 			OwnerType: db.BaofuAccountOwnerTypeMerchant,
@@ -780,6 +923,7 @@ func TestBaofuSettlementAccountMerchantPersonalDefaultsDoNotFillPersonalIdentity
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
+	expectMerchantSubjectProfileNotFound(store, merchant.ID, 1)
 	store.EXPECT().
 		GetBaofuAccountOpeningProfileByOwner(gomock.Any(), gomock.Eq(db.GetBaofuAccountOpeningProfileByOwnerParams{
 			OwnerType: db.BaofuAccountOwnerTypeMerchant,
@@ -836,6 +980,7 @@ func TestBaofuSettlementAccountMerchantPersonalDefaultsNilInputDoesNotBecomeBusi
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
+	expectMerchantSubjectProfileNotFound(store, merchant.ID, 1)
 	store.EXPECT().
 		GetBaofuAccountOpeningProfileByOwner(gomock.Any(), gomock.Eq(db.GetBaofuAccountOpeningProfileByOwnerParams{
 			OwnerType: db.BaofuAccountOwnerTypeMerchant,
@@ -890,6 +1035,7 @@ func TestBaofuSettlementAccountMerchantCompanyDefaultsDisallowPrivateBusinessCar
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
+	expectMerchantSubjectProfileNotFound(store, merchant.ID, 2)
 	store.EXPECT().
 		GetBaofuAccountOpeningProfileByOwner(gomock.Any(), gomock.Eq(db.GetBaofuAccountOpeningProfileByOwnerParams{
 			OwnerType: db.BaofuAccountOwnerTypeMerchant,
@@ -937,6 +1083,7 @@ func TestBaofuSettlementAccountMerchantDefaultsFallbackToApprovedMerchantSnapsho
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
+	expectMerchantSubjectProfileNotFound(store, merchant.ID, 1)
 	store.EXPECT().
 		GetBaofuAccountOpeningProfileByOwner(gomock.Any(), gomock.Eq(db.GetBaofuAccountOpeningProfileByOwnerParams{
 			OwnerType: db.BaofuAccountOwnerTypeMerchant,
@@ -1002,6 +1149,7 @@ func TestBaofuSettlementAccountMerchantDefaultsFallbackToSnapshotWhenLatestAppli
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
+	expectMerchantSubjectProfileNotFound(store, merchant.ID, 1)
 	store.EXPECT().
 		GetBaofuAccountOpeningProfileByOwner(gomock.Any(), gomock.Eq(db.GetBaofuAccountOpeningProfileByOwnerParams{
 			OwnerType: db.BaofuAccountOwnerTypeMerchant,
@@ -1045,6 +1193,7 @@ func TestBaofuSettlementAccountMerchantPostOverridesMistypedIdentityBeforeOpenin
 
 	store := mockdb.NewMockStore(ctrl)
 	expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+	expectMerchantSubjectProfileNotFound(store, merchant.ID, 1)
 	store.EXPECT().
 		GetBaofuAccountBindingByOwner(gomock.Any(), gomock.Eq(db.GetBaofuAccountBindingByOwnerParams{
 			OwnerType: db.BaofuAccountOwnerTypeMerchant,
@@ -1247,6 +1396,7 @@ func TestBaofuSettlementAccountProfileInputMergesExistingPrivateBusinessCardDefa
 			OwnerID:   int64(88),
 		})).
 		Return(existingProfile, nil)
+	expectMerchantSubjectProfileNotFound(store, 88, 1)
 	store.EXPECT().
 		GetUserMerchantApplication(gomock.Any(), int64(8801)).
 		Return(db.MerchantApplication{UserID: 8801, Status: db.MerchantApplicationStatusDraft}, nil)
@@ -1313,6 +1463,7 @@ func TestBaofuSettlementAccountProfileInputExplicitPublicAccountOverridesPrivate
 			OwnerID:   int64(88),
 		})).
 		Return(existingProfile, nil)
+	expectMerchantSubjectProfileNotFound(store, 88, 1)
 	store.EXPECT().
 		GetUserMerchantApplication(gomock.Any(), int64(8801)).
 		Return(db.MerchantApplication{UserID: 8801, Status: db.MerchantApplicationStatusDraft}, nil)
@@ -2230,6 +2381,7 @@ func TestBaofuSettlementAccountMerchantPostPersonalOpeningModeUsesPersonalAccoun
 
 	store := mockdb.NewMockStore(ctrl)
 	expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+	expectMerchantSubjectProfileNotFound(store, merchant.ID, 1)
 	store.EXPECT().
 		GetBaofuAccountBindingByOwner(gomock.Any(), gomock.Eq(db.GetBaofuAccountBindingByOwnerParams{
 			OwnerType: db.BaofuAccountOwnerTypeMerchant,
@@ -3202,6 +3354,7 @@ func TestBaofuSettlementAccountMerchantCompanyRejectsPrivateBusinessCardBeforeOp
 
 	store := mockdb.NewMockStore(ctrl)
 	expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+	expectMerchantSubjectProfileNotFound(store, merchant.ID, 1)
 	store.EXPECT().
 		GetBaofuAccountOpeningProfileByOwner(gomock.Any(), gomock.Eq(db.GetBaofuAccountOpeningProfileByOwnerParams{
 			OwnerType: db.BaofuAccountOwnerTypeMerchant,
@@ -3243,6 +3396,7 @@ func TestBaofuSettlementAccountMerchantPostPrivateBusinessCardFieldsReachOnboard
 
 	store := mockdb.NewMockStore(ctrl)
 	expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+	expectMerchantSubjectProfileNotFound(store, merchant.ID, 1)
 	store.EXPECT().
 		GetBaofuAccountBindingByOwner(gomock.Any(), gomock.Eq(db.GetBaofuAccountBindingByOwnerParams{
 			OwnerType: db.BaofuAccountOwnerTypeMerchant,
@@ -3375,6 +3529,7 @@ func TestBaofuSettlementAccountMerchantPostIndividualBusinessPrivateCardDefaults
 
 	store := mockdb.NewMockStore(ctrl)
 	expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+	expectMerchantSubjectProfileNotFound(store, merchant.ID, 1)
 	store.EXPECT().
 		GetBaofuAccountBindingByOwner(gomock.Any(), gomock.Eq(db.GetBaofuAccountBindingByOwnerParams{
 			OwnerType: db.BaofuAccountOwnerTypeMerchant,
@@ -3486,6 +3641,7 @@ func TestBaofuSettlementAccountMerchantPostEnqueueFailureReturnsSafeGuidance(t *
 
 	store := mockdb.NewMockStore(ctrl)
 	expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+	expectMerchantSubjectProfileNotFound(store, merchant.ID, 1)
 	store.EXPECT().
 		GetBaofuAccountBindingByOwner(gomock.Any(), gomock.Eq(db.GetBaofuAccountBindingByOwnerParams{
 			OwnerType: db.BaofuAccountOwnerTypeMerchant,
@@ -3589,6 +3745,7 @@ func TestBaofuSettlementAccountMerchantPostWithoutOpeningDistributorReturnsSafeG
 
 	store := mockdb.NewMockStore(ctrl)
 	expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+	expectMerchantSubjectProfileNotFound(store, merchant.ID, 1)
 	store.EXPECT().
 		GetBaofuAccountBindingByOwner(gomock.Any(), gomock.Eq(db.GetBaofuAccountBindingByOwnerParams{
 			OwnerType: db.BaofuAccountOwnerTypeMerchant,

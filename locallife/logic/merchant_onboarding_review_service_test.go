@@ -16,15 +16,20 @@ import (
 )
 
 type merchantOnboardingReviewFlowStoreStub struct {
-	getOnboardingReviewRunFn            func(context.Context, int64) (db.OnboardingReviewRun, error)
-	getMerchantOwnedByUserFn            func(context.Context, int64) (db.Merchant, error)
-	approveMerchantApplicationTxFn      func(context.Context, db.ApproveMerchantApplicationTxParams) (db.ApproveMerchantApplicationTxResult, error)
-	markOnboardingReviewRunProcessingFn func(context.Context, int64) (db.OnboardingReviewRun, error)
-	completeOnboardingReviewRunFn       func(context.Context, db.CompleteOnboardingReviewRunParams) (db.OnboardingReviewRun, error)
-	updateMerchantReviewSummaryFn       func(context.Context, db.UpdateMerchantApplicationReviewSummaryParams) (db.MerchantApplication, error)
-	activateMerchantCredentialsFn       func(context.Context, db.ActivateMerchantCredentialLedgersTxParams) ([]db.CredentialLedger, error)
-	getActiveMerchantCredentialsFn      func(context.Context, pgtype.Int8) ([]db.CredentialLedger, error)
-	restoreMerchantCredentialGovFn      func(context.Context, db.RestoreMerchantCredentialGovernanceTxParams) (int64, error)
+	getOnboardingReviewRunFn              func(context.Context, int64) (db.OnboardingReviewRun, error)
+	getMerchantOwnedByUserFn              func(context.Context, int64) (db.Merchant, error)
+	approveMerchantApplicationTxFn        func(context.Context, db.ApproveMerchantApplicationTxParams) (db.ApproveMerchantApplicationTxResult, error)
+	markOnboardingReviewRunProcessingFn   func(context.Context, int64) (db.OnboardingReviewRun, error)
+	completeOnboardingReviewRunFn         func(context.Context, db.CompleteOnboardingReviewRunParams) (db.OnboardingReviewRun, error)
+	updateMerchantReviewSummaryFn         func(context.Context, db.UpdateMerchantApplicationReviewSummaryParams) (db.MerchantApplication, error)
+	activateMerchantCredentialsFn         func(context.Context, db.ActivateMerchantCredentialLedgersTxParams) ([]db.CredentialLedger, error)
+	getActiveMerchantCredentialsFn        func(context.Context, pgtype.Int8) ([]db.CredentialLedger, error)
+	restoreMerchantCredentialGovFn        func(context.Context, db.RestoreMerchantCredentialGovernanceTxParams) (int64, error)
+	upsertMerchantSubjectProfileFn        func(context.Context, db.UpsertMerchantSubjectProfileParams) (db.MerchantSubjectProfile, error)
+	detachMerchantSubjectProfileFn        func(context.Context, db.DetachMerchantSubjectProfileMerchantFromOtherApplicationsParams) (int64, error)
+	createMerchantSubjectProfileVersionFn func(context.Context, db.CreateMerchantSubjectProfileVersionParams) (db.MerchantSubjectProfileVersion, error)
+	getMerchantSubjectProfileByAppFn      func(context.Context, int64) (db.MerchantSubjectProfile, error)
+	getMerchantSubjectProfileByMerchantFn func(context.Context, pgtype.Int8) (db.MerchantSubjectProfile, error)
 }
 
 func (stub merchantOnboardingReviewFlowStoreStub) GetMerchantApplication(context.Context, int64) (db.MerchantApplication, error) {
@@ -120,6 +125,68 @@ func (stub merchantOnboardingReviewFlowStoreStub) RestoreMerchantCredentialGover
 
 func (stub merchantOnboardingReviewFlowStoreStub) RestoreRiderCredentialGovernanceTx(context.Context, db.RestoreRiderCredentialGovernanceTxParams) (int64, error) {
 	return 0, fmt.Errorf("unexpected RestoreRiderCredentialGovernanceTx call")
+}
+
+func (stub merchantOnboardingReviewFlowStoreStub) UpsertMerchantSubjectProfile(ctx context.Context, arg db.UpsertMerchantSubjectProfileParams) (db.MerchantSubjectProfile, error) {
+	if stub.upsertMerchantSubjectProfileFn == nil {
+		return db.MerchantSubjectProfile{}, fmt.Errorf("unexpected UpsertMerchantSubjectProfile call")
+	}
+	return stub.upsertMerchantSubjectProfileFn(ctx, arg)
+}
+
+func (stub merchantOnboardingReviewFlowStoreStub) DetachMerchantSubjectProfileMerchantFromOtherApplications(ctx context.Context, arg db.DetachMerchantSubjectProfileMerchantFromOtherApplicationsParams) (int64, error) {
+	if stub.detachMerchantSubjectProfileFn == nil {
+		return 0, fmt.Errorf("unexpected DetachMerchantSubjectProfileMerchantFromOtherApplications call")
+	}
+	return stub.detachMerchantSubjectProfileFn(ctx, arg)
+}
+
+func (stub merchantOnboardingReviewFlowStoreStub) CreateMerchantSubjectProfileVersion(ctx context.Context, arg db.CreateMerchantSubjectProfileVersionParams) (db.MerchantSubjectProfileVersion, error) {
+	if stub.createMerchantSubjectProfileVersionFn == nil {
+		return db.MerchantSubjectProfileVersion{}, fmt.Errorf("unexpected CreateMerchantSubjectProfileVersion call")
+	}
+	return stub.createMerchantSubjectProfileVersionFn(ctx, arg)
+}
+
+func (stub merchantOnboardingReviewFlowStoreStub) GetMerchantSubjectProfileByApplication(ctx context.Context, applicationID int64) (db.MerchantSubjectProfile, error) {
+	if stub.getMerchantSubjectProfileByAppFn == nil {
+		return db.MerchantSubjectProfile{}, fmt.Errorf("unexpected GetMerchantSubjectProfileByApplication call")
+	}
+	return stub.getMerchantSubjectProfileByAppFn(ctx, applicationID)
+}
+
+func (stub merchantOnboardingReviewFlowStoreStub) GetMerchantSubjectProfileByMerchant(ctx context.Context, merchantID pgtype.Int8) (db.MerchantSubjectProfile, error) {
+	if stub.getMerchantSubjectProfileByMerchantFn == nil {
+		return db.MerchantSubjectProfile{}, fmt.Errorf("unexpected GetMerchantSubjectProfileByMerchant call")
+	}
+	return stub.getMerchantSubjectProfileByMerchantFn(ctx, merchantID)
+}
+
+func merchantReviewSubjectProfileRowFromUpsert(arg db.UpsertMerchantSubjectProfileParams, id int64, version int32, now time.Time) db.MerchantSubjectProfile {
+	return db.MerchantSubjectProfile{
+		ID:                          id,
+		MerchantApplicationID:       arg.MerchantApplicationID,
+		MerchantID:                  arg.MerchantID,
+		UserID:                      arg.UserID,
+		BusinessLicenseNumber:       arg.BusinessLicenseNumber,
+		BusinessLicenseName:         arg.BusinessLicenseName,
+		BusinessLicenseAddress:      arg.BusinessLicenseAddress,
+		LegalPersonName:             arg.LegalPersonName,
+		LegalPersonIDNumber:         arg.LegalPersonIDNumber,
+		FoodPermitNumber:            arg.FoodPermitNumber,
+		FoodPermitCompanyName:       arg.FoodPermitCompanyName,
+		BusinessLicenseMediaAssetID: arg.BusinessLicenseMediaAssetID,
+		FoodPermitMediaAssetID:      arg.FoodPermitMediaAssetID,
+		IDCardFrontMediaAssetID:     arg.IDCardFrontMediaAssetID,
+		IDCardBackMediaAssetID:      arg.IDCardBackMediaAssetID,
+		BusinessLicensePayload:      arg.BusinessLicensePayload,
+		FoodPermitPayload:           arg.FoodPermitPayload,
+		LegalPersonPayload:          arg.LegalPersonPayload,
+		SourceSnapshot:              arg.SourceSnapshot,
+		Version:                     version,
+		CreatedAt:                   now,
+		UpdatedAt:                   now,
+	}
 }
 
 func merchantReviewTestApplication() db.MerchantApplication {
@@ -291,13 +358,25 @@ func TestMerchantOnboardingReviewServiceProcessSubmittedApplication_ActivatesCre
 	now := time.Date(2026, 4, 22, 12, 0, 0, 0, time.UTC)
 	approvedApplication := application
 	approvedApplication.Status = "approved"
+	approvedSubjectProfilePassedToTx := false
 
 	store := merchantOnboardingReviewFlowStoreStub{
 		approveMerchantApplicationTxFn: func(_ context.Context, arg db.ApproveMerchantApplicationTxParams) (db.ApproveMerchantApplicationTxResult, error) {
 			require.Equal(t, application.ID, arg.ApplicationID)
+			require.NotNil(t, arg.SubjectProfile)
+			require.Equal(t, application.ID, arg.SubjectProfile.MerchantApplicationID)
+			require.Equal(t, application.UserID, arg.SubjectProfile.UserID)
+			require.Equal(t, application.BusinessLicenseNumber, arg.SubjectProfile.BusinessLicenseNumber)
+			require.Equal(t, application.MerchantName, arg.SubjectProfile.BusinessLicenseName)
+			require.False(t, arg.SubjectProfile.MerchantID.Valid)
+			require.NotEmpty(t, arg.SubjectProfileVersionSnapshot)
+			approvedSubjectProfilePassedToTx = true
+			approvedProfileArg := *arg.SubjectProfile
+			approvedProfileArg.MerchantID = pgtype.Int8{Int64: 66, Valid: true}
 			return db.ApproveMerchantApplicationTxResult{
-				Application: approvedApplication,
-				Merchant:    db.Merchant{ID: 66, OwnerUserID: application.UserID},
+				Application:    approvedApplication,
+				Merchant:       db.Merchant{ID: 66, OwnerUserID: application.UserID},
+				SubjectProfile: merchantReviewSubjectProfileRowFromUpsert(approvedProfileArg, 501, 4, now),
 			}, nil
 		},
 		markOnboardingReviewRunProcessingFn: func(_ context.Context, id int64) (db.OnboardingReviewRun, error) {
@@ -353,7 +432,11 @@ func TestMerchantOnboardingReviewServiceProcessSubmittedApplication_ActivatesCre
 	governanceSvc := NewCredentialGovernanceService(store)
 	require.NotNil(t, governanceSvc)
 	governanceSvc.now = func() time.Time { return now }
-	service := NewMerchantOnboardingReviewService(store, onboardingSvc, governanceSvc)
+	service := NewMerchantOnboardingReviewService(
+		store,
+		onboardingSvc,
+		governanceSvc,
+	).WithSubjectProfileService(NewMerchantSubjectProfileService(store))
 
 	result, err := service.ProcessSubmittedApplication(context.Background(), application, application.UserID, &existingRunID)
 	require.NoError(t, err)
@@ -361,9 +444,112 @@ func TestMerchantOnboardingReviewServiceProcessSubmittedApplication_ActivatesCre
 	require.True(t, result.RestoreReleased)
 	require.NotNil(t, result.ReviewRun)
 	require.Equal(t, existingRunID, result.ReviewRun.ID)
+	require.True(t, approvedSubjectProfilePassedToTx, "approval tx must receive approved merchant subject profile projection")
 	var summary map[string]any
 	require.NoError(t, json.Unmarshal(result.Application.ReviewSummary, &summary))
 	require.Equal(t, "approved", summary["outcome"])
+}
+
+func TestMerchantOnboardingReviewServiceProcessSubmittedApplication_RebuildsSubjectProfileFromCurrentApplicationForSnapshotAndCredentials(t *testing.T) {
+	application := merchantReviewTestApplication()
+	application.MerchantName = "人工修正后的餐饮店"
+	application.BusinessLicenseNumber = "91330100MANUAL0001"
+	application.LegalPersonName = "李四"
+	application.LegalPersonIDNumber = "110101199001010099"
+	application.BusinessLicenseOcr = []byte(`{
+		"ocr_job_id":101,
+		"enterprise_name":"人工修正后的餐饮店",
+		"credit_code":"91330100MANUAL0001",
+		"reg_num":"91330100MANUAL0001",
+		"legal_representative":"李四",
+		"address":"杭州市西湖区修正路1号",
+		"business_scope":"餐饮服务",
+		"valid_period":"2020年01月01日至2040年01月01日",
+		"correction":{"fields":["enterprise_name","credit_code","reg_num","legal_representative","address"]}
+	}`)
+	application.FoodPermitOcr = []byte(`{
+		"ocr_job_id":102,
+		"permit_no":"JY11105000000001",
+		"company_name":"人工修正后的餐饮店",
+		"operator_name":"李四",
+		"valid_to":"2030年12月31日",
+		"correction":{"fields":["company_name","operator_name"]}
+	}`)
+	application.IDCardFrontOcr = []byte(`{"ocr_job_id":103,"name":"张三","id_number":"110101199001010011"}`)
+	application.IDCardBackOcr = []byte(`{"ocr_job_id":104,"valid_date":"2020.01.01-2035.01.01"}`)
+
+	now := time.Date(2026, 6, 15, 10, 0, 0, 0, time.UTC)
+	var appData map[string]any
+	var credentialPayloads []map[string]any
+
+	store := merchantOnboardingReviewFlowStoreStub{
+		approveMerchantApplicationTxFn: func(_ context.Context, arg db.ApproveMerchantApplicationTxParams) (db.ApproveMerchantApplicationTxResult, error) {
+			require.Equal(t, "人工修正后的餐饮店", arg.MerchantName)
+			require.NoError(t, json.Unmarshal(arg.AppData, &appData))
+			require.NotNil(t, arg.SubjectProfile)
+			require.Equal(t, "91330100MANUAL0001", arg.SubjectProfile.BusinessLicenseNumber)
+			require.Equal(t, "人工修正后的餐饮店", arg.SubjectProfile.BusinessLicenseName)
+			require.Equal(t, "杭州市西湖区修正路1号", arg.SubjectProfile.BusinessLicenseAddress)
+			require.Equal(t, "李四", arg.SubjectProfile.LegalPersonName)
+			require.Equal(t, "110101199001010099", arg.SubjectProfile.LegalPersonIDNumber)
+			require.Equal(t, "人工修正后的餐饮店", arg.SubjectProfile.FoodPermitCompanyName)
+			require.False(t, arg.SubjectProfile.MerchantID.Valid)
+			approvedProfileArg := *arg.SubjectProfile
+			approvedProfileArg.MerchantID = pgtype.Int8{Int64: 66, Valid: true}
+			return db.ApproveMerchantApplicationTxResult{
+				Application: func() db.MerchantApplication {
+					approved := application
+					approved.Status = db.MerchantApplicationStatusApproved
+					return approved
+				}(),
+				Merchant:       db.Merchant{ID: 66, OwnerUserID: application.UserID},
+				SubjectProfile: merchantReviewSubjectProfileRowFromUpsert(approvedProfileArg, 501, 3, now),
+			}, nil
+		},
+		getActiveMerchantCredentialsFn: func(_ context.Context, merchantID pgtype.Int8) ([]db.CredentialLedger, error) {
+			require.Equal(t, int64(66), merchantID.Int64)
+			return nil, nil
+		},
+		activateMerchantCredentialsFn: func(_ context.Context, arg db.ActivateMerchantCredentialLedgersTxParams) ([]db.CredentialLedger, error) {
+			require.Equal(t, int64(66), arg.MerchantID)
+			require.Len(t, arg.Entries, 2)
+			for _, entry := range arg.Entries {
+				var payload map[string]any
+				require.NoError(t, json.Unmarshal(entry.NormalizedPayload, &payload))
+				credentialPayloads = append(credentialPayloads, payload)
+			}
+			return []db.CredentialLedger{{ID: 701}, {ID: 702}}, nil
+		},
+		restoreMerchantCredentialGovFn: func(_ context.Context, arg db.RestoreMerchantCredentialGovernanceTxParams) (int64, error) {
+			require.Equal(t, int64(66), arg.MerchantID)
+			return 0, nil
+		},
+	}
+	governanceSvc := NewCredentialGovernanceService(store)
+	require.NotNil(t, governanceSvc)
+	service := NewMerchantOnboardingReviewService(
+		store,
+		nil,
+		governanceSvc,
+	).WithSubjectProfileService(NewMerchantSubjectProfileService(store))
+
+	result, err := service.ProcessSubmittedApplication(context.Background(), application, application.UserID, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result.Merchant)
+
+	require.Equal(t, "91330100MANUAL0001", appData["business_license_number"])
+	require.Equal(t, "李四", appData["legal_person_name"])
+	require.Equal(t, "110101199001010099", appData["legal_person_id_number"])
+	require.Equal(t, "杭州市西湖区修正路1号", appData["business_license_address"])
+
+	require.Len(t, credentialPayloads, 2)
+	require.Equal(t, "91330100MANUAL0001", credentialPayloads[0]["license_number"])
+	require.Equal(t, "91330100MANUAL0001", credentialPayloads[0]["credit_code"])
+	require.Equal(t, "人工修正后的餐饮店", credentialPayloads[0]["enterprise_name"])
+	require.Equal(t, "李四", credentialPayloads[0]["legal_representative"])
+	require.Equal(t, "杭州市西湖区修正路1号", credentialPayloads[0]["address"])
+	require.Equal(t, "人工修正后的餐饮店", credentialPayloads[1]["company_name"])
+	require.Equal(t, "李四", credentialPayloads[1]["operator_name"])
 }
 
 func TestMerchantOnboardingReviewServiceProcessSubmittedApplication_RepairsApprovedApplicationReviewAndCredentials(t *testing.T) {
@@ -372,6 +558,8 @@ func TestMerchantOnboardingReviewServiceProcessSubmittedApplication_RepairsAppro
 	existingRunID := int64(905)
 	now := time.Date(2026, 6, 11, 14, 0, 0, 0, time.UTC)
 	merchant := db.Merchant{ID: 77, OwnerUserID: application.UserID}
+	subjectProfileSaved := false
+	subjectProfileUpsertCalls := 0
 
 	store := merchantOnboardingReviewFlowStoreStub{
 		getMerchantOwnedByUserFn: func(_ context.Context, ownerUserID int64) (db.Merchant, error) {
@@ -432,13 +620,54 @@ func TestMerchantOnboardingReviewServiceProcessSubmittedApplication_RepairsAppro
 			require.Equal(t, []int64{201, 202}, arg.CredentialLedgerIDs)
 			return 0, nil
 		},
+		detachMerchantSubjectProfileFn: func(_ context.Context, arg db.DetachMerchantSubjectProfileMerchantFromOtherApplicationsParams) (int64, error) {
+			require.True(t, arg.MerchantID.Valid)
+			require.Equal(t, merchant.ID, arg.MerchantID.Int64)
+			require.Equal(t, application.ID, arg.MerchantApplicationID)
+			return 0, nil
+		},
+		upsertMerchantSubjectProfileFn: func(_ context.Context, arg db.UpsertMerchantSubjectProfileParams) (db.MerchantSubjectProfile, error) {
+			subjectProfileUpsertCalls++
+			subjectProfileSaved = true
+			require.Equal(t, application.ID, arg.MerchantApplicationID)
+			require.Equal(t, application.BusinessLicenseNumber, arg.BusinessLicenseNumber)
+			require.Equal(t, application.MerchantName, arg.BusinessLicenseName)
+			require.Equal(t, application.LegalPersonName, arg.LegalPersonName)
+			require.Equal(t, application.LegalPersonIDNumber, arg.LegalPersonIDNumber)
+
+			switch subjectProfileUpsertCalls {
+			case 1:
+				require.True(t, arg.MerchantID.Valid)
+				require.Equal(t, merchant.ID, arg.MerchantID.Int64)
+				return merchantReviewSubjectProfileRowFromUpsert(arg, 701, 4, now), nil
+			default:
+				t.Fatalf("unexpected subject profile upsert call %d", subjectProfileUpsertCalls)
+				return db.MerchantSubjectProfile{}, nil
+			}
+		},
+		createMerchantSubjectProfileVersionFn: func(_ context.Context, arg db.CreateMerchantSubjectProfileVersionParams) (db.MerchantSubjectProfileVersion, error) {
+			require.Equal(t, int64(701), arg.ProfileID)
+			require.Equal(t, application.ID, arg.MerchantApplicationID)
+			switch arg.Version {
+			case 4:
+				require.True(t, arg.MerchantID.Valid)
+				require.Equal(t, merchant.ID, arg.MerchantID.Int64)
+			default:
+				t.Fatalf("unexpected subject profile version %d", arg.Version)
+			}
+			return db.MerchantSubjectProfileVersion{ID: 702, ProfileID: arg.ProfileID, Version: arg.Version}, nil
+		},
 	}
 
 	onboardingSvc := NewOnboardingReviewService(store)
 	governanceSvc := NewCredentialGovernanceService(store)
 	require.NotNil(t, governanceSvc)
 	governanceSvc.now = func() time.Time { return now }
-	service := NewMerchantOnboardingReviewService(store, onboardingSvc, governanceSvc)
+	service := NewMerchantOnboardingReviewService(
+		store,
+		onboardingSvc,
+		governanceSvc,
+	).WithSubjectProfileService(NewMerchantSubjectProfileService(store))
 
 	result, err := service.ProcessSubmittedApplication(context.Background(), application, application.UserID, &existingRunID)
 	require.NoError(t, err)
@@ -447,6 +676,8 @@ func TestMerchantOnboardingReviewServiceProcessSubmittedApplication_RepairsAppro
 	require.NotNil(t, result.ReviewRun)
 	require.Equal(t, db.OnboardingReviewRunStatusCompleted, result.ReviewRun.RunStatus)
 	require.Len(t, result.CredentialEntries, 2)
+	require.True(t, subjectProfileSaved, "approved merchant application repair must persist the authority subject profile")
+	require.Equal(t, 1, subjectProfileUpsertCalls, "approved repair should save one merchant-attached subject profile snapshot")
 	require.NotEmpty(t, result.Application.ReviewSummary)
 }
 

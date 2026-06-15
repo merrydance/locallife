@@ -131,6 +131,189 @@ func TestApproveMerchantApplicationTxCopiesApplicationImagesToMerchantTruth(t *t
 	require.JSONEq(t, string(environmentImages), string(merchant.EnvironmentImages))
 }
 
+func TestApproveMerchantApplicationTxPersistsMerchantSubjectProfileAtomically(t *testing.T) {
+	user := createRandomUser(t)
+	app := prepareSubmittedMerchantApplication(t, user.ID)
+	profileArg := UpsertMerchantSubjectProfileParams{
+		MerchantApplicationID:  app.ID,
+		UserID:                 user.ID,
+		BusinessLicenseNumber:  "91330100MANUAL0001",
+		BusinessLicenseName:    "人工修正后的餐饮店",
+		BusinessLicenseAddress: "杭州市西湖区修正路1号",
+		LegalPersonName:        "李四",
+		LegalPersonIDNumber:    "110101199001010099",
+		FoodPermitNumber:       "JY11105000000001",
+		FoodPermitCompanyName:  "人工修正后的餐饮店",
+		BusinessLicensePayload: []byte(`{"valid_period":"2020年01月01日至2040年01月01日"}`),
+		FoodPermitPayload:      []byte(`{"valid_to":"2030年12月31日"}`),
+		LegalPersonPayload:     []byte(`{"id_card_valid_date":"2020.01.01-2035.01.01"}`),
+		SourceSnapshot:         []byte(`{"source":"merchant_application","status":"approved"}`),
+	}
+
+	result, err := testStore.ApproveMerchantApplicationTx(context.Background(), ApproveMerchantApplicationTxParams{
+		ApplicationID:                 app.ID,
+		UserID:                        user.ID,
+		MerchantName:                  app.MerchantName,
+		Phone:                         app.ContactPhone,
+		Address:                       app.BusinessAddress,
+		Latitude:                      app.Latitude,
+		Longitude:                     app.Longitude,
+		RegionID:                      app.RegionID.Int64,
+		AppData:                       []byte(`{"source":"test"}`),
+		SubjectProfile:                &profileArg,
+		SubjectProfileVersionSnapshot: []byte(`{"business_license":{"number":"91330100MANUAL0001"}}`),
+	})
+	require.NoError(t, err)
+	require.NotZero(t, result.SubjectProfile.ID)
+	require.True(t, result.SubjectProfile.MerchantID.Valid)
+	require.Equal(t, result.Merchant.ID, result.SubjectProfile.MerchantID.Int64)
+
+	profile, err := testStore.GetMerchantSubjectProfileByMerchant(context.Background(), pgtype.Int8{Int64: result.Merchant.ID, Valid: true})
+	require.NoError(t, err)
+	require.Equal(t, app.ID, profile.MerchantApplicationID)
+	require.Equal(t, result.Merchant.ID, profile.MerchantID.Int64)
+	require.Equal(t, "91330100MANUAL0001", profile.BusinessLicenseNumber)
+
+	version, err := testStore.CreateMerchantSubjectProfileVersion(context.Background(), CreateMerchantSubjectProfileVersionParams{
+		ProfileID:             profile.ID,
+		MerchantApplicationID: profile.MerchantApplicationID,
+		MerchantID:            profile.MerchantID,
+		UserID:                profile.UserID,
+		Version:               profile.Version,
+		Snapshot:              []byte(`{"duplicate":"ignored"}`),
+	})
+	require.ErrorIs(t, err, ErrRecordNotFound)
+	require.Zero(t, version.ID)
+}
+
+func TestApproveMerchantApplicationTxUpdatesExistingMerchantSubjectProfileOnReapproval(t *testing.T) {
+	user := createRandomUser(t)
+	app := prepareSubmittedMerchantApplication(t, user.ID)
+	firstProfileArg := UpsertMerchantSubjectProfileParams{
+		MerchantApplicationID:  app.ID,
+		UserID:                 user.ID,
+		BusinessLicenseNumber:  "91330100OLD0001",
+		BusinessLicenseName:    "旧主体餐饮店",
+		BusinessLicensePayload: []byte(`{"credit_code":"91330100OLD0001"}`),
+		FoodPermitPayload:      []byte(`{}`),
+		LegalPersonPayload:     []byte(`{}`),
+		SourceSnapshot:         []byte(`{"status":"approved"}`),
+	}
+
+	first, err := testStore.ApproveMerchantApplicationTx(context.Background(), ApproveMerchantApplicationTxParams{
+		ApplicationID:                 app.ID,
+		UserID:                        user.ID,
+		MerchantName:                  app.MerchantName,
+		Phone:                         app.ContactPhone,
+		Address:                       app.BusinessAddress,
+		Latitude:                      app.Latitude,
+		Longitude:                     app.Longitude,
+		RegionID:                      app.RegionID.Int64,
+		AppData:                       []byte(`{"business_license_number":"91330100OLD0001"}`),
+		SubjectProfile:                &firstProfileArg,
+		SubjectProfileVersionSnapshot: []byte(`{"business_license":{"number":"91330100OLD0001"}}`),
+	})
+	require.NoError(t, err)
+	require.Equal(t, int32(1), first.SubjectProfile.Version)
+
+	resetResult, err := testStore.(*SQLStore).ResetMerchantApplicationTx(context.Background(), ResetMerchantApplicationTxParams{
+		ApplicationID: app.ID,
+		UserID:        user.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, MerchantApplicationStatusDraft, resetResult.Application.Status)
+	require.Equal(t, first.Merchant.ID, resetResult.Merchant.ID)
+
+	updated, err := testStore.UpdateMerchantApplicationBasicInfo(context.Background(), UpdateMerchantApplicationBasicInfoParams{
+		ID:                    app.ID,
+		MerchantName:          pgtype.Text{String: "人工修正后的餐饮店", Valid: true},
+		BusinessLicenseNumber: pgtype.Text{String: "91330100MANUAL0001", Valid: true},
+	})
+	require.NoError(t, err)
+	resubmitted, err := testStore.SubmitMerchantApplication(context.Background(), updated.ID)
+	require.NoError(t, err)
+	require.Equal(t, MerchantApplicationStatusSubmitted, resubmitted.Status)
+
+	secondProfileArg := UpsertMerchantSubjectProfileParams{
+		MerchantApplicationID:  resubmitted.ID,
+		UserID:                 user.ID,
+		BusinessLicenseNumber:  "91330100MANUAL0001",
+		BusinessLicenseName:    "人工修正后的餐饮店",
+		BusinessLicensePayload: []byte(`{"credit_code":"91330100MANUAL0001"}`),
+		FoodPermitPayload:      []byte(`{}`),
+		LegalPersonPayload:     []byte(`{}`),
+		SourceSnapshot:         []byte(`{"status":"approved"}`),
+	}
+	second, err := testStore.ApproveMerchantApplicationTx(context.Background(), ApproveMerchantApplicationTxParams{
+		ApplicationID:                 resubmitted.ID,
+		UserID:                        user.ID,
+		MerchantName:                  resubmitted.MerchantName,
+		Phone:                         resubmitted.ContactPhone,
+		Address:                       resubmitted.BusinessAddress,
+		Latitude:                      resubmitted.Latitude,
+		Longitude:                     resubmitted.Longitude,
+		RegionID:                      resubmitted.RegionID.Int64,
+		AppData:                       []byte(`{"business_license_number":"91330100MANUAL0001"}`),
+		SubjectProfile:                &secondProfileArg,
+		SubjectProfileVersionSnapshot: []byte(`{"business_license":{"number":"91330100MANUAL0001"}}`),
+	})
+	require.NoError(t, err)
+	require.Equal(t, first.Merchant.ID, second.Merchant.ID)
+	require.Equal(t, first.SubjectProfile.ID, second.SubjectProfile.ID)
+	require.Equal(t, int32(2), second.SubjectProfile.Version)
+	require.Equal(t, "91330100MANUAL0001", second.SubjectProfile.BusinessLicenseNumber)
+	require.Equal(t, "人工修正后的餐饮店", second.SubjectProfile.BusinessLicenseName)
+	require.JSONEq(t, `{"business_license_number":"91330100MANUAL0001"}`, string(second.Merchant.ApplicationData))
+
+	profile, err := testStore.GetMerchantSubjectProfileByMerchant(context.Background(), pgtype.Int8{Int64: first.Merchant.ID, Valid: true})
+	require.NoError(t, err)
+	require.Equal(t, second.SubjectProfile.ID, profile.ID)
+	require.Equal(t, int32(2), profile.Version)
+	require.Equal(t, "91330100MANUAL0001", profile.BusinessLicenseNumber)
+	merchant, err := testStore.GetMerchant(context.Background(), first.Merchant.ID)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"business_license_number":"91330100MANUAL0001"}`, string(merchant.ApplicationData))
+}
+
+func TestApproveMerchantApplicationTxRollsBackWhenSubjectProfileInvalid(t *testing.T) {
+	user := createRandomUser(t)
+	app := prepareSubmittedMerchantApplication(t, user.ID)
+	wrongApp := createRandomMerchantApplicationWithUser(t, user.ID)
+	profileArg := UpsertMerchantSubjectProfileParams{
+		MerchantApplicationID:  wrongApp.ID,
+		UserID:                 user.ID,
+		BusinessLicenseNumber:  "91330100MANUAL0001",
+		BusinessLicenseName:    "人工修正后的餐饮店",
+		LegalPersonName:        "李四",
+		LegalPersonIDNumber:    "110101199001010099",
+		BusinessLicensePayload: []byte(`{}`),
+		FoodPermitPayload:      []byte(`{}`),
+		LegalPersonPayload:     []byte(`{}`),
+		SourceSnapshot:         []byte(`{"source":"test"}`),
+	}
+
+	_, err := testStore.ApproveMerchantApplicationTx(context.Background(), ApproveMerchantApplicationTxParams{
+		ApplicationID:  app.ID,
+		UserID:         user.ID,
+		MerchantName:   app.MerchantName,
+		Phone:          app.ContactPhone,
+		Address:        app.BusinessAddress,
+		Latitude:       app.Latitude,
+		Longitude:      app.Longitude,
+		RegionID:       app.RegionID.Int64,
+		AppData:        []byte(`{"source":"test"}`),
+		SubjectProfile: &profileArg,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "merchant subject profile application mismatch")
+
+	unchanged, getErr := testStore.GetMerchantApplication(context.Background(), app.ID)
+	require.NoError(t, getErr)
+	require.Equal(t, "submitted", unchanged.Status)
+	_, getErr = testStore.GetMerchantOwnedByUser(context.Background(), user.ID)
+	require.ErrorIs(t, getErr, ErrRecordNotFound)
+}
+
 func TestApproveMerchantApplicationTxIgnoresStaffAssociatedMerchant(t *testing.T) {
 	merchantOwner := createRandomUser(t)
 	applicant := createRandomUser(t)
