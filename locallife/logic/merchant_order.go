@@ -38,6 +38,10 @@ type MerchantRefundSubmission struct {
 	RefundOrder *db.RefundOrder
 }
 
+func newOrderStatusChangedError(err error) error {
+	return NewRequestErrorWithCause(http.StatusConflict, errors.New("order status changed"), err)
+}
+
 // AcceptMerchantOrder validates and accepts a paid order.
 func AcceptMerchantOrder(ctx context.Context, store db.Store, input MerchantOrderUpdateInput) (MerchantOrderUpdateResult, error) {
 	order, err := store.GetOrderForUpdate(ctx, input.OrderID)
@@ -72,6 +76,9 @@ func AcceptMerchantOrder(ctx context.Context, store db.Store, input MerchantOrde
 			if errors.Is(err, db.ErrTakeoutOrderPausedByFoodSafety) {
 				return MerchantOrderUpdateResult{}, NewRequestError(http.StatusForbidden, errors.New("食安暂停期间不可继续处理外卖订单"))
 			}
+			if errors.Is(err, db.ErrRecordNotFound) {
+				return MerchantOrderUpdateResult{}, newOrderStatusChangedError(err)
+			}
 			return MerchantOrderUpdateResult{}, err
 		}
 
@@ -88,6 +95,9 @@ func AcceptMerchantOrder(ctx context.Context, store db.Store, input MerchantOrde
 		NewFulfillmentStatus: &fulfillment,
 	})
 	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return MerchantOrderUpdateResult{}, newOrderStatusChangedError(err)
+		}
 		return MerchantOrderUpdateResult{}, err
 	}
 
@@ -123,6 +133,9 @@ func RejectMerchantOrder(ctx context.Context, store db.Store, input MerchantOrde
 		OperatorType: "merchant",
 	})
 	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return MerchantOrderUpdateResult{}, newOrderStatusChangedError(err)
+		}
 		return MerchantOrderUpdateResult{}, err
 	}
 
@@ -158,6 +171,9 @@ func MarkMerchantOrderReady(ctx context.Context, store db.Store, input MerchantO
 			if errors.Is(err, db.ErrTakeoutOrderPausedByFoodSafety) {
 				return MerchantOrderUpdateResult{}, NewRequestError(http.StatusForbidden, errors.New("食安暂停期间不可继续处理外卖订单"))
 			}
+			if errors.Is(err, db.ErrRecordNotFound) {
+				return MerchantOrderUpdateResult{}, newOrderStatusChangedError(err)
+			}
 			return MerchantOrderUpdateResult{}, err
 		}
 
@@ -177,6 +193,9 @@ func MarkMerchantOrderReady(ctx context.Context, store db.Store, input MerchantO
 		NewFulfillmentStatus: &fulfillment,
 	})
 	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return MerchantOrderUpdateResult{}, newOrderStatusChangedError(err)
+		}
 		return MerchantOrderUpdateResult{}, err
 	}
 
