@@ -165,7 +165,9 @@ requires `PAYMENT_FACT_APPLICATION_FIXTURE_ID` and
 `PAYMENT_DOMAIN_OUTBOX_FIXTURE_ID`, then always runs config, Redis/Asynq,
 Baofu provider-client, and rollback-only fixture claimability checks together.
 The wrapper rejects missing, zero, or non-numeric fixture IDs before invoking
-the Go smoke command.
+the Go smoke command. The Go command also rejects non-positive fixture IDs
+before opening a DB connection when run directly with
+`-include-fixture-claimability`.
 
 Current rows:
 
@@ -236,6 +238,8 @@ Observed result:
 - The wrapper contract test proves target mode includes config, Redis/Asynq,
   Baofu provider-client, and rollback-only fixture checks and refuses to run
   without positive-integer fixture IDs.
+- The Go command test proves direct `-include-fixture-claimability` runs reject
+  non-positive fixture IDs before DB claimability checks.
 - Focused worker and scheduler package tests returned `ok`.
 
 What this proves:

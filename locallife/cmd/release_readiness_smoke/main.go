@@ -35,6 +35,10 @@ func main() {
 		fmt.Fprintln(os.Stderr, "release readiness smoke failed:", err)
 		os.Exit(2)
 	}
+	if err := validateFixtureClaimabilityFlagIDs(*includeFixtureClaimability, *paymentFactApplicationFixtureID, *paymentDomainOutboxFixtureID); err != nil {
+		fmt.Fprintln(os.Stderr, "release readiness fixture claimability failed:", err)
+		os.Exit(2)
+	}
 	if *includeConfig || *includeRedis || *includeProviderClients || *includeFixtureClaimability {
 		config, err = util.LoadConfig(*root)
 		if err != nil {
@@ -87,6 +91,19 @@ func main() {
 	if report.Status != releasereadiness.StatusPass {
 		os.Exit(1)
 	}
+}
+
+func validateFixtureClaimabilityFlagIDs(includeFixtureClaimability bool, paymentFactApplicationFixtureID, paymentDomainOutboxFixtureID int64) error {
+	if !includeFixtureClaimability {
+		return nil
+	}
+	if paymentFactApplicationFixtureID <= 0 {
+		return fmt.Errorf("payment-fact-application-fixture-id must be a positive integer")
+	}
+	if paymentDomainOutboxFixtureID <= 0 {
+		return fmt.Errorf("payment-domain-outbox-fixture-id must be a positive integer")
+	}
+	return nil
 }
 
 func checkFixtureClaimabilityInRollbackTx(config util.Config, opts releasereadiness.FixtureClaimabilityOptions) (releasereadiness.Report, error) {
