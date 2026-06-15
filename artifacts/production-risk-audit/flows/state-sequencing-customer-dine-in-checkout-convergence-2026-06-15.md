@@ -91,8 +91,8 @@ and reservation completion remain in the transaction-owned close boundary.
   `dining_sessions.status = 'open'`, non-null active order via the join, order
   `status = 'paid'`, order `order_type = 'dine_in'`, and matching merchant/user.
 - `locallife/scheduler/dine_in_checkout_recovery.go`: adds the recurring
-  recovery job and per-session failure isolation while reusing
-  `CloseDiningSessionTx`.
+  recovery job, per-session failure isolation, and Prometheus counters for
+  scan/list/close outcomes while reusing `CloseDiningSessionTx`.
 - `locallife/main.go`: registers `dine-in-checkout-recovery` with the existing
   scheduler manager.
 - `locallife/db/migration/000269_add_dine_in_checkout_recovery_index.up.sql`:
@@ -100,7 +100,7 @@ and reservation completion remain in the transaction-owned close boundary.
 - `locallife/db/sqlc/tx_dining_session_test.go` and
   `locallife/scheduler/dine_in_checkout_recovery_test.go`: cover recovery
   query filters, index presence, scheduler success, list failure, and
-  per-session close failure continuation.
+  per-session close failure continuation, including recovery failure metrics.
 
 ## Evidence Anchors
 
@@ -176,6 +176,13 @@ go test . -run '^$' -count=1
 make check-generated
 ```
 
+Executed recovery observability validation:
+
+```bash
+go test ./scheduler -run TestDineInCheckoutRecoveryScheduler_Records -count=1
+go test ./scheduler -run TestDineInCheckoutRecoveryScheduler -count=1
+```
+
 From `weapp/`, add or run a focused script covering:
 
 ```bash
@@ -216,7 +223,8 @@ re-entry/polling contract gap are fixed and covered. Remaining follow-ups are:
 
 1. Add an actual Mini Program device/E2E run for pending checkout context
    survival across result-page reload and paid-status polling.
-2. Consider an operational alert if the recovery scheduler repeatedly fails to
-   list or close eligible sessions.
+2. Wire target-environment Prometheus alerting for repeated
+   `dine_in_checkout_recovery_scans_total{result="list_error"}` or
+   `dine_in_checkout_recovery_sessions_total{result="close_failed"}` increases.
 3. Keep this card as the rerun checklist before changing dine-in checkout,
    shared payment result, or dining-session close behavior.

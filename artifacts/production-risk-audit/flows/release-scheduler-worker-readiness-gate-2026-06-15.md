@@ -336,4 +336,7 @@ rollback-only DB proof for explicit disposable rows, but this implementation
 run did not execute it against a deployed release database. The remaining
 release risk is operational: every release still needs prepared fixture IDs and
 an actual smoke run in the target environment before claiming deployed runtime
-readiness.
+readiness. For dine-in checkout recovery specifically, the deployed Prometheus
+or equivalent monitor should alert on repeated increases of
+`dine_in_checkout_recovery_scans_total{result="list_error"}` and
+`dine_in_checkout_recovery_sessions_total{result="close_failed"}`.
