@@ -1,6 +1,7 @@
 package releasereadiness
 
 import (
+	"context"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -10,6 +11,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/go-redis/redis/v8"
+	"github.com/hibiken/asynq"
 	"github.com/merrydance/locallife/util"
 )
 
@@ -46,6 +49,12 @@ type CheckResult struct {
 	Source  string `json:"source,omitempty"`
 	Line    int    `json:"line,omitempty"`
 	Handler string `json:"handler,omitempty"`
+}
+
+type RedisAsynqOptions struct {
+	Address        string
+	Password       string
+	RequiredQueues []string
 }
 
 func DefaultExpectations() Expectations {
@@ -260,6 +269,67 @@ func CheckConfig(config util.Config) Report {
 			"",
 			"baofu main business runtime config is required in production for main-business payments",
 		)
+	}
+	sort.SliceStable(report.Checks, func(i, j int) bool {
+		return report.Checks[i].ID < report.Checks[j].ID
+	})
+	return report
+}
+
+func CheckRedisAsynq(opts RedisAsynqOptions) Report {
+	report := Report{Status: StatusPass}
+	address := strings.TrimSpace(opts.Address)
+	queues := opts.RequiredQueues
+	if len(queues) == 0 {
+		queues = []string{"critical", "default"}
+	}
+	if address == "" {
+		return Report{
+			Status: StatusFail,
+			Checks: []CheckResult{
+				{ID: "redis:connection", Status: StatusFail, Detail: "REDIS_ADDRESS is required for redis/asynq readiness"},
+			},
+		}
+	}
+
+	redisClient := redis.NewClient(&redis.Options{Addr: address, Password: opts.Password})
+	if err := redisClient.Ping(context.Background()).Err(); err != nil {
+		return Report{
+			Status: StatusFail,
+			Checks: []CheckResult{
+				{ID: "redis:connection", Status: StatusFail, Detail: err.Error()},
+			},
+		}
+	}
+	_ = redisClient.Close()
+
+	report.Checks = append(report.Checks, CheckResult{
+		ID:     "redis:connection",
+		Status: StatusPass,
+		Detail: "redis ping ok",
+	})
+
+	inspector := asynq.NewInspector(asynq.RedisClientOpt{Addr: address, Password: opts.Password})
+	defer inspector.Close()
+	for _, queue := range queues {
+		queue = strings.TrimSpace(queue)
+		if queue == "" {
+			continue
+		}
+		info, err := inspector.GetQueueInfo(queue)
+		if err != nil {
+			report.Checks = append(report.Checks, CheckResult{
+				ID:     "asynq:queue:" + queue,
+				Status: StatusPass,
+				Detail: "queue absent; redis/asynq namespace readable",
+			})
+			continue
+		}
+		report.Checks = append(report.Checks, CheckResult{
+			ID:     "asynq:queue:" + queue,
+			Status: StatusPass,
+			Detail: fmt.Sprintf("size=%d pending=%d active=%d paused=%t", info.Size, info.Pending, info.Active, info.Paused),
+		})
 	}
 	sort.SliceStable(report.Checks, func(i, j int) bool {
 		return report.Checks[i].ID < report.Checks[j].ID

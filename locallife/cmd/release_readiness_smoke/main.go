@@ -15,8 +15,10 @@ func main() {
 	root := flag.String("root", ".", "backend repository root to scan")
 	format := flag.String("format", "text", "output format: text or json")
 	includeConfig := flag.Bool("include-config", false, "also load config from root and check production fail-fast readiness")
+	includeRedis := flag.Bool("include-redis", false, "also ping Redis and read Asynq queue stats using loaded config")
 	flag.Parse()
 
+	var config util.Config
 	report, err := releasereadiness.Check(releasereadiness.Options{
 		Root:         *root,
 		Expectations: releasereadiness.DefaultExpectations(),
@@ -25,13 +27,22 @@ func main() {
 		fmt.Fprintln(os.Stderr, "release readiness smoke failed:", err)
 		os.Exit(2)
 	}
-	if *includeConfig {
-		config, err := util.LoadConfig(*root)
+	if *includeConfig || *includeRedis {
+		config, err = util.LoadConfig(*root)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "release readiness config load failed:", err)
 			os.Exit(2)
 		}
+	}
+	if *includeConfig {
 		report = releasereadiness.MergeReports(report, releasereadiness.CheckConfig(config))
+	}
+	if *includeRedis {
+		report = releasereadiness.MergeReports(report, releasereadiness.CheckRedisAsynq(releasereadiness.RedisAsynqOptions{
+			Address:        config.RedisAddress,
+			Password:       config.RedisPassword,
+			RequiredQueues: []string{"critical", "default"},
+		}))
 	}
 
 	switch strings.ToLower(strings.TrimSpace(*format)) {

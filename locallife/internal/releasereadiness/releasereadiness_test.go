@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/merrydance/locallife/util"
 	"github.com/stretchr/testify/require"
 )
@@ -164,6 +165,23 @@ func TestCheckConfigSkipsOutsideProduction(t *testing.T) {
 	report := CheckConfig(util.Config{Environment: "test"})
 	require.Equal(t, StatusPass, report.Status)
 	require.Equal(t, "skipped outside production", requireCheck(t, report, "config:production_payment_runtime").Detail)
+}
+
+func TestCheckRedisAsynqReadiness(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+
+	report := CheckRedisAsynq(RedisAsynqOptions{
+		Address:        redisServer.Addr(),
+		RequiredQueues: []string{"critical", "default"},
+	})
+	require.Equal(t, StatusPass, report.Status)
+	require.Equal(t, StatusPass, requireCheck(t, report, "redis:connection").Status)
+	require.Equal(t, StatusPass, requireCheck(t, report, "asynq:queue:critical").Status)
+	require.Equal(t, StatusPass, requireCheck(t, report, "asynq:queue:default").Status)
+
+	report = CheckRedisAsynq(RedisAsynqOptions{RequiredQueues: []string{"critical"}})
+	require.Equal(t, StatusFail, report.Status)
+	require.Equal(t, StatusFail, requireCheck(t, report, "redis:connection").Status)
 }
 
 func requireCheck(t *testing.T, report Report, id string) CheckResult {
