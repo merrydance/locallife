@@ -465,6 +465,12 @@ PATH="/usr/local/go/bin:$PATH" scripts/baofu_provider_evidence_gate.sh \
 The wrapper has a `--dry-run` mode for release/runbook review. Dry-run prints
 the exact commands and performs no DB, provider, or funds-action work.
 
+When `--ledger-row --ledger-env production` is used, the wrapper also requires
+`--release-target-evidence <evidence.md>`. The referenced file must pass
+`scripts/check_release_readiness_target_evidence.sh`, so production provider
+evidence cannot be closed with only the static release preflight, a dry-run, or
+template readiness proof.
+
 ## Phase 1 Release Gate Checklist
 
 Before any Baofu-affecting release, answer every item below in the change
@@ -485,6 +491,8 @@ handoff.
   recovery and what masked provider query result backed it?
 - Did `scripts/baofu_provider_evidence_gate.sh` run, or was its `--dry-run`
   output reviewed before the controlled evidence run?
+- If the ledger row uses `--ledger-env production`, which filled
+  `--release-target-evidence` file passed the target readiness checker?
 - Which provider identifiers were masked in the evidence ledger?
 
 ## Phase 1 Validation Run 2026-06-15
@@ -556,6 +564,8 @@ What this proves:
 - The wrapper dry-run includes `make check-baofu-contract`,
   `scripts/release_readiness_smoke.sh --static --format text`, and the matching
   read-only collector command.
+- Production ledger evidence requires a filled release target evidence file and
+  the dry-run prints the target evidence checker command before the collector.
 - Callback ledger rows are rejected without explicit ACK.
 - Callback ledger rows are rejected when the endpoint does not match the
   selected capability's exact LocalLife Baofu webhook path; prefix lookalikes
@@ -573,6 +583,9 @@ What this proves:
   and monitoring owner are supplied.
 - Withdrawal manual-reconciliation evidence is rejected unless a manual recovery
   owner and masked provider query result are supplied.
+- Production ledger evidence is rejected unless `--release-target-evidence` is
+  supplied; static release preflight remains a source-level guard, not target
+  production readiness proof.
 
 What this still does not prove:
 
@@ -592,6 +605,10 @@ query recovery, command dispatch, or local terminal-state mapping:
 3. If claiming C4 or production readiness, append masked request/response,
    callback, fact-persistence, and query-recovery evidence to
    `SANDBOX_EVIDENCE_LEDGER.md`.
+   Production rows must also pass
+   `make check-release-readiness-target-evidence evidence=...` and pass the
+   evidence file to `scripts/baofu_provider_evidence_gate.sh` with
+   `--release-target-evidence`.
 4. Prove local persistence, not only provider reachability:
    `external_payment_facts`, `external_payment_fact_applications`, command rows,
    and the relevant business row must be referenced.

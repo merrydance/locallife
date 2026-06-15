@@ -23,6 +23,7 @@ ledger_endpoint=""
 ledger_ack=""
 ledger_commit=""
 ledger_notes=""
+release_target_evidence=""
 
 withdrawal_approver=""
 withdrawal_amount_bound=""
@@ -58,6 +59,7 @@ Common options:
   --ledger-ack <OK>                      Required for callback evidence; allowed for withdrawal funds-action callbacks.
   --ledger-commit <sha>                   7-40 hex chars.
   --ledger-notes <controlled-run-notes>
+  --release-target-evidence <evidence.md> Required when --ledger-env production is used with --ledger-row.
   --withdrawal-approver <name-or-ticket> Required for withdrawal funds-action evidence.
   --withdrawal-amount-bound <amount>     Required for withdrawal funds-action evidence.
   --withdrawal-monitoring-owner <owner>  Required for withdrawal funds-action evidence.
@@ -158,6 +160,11 @@ while [[ $# -gt 0 ]]; do
     --ledger-notes)
       require_value "$1" "${2:-}"
       ledger_notes="$2"
+      shift 2
+      ;;
+    --release-target-evidence)
+      require_value "$1" "${2:-}"
+      release_target_evidence="$2"
       shift 2
       ;;
     --withdrawal-approver)
@@ -339,6 +346,10 @@ if [[ "$ledger_row" -eq 1 ]]; then
     exit 2
   fi
   validate_ledger_context_shape
+  if [[ "$ledger_env" == "production" && -z "$release_target_evidence" ]]; then
+    echo "release target evidence is required for production ledger evidence" >&2
+    exit 2
+  fi
   if [[ "$evidence_kind" == "callback" && -z "$ledger_ack" ]]; then
     echo "ledger ack is required for callback evidence" >&2
     exit 2
@@ -390,6 +401,10 @@ fi
 
 preflight_contract=(make check-baofu-contract)
 preflight_release=(scripts/release_readiness_smoke.sh --static --format text)
+preflight_target_evidence=()
+if [[ -n "$release_target_evidence" ]]; then
+  preflight_target_evidence=(scripts/check_release_readiness_target_evidence.sh "$release_target_evidence")
+fi
 
 collector=()
 case "$capability" in
@@ -444,10 +459,16 @@ cd "$BACKEND_ROOT"
 if [[ "$dry_run" -eq 1 ]]; then
   print_command preflight_contract
   print_command preflight_release
+  if [[ "${#preflight_target_evidence[@]}" -gt 0 ]]; then
+    print_command preflight_target_evidence
+  fi
   print_command collector
   exit 0
 fi
 
 "${preflight_contract[@]}"
 "${preflight_release[@]}"
+if [[ "${#preflight_target_evidence[@]}" -gt 0 ]]; then
+  "${preflight_target_evidence[@]}"
+fi
 exec "${collector[@]}"
