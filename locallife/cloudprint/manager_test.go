@@ -41,6 +41,22 @@ func TestNewManagerFromConfigRegistersShangpengWhenEnabled(t *testing.T) {
 	require.False(t, provider.PrintResultCallbackEnabled())
 }
 
+func TestNewManagerFromConfigRegistersPrintServerWhenEnabled(t *testing.T) {
+	manager := NewManagerFromConfig(util.Config{
+		PrintServerEnabled:    true,
+		PrintServerAPIBaseURL: "https://print.example.com",
+		PrintServerAppID:      "local-life",
+		PrintServerSecret:     "secret",
+	})
+
+	require.True(t, manager.Supported(string(ProviderSelfCloud)))
+
+	provider, ok := manager.Provider(string(ProviderSelfCloud))
+	require.True(t, ok)
+	require.NotNil(t, provider)
+	require.False(t, provider.PrintResultCallbackEnabled())
+}
+
 func TestNewManagerFromConfigOmitsFeieyunWhenDisabledOrIncomplete(t *testing.T) {
 	testCases := []struct {
 		name   string
@@ -152,4 +168,18 @@ func TestNewRuntimeManagerFromConfigKeepsValidProviderWhenOnlyPollConfigIsInvali
 	require.Error(t, err)
 	require.NotNil(t, manager)
 	require.True(t, manager.Supported(string(ProviderShangpeng)))
+}
+
+func TestNewRuntimeManagerFromConfigDisablesMalformedPrintServerInWarnOnlyMode(t *testing.T) {
+	manager, err := NewRuntimeManagerFromConfig(util.Config{
+		PrintServerEnabled:     true,
+		PrintServerAPIBaseURL:  "print.example.com",
+		PrintServerAppID:       "local-life",
+		PrintServerSecret:      "secret",
+		PrintServerHTTPTimeout: time.Second,
+	})
+
+	require.Error(t, err)
+	require.NotNil(t, manager)
+	require.False(t, manager.Supported(string(ProviderSelfCloud)))
 }

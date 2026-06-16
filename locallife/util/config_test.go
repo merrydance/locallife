@@ -286,6 +286,14 @@ func TestLoadConfig_ReadsCloudPrinterProviderConfig(t *testing.T) {
 		"SHANGPENG_APPID=spyun-app",
 		"SHANGPENG_APPSECRET=spyun-secret",
 		"SHANGPENG_HTTP_TIMEOUT=8s",
+		"PRINT_SERVER_ENABLED=true",
+		"PRINT_SERVER_API_BASE_URL=https://print.example.com",
+		"PRINT_SERVER_APP_ID=local-life",
+		"PRINT_SERVER_SECRET=print-secret",
+		"PRINT_SERVER_HTTP_TIMEOUT=6s",
+		"PRINT_SERVER_CALLBACK_URL=https://api.example.com/v1/webhooks/self-cloudprint/print-result",
+		"PRINT_SERVER_CALLBACK_SIGNING_SECRET=callback-secret",
+		"PRINT_SERVER_CALLBACK_FRESHNESS_WINDOW=9m",
 		"CLOUD_PRINTER_FAIL_ON_PROVIDER_CONFIG_ERROR=true",
 		"CLOUD_PRINTER_STATUS_POLL_INTERVAL=2m",
 		"CLOUD_PRINTER_STATUS_POLL_BATCH_SIZE=25",
@@ -310,6 +318,14 @@ func TestLoadConfig_ReadsCloudPrinterProviderConfig(t *testing.T) {
 	require.Equal(t, "spyun-app", config.ShangpengAppID)
 	require.Equal(t, "spyun-secret", config.ShangpengAppSecret)
 	require.Equal(t, 8*time.Second, config.ShangpengHTTPTimeout)
+	require.True(t, config.PrintServerEnabled)
+	require.Equal(t, "https://print.example.com", config.PrintServerAPIBaseURL)
+	require.Equal(t, "local-life", config.PrintServerAppID)
+	require.Equal(t, "print-secret", config.PrintServerSecret)
+	require.Equal(t, 6*time.Second, config.PrintServerHTTPTimeout)
+	require.Equal(t, "https://api.example.com/v1/webhooks/self-cloudprint/print-result", config.PrintServerCallbackURL)
+	require.Equal(t, "callback-secret", config.PrintServerCallbackSigningSecret)
+	require.Equal(t, 9*time.Minute, config.PrintServerCallbackFreshnessWindow)
 	require.True(t, config.CloudPrinterFailOnProviderConfigError)
 	require.Equal(t, 2*time.Minute, config.CloudPrinterStatusPollInterval)
 	require.Equal(t, 25, config.CloudPrinterStatusPollBatchSize)
@@ -412,6 +428,76 @@ func TestValidateCloudPrinterProviderConfig(t *testing.T) {
 			want: "SHANGPENG_API_BASE_URL must be a valid absolute URL",
 		},
 		{
+			name: "print server requires secret",
+			config: Config{
+				PrintServerEnabled:     true,
+				PrintServerAPIBaseURL:  "https://print.example.com",
+				PrintServerAppID:       "local-life",
+				PrintServerHTTPTimeout: time.Second,
+			},
+			want: "PRINT_SERVER_API_BASE_URL, PRINT_SERVER_APP_ID and PRINT_SERVER_SECRET",
+		},
+		{
+			name: "print server api base url must be absolute",
+			config: Config{
+				PrintServerEnabled:     true,
+				PrintServerAPIBaseURL:  "print.example.com",
+				PrintServerAppID:       "local-life",
+				PrintServerSecret:      "secret",
+				PrintServerHTTPTimeout: time.Second,
+			},
+			want: "PRINT_SERVER_API_BASE_URL must be a valid absolute URL",
+		},
+		{
+			name: "print server callback url requires signing secret",
+			config: Config{
+				PrintServerEnabled:                 true,
+				PrintServerAPIBaseURL:              "https://print.example.com",
+				PrintServerAppID:                   "local-life",
+				PrintServerSecret:                  "secret",
+				PrintServerHTTPTimeout:             time.Second,
+				PrintServerCallbackURL:             "https://api.example.com/v1/webhooks/self-cloudprint/print-result",
+				CloudPrinterStatusPollInterval:     time.Minute,
+				CloudPrinterStatusPollBatchSize:    50,
+				CloudPrinterStatusPollInitialDelay: time.Second,
+				CloudPrinterStatusPollMaxAge:       time.Hour,
+			},
+			want: "PRINT_SERVER_CALLBACK_SIGNING_SECRET is required",
+		},
+		{
+			name: "print server callback signing secret requires url",
+			config: Config{
+				PrintServerEnabled:                 true,
+				PrintServerAPIBaseURL:              "https://print.example.com",
+				PrintServerAppID:                   "local-life",
+				PrintServerSecret:                  "secret",
+				PrintServerHTTPTimeout:             time.Second,
+				PrintServerCallbackSigningSecret:   "callback-secret",
+				CloudPrinterStatusPollInterval:     time.Minute,
+				CloudPrinterStatusPollBatchSize:    50,
+				CloudPrinterStatusPollInitialDelay: time.Second,
+				CloudPrinterStatusPollMaxAge:       time.Hour,
+			},
+			want: "PRINT_SERVER_CALLBACK_URL is required",
+		},
+		{
+			name: "print server callback url must be absolute",
+			config: Config{
+				PrintServerEnabled:                 true,
+				PrintServerAPIBaseURL:              "https://print.example.com",
+				PrintServerAppID:                   "local-life",
+				PrintServerSecret:                  "secret",
+				PrintServerHTTPTimeout:             time.Second,
+				PrintServerCallbackURL:             "/v1/webhooks/self-cloudprint/print-result",
+				PrintServerCallbackSigningSecret:   "callback-secret",
+				CloudPrinterStatusPollInterval:     time.Minute,
+				CloudPrinterStatusPollBatchSize:    50,
+				CloudPrinterStatusPollInitialDelay: time.Second,
+				CloudPrinterStatusPollMaxAge:       time.Hour,
+			},
+			want: "PRINT_SERVER_CALLBACK_URL must be a valid absolute URL",
+		},
+		{
 			name: "enabled provider requires positive polling config",
 			config: Config{
 				YilianyunEnabled:         true,
@@ -437,6 +523,20 @@ func TestValidateCloudPrinterProviderConfig(t *testing.T) {
 				ShangpengAppID:                     "appid",
 				ShangpengAppSecret:                 "secret",
 				ShangpengHTTPTimeout:               time.Second,
+				CloudPrinterStatusPollInterval:     time.Minute,
+				CloudPrinterStatusPollBatchSize:    50,
+				CloudPrinterStatusPollInitialDelay: time.Second,
+				CloudPrinterStatusPollMaxAge:       time.Hour,
+			},
+		},
+		{
+			name: "valid print server provider passes",
+			config: Config{
+				PrintServerEnabled:                 true,
+				PrintServerAPIBaseURL:              "https://print.example.com",
+				PrintServerAppID:                   "local-life",
+				PrintServerSecret:                  "secret",
+				PrintServerHTTPTimeout:             time.Second,
 				CloudPrinterStatusPollInterval:     time.Minute,
 				CloudPrinterStatusPollBatchSize:    50,
 				CloudPrinterStatusPollInitialDelay: time.Second,

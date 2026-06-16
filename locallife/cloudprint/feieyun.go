@@ -39,12 +39,15 @@ type RemovePrinterInput struct {
 }
 
 type PrintInput struct {
+	OrderID          int64
+	PrintLogID       int64
 	PrinterID        int64
 	MerchantID       int64
 	SN               string
 	Content          string
 	Copies           int
 	ExpiredAt        *time.Time
+	TaskKey          string
 	ProviderOriginID string
 }
 

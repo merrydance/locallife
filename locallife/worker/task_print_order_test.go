@@ -32,9 +32,13 @@ type printClientRecorder struct {
 }
 
 type printInputSnapshot struct {
+	OrderID          int64
+	PrintLogID       int64
+	MerchantID       int64
 	SN               string
 	Content          string
 	Copies           int
+	TaskKey          string
 	ProviderOriginID string
 }
 
@@ -48,9 +52,13 @@ func (r *printClientRecorder) RemovePrinter(ctx context.Context, input cloudprin
 
 func (r *printClientRecorder) Print(ctx context.Context, input cloudprint.PrintInput) (string, error) {
 	r.inputs = append(r.inputs, printInputSnapshot{
+		OrderID:          input.OrderID,
+		PrintLogID:       input.PrintLogID,
+		MerchantID:       input.MerchantID,
 		SN:               input.SN,
 		Content:          input.Content,
 		Copies:           input.Copies,
+		TaskKey:          input.TaskKey,
 		ProviderOriginID: input.ProviderOriginID,
 	})
 	if r.printOrderID == "" && r.printErr == nil {
@@ -203,6 +211,52 @@ func TestExecutePrintAttempt_KeepsPendingWhenStatusQueryProviderAccepts(t *testi
 	require.Len(t, shangpengClient.inputs, 1)
 	require.Equal(t, printer.PrinterSn, shangpengClient.inputs[0].SN)
 	require.Equal(t, createdProviderOriginID, shangpengClient.inputs[0].ProviderOriginID)
+}
+
+func TestExecutePrintAttempt_SelfCloudUsesPrintLogTaskKeyAndKeepsPending(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	processor := NewTestTaskProcessor(store, NewNoopTaskDistributor(), nil, nil)
+	selfCloudClient := &printClientRecorder{printOrderID: "psj_001"}
+	processor.SetCloudPrinterManagerForTest(printProviderManagerStub{providers: map[string]cloudprint.Client{
+		string(cloudprint.ProviderSelfCloud): selfCloudClient,
+	}})
+	printer := db.CloudPrinter{
+		ID:          31,
+		MerchantID:  1001,
+		PrinterSn:   "MDP000001",
+		PrinterType: string(cloudprint.ProviderSelfCloud),
+		IsActive:    true,
+	}
+
+	store.EXPECT().GetPrintLogByTaskKeyAndPrinter(gomock.Any(), gomock.Any()).Times(1).Return(db.PrintLog{}, db.ErrRecordNotFound)
+	store.EXPECT().CreatePrintLog(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(func(_ context.Context, arg db.CreatePrintLogParams) (db.PrintLog, error) {
+		require.Equal(t, int64(2002), arg.OrderID)
+		require.Equal(t, printer.ID, arg.PrinterID)
+		require.Equal(t, printLogStatusPending, arg.Status)
+		require.Equal(t, pgtype.Text{String: "order:2002:accepted", Valid: true}, arg.TaskKey)
+		return db.PrintLog{ID: 904, OrderID: arg.OrderID, PrinterID: arg.PrinterID, Status: arg.Status, TaskKey: arg.TaskKey, ProviderOriginID: arg.ProviderOriginID}, nil
+	})
+	store.EXPECT().UpdatePrintLogStatus(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(func(_ context.Context, arg db.UpdatePrintLogStatusParams) (db.PrintLog, error) {
+		require.Equal(t, int64(904), arg.ID)
+		require.Equal(t, printLogStatusPending, arg.Status)
+		require.True(t, arg.VendorOrderID.Valid)
+		require.Equal(t, "psj_001", arg.VendorOrderID.String)
+		require.False(t, arg.ErrorMessage.Valid)
+		return db.PrintLog{}, nil
+	})
+
+	processor.executePrintAttempt(context.Background(), 2002, printer, "<CB>自有云测试</CB>", "full", "order:2002:accepted")
+
+	require.Len(t, selfCloudClient.inputs, 1)
+	require.Equal(t, int64(2002), selfCloudClient.inputs[0].OrderID)
+	require.Equal(t, int64(904), selfCloudClient.inputs[0].PrintLogID)
+	require.Equal(t, int64(1001), selfCloudClient.inputs[0].MerchantID)
+	require.Equal(t, "MDP000001", selfCloudClient.inputs[0].SN)
+	require.Equal(t, "order:2002:accepted", selfCloudClient.inputs[0].TaskKey)
+	require.NotEmpty(t, selfCloudClient.inputs[0].ProviderOriginID)
 }
 
 func TestExecutePrintAttempt_KeepsPendingWhenYilianyunAuthorizationPrintIsAccepted(t *testing.T) {

@@ -348,6 +348,58 @@ func (q *Queries) GetPrintLog(ctx context.Context, id int64) (PrintLog, error) {
 	return i, err
 }
 
+const getPrintLogByIDProviderAndVendorOrderID = `-- name: GetPrintLogByIDProviderAndVendorOrderID :one
+SELECT
+    pl.id,
+    pl.order_id,
+    pl.printer_id,
+    pl.print_content,
+    pl.status,
+    pl.error_message,
+    pl.printed_at,
+    pl.created_at,
+    pl.vendor_order_id,
+    pl.task_key,
+    pl.provider_origin_id,
+    pl.provider_status_checked_at,
+    pl.provider_status_check_attempts,
+    pl.provider_status_last_error
+FROM print_logs pl
+INNER JOIN cloud_printers cp ON pl.printer_id = cp.id
+WHERE pl.id = $1
+    AND cp.printer_type = $2
+    AND pl.vendor_order_id = $3
+LIMIT 1
+`
+
+type GetPrintLogByIDProviderAndVendorOrderIDParams struct {
+	ID            int64       `json:"id"`
+	PrinterType   string      `json:"printer_type"`
+	VendorOrderID pgtype.Text `json:"vendor_order_id"`
+}
+
+func (q *Queries) GetPrintLogByIDProviderAndVendorOrderID(ctx context.Context, arg GetPrintLogByIDProviderAndVendorOrderIDParams) (PrintLog, error) {
+	row := q.db.QueryRow(ctx, getPrintLogByIDProviderAndVendorOrderID, arg.ID, arg.PrinterType, arg.VendorOrderID)
+	var i PrintLog
+	err := row.Scan(
+		&i.ID,
+		&i.OrderID,
+		&i.PrinterID,
+		&i.PrintContent,
+		&i.Status,
+		&i.ErrorMessage,
+		&i.PrintedAt,
+		&i.CreatedAt,
+		&i.VendorOrderID,
+		&i.TaskKey,
+		&i.ProviderOriginID,
+		&i.ProviderStatusCheckedAt,
+		&i.ProviderStatusCheckAttempts,
+		&i.ProviderStatusLastError,
+	)
+	return i, err
+}
+
 const getPrintLogByProviderAndOriginID = `-- name: GetPrintLogByProviderAndOriginID :one
 SELECT
     pl.id,

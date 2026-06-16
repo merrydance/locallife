@@ -41,6 +41,10 @@ type cloudPrinterStatusPollConfig struct {
 	maxAge       time.Duration
 }
 
+type printStateQuerier interface {
+	QueryPrintState(context.Context, string) (cloudprint.PrintState, error)
+}
+
 func NewCloudPrinterStatusPollScheduler(store db.Store, manager cloudprint.Manager, config util.Config) *CloudPrinterStatusPollScheduler {
 	stopCtx, stopCancel := context.WithCancel(context.Background())
 	return &CloudPrinterStatusPollScheduler{
@@ -150,6 +154,11 @@ func (s *CloudPrinterStatusPollScheduler) pollOne(ctx context.Context, row db.Cl
 
 	providerCtx, cancel := context.WithTimeout(ctx, cloudPrinterStatusPollProviderTimeout)
 	defer cancel()
+	if stateProvider, ok := provider.(printStateQuerier); ok {
+		s.pollOnePrintState(providerCtx, ctx, row, stateProvider, vendorOrderID)
+		return
+	}
+
 	printed, err := provider.QueryOrderState(providerCtx, vendorOrderID)
 	if err != nil {
 		sanitizedError := sanitizeProviderStatusPollError(err.Error())
@@ -190,8 +199,82 @@ func (s *CloudPrinterStatusPollScheduler) pollOne(ctx context.Context, row db.Cl
 		Msg("cloud printer print job reconciled as success")
 }
 
+func (s *CloudPrinterStatusPollScheduler) pollOnePrintState(providerCtx context.Context, storeCtx context.Context, row db.ClaimPendingProviderStatusPrintLogsRow, provider printStateQuerier, vendorOrderID string) {
+	state, err := provider.QueryPrintState(providerCtx, vendorOrderID)
+	if err != nil {
+		sanitizedError := sanitizeProviderStatusPollError(err.Error())
+		if _, updateErr := s.store.RecordProviderStatusPollError(storeCtx, db.RecordProviderStatusPollErrorParams{
+			ID: row.ID,
+			ProviderStatusLastError: pgtype.Text{
+				String: sanitizedError,
+				Valid:  true,
+			},
+		}); updateErr != nil && updateErr != db.ErrRecordNotFound {
+			log.Error().Err(updateErr).Int64("print_log_id", row.ID).Msg("record cloud printer status poll error failed")
+		}
+		log.Warn().
+			Str("error", sanitizedError).
+			Int64("print_log_id", row.ID).
+			Str("printer_type", row.PrinterType).
+			Msg("cloud printer status poll provider state query failed")
+		return
+	}
+
+	switch state.Status {
+	case cloudprint.PrintStateQueued, cloudprint.PrintStateSent, cloudprint.PrintStateAcked, cloudprint.PrintStatePending, "":
+		log.Info().
+			Int64("print_log_id", row.ID).
+			Str("printer_type", row.PrinterType).
+			Str("provider_status", state.Status).
+			Msg("cloud printer print job is still pending")
+		return
+	case cloudprint.PrintStateSuccess:
+		if _, err := s.store.MarkProviderStatusPrintLogTerminal(storeCtx, db.MarkProviderStatusPrintLogTerminalParams{
+			ID:     row.ID,
+			Status: printLogStatusSuccess,
+		}); err != nil && err != db.ErrRecordNotFound {
+			log.Error().Err(err).Int64("print_log_id", row.ID).Msg("mark provider print log success failed")
+			return
+		}
+		log.Info().
+			Int64("print_log_id", row.ID).
+			Str("printer_type", row.PrinterType).
+			Msg("cloud printer print job reconciled as success")
+	case cloudprint.PrintStateFailed, cloudprint.PrintStateTimeout, cloudprint.PrintStateCancelled:
+		if _, err := s.store.MarkProviderStatusPrintLogTerminal(storeCtx, db.MarkProviderStatusPrintLogTerminalParams{
+			ID:           row.ID,
+			Status:       printLogStatusFailed,
+			ErrorMessage: pgtype.Text{String: sanitizeProviderStatusPollError(printStateFailureMessage(state)), Valid: true},
+		}); err != nil && err != db.ErrRecordNotFound {
+			log.Error().Err(err).Int64("print_log_id", row.ID).Msg("mark provider print log failure failed")
+			return
+		}
+		log.Warn().
+			Int64("print_log_id", row.ID).
+			Str("printer_type", row.PrinterType).
+			Str("provider_status", state.Status).
+			Msg("cloud printer print job reconciled as failure")
+	default:
+		sanitizedError := sanitizeProviderStatusPollError("unknown provider print state: " + state.Status)
+		if _, updateErr := s.store.RecordProviderStatusPollError(storeCtx, db.RecordProviderStatusPollErrorParams{
+			ID: row.ID,
+			ProviderStatusLastError: pgtype.Text{
+				String: sanitizedError,
+				Valid:  true,
+			},
+		}); updateErr != nil && updateErr != db.ErrRecordNotFound {
+			log.Error().Err(updateErr).Int64("print_log_id", row.ID).Msg("record cloud printer status poll error failed")
+		}
+		log.Warn().
+			Str("error", sanitizedError).
+			Int64("print_log_id", row.ID).
+			Str("printer_type", row.PrinterType).
+			Msg("cloud printer status poll provider state unknown")
+	}
+}
+
 func (s *CloudPrinterStatusPollScheduler) pollableProviderTypes() []string {
-	candidates := []string{printerTypeShangpeng}
+	candidates := []string{printerTypeShangpeng, printerTypeSelfCloud}
 	providerTypes := make([]string, 0, len(candidates))
 	for _, providerType := range candidates {
 		if provider, ok := s.manager.Provider(providerType); ok && provider != nil {
@@ -228,6 +311,24 @@ func normalizeCloudPrinterStatusPollConfig(config util.Config) cloudPrinterStatu
 
 func sanitizeProviderStatusPollError(message string) string {
 	return sanitizePrintProviderErrorWithDefault(message, "provider_status_query_failed")
+}
+
+func printStateFailureMessage(state cloudprint.PrintState) string {
+	code := strings.TrimSpace(state.ErrorCode)
+	message := strings.TrimSpace(state.ErrorMessage)
+	if code != "" && message != "" {
+		return code + ": " + message
+	}
+	if message != "" {
+		return message
+	}
+	if code != "" {
+		return code
+	}
+	if strings.TrimSpace(state.Status) != "" {
+		return state.Status
+	}
+	return "provider_print_failed"
 }
 
 func sanitizePrintProviderError(message string) string {

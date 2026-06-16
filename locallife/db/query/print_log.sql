@@ -49,6 +49,29 @@ WHERE cp.printer_type = $1
 ORDER BY pl.created_at DESC, pl.id DESC
 LIMIT 1;
 
+-- name: GetPrintLogByIDProviderAndVendorOrderID :one
+SELECT
+    pl.id,
+    pl.order_id,
+    pl.printer_id,
+    pl.print_content,
+    pl.status,
+    pl.error_message,
+    pl.printed_at,
+    pl.created_at,
+    pl.vendor_order_id,
+    pl.task_key,
+    pl.provider_origin_id,
+    pl.provider_status_checked_at,
+    pl.provider_status_check_attempts,
+    pl.provider_status_last_error
+FROM print_logs pl
+INNER JOIN cloud_printers cp ON pl.printer_id = cp.id
+WHERE pl.id = $1
+    AND cp.printer_type = $2
+    AND pl.vendor_order_id = $3
+LIMIT 1;
+
 -- name: GetPrintLogByProviderAndOriginID :one
 SELECT
     pl.id,

@@ -18,6 +18,8 @@ const (
 	ProviderYilianyun ProviderType = "yilianyun"
 	// ProviderShangpeng is reserved for the planned Shangpeng integration.
 	ProviderShangpeng ProviderType = "shangpeng"
+	// ProviderSelfCloud is LocalLife's own cloud-printer provider.
+	ProviderSelfCloud ProviderType = "self_cloud"
 )
 
 // Manager exposes the cloud-printer providers that are configured at runtime.
@@ -43,6 +45,9 @@ func NewManagerFromConfig(config util.Config) Manager {
 	if shangpeng := NewShangpengClientFromConfig(config); shangpeng != nil {
 		manager.providers[string(ProviderShangpeng)] = shangpeng
 	}
+	if printServer := NewPrintServerClientFromConfig(config); printServer != nil {
+		manager.providers[string(ProviderSelfCloud)] = printServer
+	}
 
 	return manager
 }
@@ -62,6 +67,9 @@ func NewRuntimeManagerFromConfig(config util.Config) (Manager, error) {
 	}
 	if err := validateShangpengRuntimeProviderConfig(config); err != nil {
 		runtimeConfig.ShangpengEnabled = false
+	}
+	if err := validatePrintServerRuntimeProviderConfig(config); err != nil {
+		runtimeConfig.PrintServerEnabled = false
 	}
 
 	return NewManagerFromConfig(runtimeConfig), configErr
@@ -99,6 +107,24 @@ func validateShangpengRuntimeProviderConfig(config util.Config) error {
 	}
 	if config.ShangpengHTTPTimeout <= 0 {
 		return fmt.Errorf("SHANGPENG_HTTP_TIMEOUT must be > 0 when SHANGPENG_ENABLED=true")
+	}
+	return nil
+}
+
+func validatePrintServerRuntimeProviderConfig(config util.Config) error {
+	if !config.PrintServerEnabled {
+		return nil
+	}
+	if strings.TrimSpace(config.PrintServerAPIBaseURL) == "" ||
+		strings.TrimSpace(config.PrintServerAppID) == "" ||
+		strings.TrimSpace(config.PrintServerSecret) == "" {
+		return fmt.Errorf("PRINT_SERVER_API_BASE_URL, PRINT_SERVER_APP_ID and PRINT_SERVER_SECRET are required when PRINT_SERVER_ENABLED=true")
+	}
+	if err := validateRuntimeProviderAbsoluteURL("PRINT_SERVER_API_BASE_URL", config.PrintServerAPIBaseURL); err != nil {
+		return err
+	}
+	if config.PrintServerHTTPTimeout <= 0 {
+		return fmt.Errorf("PRINT_SERVER_HTTP_TIMEOUT must be > 0 when PRINT_SERVER_ENABLED=true")
 	}
 	return nil
 }

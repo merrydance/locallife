@@ -21,6 +21,7 @@ const (
 	printerTypeFeieyun   = string(cloudprint.ProviderFeieyun)
 	printerTypeYilianyun = string(cloudprint.ProviderYilianyun)
 	printerTypeShangpeng = string(cloudprint.ProviderShangpeng)
+	printerTypeSelfCloud = string(cloudprint.ProviderSelfCloud)
 
 	printerRoleFront   = "front"
 	printerRoleKitchen = "kitchen"
@@ -257,7 +258,7 @@ func (processor *RedisTaskProcessor) hasAnyCloudPrinterProvider() bool {
 
 func printProviderAcceptanceRequiresStatusQuery(providerType string) bool {
 	switch providerType {
-	case printerTypeShangpeng:
+	case printerTypeShangpeng, printerTypeSelfCloud:
 		return true
 	default:
 		return false

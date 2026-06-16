@@ -22,6 +22,7 @@ const (
 	printerTypeFeieyun                          = string(cloudprint.ProviderFeieyun)
 	printerTypeYilianyun                        = string(cloudprint.ProviderYilianyun)
 	printerTypeShangpeng                        = string(cloudprint.ProviderShangpeng)
+	printerTypeSelfCloud                        = string(cloudprint.ProviderSelfCloud)
 )
 
 // ==================== 注册打印机 ====================
@@ -30,7 +31,7 @@ type createPrinterRequest struct {
 	PrinterName      string `json:"printer_name" binding:"required,max=100"`
 	PrinterSN        string `json:"printer_sn" binding:"required,max=100"`
 	PrinterKey       string `json:"printer_key" binding:"required,max=100"`
-	PrinterType      string `json:"printer_type" binding:"required,oneof=feieyun shangpeng"`
+	PrinterType      string `json:"printer_type" binding:"required,oneof=feieyun shangpeng self_cloud"`
 	PrinterRole      string `json:"printer_role" binding:"omitempty,oneof=front kitchen"`
 	PrintTakeout     *bool  `json:"print_takeout"`
 	PrintDineIn      *bool  `json:"print_dine_in"`
@@ -81,7 +82,7 @@ type printerLiveStatusResponse struct {
 
 // createPrinter 注册打印机设备
 // @Summary 注册打印机
-// @Description 商户注册新的云打印机设备，支持飞鹅云和商鹏云；易联云需通过授权流程绑定
+// @Description 商户注册新的云打印机设备，支持飞鹅云、商鹏云和自有云打印机；易联云需通过授权流程绑定
 // @Tags 商户设备管理
 // @Accept json
 // @Produce json
@@ -683,8 +684,8 @@ func (server *Server) testPrinter(ctx *gin.Context) {
 		return
 	}
 
-	// 注意：云打印测试功能尚未接入实际服务
-	if printer.PrinterType != printerTypeFeieyun || server.printerClient == nil {
+	printerProvider, ok := server.cloudPrinterProvider(printer.PrinterType)
+	if !ok {
 		ctx.JSON(http.StatusNotImplemented, printerTestNotImplementedResponse{
 			Error:       "当前打印机类型或环境配置暂不支持在线测试打印",
 			PrinterName: printer.PrinterName,
@@ -695,10 +696,13 @@ func (server *Server) testPrinter(ctx *gin.Context) {
 	}
 
 	content := "<CB><B>打印测试</B></CB><BR>乐客来福<BR>设备：" + printer.PrinterName + "<BR>时间：" + time.Now().Format("2006-01-02 15:04:05") + "<BR><CUT>"
-	orderID, err := server.printerClient.Print(ctx, cloudprint.PrintInput{
-		SN:      printer.PrinterSn,
-		Content: content,
-		Copies:  1,
+	orderID, err := printerProvider.Print(ctx, cloudprint.PrintInput{
+		PrinterID:  printer.ID,
+		MerchantID: printer.MerchantID,
+		SN:         printer.PrinterSn,
+		Content:    content,
+		Copies:     1,
+		TaskKey:    "test_printer:" + strconv.FormatInt(printer.ID, 10) + ":" + strconv.FormatInt(time.Now().UnixNano(), 10),
 	})
 	if err != nil {
 		ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, err, "cloud printer provider unavailable", "cloud printer test print failed"))
@@ -725,7 +729,7 @@ func interpretCloudPrinterStatus(providerType string, status string) (bool, bool
 	switch providerType {
 	case printerTypeFeieyun:
 		return interpretFeieyunPrinterStatus(status)
-	case printerTypeShangpeng:
+	case printerTypeShangpeng, printerTypeSelfCloud:
 		return interpretNormalizedCloudPrinterStatus(status)
 	default:
 		return false, false
@@ -736,7 +740,7 @@ func interpretNormalizedCloudPrinterStatus(status string) (bool, bool) {
 	switch strings.ToLower(strings.TrimSpace(status)) {
 	case "online":
 		return true, true
-	case "abnormal", "busy":
+	case "abnormal", "busy", "fault":
 		return true, false
 	default:
 		return false, false
@@ -745,7 +749,7 @@ func interpretNormalizedCloudPrinterStatus(status string) (bool, bool) {
 
 func isSupportedCloudPrinterProviderType(providerType string) bool {
 	switch strings.TrimSpace(providerType) {
-	case printerTypeFeieyun, printerTypeShangpeng:
+	case printerTypeFeieyun, printerTypeShangpeng, printerTypeSelfCloud:
 		return true
 	default:
 		return false

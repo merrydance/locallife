@@ -2498,6 +2498,17 @@ type SearchPopularKeyword struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+type SelfCloudPrintCallbackEvent struct {
+	ID          int64              `json:"id"`
+	EventID     string             `json:"event_id"`
+	PrintJobID  string             `json:"print_job_id"`
+	PrintLogID  pgtype.Int8        `json:"print_log_id"`
+	Status      string             `json:"status"`
+	RawPayload  []byte             `json:"raw_payload"`
+	ReceivedAt  time.Time          `json:"received_at"`
+	ProcessedAt pgtype.Timestamptz `json:"processed_at"`
+}
+
 type Session struct {
 	ID                    int64     `json:"id"`
 	UserID                int64     `json:"user_id"`

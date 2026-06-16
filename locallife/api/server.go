@@ -560,6 +560,8 @@ func (server *Server) setupRouter() {
 		// 易联云打印结果回调和推送地址健康检查
 		webhooksGroup.GET("/yilianyun/print-result", server.handleYilianyunPrintResultHealth)
 		webhooksGroup.POST("/yilianyun/print-result", server.handleYilianyunPrintResultNotify)
+		// 自有云打印结果回调
+		webhooksGroup.POST("/self-cloudprint/print-result", server.handleSelfCloudPrintResultNotify)
 	}
 
 	// 需要认证的路由

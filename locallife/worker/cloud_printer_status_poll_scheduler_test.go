@@ -121,6 +121,61 @@ func TestCloudPrinterStatusPollSchedulerRunOnceRecordsProviderErrorWithoutTermin
 	require.Equal(t, []string{"sp-order-103"}, client.queryOrderStateCalls)
 }
 
+func TestCloudPrinterStatusPollSchedulerRunOnceMarksSelfCloudTerminalFailure(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	client := &selfCloudStatusClientRecorder{
+		printClientRecorder: &printClientRecorder{},
+		printStateResult: cloudprint.PrintState{
+			Status:       cloudprint.PrintStateTimeout,
+			ErrorCode:    "paper_out",
+			ErrorMessage: "缺纸",
+		},
+	}
+	manager := printProviderManagerStub{providers: map[string]cloudprint.Client{
+		string(cloudprint.ProviderSelfCloud): client,
+	}}
+	scheduler := NewCloudPrinterStatusPollScheduler(store, manager, util.Config{
+		CloudPrinterStatusPollInterval:     time.Minute,
+		CloudPrinterStatusPollBatchSize:    10,
+		CloudPrinterStatusPollInitialDelay: 30 * time.Second,
+		CloudPrinterStatusPollMaxAge:       12 * time.Hour,
+	})
+
+	store.EXPECT().
+		ExpireProviderStatusPrintLogs(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.ExpireProviderStatusPrintLogsParams) ([]db.PrintLog, error) {
+			require.Equal(t, []string{string(cloudprint.ProviderSelfCloud)}, arg.PrinterTypes)
+			return []db.PrintLog{}, nil
+		})
+	store.EXPECT().
+		ClaimPendingProviderStatusPrintLogs(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.ClaimPendingProviderStatusPrintLogsParams) ([]db.ClaimPendingProviderStatusPrintLogsRow, error) {
+			require.Equal(t, []string{string(cloudprint.ProviderSelfCloud)}, arg.PrinterTypes)
+			row := pendingStatusPollRow(106, "psj_timeout")
+			row.PrinterType = string(cloudprint.ProviderSelfCloud)
+			row.PrinterSn = "MDP000001"
+			return []db.ClaimPendingProviderStatusPrintLogsRow{row}, nil
+		})
+	store.EXPECT().
+		MarkProviderStatusPrintLogTerminal(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.MarkProviderStatusPrintLogTerminalParams) (db.PrintLog, error) {
+			require.Equal(t, int64(106), arg.ID)
+			require.Equal(t, printLogStatusFailed, arg.Status)
+			require.True(t, arg.ErrorMessage.Valid)
+			require.Equal(t, "paper_out: 缺纸", arg.ErrorMessage.String)
+			return db.PrintLog{ID: arg.ID, Status: arg.Status, ErrorMessage: arg.ErrorMessage}, nil
+		})
+	store.EXPECT().RecordProviderStatusPollError(gomock.Any(), gomock.Any()).Times(0)
+
+	scheduler.RunOnce()
+
+	require.Equal(t, []string{"psj_timeout"}, client.queryPrintStateCalls)
+	require.Empty(t, client.queryOrderStateCalls)
+}
+
 func TestCloudPrinterStatusPollSchedulerRunOnceExpiresOldPendingBeforeProviderCall(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -174,6 +229,18 @@ func TestCloudPrinterStatusPollSchedulerRunOnceSkipsWhenNoPollableProviderConfig
 	store.EXPECT().ClaimPendingProviderStatusPrintLogs(gomock.Any(), gomock.Any()).Times(0)
 
 	scheduler.RunOnce()
+}
+
+type selfCloudStatusClientRecorder struct {
+	*printClientRecorder
+	queryPrintStateCalls []string
+	printStateResult     cloudprint.PrintState
+	printStateErr        error
+}
+
+func (r *selfCloudStatusClientRecorder) QueryPrintState(ctx context.Context, orderID string) (cloudprint.PrintState, error) {
+	r.queryPrintStateCalls = append(r.queryPrintStateCalls, orderID)
+	return r.printStateResult, r.printStateErr
 }
 
 func pendingStatusPollRow(id int64, vendorOrderID string) db.ClaimPendingProviderStatusPrintLogsRow {
