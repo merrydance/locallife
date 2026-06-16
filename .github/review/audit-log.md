@@ -75,3 +75,11 @@ Append one section per formal backend audit or durable review pass.
 - Findings logged: No new finding. `BE-AUDIT-2026-05-29-01` remains resolved with a clarified invariant.
 - Durable docs updated: .github/review/open-findings.md; .github/review/audit-log.md; artifacts/baofu-reservation-completed-share-and-refund-transaction-design-2026-05-29.md; artifacts/baofu-refund-slice-fix-plan.md
 - Remaining scope: Net-amount sharing is deliberately scoped to `reservation` and `reservation_addon` payment orders. Ordinary `order` payment orders with successful refunds remain excluded from automatic Baofu sharing; post-share refund remains outside this first-version scope.
+
+### 2026-06-16 - Table QR scene parsing and persistence recovery audit
+
+- Scope: Focused audit of the table QR generation, Mini Program scene parsing, and QR persistence update chain on the dine-in / merchant table path.
+- Reviewed paths: locallife/api/scan.go; locallife/api/scan_test.go; locallife/api/table.go; locallife/db/sqlc/tx_table.go; locallife/db/migration/000140_create_media_assets.up.sql; locallife/db/migration/000009_add_tables_and_reservations.up.sql; weapp/miniprogram/pages/dine-in/scan-entry/scan-entry.ts; weapp/miniprogram/pages/dine-in/menu/menu.ts; weapp/miniprogram/pages/merchant/tables/edit/index.ts; weapp/miniprogram/pages/merchant/tables/shared/table-edit-view.ts; weapp/miniprogram/pages/merchant/_utils/merchant-tables-shared.ts
+- Findings logged: BE-AUDIT-2026-06-16-01, BE-AUDIT-2026-06-16-02
+- Durable docs updated: artifacts/production-risk-audit/state-sequencing-audit-snapshot-2026-06-16.md; .github/review/open-findings.md; .github/review/audit-log.md
+- Remaining scope: The table update transaction path that clears QR on table number change is still a non-finding for the scanned merchant edit flow; the WeChat `env_version` setting remains a separate evidence gap and was not promoted to a finding in this pass.
