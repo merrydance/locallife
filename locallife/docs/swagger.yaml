@@ -4341,19 +4341,6 @@ definitions:
       total:
         type: integer
     type: object
-  api.listRidersResponse:
-    properties:
-      page_id:
-        type: integer
-      page_size:
-        type: integer
-      riders:
-        items:
-          $ref: '#/definitions/api.riderResponse'
-        type: array
-      total:
-        type: integer
-    type: object
   api.listRoomsForCustomerResponse:
     properties:
       count:
@@ -7019,6 +7006,38 @@ definitions:
       pending_orders:
         type: integer
       total_orders:
+        type: integer
+    type: object
+  api.platformRiderCard:
+    properties:
+      active:
+        type: boolean
+      complaint_count:
+        type: integer
+      id:
+        type: integer
+      name:
+        type: string
+      region_id:
+        type: integer
+      region_name:
+        type: string
+      status:
+        type: string
+    type: object
+  api.platformRiderListResponse:
+    properties:
+      has_more:
+        type: boolean
+      limit:
+        type: integer
+      page:
+        type: integer
+      riders:
+        items:
+          $ref: '#/definitions/api.platformRiderCard'
+        type: array
+      total:
         type: integer
     type: object
   api.printMerchantOrderResponse:
@@ -11341,16 +11360,8 @@ paths:
     get:
       consumes:
       - application/json
-      description: 管理员或运营商分页获取骑手列表，支持状态筛选
+      description: 管理员分页获取平台骑手列表，返回平台管理页使用的骑手卡片信息
       parameters:
-      - description: 筛选状态
-        enum:
-        - approved
-        - active
-        - suspended
-        in: query
-        name: status
-        type: string
       - default: 1
         description: 页码
         in: query
@@ -11370,7 +11381,7 @@ paths:
         "200":
           description: 骑手列表
           schema:
-            $ref: '#/definitions/api.listRidersResponse'
+            $ref: '#/definitions/api.platformRiderListResponse'
         "400":
           description: 参数错误
           schema:
@@ -11389,9 +11400,9 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: 获取骑手列表（管理员）
+      summary: 获取平台骑手列表
       tags:
-      - 骑手管理
+      - 平台实体管理
   /v1/agreements:
     get:
       consumes:
@@ -13744,7 +13755,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: 商家手动结束就餐会话，关闭账单组并释放桌位。
+      description: 商家手动结束就餐会话，或顾客在堂食订单已支付后关闭自己的就餐会话；关闭账单组并释放桌位。
       parameters:
       - description: 会话ID
         in: path
@@ -13772,6 +13783,10 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
         "404":
           description: 找不到就餐会话
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: 订单未支付或会话状态冲突
           schema:
             $ref: '#/definitions/api.ErrorResponse'
         "500":
@@ -24791,6 +24806,10 @@ paths:
         - 商户必须处于active状态才能下单
         - 订单中的菜品必须在线且可售
       parameters:
+      - description: 可选幂等键，同一次创建订单重试建议复用同一个值
+        in: header
+        name: Idempotency-Key
+        type: string
       - description: 订单创建参数
         in: body
         name: request
@@ -24800,7 +24819,7 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
+        "201":
           description: 创建成功
           schema:
             $ref: '#/definitions/api.orderResponse'
@@ -24818,6 +24837,10 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
         "404":
           description: 商户/地址/桌台/菜品不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: 重复提交或订单请求状态已变化
           schema:
             $ref: '#/definitions/api.ErrorResponse'
         "500":

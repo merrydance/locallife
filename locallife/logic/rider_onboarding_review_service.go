@@ -567,10 +567,3 @@ func parseRiderCredentialExpiry(raw string) (*time.Time, error) {
 	}
 	return &expiresAt, nil
 }
-
-func onboardingReviewRunID(run *db.OnboardingReviewRun) *int64 {
-	if run == nil {
-		return nil
-	}
-	return &run.ID
-}

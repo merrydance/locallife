@@ -2718,10 +2718,11 @@ SET
   latitude = COALESCE($6, latitude),
   longitude = COALESCE($7, longitude),
   region_id = COALESCE($8, region_id),
+  application_data = COALESCE($9, application_data),
   version = version + 1,
   updated_at = now()
-WHERE id = $9
-  AND version = $10
+WHERE id = $10
+  AND version = $11
   AND deleted_at IS NULL
 RETURNING id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images, manual_open_status_until
 `
@@ -2735,6 +2736,7 @@ type UpdateMerchantParams struct {
 	Latitude         pgtype.Numeric `json:"latitude"`
 	Longitude        pgtype.Numeric `json:"longitude"`
 	RegionID         pgtype.Int8    `json:"region_id"`
+	ApplicationData  []byte         `json:"application_data"`
 	ID               int64          `json:"id"`
 	Version          int32          `json:"version"`
 }
@@ -2750,6 +2752,7 @@ func (q *Queries) UpdateMerchant(ctx context.Context, arg UpdateMerchantParams) 
 		arg.Latitude,
 		arg.Longitude,
 		arg.RegionID,
+		arg.ApplicationData,
 		arg.ID,
 		arg.Version,
 	)

@@ -180,6 +180,8 @@ type orderPaymentContextResponse struct {
 	CombineOutTradeNo string `json:"combine_out_trade_no" example:"CP202604061234560001"`
 }
 
+const orderCreateIdempotencyHeader = "Idempotency-Key"
+
 type orderResponse struct {
 	ID                   int64               `json:"id" example:"100001"`
 	OrderNo              string              `json:"order_no" example:"ORD20251201123456"`
@@ -542,12 +544,14 @@ func newOrderWithMerchantFromFilterResponse(o db.ListOrdersByUserWithFiltersRow)
 // @Tags 订单管理
 // @Accept json
 // @Produce json
+// @Param Idempotency-Key header string false "可选幂等键，同一次创建订单重试建议复用同一个值"
 // @Param request body createOrderRequest true "订单创建参数"
-// @Success 200 {object} orderResponse "创建成功"
+// @Success 201 {object} orderResponse "创建成功"
 // @Failure 400 {object} ErrorResponse "请求参数错误 / 商户未激活 / 菜品下线 / 桌台不属于该商户"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "地址不属于当前用户"
 // @Failure 404 {object} ErrorResponse "商户/地址/桌台/菜品不存在"
+// @Failure 409 {object} ErrorResponse "重复提交或订单请求状态已变化"
 // @Failure 500 {object} ErrorResponse "服务器内部错误"
 // @Router /v1/orders [post]
 // @Security BearerAuth
@@ -582,6 +586,7 @@ func (server *Server) createOrder(ctx *gin.Context) {
 		Notes:              req.Notes,
 		UserVoucherID:      req.UserVoucherID,
 		UseBalance:         req.UseBalance,
+		IdempotencyKey:     strings.TrimSpace(ctx.GetHeader(orderCreateIdempotencyHeader)),
 		RulesEngine:        server.rulesEngine,
 		RulesEngineEnabled: server.config.RulesEngineEnabled,
 		OnRuleDecision: func(input rules.Context, decision rules.Decision, actorRole string) {

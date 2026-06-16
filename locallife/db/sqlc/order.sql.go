@@ -88,6 +88,36 @@ func (q *Queries) AutoCompleteTakeoutOrder(ctx context.Context, id int64) (Order
 	return i, err
 }
 
+const bindOrderRequestIdempotencyOrder = `-- name: BindOrderRequestIdempotencyOrder :one
+UPDATE order_create_request_idempotency
+SET order_id = $1,
+    updated_at = now()
+WHERE id = $2
+  AND order_id IS NULL
+RETURNING id, operation_scope, actor_user_id, idempotency_key, request_hash, order_id, created_at, updated_at
+`
+
+type BindOrderRequestIdempotencyOrderParams struct {
+	OrderID pgtype.Int8 `json:"order_id"`
+	ID      int64       `json:"id"`
+}
+
+func (q *Queries) BindOrderRequestIdempotencyOrder(ctx context.Context, arg BindOrderRequestIdempotencyOrderParams) (OrderCreateRequestIdempotency, error) {
+	row := q.db.QueryRow(ctx, bindOrderRequestIdempotencyOrder, arg.OrderID, arg.ID)
+	var i OrderCreateRequestIdempotency
+	err := row.Scan(
+		&i.ID,
+		&i.OperationScope,
+		&i.ActorUserID,
+		&i.IdempotencyKey,
+		&i.RequestHash,
+		&i.OrderID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const clearMerchantFoodSafetyPausedOrders = `-- name: ClearMerchantFoodSafetyPausedOrders :execrows
 UPDATE orders
 SET
@@ -476,6 +506,50 @@ func (q *Queries) CreateOrder(ctx context.Context, arg CreateOrderParams) (Order
 	return i, err
 }
 
+const createOrderRequestIdempotency = `-- name: CreateOrderRequestIdempotency :one
+INSERT INTO order_create_request_idempotency (
+    operation_scope,
+    actor_user_id,
+    idempotency_key,
+    request_hash
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4
+)
+ON CONFLICT (operation_scope, actor_user_id, idempotency_key) DO NOTHING
+RETURNING id, operation_scope, actor_user_id, idempotency_key, request_hash, order_id, created_at, updated_at
+`
+
+type CreateOrderRequestIdempotencyParams struct {
+	OperationScope string `json:"operation_scope"`
+	ActorUserID    int64  `json:"actor_user_id"`
+	IdempotencyKey string `json:"idempotency_key"`
+	RequestHash    string `json:"request_hash"`
+}
+
+func (q *Queries) CreateOrderRequestIdempotency(ctx context.Context, arg CreateOrderRequestIdempotencyParams) (OrderCreateRequestIdempotency, error) {
+	row := q.db.QueryRow(ctx, createOrderRequestIdempotency,
+		arg.OperationScope,
+		arg.ActorUserID,
+		arg.IdempotencyKey,
+		arg.RequestHash,
+	)
+	var i OrderCreateRequestIdempotency
+	err := row.Scan(
+		&i.ID,
+		&i.OperationScope,
+		&i.ActorUserID,
+		&i.IdempotencyKey,
+		&i.RequestHash,
+		&i.OrderID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getLatestOrderByReservation = `-- name: GetLatestOrderByReservation :one
 SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
 WHERE reservation_id = $1
@@ -845,6 +919,38 @@ func (q *Queries) GetOrderForUpdate(ctx context.Context, id int64) (Order, error
 		&i.DeliveryAddressSnapshot,
 		&i.DeliveryLongitudeSnapshot,
 		&i.DeliveryLatitudeSnapshot,
+	)
+	return i, err
+}
+
+const getOrderRequestIdempotencyForUpdate = `-- name: GetOrderRequestIdempotencyForUpdate :one
+SELECT id, operation_scope, actor_user_id, idempotency_key, request_hash, order_id, created_at, updated_at
+FROM order_create_request_idempotency
+WHERE operation_scope = $1
+  AND actor_user_id = $2
+  AND idempotency_key = $3
+LIMIT 1
+FOR UPDATE
+`
+
+type GetOrderRequestIdempotencyForUpdateParams struct {
+	OperationScope string `json:"operation_scope"`
+	ActorUserID    int64  `json:"actor_user_id"`
+	IdempotencyKey string `json:"idempotency_key"`
+}
+
+func (q *Queries) GetOrderRequestIdempotencyForUpdate(ctx context.Context, arg GetOrderRequestIdempotencyForUpdateParams) (OrderCreateRequestIdempotency, error) {
+	row := q.db.QueryRow(ctx, getOrderRequestIdempotencyForUpdate, arg.OperationScope, arg.ActorUserID, arg.IdempotencyKey)
+	var i OrderCreateRequestIdempotency
+	err := row.Scan(
+		&i.ID,
+		&i.OperationScope,
+		&i.ActorUserID,
+		&i.IdempotencyKey,
+		&i.RequestHash,
+		&i.OrderID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }

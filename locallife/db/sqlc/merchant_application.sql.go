@@ -716,11 +716,12 @@ SET
   business_license_media_asset_id = COALESCE($2, business_license_media_asset_id),
   business_license_number = COALESCE($3, business_license_number),
   business_scope = COALESCE($4, business_scope),
+  legal_person_name = COALESCE($5, legal_person_name),
   merchant_name = CASE
-    WHEN COALESCE(NULLIF(btrim(merchant_name), ''), '') = '' THEN COALESCE($5, merchant_name)
+    WHEN COALESCE(NULLIF(btrim(merchant_name), ''), '') = '' THEN COALESCE($6, merchant_name)
     ELSE merchant_name
   END,
-  business_license_ocr = COALESCE($6, business_license_ocr),
+  business_license_ocr = COALESCE($7, business_license_ocr),
   updated_at = now()
 WHERE id = $1 AND status = 'draft'
 RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id, review_summary
@@ -731,17 +732,101 @@ type UpdateMerchantApplicationBusinessLicenseParams struct {
 	BusinessLicenseMediaAssetID pgtype.Int8 `json:"business_license_media_asset_id"`
 	BusinessLicenseNumber       pgtype.Text `json:"business_license_number"`
 	BusinessScope               pgtype.Text `json:"business_scope"`
+	LegalPersonName             pgtype.Text `json:"legal_person_name"`
 	MerchantName                pgtype.Text `json:"merchant_name"`
 	BusinessLicenseOcr          []byte      `json:"business_license_ocr"`
 }
 
-// 更新营业执照信息（图片URL和OCR结果）
+// 更新营业执照信息（图片URL、人工修正字段和OCR结果）
 func (q *Queries) UpdateMerchantApplicationBusinessLicense(ctx context.Context, arg UpdateMerchantApplicationBusinessLicenseParams) (MerchantApplication, error) {
 	row := q.db.QueryRow(ctx, updateMerchantApplicationBusinessLicense,
 		arg.ID,
 		arg.BusinessLicenseMediaAssetID,
 		arg.BusinessLicenseNumber,
 		arg.BusinessScope,
+		arg.LegalPersonName,
+		arg.MerchantName,
+		arg.BusinessLicenseOcr,
+	)
+	var i MerchantApplication
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.MerchantName,
+		&i.BusinessLicenseNumber,
+		&i.LegalPersonName,
+		&i.LegalPersonIDNumber,
+		&i.ContactPhone,
+		&i.BusinessAddress,
+		&i.BusinessScope,
+		&i.Status,
+		&i.RejectReason,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Longitude,
+		&i.Latitude,
+		&i.RegionID,
+		&i.FoodPermitOcr,
+		&i.BusinessLicenseOcr,
+		&i.IDCardFrontOcr,
+		&i.IDCardBackOcr,
+		&i.StorefrontImages,
+		&i.EnvironmentImages,
+		&i.BusinessLicenseMediaAssetID,
+		&i.FoodPermitMediaAssetID,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
+		&i.ReviewSummary,
+	)
+	return i, err
+}
+
+const updateMerchantApplicationBusinessLicenseOCRResult = `-- name: UpdateMerchantApplicationBusinessLicenseOCRResult :one
+UPDATE merchant_applications
+SET
+  business_license_media_asset_id = COALESCE($2, business_license_media_asset_id),
+  business_license_number = CASE
+    WHEN COALESCE(NULLIF(btrim(business_license_number), ''), '') = '' THEN COALESCE($3, business_license_number)
+    ELSE business_license_number
+  END,
+  business_scope = CASE
+    WHEN COALESCE(NULLIF(btrim(business_scope), ''), '') = '' THEN COALESCE($4, business_scope)
+    ELSE business_scope
+  END,
+  legal_person_name = CASE
+    WHEN COALESCE(NULLIF(btrim(legal_person_name), ''), '') = '' THEN COALESCE($5, legal_person_name)
+    ELSE legal_person_name
+  END,
+  merchant_name = CASE
+    WHEN COALESCE(NULLIF(btrim(merchant_name), ''), '') = '' THEN COALESCE($6, merchant_name)
+    ELSE merchant_name
+  END,
+  business_license_ocr = COALESCE($7, business_license_ocr),
+  updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id, review_summary
+`
+
+type UpdateMerchantApplicationBusinessLicenseOCRResultParams struct {
+	ID                          int64       `json:"id"`
+	BusinessLicenseMediaAssetID pgtype.Int8 `json:"business_license_media_asset_id"`
+	BusinessLicenseNumber       pgtype.Text `json:"business_license_number"`
+	BusinessScope               pgtype.Text `json:"business_scope"`
+	LegalPersonName             pgtype.Text `json:"legal_person_name"`
+	MerchantName                pgtype.Text `json:"merchant_name"`
+	BusinessLicenseOcr          []byte      `json:"business_license_ocr"`
+}
+
+// 异步OCR回写营业执照结果；只在结构化字段为空时回填，避免晚到OCR覆盖人工修正
+func (q *Queries) UpdateMerchantApplicationBusinessLicenseOCRResult(ctx context.Context, arg UpdateMerchantApplicationBusinessLicenseOCRResultParams) (MerchantApplication, error) {
+	row := q.db.QueryRow(ctx, updateMerchantApplicationBusinessLicenseOCRResult,
+		arg.ID,
+		arg.BusinessLicenseMediaAssetID,
+		arg.BusinessLicenseNumber,
+		arg.BusinessScope,
+		arg.LegalPersonName,
 		arg.MerchantName,
 		arg.BusinessLicenseOcr,
 	)
@@ -908,9 +993,79 @@ type UpdateMerchantApplicationIDCardFrontParams struct {
 	IDCardFrontOcr          []byte      `json:"id_card_front_ocr"`
 }
 
-// 更新身份证正面信息（图片URL和OCR结果）
+// 更新身份证正面信息（图片URL、人工修正字段和OCR结果）
 func (q *Queries) UpdateMerchantApplicationIDCardFront(ctx context.Context, arg UpdateMerchantApplicationIDCardFrontParams) (MerchantApplication, error) {
 	row := q.db.QueryRow(ctx, updateMerchantApplicationIDCardFront,
+		arg.ID,
+		arg.IDCardFrontMediaAssetID,
+		arg.LegalPersonName,
+		arg.LegalPersonIDNumber,
+		arg.IDCardFrontOcr,
+	)
+	var i MerchantApplication
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.MerchantName,
+		&i.BusinessLicenseNumber,
+		&i.LegalPersonName,
+		&i.LegalPersonIDNumber,
+		&i.ContactPhone,
+		&i.BusinessAddress,
+		&i.BusinessScope,
+		&i.Status,
+		&i.RejectReason,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Longitude,
+		&i.Latitude,
+		&i.RegionID,
+		&i.FoodPermitOcr,
+		&i.BusinessLicenseOcr,
+		&i.IDCardFrontOcr,
+		&i.IDCardBackOcr,
+		&i.StorefrontImages,
+		&i.EnvironmentImages,
+		&i.BusinessLicenseMediaAssetID,
+		&i.FoodPermitMediaAssetID,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
+		&i.ReviewSummary,
+	)
+	return i, err
+}
+
+const updateMerchantApplicationIDCardFrontOCRResult = `-- name: UpdateMerchantApplicationIDCardFrontOCRResult :one
+UPDATE merchant_applications
+SET
+  id_card_front_media_asset_id = COALESCE($2, id_card_front_media_asset_id),
+  legal_person_name = CASE
+    WHEN COALESCE(NULLIF(btrim(legal_person_name), ''), '') = '' THEN COALESCE($3, legal_person_name)
+    ELSE legal_person_name
+  END,
+  legal_person_id_number = CASE
+    WHEN COALESCE(NULLIF(btrim(legal_person_id_number), ''), '') = '' THEN COALESCE($4, legal_person_id_number)
+    ELSE legal_person_id_number
+  END,
+  id_card_front_ocr = COALESCE($5, id_card_front_ocr),
+  updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id, review_summary
+`
+
+type UpdateMerchantApplicationIDCardFrontOCRResultParams struct {
+	ID                      int64       `json:"id"`
+	IDCardFrontMediaAssetID pgtype.Int8 `json:"id_card_front_media_asset_id"`
+	LegalPersonName         pgtype.Text `json:"legal_person_name"`
+	LegalPersonIDNumber     pgtype.Text `json:"legal_person_id_number"`
+	IDCardFrontOcr          []byte      `json:"id_card_front_ocr"`
+}
+
+// 异步OCR回写身份证正面结果；只在结构化字段为空时回填，避免晚到OCR覆盖人工修正
+func (q *Queries) UpdateMerchantApplicationIDCardFrontOCRResult(ctx context.Context, arg UpdateMerchantApplicationIDCardFrontOCRResultParams) (MerchantApplication, error) {
+	row := q.db.QueryRow(ctx, updateMerchantApplicationIDCardFrontOCRResult,
 		arg.ID,
 		arg.IDCardFrontMediaAssetID,
 		arg.LegalPersonName,

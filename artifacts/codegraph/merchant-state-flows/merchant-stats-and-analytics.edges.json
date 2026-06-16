@@ -1,0 +1,695 @@
+{
+  "schema": "locallife-code-slice/v1",
+  "slice": "merchant-stats-and-analytics",
+  "risk_class": "G2",
+  "generated_at": "2026-06-14",
+  "nodes": [
+    {
+      "id": "weapp.statsOverviewPage",
+      "kind": "frontend_page",
+      "label": "Merchant stats overview page",
+      "file": "weapp/miniprogram/pages/merchant/stats/index.ts",
+      "line": 311
+    },
+    {
+      "id": "weapp.statsLoadStats",
+      "kind": "frontend_handler",
+      "label": "stats overview loadStats fan-out",
+      "file": "weapp/miniprogram/pages/merchant/stats/index.ts",
+      "line": 372
+    },
+    {
+      "id": "weapp.customerStatsPage",
+      "kind": "frontend_page",
+      "label": "Merchant customer analytics list page",
+      "file": "weapp/miniprogram/pages/merchant/stats/customers/index.ts",
+      "line": 69
+    },
+    {
+      "id": "weapp.customerStatsLoad",
+      "kind": "frontend_handler",
+      "label": "customer analytics loadCustomers",
+      "file": "weapp/miniprogram/pages/merchant/stats/customers/index.ts",
+      "line": 109
+    },
+    {
+      "id": "weapp.customerStatsDetailPage",
+      "kind": "frontend_page",
+      "label": "Merchant customer analytics detail page",
+      "file": "weapp/miniprogram/pages/merchant/stats/customers/detail/index.ts",
+      "line": 63
+    },
+    {
+      "id": "weapp.customerStatsDetailLoad",
+      "kind": "frontend_handler",
+      "label": "customer analytics detail loadDetail",
+      "file": "weapp/miniprogram/pages/merchant/stats/customers/detail/index.ts",
+      "line": 104
+    },
+    {
+      "id": "weapp.dashboardOverviewHelper",
+      "kind": "frontend_service",
+      "label": "fetchMerchantDashboardOverview",
+      "file": "weapp/miniprogram/pages/merchant/_services/merchant-dashboard.ts",
+      "line": 4
+    },
+    {
+      "id": "apiWrapper.merchantStats",
+      "kind": "frontend_api",
+      "label": "MerchantStatsService",
+      "file": "weapp/miniprogram/pages/merchant/_api/merchant-stats.ts",
+      "line": 87
+    },
+    {
+      "id": "apiWrapper.getOrderStats",
+      "kind": "frontend_api",
+      "label": "MerchantOrderManagementService.getOrderStats",
+      "file": "weapp/miniprogram/pages/merchant/_api/order-management.ts",
+      "line": 371
+    },
+    {
+      "id": "apiWrapper.getReservationStats",
+      "kind": "frontend_api",
+      "label": "ReservationService.getReservationStats",
+      "file": "weapp/miniprogram/pages/merchant/_main_shared/api/reservation.ts",
+      "line": 652
+    },
+    {
+      "id": "route.merchantStats",
+      "kind": "route_group",
+      "label": "/v1/merchant/stats owner/manager",
+      "file": "locallife/api/server.go",
+      "line": 1291
+    },
+    {
+      "id": "middleware.merchantStatsOwnerManager",
+      "kind": "backend_middleware",
+      "label": "MerchantStaffMiddleware owner/manager",
+      "file": "locallife/api/server.go",
+      "line": 1292
+    },
+    {
+      "id": "api.getMerchantDailyStats",
+      "kind": "backend_handler",
+      "label": "getMerchantDailyStats",
+      "file": "locallife/api/merchant_stats.go",
+      "line": 51
+    },
+    {
+      "id": "api.getMerchantOverview",
+      "kind": "backend_handler",
+      "label": "getMerchantOverview",
+      "file": "locallife/api/merchant_stats.go",
+      "line": 139
+    },
+    {
+      "id": "api.getTopSellingDishes",
+      "kind": "backend_handler",
+      "label": "getTopSellingDishes",
+      "file": "locallife/api/merchant_stats.go",
+      "line": 231
+    },
+    {
+      "id": "api.listMerchantCustomers",
+      "kind": "backend_handler",
+      "label": "listMerchantCustomers",
+      "file": "locallife/api/merchant_stats.go",
+      "line": 336
+    },
+    {
+      "id": "api.getCustomerDetail",
+      "kind": "backend_handler",
+      "label": "getCustomerDetail",
+      "file": "locallife/api/merchant_stats.go",
+      "line": 467
+    },
+    {
+      "id": "api.getMerchantHourlyStats",
+      "kind": "backend_handler",
+      "label": "getMerchantHourlyStats",
+      "file": "locallife/api/merchant_stats.go",
+      "line": 580
+    },
+    {
+      "id": "api.getMerchantOrderSourceStats",
+      "kind": "backend_handler",
+      "label": "getMerchantOrderSourceStats",
+      "file": "locallife/api/merchant_stats.go",
+      "line": 654
+    },
+    {
+      "id": "api.getMerchantRepurchaseRate",
+      "kind": "backend_handler",
+      "label": "getMerchantRepurchaseRate",
+      "file": "locallife/api/merchant_stats.go",
+      "line": 729
+    },
+    {
+      "id": "api.getMerchantDishCategoryStats",
+      "kind": "backend_handler",
+      "label": "getMerchantDishCategoryStats",
+      "file": "locallife/api/merchant_stats.go",
+      "line": 800
+    },
+    {
+      "id": "route.merchantOrderStats",
+      "kind": "route",
+      "label": "GET /v1/merchant/orders/stats",
+      "file": "locallife/api/server.go",
+      "line": 1041
+    },
+    {
+      "id": "api.getOrderStats",
+      "kind": "backend_handler",
+      "label": "getOrderStats",
+      "file": "locallife/api/order.go",
+      "line": 2546
+    },
+    {
+      "id": "route.reservationStats",
+      "kind": "route",
+      "label": "GET /v1/reservations/merchant/stats",
+      "file": "locallife/api/server.go",
+      "line": 976
+    },
+    {
+      "id": "api.getReservationStats",
+      "kind": "backend_handler",
+      "label": "getReservationStats",
+      "file": "locallife/api/table_reservation.go",
+      "line": 1430
+    },
+    {
+      "id": "sql.getMerchantDailyStats",
+      "kind": "sql_query",
+      "label": "GetMerchantDailyStats",
+      "file": "locallife/db/query/merchant_stats.sql",
+      "line": 3
+    },
+    {
+      "id": "sql.getMerchantOverview",
+      "kind": "sql_query",
+      "label": "GetMerchantOverview",
+      "file": "locallife/db/query/merchant_stats.sql",
+      "line": 20
+    },
+    {
+      "id": "sql.getTopSellingDishes",
+      "kind": "sql_query",
+      "label": "GetTopSellingDishes",
+      "file": "locallife/db/query/merchant_stats.sql",
+      "line": 38
+    },
+    {
+      "id": "sql.getMerchantCustomerStats",
+      "kind": "sql_query",
+      "label": "GetMerchantCustomerStats",
+      "file": "locallife/db/query/merchant_stats.sql",
+      "line": 57
+    },
+    {
+      "id": "sql.countMerchantCustomers",
+      "kind": "sql_query",
+      "label": "CountMerchantCustomers",
+      "file": "locallife/db/query/merchant_stats.sql",
+      "line": 87
+    },
+    {
+      "id": "sql.getCustomerMerchantDetail",
+      "kind": "sql_query",
+      "label": "GetCustomerMerchantDetail",
+      "file": "locallife/db/query/merchant_stats.sql",
+      "line": 94
+    },
+    {
+      "id": "sql.getCustomerFavoriteDishes",
+      "kind": "sql_query",
+      "label": "GetCustomerFavoriteDishes",
+      "file": "locallife/db/query/merchant_stats.sql",
+      "line": 118
+    },
+    {
+      "id": "sql.getMerchantHourlyStats",
+      "kind": "sql_query",
+      "label": "GetMerchantHourlyStats",
+      "file": "locallife/db/query/merchant_stats.sql",
+      "line": 135
+    },
+    {
+      "id": "sql.getMerchantOrderSourceStats",
+      "kind": "sql_query",
+      "label": "GetMerchantOrderSourceStats",
+      "file": "locallife/db/query/merchant_stats.sql",
+      "line": 150
+    },
+    {
+      "id": "sql.getMerchantRepurchaseRate",
+      "kind": "sql_query",
+      "label": "GetMerchantRepurchaseRate",
+      "file": "locallife/db/query/merchant_stats.sql",
+      "line": 165
+    },
+    {
+      "id": "sql.getDishCategoryStats",
+      "kind": "sql_query",
+      "label": "GetDishCategoryStats",
+      "file": "locallife/db/query/merchant_stats.sql",
+      "line": 196
+    },
+    {
+      "id": "sql.getOrderStats",
+      "kind": "sql_query",
+      "label": "GetOrderStats",
+      "file": "locallife/db/query/order.sql",
+      "line": 364
+    },
+    {
+      "id": "sql.countMerchantPrintAnomalies",
+      "kind": "sql_query",
+      "label": "CountMerchantPrintAnomalies",
+      "file": "locallife/db/query/print_log.sql",
+      "line": 127
+    },
+    {
+      "id": "sql.getReservationStatsEnhanced",
+      "kind": "sql_query",
+      "label": "GetReservationStatsEnhanced",
+      "file": "locallife/db/query/table_reservation.sql",
+      "line": 358
+    },
+    {
+      "id": "table.orders",
+      "kind": "table",
+      "label": "orders",
+      "file": "locallife/db/query/merchant_stats.sql",
+      "line": 12
+    },
+    {
+      "id": "table.orderItems",
+      "kind": "table",
+      "label": "order_items",
+      "file": "locallife/db/query/merchant_stats.sql",
+      "line": 46
+    },
+    {
+      "id": "table.users",
+      "kind": "table",
+      "label": "users",
+      "file": "locallife/db/query/merchant_stats.sql",
+      "line": 75
+    },
+    {
+      "id": "table.dishes",
+      "kind": "table",
+      "label": "dishes",
+      "file": "locallife/db/query/merchant_stats.sql",
+      "line": 47
+    },
+    {
+      "id": "table.dishCategories",
+      "kind": "table",
+      "label": "dish_categories",
+      "file": "locallife/db/query/merchant_stats.sql",
+      "line": 204
+    },
+    {
+      "id": "table.merchantDishCategories",
+      "kind": "table",
+      "label": "merchant_dish_categories",
+      "file": "locallife/db/query/merchant_stats.sql",
+      "line": 205
+    },
+    {
+      "id": "table.printLogs",
+      "kind": "table",
+      "label": "print_logs",
+      "file": "locallife/db/query/print_log.sql",
+      "line": 131
+    },
+    {
+      "id": "table.tableReservations",
+      "kind": "table",
+      "label": "table_reservations",
+      "file": "locallife/db/query/table_reservation.sql",
+      "line": 369
+    },
+    {
+      "id": "test.merchantStatsAPI",
+      "kind": "test",
+      "label": "merchant_stats API tests",
+      "file": "locallife/api/merchant_stats_test.go",
+      "line": 22
+    },
+    {
+      "id": "test.orderStatsAPI",
+      "kind": "test",
+      "label": "merchant order stats API test",
+      "file": "locallife/api/order_test.go",
+      "line": 2196
+    },
+    {
+      "id": "test.reservationStatsAPI",
+      "kind": "test",
+      "label": "reservation stats API test",
+      "file": "locallife/api/table_reservation_test.go",
+      "line": 1882
+    }
+  ],
+  "edges": [
+    {
+      "from": "weapp.statsOverviewPage",
+      "to": "weapp.statsLoadStats",
+      "kind": "calls"
+    },
+    {
+      "from": "weapp.statsLoadStats",
+      "to": "apiWrapper.merchantStats",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.statsLoadStats",
+      "to": "apiWrapper.getOrderStats",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.statsLoadStats",
+      "to": "apiWrapper.getReservationStats",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.customerStatsPage",
+      "to": "weapp.customerStatsLoad",
+      "kind": "calls"
+    },
+    {
+      "from": "weapp.customerStatsLoad",
+      "to": "apiWrapper.merchantStats",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.customerStatsPage",
+      "to": "weapp.customerStatsDetailPage",
+      "kind": "navigates"
+    },
+    {
+      "from": "weapp.customerStatsDetailPage",
+      "to": "weapp.customerStatsDetailLoad",
+      "kind": "calls"
+    },
+    {
+      "from": "weapp.customerStatsDetailLoad",
+      "to": "apiWrapper.merchantStats",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.dashboardOverviewHelper",
+      "to": "apiWrapper.merchantStats",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "apiWrapper.merchantStats",
+      "to": "route.merchantStats",
+      "kind": "http"
+    },
+    {
+      "from": "apiWrapper.getOrderStats",
+      "to": "route.merchantOrderStats",
+      "kind": "http"
+    },
+    {
+      "from": "apiWrapper.getReservationStats",
+      "to": "route.reservationStats",
+      "kind": "http"
+    },
+    {
+      "from": "route.merchantStats",
+      "to": "middleware.merchantStatsOwnerManager",
+      "kind": "protected_by"
+    },
+    {
+      "from": "route.merchantStats",
+      "to": "api.getMerchantDailyStats",
+      "kind": "routes"
+    },
+    {
+      "from": "route.merchantStats",
+      "to": "api.getMerchantOverview",
+      "kind": "routes"
+    },
+    {
+      "from": "route.merchantStats",
+      "to": "api.getTopSellingDishes",
+      "kind": "routes"
+    },
+    {
+      "from": "route.merchantStats",
+      "to": "api.listMerchantCustomers",
+      "kind": "routes"
+    },
+    {
+      "from": "route.merchantStats",
+      "to": "api.getCustomerDetail",
+      "kind": "routes"
+    },
+    {
+      "from": "route.merchantStats",
+      "to": "api.getMerchantHourlyStats",
+      "kind": "routes"
+    },
+    {
+      "from": "route.merchantStats",
+      "to": "api.getMerchantOrderSourceStats",
+      "kind": "routes"
+    },
+    {
+      "from": "route.merchantStats",
+      "to": "api.getMerchantRepurchaseRate",
+      "kind": "routes"
+    },
+    {
+      "from": "route.merchantStats",
+      "to": "api.getMerchantDishCategoryStats",
+      "kind": "routes"
+    },
+    {
+      "from": "route.merchantOrderStats",
+      "to": "api.getOrderStats",
+      "kind": "routes"
+    },
+    {
+      "from": "route.reservationStats",
+      "to": "api.getReservationStats",
+      "kind": "routes"
+    },
+    {
+      "from": "api.getMerchantDailyStats",
+      "to": "sql.getMerchantDailyStats",
+      "kind": "reads"
+    },
+    {
+      "from": "api.getMerchantOverview",
+      "to": "sql.getMerchantOverview",
+      "kind": "reads"
+    },
+    {
+      "from": "api.getMerchantOverview",
+      "to": "sql.countMerchantPrintAnomalies",
+      "kind": "reads"
+    },
+    {
+      "from": "api.getTopSellingDishes",
+      "to": "sql.getTopSellingDishes",
+      "kind": "reads"
+    },
+    {
+      "from": "api.listMerchantCustomers",
+      "to": "sql.getMerchantCustomerStats",
+      "kind": "reads"
+    },
+    {
+      "from": "api.listMerchantCustomers",
+      "to": "sql.countMerchantCustomers",
+      "kind": "reads"
+    },
+    {
+      "from": "api.getCustomerDetail",
+      "to": "sql.getCustomerMerchantDetail",
+      "kind": "reads"
+    },
+    {
+      "from": "api.getCustomerDetail",
+      "to": "sql.getCustomerFavoriteDishes",
+      "kind": "reads"
+    },
+    {
+      "from": "api.getMerchantHourlyStats",
+      "to": "sql.getMerchantHourlyStats",
+      "kind": "reads"
+    },
+    {
+      "from": "api.getMerchantOrderSourceStats",
+      "to": "sql.getMerchantOrderSourceStats",
+      "kind": "reads"
+    },
+    {
+      "from": "api.getMerchantRepurchaseRate",
+      "to": "sql.getMerchantRepurchaseRate",
+      "kind": "reads"
+    },
+    {
+      "from": "api.getMerchantDishCategoryStats",
+      "to": "sql.getDishCategoryStats",
+      "kind": "reads"
+    },
+    {
+      "from": "api.getOrderStats",
+      "to": "sql.getOrderStats",
+      "kind": "reads"
+    },
+    {
+      "from": "api.getReservationStats",
+      "to": "sql.getReservationStatsEnhanced",
+      "kind": "reads"
+    },
+    {
+      "from": "sql.getMerchantDailyStats",
+      "to": "table.orders",
+      "kind": "aggregates"
+    },
+    {
+      "from": "sql.getMerchantOverview",
+      "to": "table.orders",
+      "kind": "aggregates"
+    },
+    {
+      "from": "sql.getTopSellingDishes",
+      "to": "table.orders",
+      "kind": "filters"
+    },
+    {
+      "from": "sql.getTopSellingDishes",
+      "to": "table.orderItems",
+      "kind": "aggregates"
+    },
+    {
+      "from": "sql.getTopSellingDishes",
+      "to": "table.dishes",
+      "kind": "reads"
+    },
+    {
+      "from": "sql.getMerchantCustomerStats",
+      "to": "table.orders",
+      "kind": "aggregates"
+    },
+    {
+      "from": "sql.getMerchantCustomerStats",
+      "to": "table.users",
+      "kind": "reads"
+    },
+    {
+      "from": "sql.countMerchantCustomers",
+      "to": "table.orders",
+      "kind": "aggregates"
+    },
+    {
+      "from": "sql.getCustomerMerchantDetail",
+      "to": "table.orders",
+      "kind": "aggregates"
+    },
+    {
+      "from": "sql.getCustomerMerchantDetail",
+      "to": "table.users",
+      "kind": "reads"
+    },
+    {
+      "from": "sql.getCustomerFavoriteDishes",
+      "to": "table.orderItems",
+      "kind": "aggregates"
+    },
+    {
+      "from": "sql.getCustomerFavoriteDishes",
+      "to": "table.orders",
+      "kind": "filters"
+    },
+    {
+      "from": "sql.getCustomerFavoriteDishes",
+      "to": "table.dishes",
+      "kind": "reads"
+    },
+    {
+      "from": "sql.getMerchantHourlyStats",
+      "to": "table.orders",
+      "kind": "aggregates"
+    },
+    {
+      "from": "sql.getMerchantOrderSourceStats",
+      "to": "table.orders",
+      "kind": "aggregates"
+    },
+    {
+      "from": "sql.getMerchantRepurchaseRate",
+      "to": "table.orders",
+      "kind": "aggregates"
+    },
+    {
+      "from": "sql.getDishCategoryStats",
+      "to": "table.orders",
+      "kind": "filters"
+    },
+    {
+      "from": "sql.getDishCategoryStats",
+      "to": "table.orderItems",
+      "kind": "aggregates"
+    },
+    {
+      "from": "sql.getDishCategoryStats",
+      "to": "table.dishes",
+      "kind": "reads"
+    },
+    {
+      "from": "sql.getDishCategoryStats",
+      "to": "table.dishCategories",
+      "kind": "reads"
+    },
+    {
+      "from": "sql.getDishCategoryStats",
+      "to": "table.merchantDishCategories",
+      "kind": "reads"
+    },
+    {
+      "from": "sql.getOrderStats",
+      "to": "table.orders",
+      "kind": "aggregates"
+    },
+    {
+      "from": "sql.countMerchantPrintAnomalies",
+      "to": "table.printLogs",
+      "kind": "aggregates"
+    },
+    {
+      "from": "sql.countMerchantPrintAnomalies",
+      "to": "table.orders",
+      "kind": "filters_by_merchant"
+    },
+    {
+      "from": "sql.getReservationStatsEnhanced",
+      "to": "table.tableReservations",
+      "kind": "aggregates"
+    },
+    {
+      "from": "test.merchantStatsAPI",
+      "to": "route.merchantStats",
+      "kind": "covers"
+    },
+    {
+      "from": "test.orderStatsAPI",
+      "to": "route.merchantOrderStats",
+      "kind": "covers"
+    },
+    {
+      "from": "test.reservationStatsAPI",
+      "to": "route.reservationStats",
+      "kind": "covers"
+    }
+  ]
+}

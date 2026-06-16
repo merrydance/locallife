@@ -68,6 +68,7 @@ type Querier interface {
 	BatchCreateRiderLocations(ctx context.Context, arg []BatchCreateRiderLocationsParams) (int64, error)
 	// 批量更新菜品上下架状态（只更新属于指定商户的菜品）
 	BatchUpdateDishOnlineStatus(ctx context.Context, arg BatchUpdateDishOnlineStatusParams) ([]int64, error)
+	BindOrderRequestIdempotencyOrder(ctx context.Context, arg BindOrderRequestIdempotencyOrderParams) (OrderCreateRequestIdempotency, error)
 	CancelActiveMerchantOnboardingReviewRunsForApplication(ctx context.Context, arg CancelActiveMerchantOnboardingReviewRunsForApplicationParams) ([]OnboardingReviewRun, error)
 	// 商户熔断时自动取消所有未来的预订
 	CancelMerchantFutureReservations(ctx context.Context, arg CancelMerchantFutureReservationsParams) (int64, error)
@@ -445,6 +446,7 @@ type Querier interface {
 	CreateMerchantSettlementAdjustment(ctx context.Context, arg CreateMerchantSettlementAdjustmentParams) (MerchantSettlementAdjustment, error)
 	// 商户员工管理查询
 	CreateMerchantStaff(ctx context.Context, arg CreateMerchantStaffParams) (MerchantStaff, error)
+	CreateMerchantSubjectProfileVersion(ctx context.Context, arg CreateMerchantSubjectProfileVersionParams) (MerchantSubjectProfileVersion, error)
 	CreateNotification(ctx context.Context, arg CreateNotificationParams) (Notification, error)
 	CreateOperator(ctx context.Context, arg CreateOperatorParams) (Operator, error)
 	// ==================== 运营商入驻申请（草稿模式+人工审核） ====================
@@ -457,6 +459,7 @@ type Querier interface {
 	CreateOrderDisplayConfig(ctx context.Context, arg CreateOrderDisplayConfigParams) (OrderDisplayConfig, error)
 	CreateOrderItem(ctx context.Context, arg CreateOrderItemParams) (OrderItem, error)
 	CreateOrderPaymentFeeLedger(ctx context.Context, arg CreateOrderPaymentFeeLedgerParams) (OrderPaymentFeeLedger, error)
+	CreateOrderRequestIdempotency(ctx context.Context, arg CreateOrderRequestIdempotencyParams) (OrderCreateRequestIdempotency, error)
 	CreateOrderStatusLog(ctx context.Context, arg CreateOrderStatusLogParams) (OrderStatusLog, error)
 	CreatePaymentDomainOutbox(ctx context.Context, arg CreatePaymentDomainOutboxParams) (PaymentDomainOutbox, error)
 	CreatePaymentDomainOutboxOnce(ctx context.Context, arg CreatePaymentDomainOutboxOnceParams) (PaymentDomainOutbox, error)
@@ -612,6 +615,7 @@ type Querier interface {
 	DeleteUserRoleByUserAndRole(ctx context.Context, arg DeleteUserRoleByUserAndRoleParams) error
 	// 软删除代金券模板
 	DeleteVoucher(ctx context.Context, id int64) error
+	DetachMerchantSubjectProfileMerchantFromOtherApplications(ctx context.Context, arg DetachMerchantSubjectProfileMerchantFromOtherApplicationsParams) (int64, error)
 	ExpireProviderStatusPrintLogs(ctx context.Context, arg ExpireProviderStatusPrintLogsParams) ([]PrintLog, error)
 	ExpireStaleUploadSessions(ctx context.Context) ([]MediaUploadSession, error)
 	ExpireUnusedVouchers(ctx context.Context) (int64, error)
@@ -925,6 +929,8 @@ type Querier interface {
 	GetMerchantStaffByID(ctx context.Context, id int64) (MerchantStaff, error)
 	GetMerchantStaffByMerchantUserForUpdate(ctx context.Context, arg GetMerchantStaffByMerchantUserForUpdateParams) (MerchantStaff, error)
 	GetMerchantStaffForUpdate(ctx context.Context, id int64) (MerchantStaff, error)
+	GetMerchantSubjectProfileByApplication(ctx context.Context, merchantApplicationID int64) (MerchantSubjectProfile, error)
+	GetMerchantSubjectProfileByMerchant(ctx context.Context, merchantID pgtype.Int8) (MerchantSubjectProfile, error)
 	// ==================== 高级查询（使用JOIN和聚合）====================
 	GetMerchantWithTags(ctx context.Context, id int64) (GetMerchantWithTagsRow, error)
 	// 批量获取商户详情
@@ -972,6 +978,7 @@ type Querier interface {
 	GetOrderDisplayConfigByMerchant(ctx context.Context, merchantID int64) (OrderDisplayConfig, error)
 	GetOrderForUpdate(ctx context.Context, id int64) (Order, error)
 	GetOrderItem(ctx context.Context, id int64) (OrderItem, error)
+	GetOrderRequestIdempotencyForUpdate(ctx context.Context, arg GetOrderRequestIdempotencyForUpdateParams) (OrderCreateRequestIdempotency, error)
 	GetOrderStats(ctx context.Context, arg GetOrderStatsParams) (GetOrderStatsRow, error)
 	GetOrderWithDetails(ctx context.Context, id int64) (GetOrderWithDetailsRow, error)
 	// ==========================================
@@ -1473,6 +1480,7 @@ type Querier interface {
 	ListOrdersByUser(ctx context.Context, arg ListOrdersByUserParams) ([]ListOrdersByUserRow, error)
 	ListOrdersByUserAndStatus(ctx context.Context, arg ListOrdersByUserAndStatusParams) ([]ListOrdersByUserAndStatusRow, error)
 	ListOrdersByUserWithFilters(ctx context.Context, arg ListOrdersByUserWithFiltersParams) ([]ListOrdersByUserWithFiltersRow, error)
+	ListPaidOpenDineInSessionsForCheckoutRecovery(ctx context.Context, arg ListPaidOpenDineInSessionsForCheckoutRecoveryParams) ([]DiningSession, error)
 	ListPaidUnprocessedPaymentOrders(ctx context.Context, arg ListPaidUnprocessedPaymentOrdersParams) ([]PaymentOrder, error)
 	ListPaidUnrefundedPaymentOrders(ctx context.Context, limit int32) ([]PaymentOrder, error)
 	ListPaidUnrefundedReservationPaymentOrders(ctx context.Context, limit int32) ([]PaymentOrder, error)
@@ -1872,14 +1880,18 @@ type Querier interface {
 	UpdateMerchantAppDeviceHeartbeat(ctx context.Context, arg UpdateMerchantAppDeviceHeartbeatParams) (MerchantAppDevice, error)
 	// 更新基础信息（商户名、联系电话、地址、经纬度、区域、人工修正字段）
 	UpdateMerchantApplicationBasicInfo(ctx context.Context, arg UpdateMerchantApplicationBasicInfoParams) (MerchantApplication, error)
-	// 更新营业执照信息（图片URL和OCR结果）
+	// 更新营业执照信息（图片URL、人工修正字段和OCR结果）
 	UpdateMerchantApplicationBusinessLicense(ctx context.Context, arg UpdateMerchantApplicationBusinessLicenseParams) (MerchantApplication, error)
+	// 异步OCR回写营业执照结果；只在结构化字段为空时回填，避免晚到OCR覆盖人工修正
+	UpdateMerchantApplicationBusinessLicenseOCRResult(ctx context.Context, arg UpdateMerchantApplicationBusinessLicenseOCRResultParams) (MerchantApplication, error)
 	// 更新食品经营许可证信息（图片URL和OCR结果）
 	UpdateMerchantApplicationFoodPermit(ctx context.Context, arg UpdateMerchantApplicationFoodPermitParams) (MerchantApplication, error)
 	// 更新身份证背面信息（图片URL和OCR结果）
 	UpdateMerchantApplicationIDCardBack(ctx context.Context, arg UpdateMerchantApplicationIDCardBackParams) (MerchantApplication, error)
-	// 更新身份证正面信息（图片URL和OCR结果）
+	// 更新身份证正面信息（图片URL、人工修正字段和OCR结果）
 	UpdateMerchantApplicationIDCardFront(ctx context.Context, arg UpdateMerchantApplicationIDCardFrontParams) (MerchantApplication, error)
+	// 异步OCR回写身份证正面结果；只在结构化字段为空时回填，避免晚到OCR覆盖人工修正
+	UpdateMerchantApplicationIDCardFrontOCRResult(ctx context.Context, arg UpdateMerchantApplicationIDCardFrontOCRResultParams) (MerchantApplication, error)
 	// 更新门头照和环境照（jsonb数组）
 	UpdateMerchantApplicationImages(ctx context.Context, arg UpdateMerchantApplicationImagesParams) (MerchantApplication, error)
 	UpdateMerchantApplicationReviewSummary(ctx context.Context, arg UpdateMerchantApplicationReviewSummaryParams) (MerchantApplication, error)
@@ -2032,6 +2044,7 @@ type Querier interface {
 	UpsertMerchantMembershipSettings(ctx context.Context, arg UpsertMerchantMembershipSettingsParams) (MerchantMembershipSetting, error)
 	UpsertMerchantOfflineCustomer(ctx context.Context, arg UpsertMerchantOfflineCustomerParams) (MerchantOfflineCustomer, error)
 	UpsertMerchantPaymentConfig(ctx context.Context, arg UpsertMerchantPaymentConfigParams) (MerchantPaymentConfig, error)
+	UpsertMerchantSubjectProfile(ctx context.Context, arg UpsertMerchantSubjectProfileParams) (MerchantSubjectProfile, error)
 	UpsertMerchantSystemLabel(ctx context.Context, arg UpsertMerchantSystemLabelParams) error
 	UpsertOCRJob(ctx context.Context, arg UpsertOCRJobParams) (OcrJob, error)
 	UpsertOrderDisplayConfig(ctx context.Context, arg UpsertOrderDisplayConfigParams) (OrderDisplayConfig, error)

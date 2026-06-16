@@ -5,6 +5,11 @@ Risk class: G3 - identity documents, OCR, rider eligibility, delivery state mach
 Scope: WeChat Mini Program rider/register pages -> rider/delivery backend routes -> logic/transactions -> SQL tables -> async callbacks/workers/recovery schedulers -> dead/orphan paths
 Boundary note: this directory judges rider-side closure only: what the rider can see, do, and recover. Cross-role platform/operator/merchant operations gaps discovered during the audit are parked in `artifacts/codegraph/platform-operations-closed-loop/`.
 
+Before creating or refreshing a rider slice, use the workflow in
+`artifacts/codegraph/README.md`: CodeGraph may be used for discovery and line
+anchor drift checks, but the slice and edge artifacts are the durable
+LocalLife-aware source of truth after review.
+
 ## Slice Map
 
 - `rider-application-onboarding.slice.md`: rider registration, document OCR, application submit/review, rider activation, credential lifecycle/restore/suspension.

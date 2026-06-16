@@ -149,6 +149,7 @@ SET
   latitude = COALESCE(sqlc.narg('latitude'), latitude),
   longitude = COALESCE(sqlc.narg('longitude'), longitude),
   region_id = COALESCE(sqlc.narg('region_id'), region_id),
+  application_data = COALESCE(sqlc.narg('application_data'), application_data),
   version = version + 1,
   updated_at = now()
 WHERE id = sqlc.arg('id')

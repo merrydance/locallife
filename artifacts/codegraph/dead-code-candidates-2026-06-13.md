@@ -1,0 +1,128 @@
+# 死代码候选核对清单
+
+日期：2026-06-13
+
+这份清单只做定位和复核，不删除任何代码。
+
+## 核对方法
+
+- CodeGraph：读取 `/home/sam/locallife/.codegraph/codegraph.db`，索引为最新
+- 文本核对：用 `rg` 核对生产 Go 源码、测试源码和 Swagger 生成物中的引用
+- 静态检查：`staticcheck -checks=U1000,SA4006,SA4011 ./...`
+- 基础验证：`/usr/local/go/bin/go vet ./...`
+- 范围：`locallife/**/*.go`，重点看生产源码里的私有符号
+
+## 验证结果
+
+- 早前基线 `go vet ./...`：通过。
+- 本轮 fresh `go vet ./...`：未通过，原因是工作区已有的 `locallife/db/sqlc/tx_rider_refund_test.go` 修改尚未与当前接口对齐，`PrepareRiderDepositRefundTxParams` / `PrepareRiderDepositRefundTxResult` 字段不匹配；这不是本次报告更新引入的生产代码变化。
+- `staticcheck -checks=U1000,SA4006,SA4011 ./...`：继续确认未使用代码和 `SA4006` 信号；本轮 fresh 运行也先报同一个 `tx_rider_refund_test.go` 编译错误。
+- `/usr/local/go/bin/go test ./...`：本次为了确认现状跑过，但失败在既有 DB / integration 测试状态：
+  - `db/sqlc`: `TestDeactivateStaleMerchantAppDevices` 期望 `1`，实际 `3`
+  - `integration`: `TestClaimJourneyD39RiderRecoveryDisputeListPaginationIntegration` 返回 `404`，期望 `201`
+  - `integration`: `TestTakeoutJourneyB3Integration` 触发 `baofu_account_bindings_opening_mode_account_type_check`
+- 本次没有改生产代码，所以这些验证失败不来自本次文档更新。
+
+## 分类说明
+
+- `可优先清理候选`：生产源码里没有调用方；用途明确但当前未接入。删除前仍要做一次小范围编译/测试。
+- `已清理`：已按本报告逐项复核、删除，并记录对应验证。
+- `整组遗留候选`：一组同属一个未接入功能的类型/函数，适合按功能成组确认。
+- `测试仍在引用`：生产路径没用，但测试还在用；若删除，需要同步删/改测试。
+- `Swagger-only`：Go 编译视角未使用，但被 Swagger 注释或生成文档引用；不应按普通死代码直接删。
+- `暂不作为死代码`：静态工具有噪声，或它是被同文件内部私有函数调用的符号，不能单独删除。
+
+## 已清理
+
+| 位置 | 符号 | 原作用 | 复核与验证 |
+| --- | --- | --- | --- |
+| `locallife/api/server.go:1815` | `attachedServerError` | 将错误挂到 Gin context，同时返回公开错误文案 | 生产和测试均无调用；常用路径使用 `internalError` / `loggedServerError`。已删除；`go build ./api` 通过。`go test ./api` 被当前工作区已有的 `api/rider_test.go` WIP 编译错误挡住，未作为本项通过依据 |
+| `locallife/api/baofu_settlement_account_profile_defaults_merge.go:410` | `pgInt8Value` | 把 `pgtype.Int8` 转成 `int64`，原本用于结算账户默认值响应或合并 | 生产和测试均无调用。已删除，同时移除随之未使用的 `pgtype` import；`go build ./api` 通过。`go test ./api` 仍被当前工作区已有的 `api/rider_test.go` WIP 编译错误挡住，未作为本项通过依据 |
+| `locallife/api/merchant_application.go:1957` | `parseFlexibleDate` | 解析中文、点分隔、纯数字、横线分隔的营业执照日期字符串 | 生产和测试均无调用；OCR 日期解析逻辑已转移到 worker/helper。已删除；`go build ./api` 通过。`go test ./api` 仍被当前工作区已有的 `api/rider_test.go` WIP 编译错误挡住，未作为本项通过依据 |
+| `locallife/logic/payment_order_service.go:427` | `subMchIDFromPaymentAttach` | 从支付单 attach 里解析 `sub_mchid` | 生产和测试均无调用。已删除；`parsePaymentAttach` 仍被预订待支付单复用判断使用，保留。`go build ./logic` 通过。`go test ./logic -run 'TestPaymentOrderService|TestCreateBaofuPaymentOrder|TestCreatePaymentOrder|TestClosePaymentOrder' -count=1` 被当前工作区已有的 `logic/rider_deposit_refund_service_test.go` WIP 编译错误挡住，未作为本项通过依据 |
+| `locallife/logic/payment_order_service.go:466` | `shouldEnableOrderProfitSharing` | 按订单类型判断是否启用订单分账 | 生产和测试均无调用；worker 里有另一套 `shouldDispatchOrderProfitSharing` 测试覆盖。已删除；`orderTypeDineIn` / `orderTypeTakeaway` 仍被同包其他文件和测试使用，保留。`go build ./logic` 通过。`go test ./logic -run 'TestPaymentOrderService|TestCreateBaofuPaymentOrder|TestCreatePaymentOrder|TestClosePaymentOrder' -count=1` 被当前工作区已有的 `logic/rider_deposit_refund_service_test.go` WIP 编译错误挡住，未作为本项通过依据 |
+| `locallife/worker/task_process_payment.go:1544` | `workerStringValue` | 把 `*string` 转成空字符串兜底 | 生产和测试均无调用。已删除；相邻 `workerStringPtrIfNotEmpty` 仍被错误字段映射使用，保留。`go build ./worker` 通过；`go test ./worker -run 'TestWorkerPaymentCommandErrorFields|TestShouldDispatchOrderProfitSharing' -count=1` 通过 |
+| `locallife/worker/task_process_payment.go:1619` | `workerProfitSharingCommandSnapshot` | 过滤空字段后序列化分账 command snapshot | 生产和测试均无调用。已删除；相邻 `workerBaofuRefundCommandSnapshot` 仍在退款命令记录路径使用，保留。`go build ./worker` 通过；`go test ./worker -run 'TestWorkerPaymentCommandErrorFields|TestShouldDispatchOrderProfitSharing' -count=1` 通过 |
+| `locallife/api/merchant_application.go:35` | `loggingReader` / `Read` / `Close` | 包装上传 body，按读取进度记录商户 OCR 上传日志 | 类型和方法生产、测试均无调用；上传链路已不使用这个 wrapper。已删除，同时移除随之未使用的 `io` import；`go build ./api` 通过；`go test ./api -run '^$' -count=1` 通过 |
+| `locallife/api/applyment_contact_info.go:21` | `pgTextValue` | 把 `pgtype.Text` 转成普通字符串，用于取用户手机号兜底 | 只被同文件未使用的 `resolveApplymentContactPhone` 调用。已随上层 helper 一起删除；`firstNonEmptyTrimmed` 仍被 `baofu_callback.go` 使用，保留。`go build ./api` 通过；`go test ./api -run '^$' -count=1` 通过 |
+| `locallife/api/applyment_contact_info.go:28` | `Server.resolveApplymentContactPhone` | 商户进件联系人手机号解析：候选值优先，否则从用户手机号兜底 | 生产和测试均无调用；当前商户申请提交路径在 `merchant_application.go` 自行从用户手机号兜底。已删除；`go build ./api` 通过；`go test ./api -run '^$' -count=1` 通过 |
+| `locallife/api/payment_order.go:1127` | `applyAbnormalRefundURIRequest` | 异常退款申请 URI 参数 DTO | 未见 handler 绑定、路由注册、Swagger 注释或 `docs` 生成物引用。已删除；`go build ./api` 通过；`go test ./api -run '^$' -count=1` 通过 |
+| `locallife/api/payment_order.go:1131` | `applyAbnormalRefundBodyRequest` | 异常退款申请 body DTO | 未见 handler 绑定、路由注册、Swagger 注释或 `docs` 生成物引用。已删除；`go build ./api` 通过；`go test ./api -run '^$' -count=1` 通过 |
+| `locallife/api/payment_callback.go:78` | `Server.enqueueProfitSharingPaymentFactApplication` | 从支付回调触发分账 payment fact application task | 生产和测试均无调用；当前宝付分账 callback 路径在 `baofu_callback.go` 记录并派发 application。已删除；相邻的 direct payment、骑手押金退款、预订退款、订单退款 enqueue helper 仍在用，保留。`go build ./api` 通过；`go test ./api -run 'TestBaofuShareCallback|TestHandlePaymentNotify|TestHandleRefundNotify|TestHandleMerchantTransferNotify' -count=1` 通过 |
+| `locallife/api/payment_callback.go:564` | `Server.requireTaskDistributorForNotification` | 回调处理前检查 task distributor，缺失时释放通知 claim 并返回失败 | 生产和测试均无调用；当前回调路径已在各自 handler 内直接处理缺失分支。已删除；`go build ./api` 通过；`go test ./api -run 'TestBaofuShareCallback|TestHandlePaymentNotify|TestHandleRefundNotify|TestHandleMerchantTransferNotify' -count=1` 通过 |
+| `locallife/logic/combined_payment_service.go:15` | `combinedOutTradePrefix` | 原合单支付 out_trade_no 前缀 | 当前合单支付服务 fail-closed，没有创建路径使用。已删除；`go build ./logic` 通过；`go test ./api -run 'TestCreateCombinedPaymentOrderAPI_BaofuMainBusinessFailsClosed' -count=1` 通过 |
+| `locallife/logic/combined_payment_service.go:16` | `combinedOrderMaxCount` | 原合单支付子订单数量上限 | 当前合单支付服务 fail-closed，没有创建路径使用。已删除；`go build ./logic` 通过；`go test ./api -run 'TestCreateCombinedPaymentOrderAPI_BaofuMainBusinessFailsClosed' -count=1` 通过 |
+| `locallife/logic/baofu_payment_readiness.go:47` | `ensureMerchantBaofuReadyForPayment` | 单商户宝付支付 readiness 校验 wrapper | 只被同文件未接入的 `ensureCombinedPaymentMerchantsBaofuReady` 调用；生产支付创建路径直接使用 `merchantBaofuReadinessForPayment`，该函数仍在 `baofu_payment_order_route.go` 使用并保留。已删除；`go build ./logic` 通过；`go test ./logic -run 'TestPaymentOrderServiceCreatePaymentOrder_RequiresMerchantBaofuReadiness|TestPaymentOrderServiceCreatePaymentOrder_BaofuWechatChannelNotReadyFailsBeforeClientCall|TestBaofuPaymentReadiness' -count=1` 通过 |
+| `locallife/logic/baofu_payment_readiness.go:65` | `ensureCombinedPaymentMerchantsBaofuReady` | 创建合单支付前逐商户检查宝付账户和微信通道 readiness | 生产和测试均无调用；当前合单支付服务已 fail-closed，不进入合单创建 readiness 校验。已删除；底层 `merchantBaofuReadinessForPayment` 仍服务单商户宝付支付创建路径。`go build ./logic` 通过；`go test ./logic -run 'TestPaymentOrderServiceCreatePaymentOrder_RequiresMerchantBaofuReadiness|TestPaymentOrderServiceCreatePaymentOrder_BaofuWechatChannelNotReadyFailsBeforeClientCall|TestBaofuPaymentReadiness' -count=1` 通过 |
+| `locallife/logic/rider_onboarding_review_service.go:571` | `onboardingReviewRunID` | 把 rider onboarding review run 转为 `*int64` | 逻辑层生产和测试均无调用；API 层同名 helper 仍在商户/骑手申请提交入口使用并保留。已删除；`go build ./logic` 通过；`go test ./logic -run 'TestEvaluateRiderApplication|TestRiderOnboardingReviewServiceProcessSubmittedApplication_UsesDurableApprovalTx' -count=1` 通过 |
+| `locallife/worker/task_payment_timeout.go:264` | `paymentTimeoutSubMchIDFromAttach` | 超时关闭支付单时从 attach 解析 `sub_mchid` | 生产和测试均无调用；当前宝付支付超时查询/关闭使用 collect merchant/terminal 配置与支付单号，不通过 attach 解析子商户号。已删除；`go build ./worker` 通过；`go test ./worker -run 'TestProcessTaskPaymentOrderTimeout|TestProcessTaskOrderPaymentTimeout_DelegatesPendingBaofuPaymentOrder' -count=1` 通过 |
+| `locallife/worker/task_process_payment.go:97` | `withProfitSharingEnqueueDedup` / `profitSharingEnqueueDedupWindow` | 给分账 enqueue 追加 asynq unique 去重窗口 | 生产和测试均无调用；当前分账任务调度由 API/logic 调用方直接传入去重选项，分账结果通知仍保留 `profitSharingResultNotificationDedupWindow`。已删除；`go build ./worker` 通过；`go test ./worker -run 'TestProcessTaskBaofuProfitSharing|TestProcessTaskPaymentDomainOutbox_PublishesProfitSharingResultReady|TestProcessTaskPaymentDomainOutbox_PublishesRiderProfitSharingResultReady|TestWorkerPaymentCommandErrorFields|TestShouldDispatchOrderProfitSharing' -count=1` 通过 |
+| `locallife/worker/order_payment_fact.go:36` | `recoveredOrderPaymentFactResource` / `orderPaymentInt8Value` | 为“已支付但未处理”恢复扫描构造泛用 payment fact 资源快照 JSON，并把 `pgtype.Int8` 转成 JSON 值 | 生产和测试均无调用；支付恢复调度器当前通过 `recordRecoveredDirectPaymentFact` 使用 direct-payment 专用 `recoveredDirectPaymentFactResource`，宝付支付恢复由专用宝付 scheduler 处理。已删除，同时移除只服务该 helper 的 `encoding/json` import；`go build ./worker` 通过；`go test ./worker -run 'TestPaymentRecoverySchedulerRunOnceCreatesRiderDepositPaymentFactApplication|TestPaymentRecoverySchedulerRunOnceCreatesClaimRecoveryPaymentFactApplication|TestProcessTaskPaymentOrderTimeout_DirectRemotePaidRecordsFactInsteadOfClosing' -count=1` 通过 |
+| `locallife/logic/replace_order.go:332` | `markReplaceReservationPaymentOrderFailedForCleanup` | 替换预订支付失败后把支付单置为 failed | 生产和测试均无调用；当前替换预订正向支付创建失败直接返回错误，宝付预订支付终态失败由 payment fact 应用路径处理。已删除；`go build ./logic` 通过；`go test ./logic -run 'TestProcessReplaceOrderRefundWithBaofu|TestCreateReplaceOrderBaofuPayment|TestReplaceReservationOrderWithBaofu|TestReplaceReservationRefundCommandInputUsesBaofuProvider' -count=1` 通过 |
+| `locallife/logic/baofu_account_onboarding_profile.go:168` | `BaofuAccountOnboardingService.getOrCreateFlow` | 为宝付开户 profile 获取或创建开户 flow 的旧 wrapper | 生产和测试均无调用；当前 `Start` 流程先解析 active flow，再直接调用 `getOrCreateFlowWithExisting`，该函数和 `createBaofuAccountOpeningFlow` 仍承载开户草稿复用、模式切换作废和新 flow 创建。已删除；`go build ./logic` 通过；`go test ./logic -run 'TestBaofuAccountOnboardingServiceStart_MerchantEmptyModeContinuesPersonalDraft|TestBaofuAccountOnboardingServiceStart_MerchantOpeningModeChangeVoidsDraftFlow|TestBaofuAccountOnboardingServiceStart_MerchantOpeningModeChangeRejectsProcessingFlow|TestBaofuAccountOnboardingServiceStart_ReplacementFlowReusesPaidVerifyFeeWithoutChargingAgain|TestBaofuAccountOnboardingServiceStartRecoversProviderProgressFlow' -count=1` 通过 |
+| `locallife/logic/payment_order_service.go:273` | `PaymentOrderService.resolveConcurrentOrderPayment` | 并发创建订单支付单冲突时，轮询并复用或关闭已有待支付单 | 生产和测试均无调用；当前创建支付单路径已在创建前读取最新待支付单并按金额/渠道决定复用或关闭。已删除；`go build ./logic` 通过；`go test ./logic -run 'TestPaymentOrderServiceCreatePaymentOrder|TestPaymentOrderServiceCreateReservationPaymentRejectsOfflineOperatorAsCustomerOwner|TestPaymentOrderServiceClosePaymentOrder|TestPaymentOrderServiceGetPaymentOrder|TestPaymentOrderServiceListPaymentOrders' -count=1` 通过 |
+| `locallife/logic/payment_order_service.go:303` | `PaymentOrderService.resolveConcurrentReservationPayment` | 并发创建预订支付单冲突时，按 attach 判断是否复用已有待支付单 | 生产和测试均无调用；当前预订支付复用判断由创建前的 `shouldReuseReservationPendingPayment` 承担，`parsePaymentAttach` 因此仍在用并保留。已删除；同上 build/test 通过 |
+| `locallife/logic/payment_order_service.go:536` | `sleepWithContext` / 支撑重试常量 | 并发支付冲突轮询时的 context-aware sleep 和重试参数 | 只被已删除的并发解析 helper 调用；API 层仍有自己的 `sleepWithContext` 用于骑手押金 legacy out_trade_no 重试，不属于本项。已删除；同上 build/test 通过 |
+| `locallife/logic/payment_order_service.go:547` | `PaymentOrderService.markPaymentOrderFailedForCleanup` | 预支付失败后把支付单标记为 failed 并记录日志 | 生产和测试均无调用；当前宝付创建失败路径会关闭本地 pending 支付单，宝付/预订支付终态失败由 payment fact 应用路径处理。已删除；同上 build/test 通过 |
+| `locallife/logic/refund_service.go:58` | `RefundService.maybeMarkPaymentOrderRefunded` | 累计退款额达到支付金额后，把支付单置为 refunded | 生产和测试均无调用；当前退款结果终态由 worker legacy 路径和 `PaymentFactService.maybeMarkPaymentOrderRefunded` 处理，商户发起退款的同步阶段不直接终结支付单状态。已删除；`go build ./logic` 通过；`go test ./logic -run 'TestCreateRefundOrder|TestPaymentFactServiceApplyExternalPaymentFactApplication_.*Refund' -count=1` 通过 |
+| `locallife/internal/wechatdoc/alignment_helpers.go` | `alignment_helpers.go` 整组旧对齐审计 helper | 微信官方文档 endpoint/字段/枚举/约束对齐审计的未接入实现 | 生产和测试均无调用；`cmd/wechat_doc_extract` 只使用 `ExtractMarkdownFile`，`cmd/doc_audit` 走 `internal/docaudit`，未接入这套 alignment helper。已删除整个文件；`go test ./internal/wechatdoc ./internal/docaudit ./cmd/wechat_doc_extract ./cmd/doc_audit -count=1` 通过 |
+| `locallife/api/rider.go` | `listRidersRequest` / `listRidersResponse` / `Server.listRiders` | 旧版 `/v1/admin/riders` 管理员骑手列表 handler、查询参数和响应 DTO | 真实路由在 `server.go` 注册到 `listPlatformRiders`，旧 handler 生产和测试均无调用。已删除旧 handler，并把 `/v1/admin/riders` Swagger 注释迁移到真实 handler，使文档响应从旧 `listRidersResponse` 对齐为 `platformRiderListResponse`；`PATH="/usr/local/go/bin:$HOME/go/bin:$PATH" make swagger` 通过 |
+| `locallife/api/scan.go` | `buildMerchantStorefrontQRCodeObjectKey` / `buildMerchantStorefrontQRCodeScene` / `wxaCodeEnvVersion` / `Server.ensureMerchantStorefrontQRCode` | 旧版商户店铺小程序码生成和媒体资产保存 helper | 生产、测试、路由和 Swagger 均无调用；真实扫码/二维码入口只有 `/v1/scan/table` 和 `/v1/tables/{id}/qrcode`，桌台二维码生成路径独立保留。已删除店铺码整组 helper 和专属常量；不需要重新生成 Swagger |
+| `locallife/worker/refund_recovery_scheduler.go` | `errRefundRecoverySubMchIDMissing` / `errRefundRecoveryMerchantUnresolved` / `RefundRecoveryScheduler.resolveSubMchID` | 旧版 refund recovery 根据订单或预订反查商户微信/宝付子商户号 | 生产和测试均无调用；当前 stuck refund status recovery 已按 payment channel 分流，直连微信用 `out_refund_no` 调 `DirectPaymentClientInterface.QueryRefund`，宝付用 collect merchant/terminal 配置调 `aggregatepay.QueryRefund`，不再需要按订单/预订解析商户 `sub_mchid`。已删除整组 helper 和专属错误；高风险退款恢复路径需跑 focused worker tests |
+| `locallife/worker/order_profit_sharing_snapshot.go` | `wechatProfitSharingPaymentFeeRateBps` / `estimatedWechatProfitSharingPaymentFee` / `RedisTaskProcessor.ensureOrderProfitSharingSnapshot` | 旧版微信分账快照创建逻辑，按订单、商户、运营商和骑手估算分账并写入 `profit_sharing_orders` | 生产和测试均无调用；当前主业务分账由 `BaofuPaymentRecoveryScheduler.createReadyProfitSharingOrders` 调 `BaofuProfitSharingService.CreatePendingOrder` 创建宝付分账单，并由 `ProcessTaskBaofuProfitSharing` 派发命令。旧 helper 会创建 `Provider=wechat` 的历史快照，已退役。已删除整个文件；高风险分账路径需跑 focused worker tests |
+| `locallife/api/recovery_dispute.go:1805` | `deriveAutomaticRecoveryDisputeResolution` | API 包内旧版追偿争议自动复核 wrapper，把 logic 层判定结果转成 API 私有结构 | 生产无调用，API 自动复核路径和 worker 重试路径均已直接使用 `logic.ResolveRecoveryDisputeAutomatically` / `logic.EvaluateAutomaticRecoveryDisputeResolution`。已删除 API wrapper，并把原本直接测 wrapper 的规则覆盖迁到 `logic/recovery_dispute_auto_resolution_test.go`；`go test ./logic -run 'Test(Evaluate|Derive)AutomaticRecoveryDisputeResolution' -count=1` 和 `go test ./api -run '^$' -count=1` 通过 |
+| `locallife/baofu/client.go:454` | `publicBusinessFailure` | 旧版宝付 public envelope 通用业务失败解析器，读取 `resultCode` / `errCode` / `errMsg` | 生产无调用；当前宝付公共 envelope 只负责 `returnCode`、签名和 `dataContent` 解包，聚合支付与商户报备的业务失败分别由 `aggregatepay` / `merchantreport` client 按各自契约解析。已删除旧 helper 和直接测试，并把 `SUCCESS + errCode`、未知 `resultCode` 的保护迁到现用 client 测试；`go test ./baofu ./baofu/aggregatepay ./baofu/merchantreport -count=1` 和 `make check-baofu-contract` 通过 |
+| `locallife/db/sqlc/tx_claim_behavior.go:135` | `behaviorDecisionScoreBreakdown` / `behaviorDecisionScoreDetail` / `behaviorDecisionSignal` | 索赔行为决策 `score_breakdown` JSON 的测试解码结构 | 生产事务边界始终以 `[]byte` 保存 `score_breakdown`，默认写入 `{"version":"claims_rules_v1"}`，外部 adjudicator 路径写入已序列化 JSON；这三个结构只被 `tx_claim_behavior_test.go` 用来解码断言。已从生产事务文件移到 `_test.go`；`go test ./db/sqlc -run 'TestCreateClaimWithBehaviorTx_' -count=1` 和 `go test ./db/sqlc -run '^$' -count=1` 通过 |
+| `locallife/logic/promotion_engine.go:269` | `suggestBestVoucher` | 旧版代金券推荐 wrapper：从 DB 查询可用券后调用 `suggestBestVoucherFromList` | 生产无调用；当前 `PromotionEngine.CalculateFinalPrice` 已先调用 `listAvailableVouchers` 取得同一批可用券，再直接用 `suggestBestVoucherFromList` 生成推荐和券试算。已删除 wrapper，并把测试改为覆盖真实核心选择函数；`go test ./logic -run 'TestSuggestBestVoucherFromList|TestCalculateFinalPrice' -count=1` 和 `go test ./logic -run '^$' -count=1` 通过 |
+| `locallife/worker/baofu_alert_payloads.go` | `newBaofuPaymentCallbackMissingAlert` / `newBaofuProfitSharingProcessingSLAAlert` / `newBaofuWithdrawalProcessingSLAAlert` / `newBaofuFailedFactAlert` / `newBaofuFeeLedgerMismatchAlert` | 未接入的宝付支付回调、分账、提现、fact 和手续费对账告警 payload 构造函数 | 生产无调用，未见 scheduler/worker/API 持久化入口；当前真实平台告警路径直接调用 `SavePlatformAlertEvent`，退款/超时告警仍使用 `refundOrderAlertExtra` / `paymentOrderAlertExtra` 等通用 helper。已删除整组文件，并移除只服务这组未接入 helper 的 `baofuReconciliationAlertExtra` / `isSensitiveBaofuAlertField` 和测试；`go test ./worker -run 'TestRefundOrderAlertExtra_IncludesCommonIdentifiers' -count=1`、`go test ./worker -run '^$' -count=1`、`go build ./worker` 通过 |
+| `locallife/worker/payment_channel_boundary.go:11` | `paymentOrderRequiresProfitSharing` / `paymentOrderUsesMainBusinessRefundChannel` | worker 包内支付单分账和宝付主业务退款通道判断 wrapper | 生产无调用；当前生产路径直接使用 `db.PaymentOrderRequiresProfitSharing` 或直接检查 `PaymentChannel == baofu_aggregate`，同文件仍保留真实退款路径使用的 `refundTypeForPaymentOrder` 和 `mainBusinessRefundChannelDriftError`。已删除两个 wrapper 和对应测试；`go test ./worker -run 'TestRefundTypeForPaymentOrder' -count=1`、`go test ./worker -run '^$' -count=1`、`go build ./worker` 通过 |
+| `locallife/worker/task_merchant_application_ocr.go:505` | `parseFoodPermitOCRText` | 食品经营许可证 OCR 旧版直接解析入口，调用 internal parser 并控制缺失公司名日志 | 生产无调用；当前商户食品经营许可证 OCR 成功路径先写入 normalized 结构化字段，仅在 `RawText` 存在时通过 `parseFoodPermitOCRTextFallback` 补齐缺失字段且不覆盖结构化结果。已删除旧 wrapper 和随之失效的 `logFailure` 分支，测试迁到生产 fallback 语义；`go test ./worker -run 'Test(ParseFoodPermitOCRTextFallback|ProcessTaskMerchantApplicationFoodPermitOCR)' -count=1`、`go test ./worker -run '^$' -count=1`、`go build ./worker` 通过 |
+| `locallife/worker/task_process_payment.go:84` | `shouldDispatchOrderProfitSharing` | 旧版支付成功后订单分账派发判断，按订单类型和预订关联返回是否派发 | 生产无调用；当前宝付分账不在支付成功 worker 中直接派发，而由 `BaofuPaymentRecoveryScheduler.createReadyProfitSharingOrders` 扫描 `ListBaofuOrdersReadyForProfitSharing` 后按 `PaymentChannel=baofu_aggregate`、`RequiresProfitSharing=true`、`paid` 状态、业务类型和订单/预订完成状态创建分账单，再派发 `ProcessTaskBaofuProfitSharing`。旧 helper 的 `takeout` 规则也不再代表当前生产边界。已删除 helper 和只覆盖它的测试文件；`go test ./worker -run 'TestBaofuPaymentRecoveryScheduler|TestProcessTaskBaofuProfitSharing' -count=1`、`go test ./worker -run '^$' -count=1`、`go build ./worker` 通过 |
+| `locallife/worker/task_process_payment.go:1551` | `workerPaymentCommandErrorFields` | 旧版 worker 支付命令错误字段 mapper，把微信或宝付错误转为 command 的 `last_error_code/message` | 生产无调用；当前宝付退款命令记录由 `recordWorkerBaofuRefundCommand` 直接从 `RefundResult` 或 `baofu.ProviderError` 填充错误码和经过 `BaofuCommandMessage` 归一化的错误说明，`workerStringPtrIfNotEmpty` 仍被真实命令记录使用。已删除旧 mapper 和只测它的测试文件，并移除随之失效的 `wechat` import；`go test ./worker -run 'TestProcessTaskInitiateRefund_(OrderRefundUsesProvidedOutRefundNo|OrderRefundBaofuOrderExistMarksProcessingForQueryRecovery|ReservationAddonRefund_UsesProvidedOutRefundNo)' -count=1`、`go test ./worker -run '^$' -count=1`、`go build ./worker` 通过 |
+| `locallife/api/merchant_finance.go:877` / `:898` | `SA4006` | 商户结算列表接口统计带状态/不带状态筛选的总数 | 已修复：两个 `CountMerchantSettlements...` 调用原先在分支内用 `:=` shadow 了外层 `err`，导致 count 查询失败后仍可能继续返回 200；现在各分支内立即检查 count 错误并走 `internalError`。新增失败回归覆盖带状态和不带状态两条 count 错误路径；`go test ./api -run 'TestListMerchantSettlementsReturnsInternalErrorWhenCountFails' -count=1` 先红后绿，`go test ./api -run 'TestMerchantFinanceRoutesHonorSelectedStaffMerchant|TestListMerchantSettlementsReturnsInternalErrorWhenCountFails' -count=1`、`go test ./api -run '^$' -count=1` 通过；本机无 `staticcheck` 命令，未能直接重跑 SA4006 |
+
+## 可优先清理候选
+
+| 位置 | 符号 | 作用 | 核对结论 |
+| --- | --- | --- | --- |
+
+## 整组遗留候选
+
+暂无。已处理的整组项见“已清理”。
+
+## 未注册 handler / 未接入入口候选
+
+| 位置 | 符号 | 作用 | 核对结论 |
+| --- | --- | --- | --- |
+暂无。已处理的未接入口项见“已清理”。
+
+## Swagger-only / 文档契约用途
+
+| 位置 | 符号 | 作用 | 核对结论 |
+| --- | --- | --- | --- |
+| `locallife/api/merchant_application_ocr_correction.go:39` | `patchMerchantDocumentOCRFieldsRequest` | Swagger 文档里的 OCR 更正统一请求体 | 已复核并保留：真实路由 `/v1/merchant/application/documents/{document_type}/ocr-fields` 进入 `patchMerchantApplicationDocumentOCRFields` 后按 `business_license` / `food_permit` 分别绑定具体 DTO；该结构只作为多态请求体的 Swagger schema，被注释和生成文档引用，删除会丢失 API 文档契约 |
+
+## 测试仍在引用，先别直接删
+
+| 位置 | 符号 | 作用 | 核对结论 |
+| --- | --- | --- | --- |
+暂无。
+
+## 暂不作为死代码
+
+| 位置 | 符号 | 作用 | 核对结论 |
+| --- | --- | --- | --- |
+暂无。已处理的高风险 worker 遗留项见“已清理”。
+
+## 代码块级信号
+
+| 位置 | 信号 | 作用 | 核对结论 |
+| --- | --- | --- | --- |
+暂无。
+
+## 建议顺序
+
+1. 纯孤立 helper、未接入口候选和已确认退役的高风险 worker 遗留项已清理。
+2. 对 Swagger-only 的 OCR 更正请求体，保持为文档契约用途，不作为删除项。
+3. 对“测试仍在引用”的项，先决定测试是否还代表有效业务规则；若规则已经迁移，应同步删除或改写测试。
+4. `merchant_finance.go` 的 `SA4006` 已按局部 bugfix 修复：保留查询/响应契约，只修 count 错误传播。

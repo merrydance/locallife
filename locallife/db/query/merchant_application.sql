@@ -42,12 +42,39 @@ WHERE id = $1 AND status = 'draft'
 RETURNING *;
 
 -- name: UpdateMerchantApplicationBusinessLicense :one
--- 更新营业执照信息（图片URL和OCR结果）
+-- 更新营业执照信息（图片URL、人工修正字段和OCR结果）
 UPDATE merchant_applications
 SET
   business_license_media_asset_id = COALESCE(sqlc.narg(business_license_media_asset_id), business_license_media_asset_id),
   business_license_number = COALESCE(sqlc.narg(business_license_number), business_license_number),
   business_scope = COALESCE(sqlc.narg(business_scope), business_scope),
+  legal_person_name = COALESCE(sqlc.narg(legal_person_name), legal_person_name),
+  merchant_name = CASE
+    WHEN COALESCE(NULLIF(btrim(merchant_name), ''), '') = '' THEN COALESCE(sqlc.narg(merchant_name), merchant_name)
+    ELSE merchant_name
+  END,
+  business_license_ocr = COALESCE(sqlc.narg(business_license_ocr), business_license_ocr),
+  updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING *;
+
+-- name: UpdateMerchantApplicationBusinessLicenseOCRResult :one
+-- 异步OCR回写营业执照结果；只在结构化字段为空时回填，避免晚到OCR覆盖人工修正
+UPDATE merchant_applications
+SET
+  business_license_media_asset_id = COALESCE(sqlc.narg(business_license_media_asset_id), business_license_media_asset_id),
+  business_license_number = CASE
+    WHEN COALESCE(NULLIF(btrim(business_license_number), ''), '') = '' THEN COALESCE(sqlc.narg(business_license_number), business_license_number)
+    ELSE business_license_number
+  END,
+  business_scope = CASE
+    WHEN COALESCE(NULLIF(btrim(business_scope), ''), '') = '' THEN COALESCE(sqlc.narg(business_scope), business_scope)
+    ELSE business_scope
+  END,
+  legal_person_name = CASE
+    WHEN COALESCE(NULLIF(btrim(legal_person_name), ''), '') = '' THEN COALESCE(sqlc.narg(legal_person_name), legal_person_name)
+    ELSE legal_person_name
+  END,
   merchant_name = CASE
     WHEN COALESCE(NULLIF(btrim(merchant_name), ''), '') = '' THEN COALESCE(sqlc.narg(merchant_name), merchant_name)
     ELSE merchant_name
@@ -88,12 +115,30 @@ WHERE id = $1 AND status = 'draft'
 RETURNING *;
 
 -- name: UpdateMerchantApplicationIDCardFront :one
--- 更新身份证正面信息（图片URL和OCR结果）
+-- 更新身份证正面信息（图片URL、人工修正字段和OCR结果）
 UPDATE merchant_applications
 SET
   id_card_front_media_asset_id = COALESCE(sqlc.narg(id_card_front_media_asset_id), id_card_front_media_asset_id),
   legal_person_name = COALESCE(sqlc.narg(legal_person_name), legal_person_name),
   legal_person_id_number = COALESCE(sqlc.narg(legal_person_id_number), legal_person_id_number),
+  id_card_front_ocr = COALESCE(sqlc.narg(id_card_front_ocr), id_card_front_ocr),
+  updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING *;
+
+-- name: UpdateMerchantApplicationIDCardFrontOCRResult :one
+-- 异步OCR回写身份证正面结果；只在结构化字段为空时回填，避免晚到OCR覆盖人工修正
+UPDATE merchant_applications
+SET
+  id_card_front_media_asset_id = COALESCE(sqlc.narg(id_card_front_media_asset_id), id_card_front_media_asset_id),
+  legal_person_name = CASE
+    WHEN COALESCE(NULLIF(btrim(legal_person_name), ''), '') = '' THEN COALESCE(sqlc.narg(legal_person_name), legal_person_name)
+    ELSE legal_person_name
+  END,
+  legal_person_id_number = CASE
+    WHEN COALESCE(NULLIF(btrim(legal_person_id_number), ''), '') = '' THEN COALESCE(sqlc.narg(legal_person_id_number), legal_person_id_number)
+    ELSE legal_person_id_number
+  END,
   id_card_front_ocr = COALESCE(sqlc.narg(id_card_front_ocr), id_card_front_ocr),
   updated_at = now()
 WHERE id = $1 AND status = 'draft'

@@ -1,0 +1,6 @@
+DROP TABLE IF EXISTS merchant_subject_profile_versions;
+DROP INDEX IF EXISTS merchant_subject_profiles_merchant_uidx;
+DROP INDEX IF EXISTS idx_merchant_subject_profiles_legal_person_id;
+DROP INDEX IF EXISTS idx_merchant_subject_profiles_license_number;
+DROP INDEX IF EXISTS idx_merchant_subject_profiles_user_updated;
+DROP TABLE IF EXISTS merchant_subject_profiles;

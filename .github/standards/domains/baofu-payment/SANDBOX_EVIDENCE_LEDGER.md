@@ -10,6 +10,15 @@
 - 每次联调必须同时记录：请求是否命中测试地址、是否收到/解析回包、是否落本地 command/fact、查询是否能补偿回调缺失、前端/用户可见错误是否为安全中文语义。
 - 联调失败也要记录一行，`Result`/`Observed Status` 标记失败类别，`Notes` 写下一步处理，不写 raw upstream message。
 
+## C4 Claim Gate
+
+- 本地 collector 输出的 JSON 或候选 ledger row 只证明本地 DB 行收敛；不能单独把 payment、share、refund、withdrawal 或 callback 升级为 C4。
+- payment/share/refund 的正向 C4 至少要同时引用真实 provider 交易或宝付批准真实交易环境、LocalLife 业务行、`external_payment_facts`、`external_payment_fact_applications`、相关 command row、观察到的 callback ACK 或 query recovery 结果。
+- withdrawal 的正向 C4 至少要同时引用真实或宝付批准的小额资金动作、授权人和金额上限、`baofu_withdrawal_orders`、`external_payment_facts`、create-withdraw command row、观察到的 callback ACK 或 query recovery 结果。
+- fake-order、synthetic order、standalone smoke、parser test、shape-only sandbox probe、provider error classification 只能标为负向或形态证据；不得写成真实支付、真实分账、真实退款或真实提现成功。
+- 若 evidence row 来自 collector 的 `-ledger-row` 输出，`Notes` 必须写明原始运行背景：环境、操作人、是否真实资金动作、相关业务单、脱敏 provider 标识和本地 row id 来源。
+- 若 evidence row 标记为生产环境，必须先让填好的目标环境 release readiness evidence 通过 `make check-release-readiness-target-evidence evidence=...`，并在 `locallife/scripts/baofu_provider_evidence_gate.sh --ledger-row --ledger-env production` 中用 `--release-target-evidence <evidence.md>` 引用同一文件；静态 preflight、dry-run、模板 evidence 或本地 collector 输出都不能单独关闭生产 C4/production-readiness 证据。
+
 ## Ready For Next Sandbox Test
 
 - [x] 用安全测试身份资料完成一次 `open_personal` 或机构开户正向测试，并通过查询拿到 `contractNo`/`sharing_mer_id` 脱敏证据。

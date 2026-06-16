@@ -53,27 +53,6 @@ func NewRefundService(
 	}
 }
 
-// maybeMarkPaymentOrderRefunded 仅在累计退款额 >= 支付金额时才将支付单标记为 refunded，
-// 避免部分退款错误终结支付单。
-func (s *RefundService) maybeMarkPaymentOrderRefunded(ctx context.Context, paymentOrderID int64, paymentAmount int64) {
-	totalSuccessfulRefunded, err := s.store.GetTotalSuccessfulRefundedByPaymentOrder(ctx, paymentOrderID)
-	if err != nil {
-		log.Error().Err(err).Int64("payment_order_id", paymentOrderID).Msg("failed to get total successful refunded amount")
-		return
-	}
-	if totalSuccessfulRefunded >= paymentAmount {
-		if _, dbErr := s.store.UpdatePaymentOrderToRefunded(ctx, paymentOrderID); dbErr != nil {
-			log.Error().Err(dbErr).Int64("payment_order_id", paymentOrderID).Msg("failed to mark payment order as refunded")
-		}
-	} else {
-		log.Info().
-			Int64("payment_order_id", paymentOrderID).
-			Int64("total_successful_refunded", totalSuccessfulRefunded).
-			Int64("payment_amount", paymentAmount).
-			Msg("partial refund: payment order not yet fully refunded")
-	}
-}
-
 func (s *RefundService) CreateRefundOrder(ctx context.Context, input CreateRefundOrderInput) (CreateRefundOrderResult, error) {
 	idempotencyKey := strings.TrimSpace(input.IdempotencyKey)
 	if idempotencyKey == "" {

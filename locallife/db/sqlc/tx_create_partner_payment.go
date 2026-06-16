@@ -222,9 +222,5 @@ func (store *SQLStore) CreatePartnerPaymentTx(ctx context.Context, arg CreatePar
 var ErrOrderPendingPaymentConflict = errors.New("order already has a pending payment order")
 
 func IsPartnerPaymentRequestError(err error) (int, bool) {
-	var re *requestError
-	if errors.As(err, &re) {
-		return re.statusCode, true
-	}
-	return 0, false
+	return IsTxRequestError(err)
 }

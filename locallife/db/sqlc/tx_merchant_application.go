@@ -23,24 +23,27 @@ type onboardingReviewRunSummary struct {
 
 // ApproveMerchantApplicationTxParams contains input parameters for approving merchant application
 type ApproveMerchantApplicationTxParams struct {
-	ApplicationID     int64
-	UserID            int64
-	MerchantName      string
-	Phone             string
-	Address           string
-	Latitude          pgtype.Numeric
-	Longitude         pgtype.Numeric
-	RegionID          int64
-	AppData           []byte // JSON 格式的申请数据
-	StorefrontImages  []byte
-	EnvironmentImages []byte
+	ApplicationID                 int64
+	UserID                        int64
+	MerchantName                  string
+	Phone                         string
+	Address                       string
+	Latitude                      pgtype.Numeric
+	Longitude                     pgtype.Numeric
+	RegionID                      int64
+	AppData                       []byte // JSON 格式的申请数据
+	StorefrontImages              []byte
+	EnvironmentImages             []byte
+	SubjectProfile                *UpsertMerchantSubjectProfileParams
+	SubjectProfileVersionSnapshot []byte
 }
 
 // ApproveMerchantApplicationTxResult contains the result of approval transaction
 type ApproveMerchantApplicationTxResult struct {
-	Application MerchantApplication
-	Merchant    Merchant
-	UserRole    UserRole
+	Application    MerchantApplication
+	Merchant       Merchant
+	UserRole       UserRole
+	SubjectProfile MerchantSubjectProfile
 }
 
 // ApproveMerchantApplicationTx approves a merchant application, creates merchant record,
@@ -90,14 +93,15 @@ func (store *SQLStore) ApproveMerchantApplicationTx(ctx context.Context, arg App
 		} else {
 			// 更新现有商户
 			result.Merchant, err = q.UpdateMerchant(ctx, UpdateMerchantParams{
-				ID:        existingMerchant.ID,
-				Version:   existingMerchant.Version,
-				Name:      pgtype.Text{String: arg.MerchantName, Valid: true},
-				Phone:     pgtype.Text{String: arg.Phone, Valid: true},
-				Address:   pgtype.Text{String: arg.Address, Valid: true},
-				Latitude:  arg.Latitude,
-				Longitude: arg.Longitude,
-				RegionID:  pgtype.Int8{Int64: arg.RegionID, Valid: true},
+				ID:              existingMerchant.ID,
+				Version:         existingMerchant.Version,
+				Name:            pgtype.Text{String: arg.MerchantName, Valid: true},
+				Phone:           pgtype.Text{String: arg.Phone, Valid: true},
+				Address:         pgtype.Text{String: arg.Address, Valid: true},
+				Latitude:        arg.Latitude,
+				Longitude:       arg.Longitude,
+				RegionID:        pgtype.Int8{Int64: arg.RegionID, Valid: true},
+				ApplicationData: arg.AppData,
 			})
 			if err == nil {
 				// 仅在非 active/suspended 状态下推进到 approved，避免降级
@@ -118,6 +122,41 @@ func (store *SQLStore) ApproveMerchantApplicationTx(ctx context.Context, arg App
 		}
 		if err != nil {
 			return fmt.Errorf("create/update merchant: %w", err)
+		}
+
+		if arg.SubjectProfile != nil {
+			if arg.SubjectProfile.MerchantApplicationID != arg.ApplicationID {
+				return fmt.Errorf("merchant subject profile application mismatch: profile application %d, approval application %d", arg.SubjectProfile.MerchantApplicationID, arg.ApplicationID)
+			}
+			if arg.SubjectProfile.UserID != arg.UserID {
+				return fmt.Errorf("merchant subject profile user mismatch: profile user %d, approval user %d", arg.SubjectProfile.UserID, arg.UserID)
+			}
+			profileArg := *arg.SubjectProfile
+			profileArg.MerchantID = pgtype.Int8{Int64: result.Merchant.ID, Valid: true}
+			if _, err := q.DetachMerchantSubjectProfileMerchantFromOtherApplications(ctx, DetachMerchantSubjectProfileMerchantFromOtherApplicationsParams{
+				MerchantID:            profileArg.MerchantID,
+				MerchantApplicationID: profileArg.MerchantApplicationID,
+			}); err != nil {
+				return fmt.Errorf("detach previous merchant subject profile: %w", err)
+			}
+			result.SubjectProfile, err = q.UpsertMerchantSubjectProfile(ctx, profileArg)
+			if err != nil {
+				return fmt.Errorf("upsert merchant subject profile: %w", err)
+			}
+			versionSnapshot := arg.SubjectProfileVersionSnapshot
+			if len(versionSnapshot) == 0 {
+				versionSnapshot = []byte(`{}`)
+			}
+			if _, err := q.CreateMerchantSubjectProfileVersion(ctx, CreateMerchantSubjectProfileVersionParams{
+				ProfileID:             result.SubjectProfile.ID,
+				MerchantApplicationID: result.SubjectProfile.MerchantApplicationID,
+				MerchantID:            result.SubjectProfile.MerchantID,
+				UserID:                result.SubjectProfile.UserID,
+				Version:               result.SubjectProfile.Version,
+				Snapshot:              versionSnapshot,
+			}); err != nil && !errors.Is(err, ErrRecordNotFound) {
+				return fmt.Errorf("create merchant subject profile version: %w", err)
+			}
 		}
 
 		normalizedMerchantName := normalizeWantedMerchantNameForDB(result.Merchant.Name)

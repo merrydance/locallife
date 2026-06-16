@@ -156,7 +156,11 @@ func NewRedisTaskProcessor(
 		ocrService:          ocrService,
 		onboardingReviewSvc: onboardingReviewSvc,
 		credentialGovSvc:    credentialGovSvc,
-		merchantReviewSvc:   logic.NewMerchantOnboardingReviewService(store, onboardingReviewSvc, credentialGovSvc),
+		merchantReviewSvc: logic.NewMerchantOnboardingReviewService(
+			store,
+			onboardingReviewSvc,
+			credentialGovSvc,
+		).WithSubjectProfileService(logic.NewMerchantSubjectProfileService(store)),
 		riderReviewSvc:      logic.NewRiderOnboardingReviewService(store, onboardingReviewSvc, credentialGovSvc),
 		cloudPrinterManager: cloudPrinterManager,
 		printerClient:       printerClient,
@@ -249,12 +253,16 @@ func NewTestTaskProcessor(
 		ocrService:          ocrService,
 		onboardingReviewSvc: onboardingReviewSvc,
 		credentialGovSvc:    credentialGovSvc,
-		merchantReviewSvc:   logic.NewMerchantOnboardingReviewService(store, onboardingReviewSvc, credentialGovSvc),
-		riderReviewSvc:      logic.NewRiderOnboardingReviewService(store, onboardingReviewSvc, credentialGovSvc),
-		printerClient:       nil,
-		pubSubPublisher:     websocket.NoopPublisher{},
-		roleCache:           make(map[int64]cachedUserRoles),
-		roleCacheTTL:        1 * time.Minute,
+		merchantReviewSvc: logic.NewMerchantOnboardingReviewService(
+			store,
+			onboardingReviewSvc,
+			credentialGovSvc,
+		).WithSubjectProfileService(logic.NewMerchantSubjectProfileService(store)),
+		riderReviewSvc:  logic.NewRiderOnboardingReviewService(store, onboardingReviewSvc, credentialGovSvc),
+		printerClient:   nil,
+		pubSubPublisher: websocket.NoopPublisher{},
+		roleCache:       make(map[int64]cachedUserRoles),
+		roleCacheTTL:    1 * time.Minute,
 	}
 	for _, client := range paymentClient {
 		if client != nil {

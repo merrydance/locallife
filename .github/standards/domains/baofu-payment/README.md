@@ -65,7 +65,7 @@ Also run the relevant regeneration commands when source files require them:
 - `make swagger` for route or Swagger annotation changes.
 - `make check-generated` before closing SQL/API contract work that should leave generated artifacts stable.
 
-For C4 claims, update `SANDBOX_EVIDENCE_LEDGER.md` with masked request/response/callback/query evidence. Never claim a real payment, share, refund, withdrawal, or callback path is C4 from parser tests or sandbox shape-only evidence.
+For C4 claims, update `SANDBOX_EVIDENCE_LEDGER.md` with masked request/response/callback/query evidence. Never claim a real payment, share, refund, withdrawal, or callback path is C4 from parser tests or sandbox shape-only evidence. Production ledger rows must also pass `make check-release-readiness-target-evidence evidence=...` and pass the same filled target-environment evidence file to `scripts/baofu_provider_evidence_gate.sh --release-target-evidence`.
 
 ## Official Source Policy
 

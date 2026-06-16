@@ -140,6 +140,13 @@ Domain modules:
 - `.github/standards/domains/wechat-payment/*`
 - `.github/standards/domains/baofu-payment/*`
 
+Codegraph artifacts:
+
+- `artifacts/codegraph/README.md`: durable workflow for using CodeGraph as an
+  auxiliary discovery and drift-check tool while keeping reviewed
+  `*.slice.md` and `*.edges.json` artifacts as the LocalLife source of business
+  semantics.
+
 ## Recommended Read Order
 
 1. Start with `copilot-instructions.md`.

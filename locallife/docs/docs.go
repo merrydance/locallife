@@ -590,7 +590,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "管理员或运营商分页获取骑手列表，支持状态筛选",
+                "description": "管理员分页获取平台骑手列表，返回平台管理页使用的骑手卡片信息",
                 "consumes": [
                     "application/json"
                 ],
@@ -598,21 +598,10 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "骑手管理"
+                    "平台实体管理"
                 ],
-                "summary": "获取骑手列表（管理员）",
+                "summary": "获取平台骑手列表",
                 "parameters": [
-                    {
-                        "enum": [
-                            "approved",
-                            "active",
-                            "suspended"
-                        ],
-                        "type": "string",
-                        "description": "筛选状态",
-                        "name": "status",
-                        "in": "query"
-                    },
                     {
                         "minimum": 1,
                         "type": "integer",
@@ -635,7 +624,7 @@ const docTemplate = `{
                     "200": {
                         "description": "骑手列表",
                         "schema": {
-                            "$ref": "#/definitions/api.listRidersResponse"
+                            "$ref": "#/definitions/api.platformRiderListResponse"
                         }
                     },
                     "400": {
@@ -4511,7 +4500,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "商家手动结束就餐会话，关闭账单组并释放桌位。",
+                "description": "商家手动结束就餐会话，或顾客在堂食订单已支付后关闭自己的就餐会话；关闭账单组并释放桌位。",
                 "consumes": [
                     "application/json"
                 ],
@@ -4558,6 +4547,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "找不到就餐会话",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "订单未支付或会话状态冲突",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -21252,6 +21247,12 @@ const docTemplate = `{
                 "summary": "创建订单",
                 "parameters": [
                     {
+                        "type": "string",
+                        "description": "可选幂等键，同一次创建订单重试建议复用同一个值",
+                        "name": "Idempotency-Key",
+                        "in": "header"
+                    },
+                    {
                         "description": "订单创建参数",
                         "name": "request",
                         "in": "body",
@@ -21262,7 +21263,7 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "200": {
+                    "201": {
                         "description": "创建成功",
                         "schema": {
                             "$ref": "#/definitions/api.orderResponse"
@@ -21288,6 +21289,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "商户/地址/桌台/菜品不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "重复提交或订单请求状态已变化",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -38482,26 +38489,6 @@ const docTemplate = `{
                 }
             }
         },
-        "api.listRidersResponse": {
-            "type": "object",
-            "properties": {
-                "page_id": {
-                    "type": "integer"
-                },
-                "page_size": {
-                    "type": "integer"
-                },
-                "riders": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/api.riderResponse"
-                    }
-                },
-                "total": {
-                    "type": "integer"
-                }
-            }
-        },
         "api.listRoomsForCustomerResponse": {
             "type": "object",
             "properties": {
@@ -42416,6 +42403,55 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "total_orders": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.platformRiderCard": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "type": "boolean"
+                },
+                "complaint_count": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "region_id": {
+                    "type": "integer"
+                },
+                "region_name": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.platformRiderListResponse": {
+            "type": "object",
+            "properties": {
+                "has_more": {
+                    "type": "boolean"
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "riders": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.platformRiderCard"
+                    }
+                },
+                "total": {
                     "type": "integer"
                 }
             }

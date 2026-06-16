@@ -197,6 +197,26 @@ func decodeGraphHits(t *testing.T, raw []byte) behaviorDecisionGraphHits {
 	return payload
 }
 
+type behaviorDecisionScoreBreakdown struct {
+	Version           string                      `json:"version"`
+	UserRisk          behaviorDecisionScoreDetail `json:"user_risk"`
+	MerchantLiability behaviorDecisionScoreDetail `json:"merchant_liability"`
+	RiderLiability    behaviorDecisionScoreDetail `json:"rider_liability"`
+	Confidence        behaviorDecisionScoreDetail `json:"confidence"`
+}
+
+type behaviorDecisionScoreDetail struct {
+	Score   int32                    `json:"score"`
+	Signals []behaviorDecisionSignal `json:"signals,omitempty"`
+}
+
+type behaviorDecisionSignal struct {
+	Code   string `json:"code"`
+	Weight int32  `json:"weight"`
+	Count  int32  `json:"count,omitempty"`
+	Active bool   `json:"active"`
+}
+
 func decodeScoreBreakdown(t *testing.T, raw []byte) behaviorDecisionScoreBreakdown {
 	t.Helper()
 

@@ -75,29 +75,6 @@ func (server *Server) sendPaymentSuccessNotification(ctx context.Context, paymen
 	}
 }
 
-func (server *Server) enqueueProfitSharingPaymentFactApplication(ctx context.Context, application *db.ExternalPaymentFactApplication) {
-	if application == nil || server.taskDistributor == nil {
-		return
-	}
-	distributor, ok := server.taskDistributor.(worker.PaymentFactApplicationTaskDistributor)
-	if !ok {
-		return
-	}
-	if err := distributor.DistributeTaskProcessPaymentFactApplication(
-		ctx,
-		&worker.PaymentFactApplicationPayload{ApplicationID: application.ID},
-		asynq.MaxRetry(5),
-		asynq.Queue(worker.QueueCritical),
-		asynq.Unique(paymentFactApplicationTaskUnique),
-	); err != nil {
-		log.Warn().Err(err).
-			Int64("payment_fact_application_id", application.ID).
-			Int64("payment_fact_id", application.FactID).
-			Int64("profit_sharing_order_id", application.BusinessObjectID).
-			Msg("enqueue profit sharing payment fact application from callback failed; scheduler will retry")
-	}
-}
-
 func (server *Server) enqueueRiderDepositRefundPaymentFactApplication(ctx context.Context, application *db.ExternalPaymentFactApplication) {
 	if application == nil || server.taskDistributor == nil {
 		return
@@ -559,24 +536,6 @@ func (server *Server) releaseNotificationWithReason(ctx context.Context, id, cal
 			},
 		})
 	}
-}
-
-func (server *Server) requireTaskDistributorForNotification(ctx *gin.Context, notificationID, callbackType, responseMessage string) bool {
-	if server.taskDistributor != nil {
-		return true
-	}
-
-	paymentCallbackFailuresTotal.WithLabelValues(callbackType, "task_distributor_missing").Inc()
-	log.Error().
-		Str("notification_id", notificationID).
-		Str("callback_type", callbackType).
-		Msg("callback cannot be acknowledged because task distributor is not configured")
-	server.releaseNotification(ctx, notificationID, callbackType)
-	ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
-		Code:    "FAIL",
-		Message: responseMessage,
-	})
-	return false
 }
 
 // handleMerchantTransferNotify 处理商家转账回调通知。

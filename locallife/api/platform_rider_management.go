@@ -70,6 +70,21 @@ func platformRiderAgeAndGender(idCardOCR []byte) (*int32, string, error) {
 	return age, strings.TrimSpace(raw.Gender), nil
 }
 
+// listPlatformRiders godoc
+// @Summary 获取平台骑手列表
+// @Description 管理员分页获取平台骑手列表，返回平台管理页使用的骑手卡片信息
+// @Tags 平台实体管理
+// @Accept json
+// @Produce json
+// @Param page query int false "页码" minimum(1) default(1)
+// @Param limit query int false "每页数量" minimum(1) maximum(100) default(20)
+// @Success 200 {object} platformRiderListResponse "骑手列表"
+// @Failure 400 {object} ErrorResponse "参数错误"
+// @Failure 401 {object} ErrorResponse "未登录"
+// @Failure 403 {object} ErrorResponse "无权限"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/admin/riders [get]
+// @Security BearerAuth
 func (server *Server) listPlatformRiders(ctx *gin.Context) {
 	var req platformEntityListRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {

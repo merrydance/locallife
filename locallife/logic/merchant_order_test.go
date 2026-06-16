@@ -156,6 +156,52 @@ func TestAcceptMerchantOrder(t *testing.T) {
 				require.Equal(t, input.OrderID, result.PoolItem.OrderID)
 			},
 		},
+		{
+			name: "ConflictAfterRead",
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetOrderForUpdate(gomock.Any(), input.OrderID).
+					Times(1).
+					Return(baseOrder, nil)
+				store.EXPECT().
+					GetMerchantProfile(gomock.Any(), input.MerchantID).
+					Times(1).
+					Return(db.GetMerchantProfileRow{MerchantID: input.MerchantID, IsTakeoutSuspended: false}, nil)
+				store.EXPECT().
+					UpdateOrderStatusTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.UpdateOrderStatusTxResult{}, db.ErrRecordNotFound)
+			},
+			check: func(t *testing.T, _ MerchantOrderUpdateResult, err error) {
+				reqErr := assertRequestError(t, err)
+				require.Equal(t, 409, reqErr.Status)
+				require.Equal(t, "order status changed", reqErr.Err.Error())
+			},
+		},
+		{
+			name: "TakeoutConflictAfterRead",
+			buildStubs: func(store *mockdb.MockStore) {
+				order := baseOrder
+				order.OrderType = db.OrderTypeTakeout
+				store.EXPECT().
+					GetOrderForUpdate(gomock.Any(), input.OrderID).
+					Times(1).
+					Return(order, nil)
+				store.EXPECT().
+					GetMerchantProfile(gomock.Any(), input.MerchantID).
+					Times(1).
+					Return(db.GetMerchantProfileRow{MerchantID: input.MerchantID, IsTakeoutSuspended: false}, nil)
+				store.EXPECT().
+					AcceptTakeoutOrderTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.AcceptTakeoutOrderTxResult{}, db.ErrRecordNotFound)
+			},
+			check: func(t *testing.T, _ MerchantOrderUpdateResult, err error) {
+				reqErr := assertRequestError(t, err)
+				require.Equal(t, 409, reqErr.Status)
+				require.Equal(t, "order status changed", reqErr.Err.Error())
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -222,6 +268,24 @@ func TestRejectMerchantOrder(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, "cancelled", result.Order.Status)
 				require.Equal(t, "paid", result.Previous.Status)
+			},
+		},
+		{
+			name: "ConflictAfterRead",
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetOrderForUpdate(gomock.Any(), input.OrderID).
+					Times(1).
+					Return(baseOrder, nil)
+				store.EXPECT().
+					CancelOrderTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.CancelOrderTxResult{}, db.ErrRecordNotFound)
+			},
+			check: func(t *testing.T, _ MerchantOrderUpdateResult, err error) {
+				reqErr := assertRequestError(t, err)
+				require.Equal(t, 409, reqErr.Status)
+				require.Equal(t, "order status changed", reqErr.Err.Error())
 			},
 		},
 	}
@@ -363,6 +427,44 @@ func TestMarkMerchantOrderReady(t *testing.T) {
 				reqErr := assertRequestError(t, err)
 				require.Equal(t, 400, reqErr.Status)
 				require.Equal(t, "order already marked as ready", reqErr.Err.Error())
+			},
+		},
+		{
+			name: "ConflictAfterRead",
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetOrderForUpdate(gomock.Any(), input.OrderID).
+					Times(1).
+					Return(baseOrder, nil)
+				store.EXPECT().
+					UpdateOrderStatusTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.UpdateOrderStatusTxResult{}, db.ErrRecordNotFound)
+			},
+			check: func(t *testing.T, _ MerchantOrderUpdateResult, err error) {
+				reqErr := assertRequestError(t, err)
+				require.Equal(t, 409, reqErr.Status)
+				require.Equal(t, "order status changed", reqErr.Err.Error())
+			},
+		},
+		{
+			name: "TakeoutConflictAfterRead",
+			buildStubs: func(store *mockdb.MockStore) {
+				order := baseOrder
+				order.OrderType = db.OrderTypeTakeout
+				store.EXPECT().
+					GetOrderForUpdate(gomock.Any(), input.OrderID).
+					Times(1).
+					Return(order, nil)
+				store.EXPECT().
+					MarkTakeoutOrderReadyTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.MarkTakeoutOrderReadyTxResult{}, db.ErrRecordNotFound)
+			},
+			check: func(t *testing.T, _ MerchantOrderUpdateResult, err error) {
+				reqErr := assertRequestError(t, err)
+				require.Equal(t, 409, reqErr.Status)
+				require.Equal(t, "order status changed", reqErr.Err.Error())
 			},
 		},
 	}

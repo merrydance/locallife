@@ -155,11 +155,17 @@ type requestError struct {
 func (e *requestError) Error() string { return e.err.Error() }
 func (e *requestError) Unwrap() error { return e.err }
 
-// IsRefundRequestError 判断事务错误是否为业务校验失败并返回 HTTP 状态码
-func IsRefundRequestError(err error) (int, bool) {
+// IsTxRequestError returns the HTTP status code carried by transaction-level
+// business validation errors.
+func IsTxRequestError(err error) (int, bool) {
 	var re *requestError
 	if errors.As(err, &re) {
 		return re.statusCode, true
 	}
 	return 0, false
+}
+
+// IsRefundRequestError 判断退款事务错误是否为业务校验失败并返回 HTTP 状态码。
+func IsRefundRequestError(err error) (int, bool) {
+	return IsTxRequestError(err)
 }

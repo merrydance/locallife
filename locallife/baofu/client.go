@@ -451,36 +451,6 @@ func accountFirstResultItem(raw json.RawMessage) accountBusinessFailureResultIte
 	}
 }
 
-func publicBusinessFailure(raw json.RawMessage) (string, string, bool) {
-	var payload struct {
-		ResultCode   string `json:"resultCode"`
-		ErrorCode    string `json:"errCode"`
-		ErrorMessage string `json:"errMsg"`
-	}
-	if len(raw) == 0 || json.Unmarshal(raw, &payload) != nil {
-		return "", "", false
-	}
-	resultCode := strings.ToUpper(strings.TrimSpace(payload.ResultCode))
-	if resultCode == "" && (strings.TrimSpace(payload.ErrorCode) != "" || strings.TrimSpace(payload.ErrorMessage) != "") {
-		return strings.TrimSpace(payload.ErrorCode), strings.TrimSpace(payload.ErrorMessage), true
-	}
-	if resultCode == "" {
-		return "MISSING_RESULT_CODE", strings.TrimSpace(payload.ErrorMessage), true
-	}
-	if resultCode == "SUCCESS" {
-		errorCode := strings.ToUpper(strings.TrimSpace(payload.ErrorCode))
-		if errorCode != "" && errorCode != "SUCCESS" {
-			return strings.TrimSpace(payload.ErrorCode), strings.TrimSpace(payload.ErrorMessage), true
-		}
-		return "", "", false
-	}
-	code := strings.TrimSpace(payload.ErrorCode)
-	if code == "" {
-		code = resultCode
-	}
-	return code, strings.TrimSpace(payload.ErrorMessage), true
-}
-
 func jsonScalarString(raw json.RawMessage) string {
 	raw = json.RawMessage(strings.TrimSpace(string(raw)))
 	if len(raw) == 0 || string(raw) == "null" {

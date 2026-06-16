@@ -68,6 +68,13 @@
       "line": 254
     },
     {
+      "id": "weapp.kitchenDetailPage",
+      "kind": "frontend_page",
+      "label": "Merchant kitchen detail page",
+      "file": "weapp/miniprogram/pages/merchant/kitchen/detail/index.ts",
+      "line": 116
+    },
+    {
       "id": "weapp.kitchenLoadOrders",
       "kind": "frontend_handler",
       "label": "kitchen loadKitchenOrders",
@@ -75,11 +82,25 @@
       "line": 329
     },
     {
+      "id": "weapp.kitchenDetailLoad",
+      "kind": "frontend_handler",
+      "label": "kitchen detail loadDetail",
+      "file": "weapp/miniprogram/pages/merchant/kitchen/detail/index.ts",
+      "line": 224
+    },
+    {
       "id": "weapp.kitchenActions",
       "kind": "frontend_handler",
       "label": "kitchen preparing/ready actions",
       "file": "weapp/miniprogram/pages/merchant/kitchen/index.ts",
       "line": 439
+    },
+    {
+      "id": "weapp.kitchenDetailActions",
+      "kind": "frontend_handler",
+      "label": "kitchen detail preparing/ready actions",
+      "file": "weapp/miniprogram/pages/merchant/kitchen/detail/index.ts",
+      "line": 270
     },
     {
       "id": "weapp.printAnomaliesPage",
@@ -212,21 +233,28 @@
       "kind": "frontend_api",
       "label": "GET /v1/kitchen/orders",
       "file": "weapp/miniprogram/pages/merchant/_api/order-management.ts",
-      "line": 500
+      "line": 522
+    },
+    {
+      "id": "apiWrapper.getKitchenOrderDetail",
+      "kind": "frontend_api",
+      "label": "GET /v1/kitchen/orders/:id",
+      "file": "weapp/miniprogram/pages/merchant/_api/order-management.ts",
+      "line": 533
     },
     {
       "id": "apiWrapper.startPreparing",
       "kind": "frontend_api",
       "label": "POST /v1/kitchen/orders/:id/preparing",
       "file": "weapp/miniprogram/pages/merchant/_api/order-management.ts",
-      "line": 522
+      "line": 544
     },
     {
       "id": "apiWrapper.markKitchenReady",
       "kind": "frontend_api",
       "label": "POST /v1/kitchen/orders/:id/ready",
       "file": "weapp/miniprogram/pages/merchant/_api/order-management.ts",
-      "line": 533
+      "line": 555
     },
     {
       "id": "apiWrapper.createRefund",
@@ -268,7 +296,7 @@
       "kind": "route_group",
       "label": "/v1/kitchen route group owner/manager/chef",
       "file": "locallife/api/server.go",
-      "line": 1016
+      "line": 1053
     },
     {
       "id": "route.refunds",
@@ -283,6 +311,13 @@
       "label": "Server.listMerchantOrders",
       "file": "locallife/api/order.go",
       "line": 1105
+    },
+    {
+      "id": "api.getKitchenOrderDetails",
+      "kind": "handler",
+      "label": "Server.getKitchenOrderDetails",
+      "file": "locallife/api/kitchen.go",
+      "line": 454
     },
     {
       "id": "api.getMerchantOrder",
@@ -1422,9 +1457,44 @@
       "kind": "frontend_api_call"
     },
     {
+      "from": "weapp.kitchenPage",
+      "to": "weapp.kitchenDetailPage",
+      "kind": "navigates"
+    },
+    {
+      "from": "weapp.kitchenDetailPage",
+      "to": "weapp.wsManager",
+      "kind": "websocket"
+    },
+    {
+      "from": "weapp.kitchenDetailPage",
+      "to": "weapp.kitchenDetailLoad",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.kitchenDetailLoad",
+      "to": "apiWrapper.getKitchenOrderDetail",
+      "kind": "frontend_api_call"
+    },
+    {
       "from": "apiWrapper.getKitchenOrders",
       "to": "route.kitchen",
       "kind": "http"
+    },
+    {
+      "from": "apiWrapper.getKitchenOrderDetail",
+      "to": "route.kitchen",
+      "kind": "http"
+    },
+    {
+      "from": "route.kitchen",
+      "to": "api.getKitchenOrderDetails",
+      "kind": "route"
+    },
+    {
+      "from": "api.getKitchenOrderDetails",
+      "to": "table.orders",
+      "kind": "read"
     },
     {
       "from": "route.kitchen",
@@ -1443,6 +1513,21 @@
     },
     {
       "from": "weapp.kitchenActions",
+      "to": "apiWrapper.markKitchenReady",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.kitchenDetailPage",
+      "to": "weapp.kitchenDetailActions",
+      "kind": "call"
+    },
+    {
+      "from": "weapp.kitchenDetailActions",
+      "to": "apiWrapper.startPreparing",
+      "kind": "frontend_api_call"
+    },
+    {
+      "from": "weapp.kitchenDetailActions",
       "to": "apiWrapper.markKitchenReady",
       "kind": "frontend_api_call"
     },

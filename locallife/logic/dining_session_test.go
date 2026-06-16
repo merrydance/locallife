@@ -2,6 +2,7 @@ package logic
 
 import (
 	"context"
+	"net/http"
 	"testing"
 	"time"
 
@@ -374,4 +375,217 @@ func TestResolveDiningSessionMenuAllowsOnlineReservationMember(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, billingGroup.ID, result.BillingGroup.ID)
+}
+
+func TestCheckoutDiningSessionAllowsCustomerWhenActiveOrderIsPaid(t *testing.T) {
+	customerID := int64(10)
+	merchantID := int64(20)
+	sessionID := int64(30)
+	orderID := int64(40)
+	tableID := int64(50)
+	session := db.DiningSession{
+		ID:            sessionID,
+		MerchantID:    merchantID,
+		TableID:       tableID,
+		UserID:        customerID,
+		ActiveOrderID: pgtype.Int8{Int64: orderID, Valid: true},
+		Status:        "open",
+	}
+	order := db.Order{
+		ID:         orderID,
+		UserID:     customerID,
+		MerchantID: merchantID,
+		OrderType:  db.OrderTypeDineIn,
+		Status:     db.OrderStatusPaid,
+	}
+	merchant := db.Merchant{ID: merchantID, OwnerUserID: customerID + 99}
+	closedSession := session
+	closedSession.Status = "closed"
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetMerchantByOwner(gomock.Any(), customerID).
+		Times(1).
+		Return(db.Merchant{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetDiningSession(gomock.Any(), sessionID).
+		Times(1).
+		Return(session, nil)
+	store.EXPECT().
+		GetOrder(gomock.Any(), orderID).
+		Times(1).
+		Return(order, nil)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchantID).
+		Times(1).
+		Return(merchant, nil)
+	store.EXPECT().
+		CloseDiningSessionTx(gomock.Any(), db.CloseDiningSessionTxParams{
+			ID:         sessionID,
+			MerchantID: merchantID,
+		}).
+		Times(1).
+		Return(db.CloseDiningSessionTxResult{Session: closedSession}, nil)
+
+	result, err := CheckoutDiningSession(context.Background(), store, CheckoutDiningSessionInput{
+		SessionID: sessionID,
+		UserID:    customerID,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "closed", result.Session.Status)
+	require.Equal(t, merchantID, result.Merchant.ID)
+}
+
+func TestCheckoutDiningSessionAllowsCustomerWhoOwnsDifferentMerchantWhenActiveOrderIsPaid(t *testing.T) {
+	customerID := int64(10)
+	sessionMerchantID := int64(20)
+	ownedMerchantID := int64(21)
+	sessionID := int64(30)
+	orderID := int64(40)
+	session := db.DiningSession{
+		ID:            sessionID,
+		MerchantID:    sessionMerchantID,
+		TableID:       50,
+		UserID:        customerID,
+		ActiveOrderID: pgtype.Int8{Int64: orderID, Valid: true},
+		Status:        "open",
+	}
+	order := db.Order{
+		ID:         orderID,
+		UserID:     customerID,
+		MerchantID: sessionMerchantID,
+		OrderType:  db.OrderTypeDineIn,
+		Status:     db.OrderStatusPaid,
+	}
+	sessionMerchant := db.Merchant{ID: sessionMerchantID, OwnerUserID: customerID + 99}
+	ownedMerchant := db.Merchant{ID: ownedMerchantID, OwnerUserID: customerID}
+	closedSession := session
+	closedSession.Status = "closed"
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetMerchantByOwner(gomock.Any(), customerID).
+		Times(1).
+		Return(ownedMerchant, nil)
+	store.EXPECT().
+		GetDiningSession(gomock.Any(), sessionID).
+		Times(1).
+		Return(session, nil)
+	store.EXPECT().
+		GetOrder(gomock.Any(), orderID).
+		Times(1).
+		Return(order, nil)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), sessionMerchantID).
+		Times(1).
+		Return(sessionMerchant, nil)
+	store.EXPECT().
+		CloseDiningSessionTx(gomock.Any(), db.CloseDiningSessionTxParams{
+			ID:         sessionID,
+			MerchantID: sessionMerchantID,
+		}).
+		Times(1).
+		Return(db.CloseDiningSessionTxResult{Session: closedSession}, nil)
+
+	result, err := CheckoutDiningSession(context.Background(), store, CheckoutDiningSessionInput{
+		SessionID: sessionID,
+		UserID:    customerID,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "closed", result.Session.Status)
+	require.Equal(t, sessionMerchantID, result.Merchant.ID)
+}
+
+func TestCheckoutDiningSessionRejectsCustomerWhenActiveOrderIsNotPaid(t *testing.T) {
+	customerID := int64(10)
+	merchantID := int64(20)
+	sessionID := int64(30)
+	orderID := int64(40)
+	session := db.DiningSession{
+		ID:            sessionID,
+		MerchantID:    merchantID,
+		TableID:       50,
+		UserID:        customerID,
+		ActiveOrderID: pgtype.Int8{Int64: orderID, Valid: true},
+		Status:        "open",
+	}
+	order := db.Order{
+		ID:         orderID,
+		UserID:     customerID,
+		MerchantID: merchantID,
+		OrderType:  db.OrderTypeDineIn,
+		Status:     db.OrderStatusPending,
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetMerchantByOwner(gomock.Any(), customerID).
+		Times(1).
+		Return(db.Merchant{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetDiningSession(gomock.Any(), sessionID).
+		Times(1).
+		Return(session, nil)
+	store.EXPECT().
+		GetOrder(gomock.Any(), orderID).
+		Times(1).
+		Return(order, nil)
+
+	_, err := CheckoutDiningSession(context.Background(), store, CheckoutDiningSessionInput{
+		SessionID: sessionID,
+		UserID:    customerID,
+	})
+
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, http.StatusConflict, reqErr.Status)
+	require.Equal(t, "active order is not paid", reqErr.Err.Error())
+}
+
+func TestCheckoutDiningSessionRejectsCustomerWhenSessionDoesNotBelongToUser(t *testing.T) {
+	customerID := int64(10)
+	ownerID := int64(11)
+	merchantID := int64(20)
+	sessionID := int64(30)
+	orderID := int64(40)
+	session := db.DiningSession{
+		ID:            sessionID,
+		MerchantID:    merchantID,
+		TableID:       50,
+		UserID:        ownerID,
+		ActiveOrderID: pgtype.Int8{Int64: orderID, Valid: true},
+		Status:        "open",
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetMerchantByOwner(gomock.Any(), customerID).
+		Times(1).
+		Return(db.Merchant{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetDiningSession(gomock.Any(), sessionID).
+		Times(1).
+		Return(session, nil)
+
+	_, err := CheckoutDiningSession(context.Background(), store, CheckoutDiningSessionInput{
+		SessionID: sessionID,
+		UserID:    customerID,
+	})
+
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, http.StatusForbidden, reqErr.Status)
+	require.Equal(t, "dining session does not belong to you", reqErr.Err.Error())
 }

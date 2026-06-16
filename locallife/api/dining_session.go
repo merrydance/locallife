@@ -697,7 +697,7 @@ type checkoutDiningSessionRequest struct {
 
 // checkoutDiningSession godoc
 // @Summary 结束就餐会话（结账离店）
-// @Description 商家手动结束就餐会话，关闭账单组并释放桌位。
+// @Description 商家手动结束就餐会话，或顾客在堂食订单已支付后关闭自己的就餐会话；关闭账单组并释放桌位。
 // @Tags 就餐会话
 // @Accept json
 // @Produce json
@@ -707,6 +707,7 @@ type checkoutDiningSessionRequest struct {
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "权限不足"
 // @Failure 404 {object} ErrorResponse "找不到就餐会话"
+// @Failure 409 {object} ErrorResponse "订单未支付或会话状态冲突"
 // @Failure 500 {object} ErrorResponse "服务器内部错误"
 // @Router /v1/dining-sessions/{id}/checkout [post]
 // @Security BearerAuth

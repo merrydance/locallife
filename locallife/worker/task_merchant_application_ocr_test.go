@@ -120,9 +120,9 @@ func (stubIDCardOCRProvider) Recognize(_ context.Context, capability ocr.Capabil
 	}, nil
 }
 
-func expectOCRSuccessAuditLog(t *testing.T, store *mockdb.MockStore, job db.OcrJob) {
+func expectOCRSuccessAuditLog(t *testing.T, store *mockdb.MockStore, job db.OcrJob) *gomock.Call {
 	t.Helper()
-	store.EXPECT().
+	return store.EXPECT().
 		CreateAuditLog(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, arg db.CreateAuditLogParams) (db.AuditLog, error) {
 			require.Equal(t, "system", arg.ActorRole)
@@ -137,6 +137,73 @@ func expectOCRSuccessAuditLog(t *testing.T, store *mockdb.MockStore, job db.OcrJ
 			require.Equal(t, job.OwnerType, metadata["owner_type"])
 			return db.AuditLog{ID: 1}, nil
 		})
+}
+
+func expectMerchantSubjectProfileSyncFromWorker(
+	t *testing.T,
+	store *mockdb.MockStore,
+	applicationID int64,
+	assertUpsert func(t *testing.T, arg db.UpsertMerchantSubjectProfileParams),
+) (*gomock.Call, *gomock.Call) {
+	t.Helper()
+	upsertCall := store.EXPECT().
+		UpsertMerchantSubjectProfile(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.UpsertMerchantSubjectProfileParams) (db.MerchantSubjectProfile, error) {
+			require.Equal(t, applicationID, arg.MerchantApplicationID)
+			require.NotEmpty(t, arg.SourceSnapshot)
+			if assertUpsert != nil {
+				assertUpsert(t, arg)
+			}
+			return db.MerchantSubjectProfile{
+				ID:                          applicationID + 500,
+				MerchantApplicationID:       arg.MerchantApplicationID,
+				MerchantID:                  arg.MerchantID,
+				UserID:                      arg.UserID,
+				BusinessLicenseNumber:       arg.BusinessLicenseNumber,
+				BusinessLicenseName:         arg.BusinessLicenseName,
+				BusinessLicenseAddress:      arg.BusinessLicenseAddress,
+				LegalPersonName:             arg.LegalPersonName,
+				LegalPersonIDNumber:         arg.LegalPersonIDNumber,
+				FoodPermitNumber:            arg.FoodPermitNumber,
+				FoodPermitCompanyName:       arg.FoodPermitCompanyName,
+				BusinessLicenseMediaAssetID: arg.BusinessLicenseMediaAssetID,
+				FoodPermitMediaAssetID:      arg.FoodPermitMediaAssetID,
+				IDCardFrontMediaAssetID:     arg.IDCardFrontMediaAssetID,
+				IDCardBackMediaAssetID:      arg.IDCardBackMediaAssetID,
+				BusinessLicensePayload:      arg.BusinessLicensePayload,
+				FoodPermitPayload:           arg.FoodPermitPayload,
+				LegalPersonPayload:          arg.LegalPersonPayload,
+				SourceSnapshot:              arg.SourceSnapshot,
+				Version:                     1,
+				CreatedAt:                   time.Now(),
+				UpdatedAt:                   time.Now(),
+			}, nil
+		})
+	versionCall := store.EXPECT().
+		CreateMerchantSubjectProfileVersion(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.CreateMerchantSubjectProfileVersionParams) (db.MerchantSubjectProfileVersion, error) {
+			require.Equal(t, applicationID, arg.MerchantApplicationID)
+			require.Equal(t, applicationID+500, arg.ProfileID)
+			require.Equal(t, int32(1), arg.Version)
+			require.NotEmpty(t, arg.Snapshot)
+			return db.MerchantSubjectProfileVersion{
+				ID:                    applicationID + 600,
+				ProfileID:             arg.ProfileID,
+				MerchantApplicationID: arg.MerchantApplicationID,
+				MerchantID:            arg.MerchantID,
+				UserID:                arg.UserID,
+				Version:               arg.Version,
+				Snapshot:              arg.Snapshot,
+				CreatedAt:             time.Now(),
+			}, nil
+		})
+	return upsertCall, versionCall
+}
+
+func expectMerchantSubjectProfileProjectionFailureFromWorker(store *mockdb.MockStore) *gomock.Call {
+	return store.EXPECT().
+		UpsertMerchantSubjectProfile(gomock.Any(), gomock.Any()).
+		Return(db.MerchantSubjectProfile{}, errors.New("profile projection unavailable"))
 }
 
 func (stubBusinessLicenseOCRProvider) Recognize(_ context.Context, capability ocr.Capability, req ocr.RecognizeRequest) (ocr.RecognizeResponse, error) {
@@ -234,6 +301,13 @@ func TestProcessTaskMerchantApplicationFoodPermitOCR_UsesOCRJob(t *testing.T) {
 		Status:       string(ocr.JobStatusPending),
 		CreatedAt:    createdAt,
 	}
+	syncUpsert := expectMerchantSubjectProfileProjectionFailureFromWorker(store)
+	auditCall := expectOCRSuccessAuditLog(t, store, db.OcrJob{
+		ID:        77,
+		Status:    string(ocr.JobStatusSucceeded),
+		OwnerType: string(ocr.OwnerTypeMerchantApplication),
+		Provider:  string(ocr.ProviderNameWechat),
+	})
 
 	gomock.InOrder(
 		store.EXPECT().
@@ -288,23 +362,12 @@ func TestProcessTaskMerchantApplicationFoodPermitOCR_UsesOCRJob(t *testing.T) {
 				require.Equal(t, "本地生活餐饮店", payload.CompanyName)
 				require.Equal(t, "2027年01月08日", payload.ValidTo)
 				require.Contains(t, payload.RawText, "许可证编号")
-				return app, nil
+				updatedApp := app
+				updatedApp.FoodPermitOcr = arg.FoodPermitOcr
+				return updatedApp, nil
 			}),
-		store.EXPECT().
-			CreateAuditLog(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(_ context.Context, arg db.CreateAuditLogParams) (db.AuditLog, error) {
-				require.Equal(t, "system", arg.ActorRole)
-				require.Equal(t, "ocr_job_succeeded", arg.Action)
-				require.Equal(t, "ocr_job", arg.TargetType)
-				require.True(t, arg.TargetID.Valid)
-				require.Equal(t, int64(77), arg.TargetID.Int64)
-				var metadata map[string]any
-				require.NoError(t, json.Unmarshal(arg.Metadata, &metadata))
-				require.Equal(t, float64(77), metadata["ocr_job_id"])
-				require.Equal(t, "succeeded", metadata["status"])
-				require.Equal(t, "merchant_application", metadata["owner_type"])
-				return db.AuditLog{ID: 1}, nil
-			}),
+		syncUpsert,
+		auditCall,
 	)
 
 	payload, err := json.Marshal(merchantApplicationOCRPayload{
@@ -359,6 +422,17 @@ func TestProcessTaskMerchantApplicationFoodPermitOCR_PrefersStructuredFields(t *
 		Status:       string(ocr.JobStatusPending),
 		CreatedAt:    createdAt,
 	}
+	syncUpsert, syncVersion := expectMerchantSubjectProfileSyncFromWorker(t, store, app.ID, func(t *testing.T, arg db.UpsertMerchantSubjectProfileParams) {
+		require.Equal(t, "JY99887766554433", arg.FoodPermitNumber)
+		require.Equal(t, "本地生活轻食店", arg.FoodPermitCompanyName)
+		require.Equal(t, app.FoodPermitMediaAssetID, arg.FoodPermitMediaAssetID)
+	})
+	auditCall := expectOCRSuccessAuditLog(t, store, db.OcrJob{
+		ID:        88,
+		Status:    string(ocr.JobStatusSucceeded),
+		OwnerType: string(ocr.OwnerTypeMerchantApplication),
+		Provider:  string(ocr.ProviderNameAliyun),
+	})
 
 	gomock.InOrder(
 		store.EXPECT().GetOCRJob(gomock.Any(), int64(88)).Return(baseJob, nil),
@@ -389,15 +463,14 @@ func TestProcessTaskMerchantApplicationFoodPermitOCR_PrefersStructuredFields(t *
 			require.Equal(t, "2025年01月08日", payload.ValidFrom)
 			require.Equal(t, "2030年12月31日", payload.ValidTo)
 			require.Equal(t, "经营场所：北京市朝阳区测试路100号1楼", payload.RawText)
-			return app, nil
+			updatedApp := app
+			updatedApp.FoodPermitOcr = arg.FoodPermitOcr
+			return updatedApp, nil
 		}),
+		syncUpsert,
+		syncVersion,
+		auditCall,
 	)
-	expectOCRSuccessAuditLog(t, store, db.OcrJob{
-		ID:        88,
-		Status:    string(ocr.JobStatusSucceeded),
-		OwnerType: string(ocr.OwnerTypeMerchantApplication),
-		Provider:  string(ocr.ProviderNameAliyun),
-	})
 
 	payload, err := json.Marshal(merchantApplicationOCRPayload{ApplicationID: 77, MediaAssetID: 99, OCRJobID: 88})
 	require.NoError(t, err)
@@ -407,37 +480,54 @@ func TestProcessTaskMerchantApplicationFoodPermitOCR_PrefersStructuredFields(t *
 	require.NoError(t, err)
 }
 
-func TestParseFoodPermitOCRText_ExtractsLikelyCompanyName(t *testing.T) {
+func TestParseFoodPermitOCRTextFallback_ExtractsLikelyCompanyName(t *testing.T) {
 	t.Parallel()
 
 	var data foodPermitOCRData
-	parseFoodPermitOCRText(&data, "经营者名称：测试餐饮有限公司\n许可证编号：JY12345678901234\n有效期至：2027年01月08日")
+	parseFoodPermitOCRTextFallback(&data, "经营者名称：测试餐饮有限公司\n许可证编号：JY12345678901234\n有效期至：2027年01月08日")
 
 	require.Equal(t, "测试餐饮有限公司", data.CompanyName)
 	require.Equal(t, "JY12345678901234", data.PermitNo)
 	require.Equal(t, "2027年01月08日", data.ValidTo)
 }
 
-func TestParseFoodPermitOCRText_RejectsSuspiciousCompanyName(t *testing.T) {
+func TestParseFoodPermitOCRTextFallback_RejectsSuspiciousCompanyName(t *testing.T) {
 	t.Parallel()
 
 	var data foodPermitOCRData
-	parseFoodPermitOCRText(&data, "经营者名称：地址：生祠经营场所面积在50平米以上的小餐饮办理《食品河北省邢台市宁晋县经济开发区希望路北段路东\n许可证编号：JY12345678901234\n有效期至：2027年01月08日")
+	parseFoodPermitOCRTextFallback(&data, "经营者名称：地址：生祠经营场所面积在50平米以上的小餐饮办理《食品河北省邢台市宁晋县经济开发区希望路北段路东\n许可证编号：JY12345678901234\n有效期至：2027年01月08日")
 
 	require.Empty(t, data.CompanyName)
 	require.Equal(t, "JY12345678901234", data.PermitNo)
 	require.Equal(t, "2027年01月08日", data.ValidTo)
 }
 
-func TestParseFoodPermitOCRText_UsesRegistrationBusinessName(t *testing.T) {
+func TestParseFoodPermitOCRTextFallback_UsesRegistrationBusinessName(t *testing.T) {
 	t.Parallel()
 
 	var data foodPermitOCRData
-	parseFoodPermitOCRText(&data, "食品小作坊小餐饮登记证\n商号名称：宁晋县玉水轩鱼味馆\n经营者姓名：张三\n登记证编号：2130528020946\n有效期至：2030年12月31日")
+	parseFoodPermitOCRTextFallback(&data, "食品小作坊小餐饮登记证\n商号名称：宁晋县玉水轩鱼味馆\n经营者姓名：张三\n登记证编号：2130528020946\n有效期至：2030年12月31日")
 
 	require.Equal(t, "宁晋县玉水轩鱼味馆", data.CompanyName)
 	require.Equal(t, "2130528020946", data.PermitNo)
 	require.Equal(t, "2030年12月31日", data.ValidTo)
+}
+
+func TestParseFoodPermitOCRTextFallback_DoesNotOverwriteStructuredFields(t *testing.T) {
+	t.Parallel()
+
+	data := foodPermitOCRData{
+		CompanyName:  "结构化餐饮店",
+		OperatorName: "李四",
+		PermitNo:     "JY00000000000000",
+		ValidTo:      "2035年01月01日",
+	}
+	parseFoodPermitOCRTextFallback(&data, "经营者名称：文本餐饮有限公司\n经营者姓名：张三\n许可证编号：JY12345678901234\n有效期至：2027年01月08日")
+
+	require.Equal(t, "结构化餐饮店", data.CompanyName)
+	require.Equal(t, "李四", data.OperatorName)
+	require.Equal(t, "JY00000000000000", data.PermitNo)
+	require.Equal(t, "2035年01月01日", data.ValidTo)
 }
 
 func TestProcessTaskMerchantApplicationBusinessLicenseOCR_UsesOCRJob(t *testing.T) {
@@ -480,6 +570,14 @@ func TestProcessTaskMerchantApplicationBusinessLicenseOCR_UsesOCRJob(t *testing.
 		Status:       string(ocr.JobStatusPending),
 		CreatedAt:    createdAt,
 	}
+	syncUpsert, syncVersion := expectMerchantSubjectProfileSyncFromWorker(t, store, app.ID, func(t *testing.T, arg db.UpsertMerchantSubjectProfileParams) {
+		require.Equal(t, "91310000123456789A", arg.BusinessLicenseNumber)
+		require.Equal(t, "本地生活科技有限公司", arg.BusinessLicenseName)
+		require.Equal(t, "测试路1号", arg.BusinessLicenseAddress)
+		require.Equal(t, "张三", arg.LegalPersonName)
+		require.Equal(t, app.BusinessLicenseMediaAssetID, arg.BusinessLicenseMediaAssetID)
+	})
+	auditCall := expectOCRSuccessAuditLog(t, store, db.OcrJob{ID: 78, OwnerType: string(ocr.OwnerTypeMerchantApplication)})
 
 	gomock.InOrder(
 		store.EXPECT().
@@ -513,8 +611,8 @@ func TestProcessTaskMerchantApplicationBusinessLicenseOCR_UsesOCRJob(t *testing.
 			}),
 		store.EXPECT().GetMerchantApplication(gomock.Any(), int64(67)).Return(app, nil),
 		store.EXPECT().
-			UpdateMerchantApplicationBusinessLicense(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(_ context.Context, arg db.UpdateMerchantApplicationBusinessLicenseParams) (db.MerchantApplication, error) {
+			UpdateMerchantApplicationBusinessLicenseOCRResult(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, arg db.UpdateMerchantApplicationBusinessLicenseOCRResultParams) (db.MerchantApplication, error) {
 				require.Equal(t, int64(67), arg.ID)
 				require.Equal(t, "91310000123456789A", arg.BusinessLicenseNumber.String)
 				require.Equal(t, "餐饮服务", arg.BusinessScope.String)
@@ -523,13 +621,19 @@ func TestProcessTaskMerchantApplicationBusinessLicenseOCR_UsesOCRJob(t *testing.
 				require.Equal(t, "done", payload["status"])
 				require.Equal(t, float64(78), payload["ocr_job_id"])
 				require.Equal(t, "本地生活科技有限公司", payload["enterprise_name"])
-				return app, nil
+				updatedApp := app
+				updatedApp.BusinessLicenseNumber = arg.BusinessLicenseNumber.String
+				updatedApp.BusinessScope = arg.BusinessScope
+				updatedApp.BusinessLicenseOcr = arg.BusinessLicenseOcr
+				return updatedApp, nil
 			}),
+		syncUpsert,
+		syncVersion,
+		auditCall,
 	)
 
 	payload, err := json.Marshal(merchantApplicationOCRPayload{ApplicationID: 67, MediaAssetID: 98, OCRJobID: 78})
 	require.NoError(t, err)
-	expectOCRSuccessAuditLog(t, store, db.OcrJob{ID: 78, OwnerType: string(ocr.OwnerTypeMerchantApplication)})
 
 	task := asynq.NewTask(TaskMerchantApplicationBusinessLicenseOCR, payload)
 	err = processor.ProcessTaskMerchantApplicationBusinessLicenseOCR(context.Background(), task)
@@ -845,6 +949,14 @@ func TestProcessTaskMerchantApplicationBusinessLicenseOCR_WritesPartialReadiness
 		Status:       string(ocr.JobStatusPending),
 		CreatedAt:    createdAt,
 	}
+	syncUpsert, syncVersion := expectMerchantSubjectProfileSyncFromWorker(t, store, app.ID, func(t *testing.T, arg db.UpsertMerchantSubjectProfileParams) {
+		require.Equal(t, "92310000123456789B", arg.BusinessLicenseNumber)
+		require.Equal(t, "本地生活小馆", arg.BusinessLicenseName)
+		require.Equal(t, "测试路2号", arg.BusinessLicenseAddress)
+		require.Equal(t, "李四", arg.LegalPersonName)
+		require.Equal(t, app.BusinessLicenseMediaAssetID, arg.BusinessLicenseMediaAssetID)
+	})
+	auditCall := expectOCRSuccessAuditLog(t, store, db.OcrJob{ID: 178, OwnerType: string(ocr.OwnerTypeMerchantApplication)})
 
 	gomock.InOrder(
 		store.EXPECT().GetOCRJob(gomock.Any(), int64(178)).Return(baseJob, nil),
@@ -872,8 +984,8 @@ func TestProcessTaskMerchantApplicationBusinessLicenseOCR_WritesPartialReadiness
 			}),
 		store.EXPECT().GetMerchantApplication(gomock.Any(), int64(167)).Return(app, nil),
 		store.EXPECT().
-			UpdateMerchantApplicationBusinessLicense(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(_ context.Context, arg db.UpdateMerchantApplicationBusinessLicenseParams) (db.MerchantApplication, error) {
+			UpdateMerchantApplicationBusinessLicenseOCRResult(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, arg db.UpdateMerchantApplicationBusinessLicenseOCRResultParams) (db.MerchantApplication, error) {
 				require.Equal(t, int64(167), arg.ID)
 				require.Equal(t, "92310000123456789B", arg.BusinessLicenseNumber.String)
 				require.Equal(t, "餐饮服务", arg.BusinessScope.String)
@@ -886,13 +998,19 @@ func TestProcessTaskMerchantApplicationBusinessLicenseOCR_WritesPartialReadiness
 				require.Equal(t, ocrReadinessReasonRequiredFieldMissing, readiness["reason_code"])
 				require.Equal(t, []any{"valid_period"}, readiness["missing_fields"])
 				require.Equal(t, "", payload["valid_period"])
-				return app, nil
+				updatedApp := app
+				updatedApp.BusinessLicenseNumber = arg.BusinessLicenseNumber.String
+				updatedApp.BusinessScope = arg.BusinessScope
+				updatedApp.BusinessLicenseOcr = arg.BusinessLicenseOcr
+				return updatedApp, nil
 			}),
+		syncUpsert,
+		syncVersion,
+		auditCall,
 	)
 
 	payload, err := json.Marshal(merchantApplicationOCRPayload{ApplicationID: 167, MediaAssetID: 198, OCRJobID: 178})
 	require.NoError(t, err)
-	expectOCRSuccessAuditLog(t, store, db.OcrJob{ID: 178, OwnerType: string(ocr.OwnerTypeMerchantApplication)})
 
 	task := asynq.NewTask(TaskMerchantApplicationBusinessLicenseOCR, payload)
 	err = processor.ProcessTaskMerchantApplicationBusinessLicenseOCR(context.Background(), task)
@@ -940,6 +1058,12 @@ func TestProcessTaskMerchantApplicationIDCardOCR_UsesOCRJob(t *testing.T) {
 		Side:         string(ocr.DocumentSideFront),
 		CreatedAt:    createdAt,
 	}
+	syncUpsert, syncVersion := expectMerchantSubjectProfileSyncFromWorker(t, store, app.ID, func(t *testing.T, arg db.UpsertMerchantSubjectProfileParams) {
+		require.Equal(t, "张三", arg.LegalPersonName)
+		require.Equal(t, "110101199001011234", arg.LegalPersonIDNumber)
+		require.Equal(t, app.IDCardFrontMediaAssetID, arg.IDCardFrontMediaAssetID)
+	})
+	auditCall := expectOCRSuccessAuditLog(t, store, db.OcrJob{ID: 79, OwnerType: string(ocr.OwnerTypeMerchantApplication)})
 
 	gomock.InOrder(
 		store.EXPECT().GetOCRJob(gomock.Any(), int64(79)).Return(baseJob, nil),
@@ -966,8 +1090,8 @@ func TestProcessTaskMerchantApplicationIDCardOCR_UsesOCRJob(t *testing.T) {
 			}),
 		store.EXPECT().GetMerchantApplication(gomock.Any(), int64(68)).Return(app, nil),
 		store.EXPECT().
-			UpdateMerchantApplicationIDCardFront(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(_ context.Context, arg db.UpdateMerchantApplicationIDCardFrontParams) (db.MerchantApplication, error) {
+			UpdateMerchantApplicationIDCardFrontOCRResult(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, arg db.UpdateMerchantApplicationIDCardFrontOCRResultParams) (db.MerchantApplication, error) {
 				require.Equal(t, int64(68), arg.ID)
 				require.Equal(t, "张三", arg.LegalPersonName.String)
 				require.Equal(t, "110101199001011234", arg.LegalPersonIDNumber.String)
@@ -977,13 +1101,19 @@ func TestProcessTaskMerchantApplicationIDCardOCR_UsesOCRJob(t *testing.T) {
 				require.NotNil(t, payload.OCRJobID)
 				require.Equal(t, int64(79), *payload.OCRJobID)
 				require.Equal(t, "张三", payload.Name)
-				return app, nil
+				updatedApp := app
+				updatedApp.LegalPersonName = arg.LegalPersonName.String
+				updatedApp.LegalPersonIDNumber = arg.LegalPersonIDNumber.String
+				updatedApp.IDCardFrontOcr = arg.IDCardFrontOcr
+				return updatedApp, nil
 			}),
+		syncUpsert,
+		syncVersion,
+		auditCall,
 	)
 
 	payload, err := json.Marshal(merchantApplicationOCRPayload{ApplicationID: 68, MediaAssetID: 99, OCRJobID: 79, Side: "Front"})
 	require.NoError(t, err)
-	expectOCRSuccessAuditLog(t, store, db.OcrJob{ID: 79, OwnerType: string(ocr.OwnerTypeMerchantApplication)})
 
 	task := asynq.NewTask(TaskMerchantApplicationIDCardOCR, payload)
 	err = processor.ProcessTaskMerchantApplicationIDCardOCR(context.Background(), task)

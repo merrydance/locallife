@@ -12,6 +12,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/ocr"
 	"github.com/rs/zerolog/log"
 )
@@ -203,10 +204,11 @@ func (processor *RedisTaskProcessor) processMerchantApplicationBusinessLicenseOC
 	})
 	ocrJSON, _ := json.Marshal(ocrData)
 	arg.BusinessLicenseOcr = ocrJSON
-	_, err = processor.store.UpdateMerchantApplicationBusinessLicense(ctx, arg)
+	updatedApp, err := processor.store.UpdateMerchantApplicationBusinessLicenseOCRResult(ctx, db.UpdateMerchantApplicationBusinessLicenseOCRResultParams(arg))
 	if err != nil {
 		return fmt.Errorf("update merchant application business license: %w", err)
 	}
+	processor.tryProjectMerchantSubjectProfile(ctx, updatedApp, "business_license_ocr")
 	processor.writeOCRJobAudit(ctx, job, "ocr_job_succeeded", map[string]any{"status": job.Status})
 	log.Info().Int64("application_id", payload.ApplicationID).Int64("ocr_job_id", job.ID).Msg("✅ business license OCR updated from ocr job")
 	return nil
@@ -310,13 +312,14 @@ func (processor *RedisTaskProcessor) processMerchantApplicationFoodPermitOCRJob(
 	}
 	ocrData.Readiness = buildMerchantFoodPermitReadiness(ocrData.CompanyName, ocrData.OperatorName, ocrData.RawText, ocrData.ValidTo)
 	ocrJSON, _ := json.Marshal(ocrData)
-	_, err = processor.store.UpdateMerchantApplicationFoodPermit(ctx, db.UpdateMerchantApplicationFoodPermitParams{
+	updatedApp, err := processor.store.UpdateMerchantApplicationFoodPermit(ctx, db.UpdateMerchantApplicationFoodPermitParams{
 		ID:            payload.ApplicationID,
 		FoodPermitOcr: ocrJSON,
 	})
 	if err != nil {
 		return fmt.Errorf("update merchant application food permit: %w", err)
 	}
+	processor.tryProjectMerchantSubjectProfile(ctx, updatedApp, "food_permit_ocr")
 	processor.writeOCRJobAudit(ctx, job, "ocr_job_succeeded", map[string]any{"status": job.Status})
 	log.Info().Int64("application_id", payload.ApplicationID).Int64("ocr_job_id", job.ID).Str("provider", job.Provider).Msg("✅ food permit OCR updated from ocr job")
 	return nil
@@ -424,19 +427,41 @@ func (processor *RedisTaskProcessor) processMerchantApplicationIDCardOCRJob(ctx 
 		if ocrData.IDNumber != "" {
 			arg.LegalPersonIDNumber = pgtype.Text{String: ocrData.IDNumber, Valid: true}
 		}
-		_, err = processor.store.UpdateMerchantApplicationIDCardFront(ctx, arg)
+		updatedApp, err := processor.store.UpdateMerchantApplicationIDCardFrontOCRResult(ctx, db.UpdateMerchantApplicationIDCardFrontOCRResultParams(arg))
 		if err != nil {
 			return fmt.Errorf("update merchant application id card front: %w", err)
 		}
+		processor.tryProjectMerchantSubjectProfile(ctx, updatedApp, "id_card_front_ocr")
 	} else {
-		_, err = processor.store.UpdateMerchantApplicationIDCardBack(ctx, db.UpdateMerchantApplicationIDCardBackParams{ID: payload.ApplicationID, IDCardBackOcr: ocrJSON})
+		updatedApp, err := processor.store.UpdateMerchantApplicationIDCardBack(ctx, db.UpdateMerchantApplicationIDCardBackParams{ID: payload.ApplicationID, IDCardBackOcr: ocrJSON})
 		if err != nil {
 			return fmt.Errorf("update merchant application id card back: %w", err)
 		}
+		processor.tryProjectMerchantSubjectProfile(ctx, updatedApp, "id_card_back_ocr")
 	}
 	processor.writeOCRJobAudit(ctx, job, "ocr_job_succeeded", map[string]any{"status": job.Status})
 	log.Info().Int64("application_id", payload.ApplicationID).Int64("ocr_job_id", job.ID).Str("side", payload.Side).Msg("✅ id card OCR updated from ocr job")
 	return nil
+}
+
+func (processor *RedisTaskProcessor) syncMerchantSubjectProfile(ctx context.Context, app db.MerchantApplication) error {
+	service := logic.NewMerchantSubjectProfileService(processor.store)
+	if service == nil {
+		return nil
+	}
+	_, err := service.SaveApplicationProfile(ctx, app)
+	return err
+}
+
+func (processor *RedisTaskProcessor) tryProjectMerchantSubjectProfile(ctx context.Context, app db.MerchantApplication, reason string) {
+	if err := processor.syncMerchantSubjectProfile(ctx, app); err != nil {
+		log.Warn().
+			Err(err).
+			Int64("application_id", app.ID).
+			Int64("user_id", app.UserID).
+			Str("reason", reason).
+			Msg("merchant subject profile projection failed")
+	}
 }
 
 func (processor *RedisTaskProcessor) parseMerchantApplicationOCRPayload(task *asynq.Task) (*merchantApplicationOCRPayload, error) {
@@ -502,16 +527,12 @@ func formatPgTimestamp(value pgtype.Timestamptz) string {
 	return value.Time.Format(time.RFC3339)
 }
 
-func parseFoodPermitOCRText(data *foodPermitOCRData, text string) {
-	parseFoodPermitOCRTextInternal(data, text, true)
-}
-
 func parseFoodPermitOCRTextFallback(data *foodPermitOCRData, text string) {
 	if data == nil || text == "" {
 		return
 	}
 	parsed := foodPermitOCRData{}
-	parseFoodPermitOCRTextInternal(&parsed, text, false)
+	parseFoodPermitOCRTextInternal(&parsed, text)
 	if data.CompanyName == "" {
 		data.CompanyName = parsed.CompanyName
 	}
@@ -529,7 +550,7 @@ func parseFoodPermitOCRTextFallback(data *foodPermitOCRData, text string) {
 	}
 }
 
-func parseFoodPermitOCRTextInternal(data *foodPermitOCRData, text string, logFailure bool) {
+func parseFoodPermitOCRTextInternal(data *foodPermitOCRData, text string) {
 	// 企业名称匹配 - 使用多种模式尝试提取
 	namePatterns := []*regexp.Regexp{
 		// 模式1: 标准格式 "经营者名称：XXX"
@@ -557,13 +578,6 @@ func parseFoodPermitOCRTextInternal(data *foodPermitOCRData, text string, logFai
 				break
 			}
 		}
-	}
-
-	// 如果未能提取企业名称，记录日志便于迭代优化
-	if logFailure && data.CompanyName == "" {
-		log.Warn().
-			Str("raw_text_preview", truncateString(text, 200)).
-			Msg("food permit company name extraction failed")
 	}
 
 	// 经营者姓名（个体工商户/小餐饮登记证格式）

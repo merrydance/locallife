@@ -1487,6 +1487,47 @@ type MerchantStaff struct {
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
+// 商户主体资料权威聚合表，覆盖入驻 OCR 与人工修正后的营业执照、食品经营许可、法人证件资料
+type MerchantSubjectProfile struct {
+	ID                          int64       `json:"id"`
+	MerchantApplicationID       int64       `json:"merchant_application_id"`
+	MerchantID                  pgtype.Int8 `json:"merchant_id"`
+	UserID                      int64       `json:"user_id"`
+	BusinessLicenseNumber       string      `json:"business_license_number"`
+	BusinessLicenseName         string      `json:"business_license_name"`
+	BusinessLicenseAddress      string      `json:"business_license_address"`
+	LegalPersonName             string      `json:"legal_person_name"`
+	LegalPersonIDNumber         string      `json:"legal_person_id_number"`
+	FoodPermitNumber            string      `json:"food_permit_number"`
+	FoodPermitCompanyName       string      `json:"food_permit_company_name"`
+	BusinessLicenseMediaAssetID pgtype.Int8 `json:"business_license_media_asset_id"`
+	FoodPermitMediaAssetID      pgtype.Int8 `json:"food_permit_media_asset_id"`
+	IDCardFrontMediaAssetID     pgtype.Int8 `json:"id_card_front_media_asset_id"`
+	IDCardBackMediaAssetID      pgtype.Int8 `json:"id_card_back_media_asset_id"`
+	// 营业执照权威字段与 OCR/修正/确认元数据 JSON
+	BusinessLicensePayload []byte `json:"business_license_payload"`
+	// 食品经营许可证权威字段与 OCR/修正/确认元数据 JSON
+	FoodPermitPayload []byte `json:"food_permit_payload"`
+	// 法人身份证权威字段与 OCR/修正/确认元数据 JSON
+	LegalPersonPayload []byte    `json:"legal_person_payload"`
+	SourceSnapshot     []byte    `json:"source_snapshot"`
+	Version            int32     `json:"version"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
+}
+
+// 商户主体资料版本审计快照
+type MerchantSubjectProfileVersion struct {
+	ID                    int64       `json:"id"`
+	ProfileID             int64       `json:"profile_id"`
+	MerchantApplicationID int64       `json:"merchant_application_id"`
+	MerchantID            pgtype.Int8 `json:"merchant_id"`
+	UserID                int64       `json:"user_id"`
+	Version               int32       `json:"version"`
+	Snapshot              []byte      `json:"snapshot"`
+	CreatedAt             time.Time   `json:"created_at"`
+}
+
 // 商户系统展示标签关联表；仅存储派生或运营维护的系统标签
 type MerchantSystemLabel struct {
 	MerchantID int64     `json:"merchant_id"`
@@ -1737,6 +1778,17 @@ type Order struct {
 	DeliveryAddressSnapshot      pgtype.Text    `json:"delivery_address_snapshot"`
 	DeliveryLongitudeSnapshot    pgtype.Numeric `json:"delivery_longitude_snapshot"`
 	DeliveryLatitudeSnapshot     pgtype.Numeric `json:"delivery_latitude_snapshot"`
+}
+
+type OrderCreateRequestIdempotency struct {
+	ID             int64       `json:"id"`
+	OperationScope string      `json:"operation_scope"`
+	ActorUserID    int64       `json:"actor_user_id"`
+	IdempotencyKey string      `json:"idempotency_key"`
+	RequestHash    string      `json:"request_hash"`
+	OrderID        pgtype.Int8 `json:"order_id"`
+	CreatedAt      time.Time   `json:"created_at"`
+	UpdatedAt      time.Time   `json:"updated_at"`
 }
 
 type OrderDisplayConfig struct {

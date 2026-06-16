@@ -745,6 +745,10 @@ func TestCheckoutDiningSessionAPI(t *testing.T) {
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return(merchant, nil)
+				store.EXPECT().
+					GetDiningSession(gomock.Any(), diningSession.ID).
+					Times(1).
+					Return(diningSession, nil)
 
 				closedSession := diningSession
 				closedSession.Status = "closed"
@@ -766,7 +770,7 @@ func TestCheckoutDiningSessionAPI(t *testing.T) {
 			},
 		},
 		{
-			name:      "NotMerchant",
+			name:      "CustomerWithoutActiveOrder",
 			sessionID: diningSession.ID,
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -776,9 +780,67 @@ func TestCheckoutDiningSessionAPI(t *testing.T) {
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return(db.Merchant{}, db.ErrRecordNotFound)
+				store.EXPECT().
+					GetDiningSession(gomock.Any(), diningSession.ID).
+					Times(1).
+					Return(diningSession, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusForbidden, recorder.Code)
+				require.Equal(t, http.StatusConflict, recorder.Code)
+			},
+		},
+		{
+			name:      "CustomerPaidActiveOrderOK",
+			sessionID: diningSession.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(db.Merchant{}, db.ErrRecordNotFound)
+
+				orderID := util.RandomInt(1000, 2000)
+				customerSession := diningSession
+				customerSession.ActiveOrderID = pgtype.Int8{Int64: orderID, Valid: true}
+
+				store.EXPECT().
+					GetDiningSession(gomock.Any(), diningSession.ID).
+					Times(1).
+					Return(customerSession, nil)
+				store.EXPECT().
+					GetOrder(gomock.Any(), orderID).
+					Times(1).
+					Return(db.Order{
+						ID:         orderID,
+						UserID:     user.ID,
+						MerchantID: merchant.ID,
+						OrderType:  db.OrderTypeDineIn,
+						Status:     db.OrderStatusPaid,
+					}, nil)
+				store.EXPECT().
+					GetMerchant(gomock.Any(), merchant.ID).
+					Times(1).
+					Return(merchant, nil)
+
+				closedSession := customerSession
+				closedSession.Status = "closed"
+				closedSession.ClosedAt.Time = time.Now()
+				closedSession.ClosedAt.Valid = true
+
+				store.EXPECT().
+					CloseDiningSessionTx(gomock.Any(), gomock.Eq(db.CloseDiningSessionTxParams{
+						ID:         diningSession.ID,
+						MerchantID: merchant.ID,
+					})).
+					Times(1).
+					Return(db.CloseDiningSessionTxResult{
+						Session: closedSession,
+					}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
 			},
 		},
 		{
@@ -792,14 +854,10 @@ func TestCheckoutDiningSessionAPI(t *testing.T) {
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return(merchant, nil)
-
 				store.EXPECT().
-					CloseDiningSessionTx(gomock.Any(), gomock.Eq(db.CloseDiningSessionTxParams{
-						ID:         diningSession.ID,
-						MerchantID: merchant.ID,
-					})).
+					GetDiningSession(gomock.Any(), diningSession.ID).
 					Times(1).
-					Return(db.CloseDiningSessionTxResult{}, db.ErrRecordNotFound)
+					Return(db.DiningSession{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -816,6 +874,10 @@ func TestCheckoutDiningSessionAPI(t *testing.T) {
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return(merchant, nil)
+				store.EXPECT().
+					GetDiningSession(gomock.Any(), diningSession.ID).
+					Times(1).
+					Return(diningSession, nil)
 
 				store.EXPECT().
 					CloseDiningSessionTx(gomock.Any(), gomock.Eq(db.CloseDiningSessionTxParams{

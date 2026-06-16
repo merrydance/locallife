@@ -187,6 +187,7 @@ func (server *Server) patchMerchantBusinessLicenseOCRFields(ctx *gin.Context, ap
 		ID:                    app.ID,
 		BusinessLicenseNumber: pgtype.Text{String: licenseNumber, Valid: licenseNumber != ""},
 		BusinessScope:         pgtype.Text{String: strings.TrimSpace(next.BusinessScope), Valid: strings.TrimSpace(next.BusinessScope) != ""},
+		LegalPersonName:       pgtype.Text{String: strings.TrimSpace(next.LegalRepresentative), Valid: strings.TrimSpace(next.LegalRepresentative) != ""},
 		MerchantName:          pgtype.Text{String: merchantNameBackfill, Valid: merchantNameBackfill != ""},
 		BusinessLicenseOcr:    encoded,
 	})
@@ -194,6 +195,7 @@ func (server *Server) patchMerchantBusinessLicenseOCRFields(ctx *gin.Context, ap
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("update merchant business license OCR correction: %w", err)))
 		return
 	}
+	server.tryProjectMerchantSubjectProfile(ctx, updated, "business_license_ocr_correction")
 	server.writeMerchantApplicationDraftResponse(ctx, http.StatusOK, updated)
 }
 
@@ -281,6 +283,7 @@ func (server *Server) patchMerchantFoodPermitOCRFields(ctx *gin.Context, app db.
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("update merchant food permit OCR correction: %w", err)))
 		return
 	}
+	server.tryProjectMerchantSubjectProfile(ctx, updated, "food_permit_ocr_correction")
 	server.writeMerchantApplicationDraftResponse(ctx, http.StatusOK, updated)
 }
 

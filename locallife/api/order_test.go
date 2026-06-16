@@ -426,6 +426,66 @@ func TestCreateOrderAPI(t *testing.T) {
 		checkResponse func(recorder *httptest.ResponseRecorder)
 	}{
 		{
+			name: "PassesIdempotencyKey",
+			body: gin.H{
+				"merchant_id": merchant.ID,
+				"order_type":  "takeaway",
+				"items": []gin.H{
+					{
+						"dish_id":  dish.ID,
+						"quantity": 1,
+					},
+				},
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				request.Header.Set("Idempotency-Key", " order-create-api-1 ")
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchant(gomock.Any(), merchant.ID).
+					Times(1).
+					Return(merchant, nil)
+				store.EXPECT().
+					GetDish(gomock.Any(), dish.ID).
+					Times(1).
+					Return(dish, nil)
+				store.EXPECT().
+					GetDishWithCustomizations(gomock.Any(), dish.ID).
+					Times(1).
+					Return(dishWithCustomizationsFromDish(dish), nil)
+				store.EXPECT().
+					ListActiveDiscountRules(gomock.Any(), merchant.ID).
+					Times(1).
+					Return([]db.DiscountRule{}, nil)
+				store.EXPECT().
+					CreateOrderTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ context.Context, arg db.CreateOrderTxParams) (db.CreateOrderTxResult, error) {
+						require.Equal(t, "customer_order_create", arg.IdempotencyOperationScope)
+						require.Equal(t, user.ID, arg.IdempotencyActorUserID)
+						require.Equal(t, "order-create-api-1", arg.IdempotencyKey)
+						require.NotEmpty(t, arg.IdempotencyRequestHash)
+						return db.CreateOrderTxResult{
+							Order: db.Order{
+								ID:          1,
+								OrderNo:     "20240101120000123456",
+								UserID:      user.ID,
+								MerchantID:  merchant.ID,
+								OrderType:   "takeaway",
+								Subtotal:    dish.Price,
+								TotalAmount: dish.Price,
+								Status:      "pending",
+								CreatedAt:   time.Now(),
+							},
+						}, nil
+					})
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusCreated, recorder.Code)
+			},
+		},
+		{
 			name: "DineInBillingGroupNotMember",
 			body: gin.H{
 				"merchant_id":      merchant.ID,
@@ -2048,6 +2108,29 @@ func TestAcceptOrderAPI(t *testing.T) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
 			},
 		},
+		{
+			name:    "ConflictAfterRead",
+			orderID: paidOrder.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+
+				store.EXPECT().
+					GetOrderForUpdate(gomock.Any(), paidOrder.ID).
+					Times(1).
+					Return(paidOrder, nil)
+
+				store.EXPECT().
+					UpdateOrderStatusTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.UpdateOrderStatusTxResult{}, db.ErrRecordNotFound)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusConflict, recorder.Code)
+			},
+		},
 	}
 
 	for i := range testCases {
@@ -2161,6 +2244,30 @@ func TestRejectOrderAPI(t *testing.T) {
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name:    "ConflictAfterRead",
+			orderID: paidOrder.ID,
+			body:    gin.H{"reason": "材料售罄"},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+
+				store.EXPECT().
+					GetOrderForUpdate(gomock.Any(), paidOrder.ID).
+					Times(1).
+					Return(paidOrder, nil)
+
+				store.EXPECT().
+					CancelOrderTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.CancelOrderTxResult{}, db.ErrRecordNotFound)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusConflict, recorder.Code)
 			},
 		},
 	}
@@ -3112,6 +3219,29 @@ func TestMarkOrderReadyAPI(t *testing.T) {
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusUnauthorized, recorder.Code)
+			},
+		},
+		{
+			name:    "ConflictAfterRead",
+			orderID: preparingOrder.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+
+				store.EXPECT().
+					GetOrderForUpdate(gomock.Any(), preparingOrder.ID).
+					Times(1).
+					Return(preparingOrder, nil)
+
+				store.EXPECT().
+					UpdateOrderStatusTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.UpdateOrderStatusTxResult{}, db.ErrRecordNotFound)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusConflict, recorder.Code)
 			},
 		},
 	}

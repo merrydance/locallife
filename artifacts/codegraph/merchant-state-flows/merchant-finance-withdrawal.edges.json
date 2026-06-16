@@ -5,6 +5,34 @@
   "generated_at": "2026-05-30",
   "nodes": [
     {
+      "id": "weapp.financeIndexPage",
+      "kind": "frontend_page",
+      "label": "Merchant finance index page",
+      "file": "weapp/miniprogram/pages/merchant/finance/index.ts",
+      "line": 20
+    },
+    {
+      "id": "weapp.financeBillsPage",
+      "kind": "frontend_page",
+      "label": "Merchant finance bills page",
+      "file": "weapp/miniprogram/pages/merchant/finance/bills/index.ts",
+      "line": 50
+    },
+    {
+      "id": "weapp.financeSettlementsPage",
+      "kind": "frontend_page",
+      "label": "Merchant finance settlements page",
+      "file": "weapp/miniprogram/pages/merchant/finance/settlements/index.ts",
+      "line": 50
+    },
+    {
+      "id": "weapp.cancelWithdrawDetailPage",
+      "kind": "frontend_page",
+      "label": "External cancel-withdraw detail page",
+      "file": "weapp/miniprogram/pages/merchant/finance/cancel-withdraw/detail/index.ts",
+      "line": 5
+    },
+    {
       "id": "weapp.financeEntry",
       "kind": "frontend_menu",
       "label": "Merchant finance entry cards",
@@ -468,6 +496,26 @@
     }
   ],
   "edges": [
+    {
+      "from": "weapp.financeIndexPage",
+      "to": "weapp.financeEntry",
+      "kind": "uses"
+    },
+    {
+      "from": "weapp.financeBillsPage",
+      "to": "weapp.financeWorkflow",
+      "kind": "calls_service"
+    },
+    {
+      "from": "weapp.financeSettlementsPage",
+      "to": "weapp.financeWorkflow",
+      "kind": "calls_service"
+    },
+    {
+      "from": "weapp.cancelWithdrawDetailPage",
+      "to": "weapp.financeIndexPage",
+      "kind": "redirects"
+    },
     {
       "from": "weapp.financeEntry",
       "to": "weapp.financeWorkflow",

@@ -2,6 +2,7 @@ package logic
 
 import (
 	"context"
+	"net/http"
 	"testing"
 	"time"
 
@@ -45,6 +46,177 @@ func (s createOrderIDGeneratorStub) OutTradeNo(string, time.Time) (string, error
 
 func (s createOrderIDGeneratorStub) OutRefundNo(time.Time) (string, error) {
 	return "", nil
+}
+
+type createOrderTaskSchedulerStub struct {
+	orderPaymentTimeouts []int64
+}
+
+func (s *createOrderTaskSchedulerStub) ScheduleOrderPaymentTimeout(ctx context.Context, orderID int64, at time.Time) error {
+	s.orderPaymentTimeouts = append(s.orderPaymentTimeouts, orderID)
+	return nil
+}
+
+func (s *createOrderTaskSchedulerStub) SchedulePaymentOrderTimeout(ctx context.Context, paymentOrderNo string, atTime time.Time) error {
+	return nil
+}
+
+func (s *createOrderTaskSchedulerStub) ScheduleCombinedPaymentOrderTimeout(ctx context.Context, combineOutTradeNo string, atTime time.Time) error {
+	return nil
+}
+
+func (s *createOrderTaskSchedulerStub) ScheduleProcessRefund(ctx context.Context, input ProcessRefundTaskInput) error {
+	return nil
+}
+
+func (s *createOrderTaskSchedulerStub) ScheduleProfitSharing(ctx context.Context, profitSharingOrderID int64) error {
+	return nil
+}
+
+func (s *createOrderTaskSchedulerStub) ScheduleProfitSharingReturnResult(ctx context.Context, input ProfitSharingReturnResultTaskInput) error {
+	return nil
+}
+
+func (s *createOrderTaskSchedulerStub) ScheduleOrderPrint(ctx context.Context, input OrderPrintTaskInput) error {
+	return nil
+}
+
+func TestOrderServiceCreateOrder_PassesIdempotencyMetadataAndSkipsTimeoutOnReplay(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	scheduler := &createOrderTaskSchedulerStub{}
+	service := NewOrderService(
+		store,
+		nil,
+		nil,
+		nil,
+		scheduler,
+		createOrderNormalizerStub{},
+		nil,
+		nil,
+		createOrderClockStub{now: time.Date(2026, 6, 15, 10, 30, 0, 0, time.UTC)},
+		createOrderIDGeneratorStub{orderNo: "ORDER-IDEMPOTENCY-REPLAY-SHOULD-NOT-PERSIST"},
+		nil,
+	)
+
+	userID := int64(20)
+	merchantID := int64(10)
+	dishID := int64(30)
+	input := CreateOrderCommandInput{
+		UserID:         userID,
+		MerchantID:     merchantID,
+		OrderType:      db.OrderTypeTakeaway,
+		Notes:          " 少辣 ",
+		IdempotencyKey: " order-create-key-1 ",
+		Items: []OrderItemInput{{
+			DishID:   &dishID,
+			Quantity: 2,
+		}},
+	}
+	replayedOrder := db.Order{
+		ID:          90,
+		OrderNo:     "ORDER-IDEMPOTENCY-EXISTING",
+		UserID:      userID,
+		MerchantID:  merchantID,
+		OrderType:   db.OrderTypeTakeaway,
+		Subtotal:    4000,
+		TotalAmount: 4000,
+		Status:      db.OrderStatusPending,
+	}
+
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchantID).
+		Times(1).
+		Return(db.Merchant{ID: merchantID, Status: "active", IsOpen: true}, nil)
+	store.EXPECT().
+		GetDish(gomock.Any(), dishID).
+		Times(1).
+		Return(db.Dish{ID: dishID, MerchantID: merchantID, Name: "菜品", Price: 2000, IsOnline: true, IsAvailable: true}, nil)
+	store.EXPECT().
+		CountActivePackagingDishesByMerchant(gomock.Any(), merchantID).
+		Times(1).
+		Return(int64(0), nil)
+	store.EXPECT().
+		ListActiveDiscountRules(gomock.Any(), merchantID).
+		Times(1).
+		Return([]db.DiscountRule{}, nil)
+	store.EXPECT().
+		CreateOrderTx(gomock.Any(), gomock.Any()).
+		Times(1).
+		DoAndReturn(func(_ context.Context, arg db.CreateOrderTxParams) (db.CreateOrderTxResult, error) {
+			require.Equal(t, "customer_order_create", arg.IdempotencyOperationScope)
+			require.Equal(t, userID, arg.IdempotencyActorUserID)
+			require.Equal(t, "order-create-key-1", arg.IdempotencyKey)
+			require.Equal(t, orderCreateRequestHash(input), arg.IdempotencyRequestHash)
+			return db.CreateOrderTxResult{Order: replayedOrder, IdempotencyReplayed: true}, nil
+		})
+
+	result, err := service.CreateOrder(context.Background(), input)
+	require.NoError(t, err)
+	require.Equal(t, replayedOrder.ID, result.Order.ID)
+	require.Empty(t, scheduler.orderPaymentTimeouts)
+}
+
+func TestOrderServiceCreateOrder_MapsIdempotencyConflict(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	service := NewOrderService(
+		store,
+		nil,
+		nil,
+		nil,
+		nil,
+		createOrderNormalizerStub{},
+		nil,
+		nil,
+		createOrderClockStub{now: time.Date(2026, 6, 15, 10, 30, 0, 0, time.UTC)},
+		createOrderIDGeneratorStub{orderNo: "ORDER-IDEMPOTENCY-CONFLICT"},
+		nil,
+	)
+
+	userID := int64(20)
+	merchantID := int64(10)
+	dishID := int64(30)
+	input := CreateOrderCommandInput{
+		UserID:         userID,
+		MerchantID:     merchantID,
+		OrderType:      db.OrderTypeTakeaway,
+		IdempotencyKey: "order-create-conflict-1",
+		Items: []OrderItemInput{{
+			DishID:   &dishID,
+			Quantity: 1,
+		}},
+	}
+
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchantID).
+		Times(1).
+		Return(db.Merchant{ID: merchantID, Status: "active", IsOpen: true}, nil)
+	store.EXPECT().
+		GetDish(gomock.Any(), dishID).
+		Times(1).
+		Return(db.Dish{ID: dishID, MerchantID: merchantID, Name: "菜品", Price: 2000, IsOnline: true, IsAvailable: true}, nil)
+	store.EXPECT().
+		CountActivePackagingDishesByMerchant(gomock.Any(), merchantID).
+		Times(1).
+		Return(int64(0), nil)
+	store.EXPECT().
+		ListActiveDiscountRules(gomock.Any(), merchantID).
+		Times(1).
+		Return([]db.DiscountRule{}, nil)
+	store.EXPECT().
+		CreateOrderTx(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.CreateOrderTxResult{}, db.ErrOrderCreateIdempotencyConflict)
+
+	_, err := service.CreateOrder(context.Background(), input)
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, http.StatusConflict, reqErr.Status)
+	require.Equal(t, "订单请求状态已变化，请刷新后重试", reqErr.Err.Error())
 }
 
 func TestOrderServiceCreateOrder_RejectsVoucherWhenMerchantDiscountCannotStack(t *testing.T) {

@@ -75,6 +75,21 @@ func TestMerchantReportClientReturnsProviderErrorForBusinessFailure(t *testing.T
 	require.Equal(t, "资料信息不完整，请核对后重新提交：上游原始参数错误", providerErr.Frontend.Message)
 }
 
+func TestMerchantReportClientReturnsBusinessErrorForSuccessResultWithFailureErrCode(t *testing.T) {
+	doer := &merchantReportRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","errCode":"MERCHANT_NOT_REPORT","errMsg":"上游报备缺失","merId":"102004465","terId":"200005200","reportType":"WECHAT","reportNo":"MR202605040001","reportState":"PROCESSING"}`)}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	_, err := client.SubmitWechatReport(context.Background(), validWechatReportRequestForClientTest())
+
+	require.Error(t, err)
+	var providerErr *baofu.ProviderError
+	require.ErrorAs(t, err, &providerErr)
+	require.Equal(t, "merchant_report", providerErr.Operation)
+	require.Equal(t, "MERCHANT_NOT_REPORT", providerErr.UpstreamCode)
+	require.Equal(t, "上游报备缺失", providerErr.UpstreamMessage)
+	require.Equal(t, "商户微信支付通道待开通，请联系平台处理", providerErr.Frontend.Message)
+}
+
 func TestMerchantReportClientValidatesBusinessFailurePayloadBeforeProviderError(t *testing.T) {
 	doer := &merchantReportRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"FAIL","errCode":"INVALID_PARAMETER","errMsg":"上游原始参数错误","terId":"200005200","reportType":"WECHAT","reportNo":"MR202605040001"}`)}
 	client := NewClient(testBaofuRootClient(t, doer))

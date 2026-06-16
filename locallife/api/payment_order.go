@@ -1124,17 +1124,6 @@ type profitSharingReturnResponse struct {
 	UpdatedAt     time.Time  `json:"updated_at"`
 }
 
-type applyAbnormalRefundURIRequest struct {
-	ID int64 `uri:"id" binding:"required,min=1"`
-}
-
-type applyAbnormalRefundBodyRequest struct {
-	Type        string `json:"type" binding:"required,oneof=USER_BANK_CARD MERCHANT_BANK_CARD"`
-	BankType    string `json:"bank_type,omitempty" binding:"omitempty,max=32"`
-	BankAccount string `json:"bank_account,omitempty" binding:"omitempty,max=128"`
-	RealName    string `json:"real_name,omitempty" binding:"omitempty,max=128"`
-}
-
 func newProfitSharingReturnResponse(r db.ProfitSharingReturn) profitSharingReturnResponse {
 	resp := profitSharingReturnResponse{
 		ID:            r.ID,

@@ -13,7 +13,6 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/websocket"
-	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 
 	"github.com/hibiken/asynq"
@@ -46,7 +45,6 @@ const (
 )
 
 const (
-	profitSharingEnqueueDedupWindow             = 12 * time.Minute
 	profitSharingResultNotificationDedupWindow  = 24 * time.Hour
 	profitSharingResultNotificationExpireWindow = 7 * 24 * time.Hour
 	riderNotificationEntityType                 = "rider"
@@ -79,26 +77,6 @@ type riderDeliveryOrderNotificationPayload struct {
 	ExpectedDeliveryAt time.Time `json:"expected_delivery_at"`
 	IsHighValue        bool      `json:"is_high_value"`
 	CreatedAt          time.Time `json:"created_at"`
-}
-
-func shouldDispatchOrderProfitSharing(order db.Order) bool {
-	if order.ReservationID.Valid {
-		return true
-	}
-
-	switch order.OrderType {
-	case "takeout", "dine_in", "takeaway":
-		return false
-	default:
-		return true
-	}
-}
-
-func withProfitSharingEnqueueDedup(opts ...asynq.Option) []asynq.Option {
-	merged := make([]asynq.Option, 0, len(opts)+1)
-	merged = append(merged, opts...)
-	merged = append(merged, asynq.Unique(profitSharingEnqueueDedupWindow))
-	return merged
 }
 
 func profitSharingResultNotificationExpiresAt(order db.ProfitSharingOrder) time.Time {
@@ -1541,28 +1519,6 @@ func workerStringPtrIfNotEmpty(value string) *string {
 	return &value
 }
 
-func workerStringValue(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
-}
-
-func workerPaymentCommandErrorFields(err error) (*string, *string) {
-	var wxErr *wechat.WechatPayError
-	if errors.As(err, &wxErr) {
-		return workerStringPtrIfNotEmpty(wxErr.Code), workerStringPtrIfNotEmpty(wxErr.Message)
-	}
-	var baofuErr *baofu.ProviderError
-	if errors.As(err, &baofuErr) {
-		return workerStringPtrIfNotEmpty(baofuErr.UpstreamCode), workerStringPtrIfNotEmpty(strings.TrimSpace(baofu.BaofuCommandMessage(baofuErr.UpstreamCode, baofuErr.UpstreamMessage)))
-	}
-	if err == nil {
-		return nil, nil
-	}
-	return nil, workerStringPtrIfNotEmpty(err.Error())
-}
-
 func dbWorkerBaofuRefundCommandInput(
 	paymentOrder db.PaymentOrder,
 	refundOrder db.RefundOrder,
@@ -1614,23 +1570,6 @@ func workerBaofuRefundCommandSnapshot(values map[string]string) []byte {
 		return []byte(`{"provider":"baofu","operation":"order_refund"}`)
 	}
 	return raw
-}
-
-func workerProfitSharingCommandSnapshot(values map[string]string) []byte {
-	filtered := make(map[string]string, len(values))
-	for key, value := range values {
-		if value != "" {
-			filtered[key] = value
-		}
-	}
-	if len(filtered) == 0 {
-		return []byte(`{}`)
-	}
-	data, err := json.Marshal(filtered)
-	if err != nil {
-		return []byte(`{}`)
-	}
-	return data
 }
 
 func (processor *RedisTaskProcessor) processProfitSharingResultPayload(ctx context.Context, payload ProfitSharingResultPayload, requireEnqueueSuccess bool) error {

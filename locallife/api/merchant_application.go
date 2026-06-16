@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"regexp"
 	"strings"
@@ -30,30 +29,6 @@ const (
 	merchantApplicationDuplicateLocationHardRejectMeters = 5
 	merchantOnboardingReviewTaskUniqueTTL                = 30 * time.Second
 )
-
-// loggingReader wraps io.ReadCloser to log progress
-type loggingReader struct {
-	r       io.ReadCloser
-	total   int64
-	lastLog time.Time
-	reqID   string
-}
-
-func (l *loggingReader) Read(p []byte) (n int, err error) {
-	n, err = l.r.Read(p)
-	l.total += int64(n)
-	// Log every 1 second or on error/EOF
-	if time.Since(l.lastLog) > 1*time.Second || err != nil {
-		log.Info().Str("request_id", l.reqID).Int64("bytes_read", l.total).Msg("merchant OCR: upload progress")
-		l.lastLog = time.Now()
-	}
-	return
-}
-
-func (l *loggingReader) Close() error {
-	log.Info().Str("request_id", l.reqID).Int64("total_bytes", l.total).Msg("merchant OCR: upload body closed")
-	return l.r.Close()
-}
 
 // ==================== 商户申请数据结构 ====================
 
@@ -578,8 +553,19 @@ func (server *Server) updateMerchantApplicationBasicInfo(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+	if merchantApplicationBasicInfoTouchesSubjectProfile(req) {
+		server.tryProjectMerchantSubjectProfile(ctx, updatedApp, "basic_info_update")
+	}
 
 	server.writeMerchantApplicationDraftResponse(ctx, http.StatusOK, updatedApp)
+}
+
+func merchantApplicationBasicInfoTouchesSubjectProfile(req updateMerchantBasicInfoRequest) bool {
+	return strings.TrimSpace(req.MerchantName) != "" ||
+		strings.TrimSpace(req.BusinessLicenseNumber) != "" ||
+		strings.TrimSpace(req.BusinessScope) != "" ||
+		strings.TrimSpace(req.LegalPersonName) != "" ||
+		strings.TrimSpace(req.LegalPersonIDNumber) != ""
 }
 
 // ==================== 更新门头照和环境照 ====================
@@ -831,6 +817,7 @@ func (server *Server) deleteMerchantApplicationDocument(ctx *gin.Context) {
 			log.Warn().Err(err).Int64("asset_id", assetID).Str("document_type", string(documentType)).Msg("delete merchant application document: soft delete media failed")
 		}
 	}
+	server.tryProjectMerchantSubjectProfile(ctx, updatedApp, "document_delete")
 
 	server.writeMerchantApplicationDraftResponse(ctx, http.StatusOK, updatedApp)
 }
@@ -947,7 +934,17 @@ func (server *Server) submitMerchantApplication(ctx *gin.Context) {
 		return
 	}
 
-	if err := server.checkMerchantApplicationApproval(ctx, app); err != nil {
+	subjectProfile, profileErr := logic.BuildMerchantSubjectProfileFromApplication(app)
+	if profileErr != nil {
+		log.Warn().Err(profileErr).Int64("application_id", app.ID).Msg("submit merchant application: build subject profile for approval failed, fallback to raw document review")
+	}
+
+	if profileErr == nil {
+		err = server.checkMerchantApplicationApproval(ctx, app, subjectProfile)
+	} else {
+		err = server.checkMerchantApplicationApproval(ctx, app)
+	}
+	if err != nil {
 		server.recordMerchantBlockedReview(ctx, app, authPayload.UserID, err)
 		log.Warn().Str("request_id", requestID).Str("reject_reason", err.Error()).Msg("submit blocked: merchant application remains editable")
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
@@ -969,7 +966,11 @@ func (server *Server) submitMerchantApplication(ctx *gin.Context) {
 		}
 	}
 
-	reviewExecutor := logic.NewMerchantOnboardingReviewService(server.store, server.onboardingReviewService, server.credentialGovernanceService)
+	reviewExecutor := logic.NewMerchantOnboardingReviewService(
+		server.store,
+		server.onboardingReviewService,
+		server.credentialGovernanceService,
+	).WithSubjectProfileService(logic.NewMerchantSubjectProfileService(server.store))
 	var queuedRun *db.OnboardingReviewRun
 	if server.onboardingReviewService != nil && server.taskDistributor != nil {
 		reviewTaskEnqueueAttempted := false
@@ -1128,20 +1129,31 @@ func validateMerchantApplicationRequired(app db.MerchantApplication) error {
 // 5. 法人身份证在有效期内
 // 6. 有经纬度信息
 // 7. 地址未被其他商户占用
-func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.MerchantApplication) error {
+func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.MerchantApplication, profiles ...logic.MerchantSubjectProfile) error {
 	// 1. 检查经纬度
 	if !app.Longitude.Valid || !app.Latitude.Valid {
 		return apierr(ErrMerchantLocationRequired.Code, "请选择商户地理位置")
 	}
 
-	payloadResult, err := logic.BuildMerchantDocumentReviewInputFromPayloads(logic.MerchantDocumentReviewPayloads{
+	var subjectProfile logic.MerchantSubjectProfile
+	useSubjectProfile := len(profiles) > 0 && profiles[0].ApplicationID > 0
+	if useSubjectProfile {
+		subjectProfile = profiles[0]
+	}
+	rawPayloadResult, rawPayloadErr := logic.BuildMerchantDocumentReviewInputFromPayloads(logic.MerchantDocumentReviewPayloads{
 		BusinessLicenseJSON: app.BusinessLicenseOcr,
 		FoodPermitJSON:      app.FoodPermitOcr,
 		IDCardFrontJSON:     app.IDCardFrontOcr,
 		IDCardBackJSON:      app.IDCardBackOcr,
 	})
-	if err != nil {
-		return merchantDocumentReviewAPIError(err)
+	if rawPayloadErr != nil && !useSubjectProfile {
+		return merchantDocumentReviewAPIError(rawPayloadErr)
+	}
+
+	payloadResult := rawPayloadResult
+	if useSubjectProfile {
+		payloadResult.Input = subjectProfile.ReviewInput()
+		payloadResult.FoodPermitNeedsNormalizedRepair = merchantFoodPermitNeedsRepairForSubmission(payloadResult.Input.FoodPermit)
 	}
 
 	if payloadResult.Input.BusinessLicense.ValidPeriod == "" && server.store != nil && payloadResult.Input.BusinessLicense.OCRJobID != nil && *payloadResult.Input.BusinessLicense.OCRJobID > 0 {
@@ -1160,6 +1172,25 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 				}); updateErr != nil {
 					log.Warn().Err(updateErr).Int64("application_id", app.ID).Msg("submit merchant application: persist repaired business license ocr failed")
 					return errors.New("系统繁忙，请稍后重试")
+				}
+				app.BusinessLicenseOcr = repairedBusinessLicenseJSON
+				if repairedPayloadResult, buildErr := logic.BuildMerchantDocumentReviewInputFromPayloads(logic.MerchantDocumentReviewPayloads{
+					BusinessLicenseJSON: app.BusinessLicenseOcr,
+					FoodPermitJSON:      app.FoodPermitOcr,
+					IDCardFrontJSON:     app.IDCardFrontOcr,
+					IDCardBackJSON:      app.IDCardBackOcr,
+				}); buildErr == nil {
+					rawPayloadResult = repairedPayloadResult
+					rawPayloadErr = nil
+				}
+				if useSubjectProfile {
+					updatedProfile, buildErr := logic.BuildMerchantSubjectProfileFromApplication(app)
+					if buildErr != nil {
+						log.Warn().Err(buildErr).Int64("application_id", app.ID).Msg("submit merchant application: rebuild repaired business license subject profile failed")
+						return errors.New("系统繁忙，请稍后重试")
+					}
+					subjectProfile = updatedProfile
+					payloadResult.Input = subjectProfile.ReviewInput()
 				}
 			}
 		}
@@ -1204,8 +1235,28 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 		}
 	}
 
-	if err := server.persistRepairedFoodPermitOCR(ctx, app.ID, payloadResult.RepairedFoodPermitJSON); err != nil {
+	if err := server.persistRepairedFoodPermitOCR(ctx, &app, payloadResult.RepairedFoodPermitJSON); err != nil {
 		return errors.New("系统繁忙，请稍后重试")
+	}
+	if len(payloadResult.RepairedFoodPermitJSON) > 0 {
+		if repairedPayloadResult, buildErr := logic.BuildMerchantDocumentReviewInputFromPayloads(logic.MerchantDocumentReviewPayloads{
+			BusinessLicenseJSON: app.BusinessLicenseOcr,
+			FoodPermitJSON:      app.FoodPermitOcr,
+			IDCardFrontJSON:     app.IDCardFrontOcr,
+			IDCardBackJSON:      app.IDCardBackOcr,
+		}); buildErr == nil {
+			rawPayloadResult = repairedPayloadResult
+			rawPayloadErr = nil
+		}
+	}
+	if useSubjectProfile && len(payloadResult.RepairedFoodPermitJSON) > 0 {
+		updatedProfile, buildErr := logic.BuildMerchantSubjectProfileFromApplication(app)
+		if buildErr != nil {
+			log.Warn().Err(buildErr).Int64("application_id", app.ID).Msg("submit merchant application: rebuild repaired food permit subject profile failed")
+			return errors.New("系统繁忙，请稍后重试")
+		}
+		subjectProfile = updatedProfile
+		payloadResult.Input = subjectProfile.ReviewInput()
 	}
 
 	documentReview, err := logic.EvaluateMerchantDocumentReview(payloadResult.Input, time.Now())
@@ -1219,10 +1270,18 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 		return merchantDocumentReviewAPIError(err)
 	}
 
-	if !merchantBusinessLicenseReviewOCRConfirmationValid(app.UserID, payloadResult.Input.BusinessLicense) {
+	businessLicenseConfirmed := merchantBusinessLicenseReviewOCRConfirmationValid(app.UserID, payloadResult.Input.BusinessLicense)
+	if !businessLicenseConfirmed && useSubjectProfile && rawPayloadErr == nil {
+		businessLicenseConfirmed = merchantBusinessLicenseReviewOCRConfirmationValid(app.UserID, rawPayloadResult.Input.BusinessLicense)
+	}
+	if !businessLicenseConfirmed {
 		return apierr(ErrApplicationInvalidState.Code, "请核对营业执照企业名称和统一社会信用代码后再提交")
 	}
-	if !merchantFoodPermitReviewOCRConfirmationValid(app.UserID, payloadResult.Input.FoodPermit) {
+	foodPermitConfirmed := merchantFoodPermitReviewOCRConfirmationValid(app.UserID, payloadResult.Input.FoodPermit)
+	if !foodPermitConfirmed && useSubjectProfile && rawPayloadErr == nil {
+		foodPermitConfirmed = merchantFoodPermitReviewOCRConfirmationValid(app.UserID, rawPayloadResult.Input.FoodPermit)
+	}
+	if !foodPermitConfirmed {
 		return apierr(ErrApplicationInvalidState.Code, "请核对食品经营许可证主体名称和许可证编号后再提交")
 	}
 
@@ -1476,6 +1535,14 @@ func merchantFoodPermitNeedsOfficialVerification(businessLicense logic.MerchantR
 	return !merchantCompanyNamesRoughlyEqual(licenseName, permitName)
 }
 
+func merchantFoodPermitNeedsRepairForSubmission(foodPermit logic.MerchantReviewFoodPermitOCRData) bool {
+	return strings.TrimSpace(foodPermit.ValidTo) == "" ||
+		strings.TrimSpace(foodPermit.OperatorName) == "" ||
+		strings.TrimSpace(foodPermit.CompanyName) == "" ||
+		strings.TrimSpace(foodPermit.PermitNo) == "" ||
+		merchantFoodPermitNameLooksLikeCertificateText(foodPermit.CompanyName)
+}
+
 func merchantFoodPermitNameLooksLikeCertificateText(name string) bool {
 	for _, keyword := range []string{"地址", "经营场所", "面积", "办理", "许可证", "登记证", "小餐饮", "小作坊", "《"} {
 		if strings.Contains(name, keyword) {
@@ -1574,18 +1641,42 @@ func (server *Server) logFoodPermitValidationFailure(ctx *gin.Context, app db.Me
 	logger.Msg("submit merchant application: food permit validation failed")
 }
 
-func (server *Server) persistRepairedFoodPermitOCR(ctx context.Context, appID int64, foodPermitOCR []byte) error {
+func (server *Server) persistRepairedFoodPermitOCR(ctx context.Context, app *db.MerchantApplication, foodPermitOCR []byte) error {
 	if len(foodPermitOCR) == 0 || server.store == nil {
 		return nil
 	}
-	if _, err := server.store.UpdateMerchantApplicationFoodPermit(ctx, db.UpdateMerchantApplicationFoodPermitParams{
-		ID:            appID,
+	if app == nil {
+		return fmt.Errorf("merchant application missing")
+	}
+	updated, err := server.store.UpdateMerchantApplicationFoodPermit(ctx, db.UpdateMerchantApplicationFoodPermitParams{
+		ID:            app.ID,
 		FoodPermitOcr: foodPermitOCR,
-	}); err != nil {
-		log.Warn().Err(err).Int64("application_id", appID).Msg("submit merchant application: persist repaired food permit ocr failed")
+	})
+	if err != nil {
+		log.Warn().Err(err).Int64("application_id", app.ID).Msg("submit merchant application: persist repaired food permit ocr failed")
 		return err
 	}
+	*app = updated
 	return nil
+}
+
+func (server *Server) syncMerchantSubjectProfile(ctx context.Context, app db.MerchantApplication) (logic.MerchantSubjectProfile, error) {
+	service := logic.NewMerchantSubjectProfileService(server.store)
+	if service == nil {
+		return logic.MerchantSubjectProfile{}, nil
+	}
+	return service.SaveApplicationProfile(ctx, app)
+}
+
+func (server *Server) tryProjectMerchantSubjectProfile(ctx context.Context, app db.MerchantApplication, reason string) {
+	if _, err := server.syncMerchantSubjectProfile(ctx, app); err != nil {
+		log.Warn().
+			Err(err).
+			Int64("application_id", app.ID).
+			Int64("user_id", app.UserID).
+			Str("reason", reason).
+			Msg("merchant subject profile projection failed")
+	}
 }
 
 func truncateMerchantOCRText(text string, maxLen int) string {
@@ -1951,62 +2042,6 @@ func extractAddressKeywords(addr string) []string {
 	roads := roadRegex.FindAllString(addr, -1)
 	keywords = append(keywords, roads...)
 	return keywords
-}
-
-// parseFlexibleDate 灵活解析多种日期格式
-func parseFlexibleDate(dateStr string) (time.Time, bool) {
-	// 移除空白和常见无关字符
-	dateStr = strings.TrimSpace(dateStr)
-	dateStr = strings.ReplaceAll(dateStr, " ", "")
-
-	// 尝试提取纯数字（年月日）
-	var year, month, day string
-
-	// 格式1: 中文格式 2030年01月01日
-	if strings.Contains(dateStr, "年") && strings.Contains(dateStr, "月") && strings.Contains(dateStr, "日") {
-		re := regexp.MustCompile(`(\d{4})年(\d{1,2})月(\d{1,2})日`)
-		if matches := re.FindStringSubmatch(dateStr); len(matches) == 4 {
-			year, month, day = matches[1], matches[2], matches[3]
-		}
-	}
-
-	// 格式2: 点分隔 2030.01.01
-	if year == "" && strings.Count(dateStr, ".") >= 2 {
-		parts := strings.Split(dateStr, ".")
-		if len(parts) >= 3 {
-			year, month, day = parts[0], parts[1], parts[2]
-		}
-	}
-
-	// 格式3: 纯数字 20300101
-	if year == "" && len(dateStr) >= 8 {
-		// 尝试匹配 YYYYMMDD
-		re := regexp.MustCompile(`^(\d{4})(\d{2})(\d{2})`)
-		if matches := re.FindStringSubmatch(dateStr); len(matches) == 4 {
-			year, month, day = matches[1], matches[2], matches[3]
-		}
-	}
-
-	// 格式4: 横线分隔 2030-01-01（但要注意不要误匹配有效期范围分隔符）
-	if year == "" && strings.Count(dateStr, "-") == 2 {
-		parts := strings.Split(dateStr, "-")
-		if len(parts) == 3 && len(parts[0]) == 4 {
-			year, month, day = parts[0], parts[1], parts[2]
-		}
-	}
-
-	if year == "" || month == "" || day == "" {
-		return time.Time{}, false
-	}
-
-	// 构建日期字符串
-	dateFormatted := fmt.Sprintf("%s-%02s-%02s", year, month, day)
-	t, err := parseISODate(dateFormatted, "")
-	if err != nil {
-		return time.Time{}, false
-	}
-
-	return t, true
 }
 
 // ==================== 重置申请 ====================

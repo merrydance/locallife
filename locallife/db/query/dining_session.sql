@@ -49,3 +49,16 @@ WHERE status = sqlc.arg('status')
   AND opened_at < sqlc.arg('opened_at')
 ORDER BY opened_at ASC, id ASC
 LIMIT sqlc.arg('limit');
+
+-- name: ListPaidOpenDineInSessionsForCheckoutRecovery :many
+SELECT ds.id, ds.merchant_id, ds.table_id, ds.reservation_id, ds.user_id, ds.active_order_id, ds.status, ds.opened_at, ds.closed_at, ds.created_at, ds.updated_at
+FROM dining_sessions ds
+INNER JOIN orders o ON o.id = ds.active_order_id
+WHERE ds.status = 'open'
+  AND ds.opened_at < sqlc.arg('opened_before')
+  AND o.status = 'paid'
+  AND o.order_type = 'dine_in'
+  AND o.merchant_id = ds.merchant_id
+  AND o.user_id = ds.user_id
+ORDER BY ds.opened_at ASC, ds.id ASC
+LIMIT sqlc.arg('limit');

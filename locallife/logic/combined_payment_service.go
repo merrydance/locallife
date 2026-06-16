@@ -11,11 +11,6 @@ import (
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 )
 
-const (
-	combinedOutTradePrefix = "CP"
-	combinedOrderMaxCount  = 50
-)
-
 // CombinedPaymentService keeps the combined-payment API boundary explicit.
 // Main-business payment is Baofu-only now, and Baofu combined payment has not
 // been enabled, so creation/query/close fail closed.

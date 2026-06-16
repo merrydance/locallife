@@ -103,7 +103,7 @@ func randomMerchantAppDraftWithData(userID int64) db.MerchantApplication {
 	return db.MerchantApplication{
 		ID:                          1,
 		UserID:                      userID,
-		MerchantName:                "测试餐厅",
+		MerchantName:                "测试餐饮有限公司",
 		BusinessLicenseNumber:       "91110000MA12345678",
 		BusinessLicenseOcr:          licenseOCR,
 		LegalPersonName:             "张三",
@@ -189,6 +189,113 @@ func expectMerchantApplicationPublicDocumentLookups(store *mockdb.MockStore, use
 			}
 			return asset, nil
 		})
+}
+
+func expectMerchantSubjectProfileSync(t *testing.T, store *mockdb.MockStore, app db.MerchantApplication) {
+	t.Helper()
+	store.EXPECT().
+		UpsertMerchantSubjectProfile(gomock.Any(), gomock.Any()).
+		Times(1).
+		DoAndReturn(func(_ context.Context, arg db.UpsertMerchantSubjectProfileParams) (db.MerchantSubjectProfile, error) {
+			require.Equal(t, app.ID, arg.MerchantApplicationID)
+			require.Equal(t, app.UserID, arg.UserID)
+			require.NotEmpty(t, arg.SourceSnapshot)
+			return db.MerchantSubjectProfile{
+				ID:                          app.ID + 500,
+				MerchantApplicationID:       arg.MerchantApplicationID,
+				MerchantID:                  arg.MerchantID,
+				UserID:                      arg.UserID,
+				BusinessLicenseNumber:       arg.BusinessLicenseNumber,
+				BusinessLicenseName:         arg.BusinessLicenseName,
+				BusinessLicenseAddress:      arg.BusinessLicenseAddress,
+				LegalPersonName:             arg.LegalPersonName,
+				LegalPersonIDNumber:         arg.LegalPersonIDNumber,
+				FoodPermitNumber:            arg.FoodPermitNumber,
+				FoodPermitCompanyName:       arg.FoodPermitCompanyName,
+				BusinessLicenseMediaAssetID: arg.BusinessLicenseMediaAssetID,
+				FoodPermitMediaAssetID:      arg.FoodPermitMediaAssetID,
+				IDCardFrontMediaAssetID:     arg.IDCardFrontMediaAssetID,
+				IDCardBackMediaAssetID:      arg.IDCardBackMediaAssetID,
+				BusinessLicensePayload:      arg.BusinessLicensePayload,
+				FoodPermitPayload:           arg.FoodPermitPayload,
+				LegalPersonPayload:          arg.LegalPersonPayload,
+				SourceSnapshot:              arg.SourceSnapshot,
+				Version:                     1,
+				CreatedAt:                   time.Now(),
+				UpdatedAt:                   time.Now(),
+			}, nil
+		})
+	store.EXPECT().
+		CreateMerchantSubjectProfileVersion(gomock.Any(), gomock.Any()).
+		Times(1).
+		DoAndReturn(func(_ context.Context, arg db.CreateMerchantSubjectProfileVersionParams) (db.MerchantSubjectProfileVersion, error) {
+			require.Equal(t, app.ID, arg.MerchantApplicationID)
+			require.Equal(t, app.UserID, arg.UserID)
+			require.NotEmpty(t, arg.Snapshot)
+			return db.MerchantSubjectProfileVersion{ID: app.ID + 600, ProfileID: arg.ProfileID, Version: arg.Version}, nil
+		})
+}
+
+func expectMerchantSubjectProfileProjectionFailure(store *mockdb.MockStore) {
+	store.EXPECT().
+		UpsertMerchantSubjectProfile(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.MerchantSubjectProfile{}, errors.New("profile projection unavailable"))
+}
+
+func expectMerchantSubjectProfileApprovalSync(t *testing.T, store *mockdb.MockStore, app db.MerchantApplication, merchantID int64) {
+	t.Helper()
+	// Approval-time subject profile persistence happens inside
+	// ApproveMerchantApplicationTx. API tests use a mocked transaction, so they
+	// assert the SubjectProfile transaction params instead of expecting an
+	// extra write before the transaction.
+	_ = store
+	_ = app
+	_ = merchantID
+}
+
+func requireMerchantSubjectProfileApprovalTxParams(t *testing.T, arg db.ApproveMerchantApplicationTxParams, app db.MerchantApplication) {
+	t.Helper()
+	require.NotNil(t, arg.SubjectProfile)
+	require.Equal(t, app.ID, arg.SubjectProfile.MerchantApplicationID)
+	require.Equal(t, app.UserID, arg.SubjectProfile.UserID)
+	require.Equal(t, app.BusinessLicenseNumber, arg.SubjectProfile.BusinessLicenseNumber)
+	require.Equal(t, app.MerchantName, arg.SubjectProfile.BusinessLicenseName)
+	require.Equal(t, app.LegalPersonName, arg.SubjectProfile.LegalPersonName)
+	require.Equal(t, app.LegalPersonIDNumber, arg.SubjectProfile.LegalPersonIDNumber)
+	require.False(t, arg.SubjectProfile.MerchantID.Valid)
+	require.NotEmpty(t, arg.SubjectProfile.BusinessLicensePayload)
+	require.NotEmpty(t, arg.SubjectProfile.FoodPermitPayload)
+	require.NotEmpty(t, arg.SubjectProfile.LegalPersonPayload)
+	require.NotEmpty(t, arg.SubjectProfile.SourceSnapshot)
+	require.NotEmpty(t, arg.SubjectProfileVersionSnapshot)
+}
+
+func merchantSubjectProfileRowFromApprovalArg(id int64, arg db.UpsertMerchantSubjectProfileParams) db.MerchantSubjectProfile {
+	return db.MerchantSubjectProfile{
+		ID:                          id,
+		MerchantApplicationID:       arg.MerchantApplicationID,
+		MerchantID:                  arg.MerchantID,
+		UserID:                      arg.UserID,
+		BusinessLicenseNumber:       arg.BusinessLicenseNumber,
+		BusinessLicenseName:         arg.BusinessLicenseName,
+		BusinessLicenseAddress:      arg.BusinessLicenseAddress,
+		LegalPersonName:             arg.LegalPersonName,
+		LegalPersonIDNumber:         arg.LegalPersonIDNumber,
+		FoodPermitNumber:            arg.FoodPermitNumber,
+		FoodPermitCompanyName:       arg.FoodPermitCompanyName,
+		BusinessLicenseMediaAssetID: arg.BusinessLicenseMediaAssetID,
+		FoodPermitMediaAssetID:      arg.FoodPermitMediaAssetID,
+		IDCardFrontMediaAssetID:     arg.IDCardFrontMediaAssetID,
+		IDCardBackMediaAssetID:      arg.IDCardBackMediaAssetID,
+		BusinessLicensePayload:      arg.BusinessLicensePayload,
+		FoodPermitPayload:           arg.FoodPermitPayload,
+		LegalPersonPayload:          arg.LegalPersonPayload,
+		SourceSnapshot:              arg.SourceSnapshot,
+		Version:                     2,
+		CreatedAt:                   time.Now(),
+		UpdatedAt:                   time.Now(),
+	}
 }
 
 func requireMerchantOCRConfirmationBlocked(t *testing.T, recorder *httptest.ResponseRecorder, message string) {
@@ -636,7 +743,7 @@ func TestUpdateMerchantApplicationBasicInfo(t *testing.T) {
 		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
 	}{
 		{
-			name: "OK",
+			name: "OK_SubjectProfileProjectionFailureDoesNotBlockDraftSave",
 			body: updateMerchantBasicInfoRequest{
 				MerchantName:          "新店名",
 				ContactPhone:          "13800138001",
@@ -677,6 +784,7 @@ func TestUpdateMerchantApplicationBasicInfo(t *testing.T) {
 						require.Equal(t, "110101199001011234", arg.LegalPersonIDNumber.String)
 						return updatedApp, nil
 					})
+				expectMerchantSubjectProfileProjectionFailure(store)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -716,6 +824,7 @@ func TestUpdateMerchantApplicationBasicInfo(t *testing.T) {
 						require.Equal(t, "新店名", arg.MerchantName.String)
 						return updatedApp, nil
 					})
+				expectMerchantSubjectProfileSync(t, store, updatedApp)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -763,6 +872,7 @@ func TestUpdateMerchantApplicationBasicInfo(t *testing.T) {
 						require.Equal(t, "北京市朝阳区修正路300号", arg.BusinessAddress.String)
 						return updatedApp, nil
 					})
+				expectMerchantSubjectProfileSync(t, store, updatedApp)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -886,6 +996,7 @@ func TestPatchMerchantApplicationBusinessLicenseOCRFields(t *testing.T) {
 						updatedApp.BusinessScope = arg.BusinessScope
 						return updatedApp, nil
 					})
+				expectMerchantSubjectProfileSync(t, store, updatedApp)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -987,6 +1098,7 @@ func TestPatchMerchantApplicationBusinessLicenseOCRFields(t *testing.T) {
 						updatedApp.BusinessLicenseOcr = arg.BusinessLicenseOcr
 						return updatedApp, nil
 					})
+				expectMerchantSubjectProfileSync(t, store, updatedApp)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1066,6 +1178,7 @@ func TestPatchMerchantApplicationBusinessLicenseOCRFields(t *testing.T) {
 						updatedApp.MerchantName = arg.MerchantName.String
 						return updatedApp, nil
 					})
+				expectMerchantSubjectProfileSync(t, store, updatedApp)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1399,6 +1512,7 @@ func TestPatchMerchantApplicationFoodPermitOCRFields(t *testing.T) {
 						updatedApp.FoodPermitOcr = arg.FoodPermitOcr
 						return updatedApp, nil
 					})
+				expectMerchantSubjectProfileSync(t, store, updatedApp)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1536,6 +1650,7 @@ func TestPatchMerchantApplicationFoodPermitOCRFields(t *testing.T) {
 						updatedApp.FoodPermitOcr = arg.FoodPermitOcr
 						return updatedApp, nil
 					})
+				expectMerchantSubjectProfileSync(t, store, updatedApp)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1796,6 +1911,8 @@ func TestDeleteMerchantApplicationDocument(t *testing.T) {
 					SoftDeleteMediaAsset(gomock.Any(), int64(2)).
 					Times(1).
 					Return(db.MediaAsset{ID: 2, UploadedBy: user.ID}, nil)
+
+				expectMerchantSubjectProfileSync(t, store, updatedApp)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1902,13 +2019,112 @@ func TestSubmitMerchantApplication(t *testing.T) {
 
 				approvedApp := submittedApp
 				approvedApp.Status = "approved"
+				expectMerchantSubjectProfileApprovalSync(t, store, submittedApp, 1)
 				store.EXPECT().
 					ApproveMerchantApplicationTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.ApproveMerchantApplicationTxResult{
-						Application: approvedApp,
-						Merchant:    db.Merchant{ID: 1},
-					}, nil)
+					DoAndReturn(func(_ context.Context, arg db.ApproveMerchantApplicationTxParams) (db.ApproveMerchantApplicationTxResult, error) {
+						requireMerchantSubjectProfileApprovalTxParams(t, arg, submittedApp)
+						return db.ApproveMerchantApplicationTxResult{
+							Application: approvedApp,
+							Merchant:    db.Merchant{ID: 1},
+						}, nil
+					})
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var resp merchantApplicationDraftResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, "approved", resp.Status)
+			},
+		},
+		{
+			name: "Approved_UsesSubjectProfileAuthorityWhenOCRPayloadIsStale",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(t *testing.T, store *mockdb.MockStore) {
+				app := randomMerchantAppDraftWithData(user.ID)
+				app.MerchantName = "人工修正后的餐饮店"
+				app.BusinessLicenseNumber = "91330100MANUAL0001"
+				app.LegalPersonName = "李四"
+				app.LegalPersonIDNumber = "110101199001010099"
+				app.BusinessScope = pgtype.Text{String: "餐饮服务;热食类食品制售", Valid: true}
+				app.BusinessLicenseOcr = []byte(fmt.Sprintf(`{
+					"status":"done",
+					"enterprise_name":"OCR错误餐饮店",
+					"credit_code":"91330100OCRWRONG01",
+					"reg_num":"91330100OCRWRONG01",
+					"legal_representative":"张三",
+					"address":"北京市朝阳区测试路100号",
+					"business_scope":"旧经营范围",
+					"valid_period":"2020年01月01日至2040年01月01日",
+					"readiness":{"state":"ready","reason_code":"ok"},
+					"confirmation":{"confirmed_by":%d,"confirmed_at":"2026-06-04T21:01:00+08:00","source":"merchant","snapshot":{"enterprise_name":"OCR错误餐饮店","credit_code":"91330100OCRWRONG01","reg_num":"91330100OCRWRONG01","legal_representative":"张三","address":"北京市朝阳区测试路100号","business_scope":"旧经营范围","valid_period":"2020年01月01日至2040年01月01日"}}
+				}`, user.ID))
+				app.FoodPermitOcr = []byte(fmt.Sprintf(`{
+					"status":"done",
+					"permit_no":"JY11105000000001",
+					"company_name":"人工修正后的餐饮店",
+					"operator_name":"李四",
+					"valid_to":"2030年12月31日",
+					"readiness":{"state":"ready","reason_code":"ok"},
+					"confirmation":{"confirmed_by":%d,"confirmed_at":"2026-06-04T21:06:00+08:00","source":"merchant","snapshot":{"permit_no":"JY11105000000001","company_name":"人工修正后的餐饮店","operator_name":"李四","valid_from":"","valid_to":"2030年12月31日"}}
+				}`, user.ID))
+				app.IDCardFrontOcr = []byte(`{"status":"done","name":"张三","id_number":"110101199001010011","readiness":{"state":"ready","reason_code":"ok"}}`)
+
+				store.EXPECT().
+					GetMerchantApplicationDraft(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+
+				submittedApp := app
+				submittedApp.Status = "submitted"
+				store.EXPECT().
+					SubmitMerchantApplication(gomock.Any(), app.ID).
+					Times(1).
+					Return(submittedApp, nil)
+
+				store.EXPECT().
+					ListMerchantLocationsInRegion(gomock.Any(), submittedApp.RegionID.Int64).
+					Times(1).
+					Return([]db.ListMerchantLocationsInRegionRow{}, nil)
+
+				store.EXPECT().
+					CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
+						BusinessLicenseNumber: submittedApp.BusinessLicenseNumber,
+						ID:                    submittedApp.ID,
+					}).
+					Times(1).
+					Return(int64(0), nil)
+
+				store.EXPECT().
+					CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
+						LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
+						ID:                  submittedApp.ID,
+					}).
+					Times(1).
+					Return(int64(0), nil)
+
+				approvedApp := submittedApp
+				approvedApp.Status = "approved"
+				expectMerchantSubjectProfileApprovalSync(t, store, submittedApp, 1)
+				store.EXPECT().
+					ApproveMerchantApplicationTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ context.Context, arg db.ApproveMerchantApplicationTxParams) (db.ApproveMerchantApplicationTxResult, error) {
+						requireMerchantSubjectProfileApprovalTxParams(t, arg, submittedApp)
+						var appData map[string]any
+						require.NoError(t, json.Unmarshal(arg.AppData, &appData))
+						require.Equal(t, "91330100MANUAL0001", appData["business_license_number"])
+						require.Equal(t, "人工修正后的餐饮店", appData["business_license_name"])
+						require.Equal(t, "李四", appData["legal_person_name"])
+						return db.ApproveMerchantApplicationTxResult{
+							Application: approvedApp,
+							Merchant:    db.Merchant{ID: 1},
+						}, nil
+					})
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1960,13 +2176,17 @@ func TestSubmitMerchantApplication(t *testing.T) {
 
 				approvedApp := submittedApp
 				approvedApp.Status = "approved"
+				expectMerchantSubjectProfileApprovalSync(t, store, submittedApp, 1)
 				store.EXPECT().
 					ApproveMerchantApplicationTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.ApproveMerchantApplicationTxResult{
-						Application: approvedApp,
-						Merchant:    db.Merchant{ID: 1},
-					}, nil)
+					DoAndReturn(func(_ context.Context, arg db.ApproveMerchantApplicationTxParams) (db.ApproveMerchantApplicationTxResult, error) {
+						requireMerchantSubjectProfileApprovalTxParams(t, arg, submittedApp)
+						return db.ApproveMerchantApplicationTxResult{
+							Application: approvedApp,
+							Merchant:    db.Merchant{ID: 1},
+						}, nil
+					})
 			},
 			configureServer: func(server *Server) {
 				server.mapClient = stubMapClient{reverseResult: &maps.ReverseGeocodeResult{
@@ -2025,13 +2245,17 @@ func TestSubmitMerchantApplication(t *testing.T) {
 
 				approvedApp := submittedApp
 				approvedApp.Status = "approved"
+				expectMerchantSubjectProfileApprovalSync(t, store, submittedApp, 1)
 				store.EXPECT().
 					ApproveMerchantApplicationTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.ApproveMerchantApplicationTxResult{
-						Application: approvedApp,
-						Merchant:    db.Merchant{ID: 1},
-					}, nil)
+					DoAndReturn(func(_ context.Context, arg db.ApproveMerchantApplicationTxParams) (db.ApproveMerchantApplicationTxResult, error) {
+						requireMerchantSubjectProfileApprovalTxParams(t, arg, submittedApp)
+						return db.ApproveMerchantApplicationTxResult{
+							Application: approvedApp,
+							Merchant:    db.Merchant{ID: 1},
+						}, nil
+					})
 			},
 			configureServer: func(server *Server) {
 				server.mapClient = stubMapClient{reverseResult: &maps.ReverseGeocodeResult{
@@ -2094,13 +2318,17 @@ func TestSubmitMerchantApplication(t *testing.T) {
 
 				approvedApp := submittedApp
 				approvedApp.Status = "approved"
+				expectMerchantSubjectProfileApprovalSync(t, store, submittedApp, 1)
 				store.EXPECT().
 					ApproveMerchantApplicationTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.ApproveMerchantApplicationTxResult{
-						Application: approvedApp,
-						Merchant:    db.Merchant{ID: 1},
-					}, nil)
+					DoAndReturn(func(_ context.Context, arg db.ApproveMerchantApplicationTxParams) (db.ApproveMerchantApplicationTxResult, error) {
+						requireMerchantSubjectProfileApprovalTxParams(t, arg, submittedApp)
+						return db.ApproveMerchantApplicationTxResult{
+							Application: approvedApp,
+							Merchant:    db.Merchant{ID: 1},
+						}, nil
+					})
 			},
 			configureServer: func(server *Server) {
 				server.mapClient = stubMapClient{
@@ -2190,13 +2418,17 @@ func TestSubmitMerchantApplication(t *testing.T) {
 
 				approvedApp := submittedApp
 				approvedApp.Status = "approved"
+				expectMerchantSubjectProfileApprovalSync(t, store, submittedApp, 1)
 				store.EXPECT().
 					ApproveMerchantApplicationTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.ApproveMerchantApplicationTxResult{
-						Application: approvedApp,
-						Merchant:    db.Merchant{ID: 1},
-					}, nil)
+					DoAndReturn(func(_ context.Context, arg db.ApproveMerchantApplicationTxParams) (db.ApproveMerchantApplicationTxResult, error) {
+						requireMerchantSubjectProfileApprovalTxParams(t, arg, submittedApp)
+						return db.ApproveMerchantApplicationTxResult{
+							Application: approvedApp,
+							Merchant:    db.Merchant{ID: 1},
+						}, nil
+					})
 			},
 			configureServer: func(server *Server) {
 				server.mapClient = stubMapClient{
@@ -2268,13 +2500,17 @@ func TestSubmitMerchantApplication(t *testing.T) {
 
 				approvedApp := submittedApp
 				approvedApp.Status = "approved"
+				expectMerchantSubjectProfileApprovalSync(t, store, submittedApp, 1)
 				store.EXPECT().
 					ApproveMerchantApplicationTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.ApproveMerchantApplicationTxResult{
-						Application: approvedApp,
-						Merchant:    db.Merchant{ID: 1},
-					}, nil)
+					DoAndReturn(func(_ context.Context, arg db.ApproveMerchantApplicationTxParams) (db.ApproveMerchantApplicationTxResult, error) {
+						requireMerchantSubjectProfileApprovalTxParams(t, arg, submittedApp)
+						return db.ApproveMerchantApplicationTxResult{
+							Application: approvedApp,
+							Merchant:    db.Merchant{ID: 1},
+						}, nil
+					})
 			},
 			configureServer: func(server *Server) {
 				server.mapClient = stubMapClient{
@@ -2308,6 +2544,8 @@ func TestSubmitMerchantApplication(t *testing.T) {
 			},
 			buildStubs: func(t *testing.T, store *mockdb.MockStore) {
 				app := randomMerchantAppDraftWithData(user.ID)
+				app.MerchantName = "测试科技有限公司"
+				app.BusinessScope = pgtype.Text{String: "软件开发、技术服务", Valid: true}
 				licenseOCR, _ := json.Marshal(BusinessLicenseOCRData{
 					EnterpriseName: "测试科技有限公司",
 					CreditCode:     "91110000MA12345678",
@@ -2459,6 +2697,7 @@ func TestSubmitMerchantApplication(t *testing.T) {
 				require.NoError(t, err)
 				app.BusinessLicenseOcr = licenseOCR
 				app.BusinessLicenseNumber = "92130528MA0A5XB46A"
+				app.MerchantName = "宁晋县周鹏饭店"
 				app.LegalPersonName = "周松涛"
 				app.LegalPersonIDNumber = "130528199001011234"
 				app.BusinessAddress = "河北省邢台市宁晋县经济开发区吉祥路与晶龙街交叉口东侧"
@@ -2846,10 +3085,12 @@ func TestSubmitMerchantApplication(t *testing.T) {
 
 				approvedApp := submittedApp
 				approvedApp.Status = "approved"
+				expectMerchantSubjectProfileApprovalSync(t, store, submittedApp, 1)
 				store.EXPECT().
 					ApproveMerchantApplicationTx(gomock.Any(), gomock.Any()).
 					Times(1).
 					DoAndReturn(func(_ context.Context, arg db.ApproveMerchantApplicationTxParams) (db.ApproveMerchantApplicationTxResult, error) {
+						requireMerchantSubjectProfileApprovalTxParams(t, arg, submittedApp)
 						require.Equal(t, "测试餐饮有限公司", arg.MerchantName)
 						require.Equal(t, "", arg.Phone)
 						return db.ApproveMerchantApplicationTxResult{
@@ -2903,12 +3144,19 @@ func TestSubmitMerchantApplication(t *testing.T) {
 					Times(1).
 					Return(int64(0), nil)
 
+				approvedApp := app
+				approvedApp.Status = "approved"
+				expectMerchantSubjectProfileApprovalSync(t, store, app, 1)
 				store.EXPECT().
 					ApproveMerchantApplicationTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.ApproveMerchantApplicationTxResult{
-						Application: db.MerchantApplication{ID: app.ID, Status: "approved"},
-					}, nil)
+					DoAndReturn(func(_ context.Context, arg db.ApproveMerchantApplicationTxParams) (db.ApproveMerchantApplicationTxResult, error) {
+						requireMerchantSubjectProfileApprovalTxParams(t, arg, app)
+						return db.ApproveMerchantApplicationTxResult{
+							Application: approvedApp,
+							Merchant:    db.Merchant{ID: 1},
+						}, nil
+					})
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -3381,12 +3629,25 @@ func TestSubmitMerchantApplication_ReusesExistingQueuedReviewRunForSyncFallback(
 	approvedApp := submittedApp
 	approvedApp.Status = db.MerchantApplicationStatusApproved
 	merchant := db.Merchant{ID: 502, OwnerUserID: user.ID}
+	expectMerchantSubjectProfileApprovalSync(t, store, submittedApp, merchant.ID)
 	store.EXPECT().
 		ApproveMerchantApplicationTx(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, arg db.ApproveMerchantApplicationTxParams) (db.ApproveMerchantApplicationTxResult, error) {
+			requireMerchantSubjectProfileApprovalTxParams(t, arg, submittedApp)
 			require.Equal(t, submittedApp.ID, arg.ApplicationID)
 			require.Equal(t, user.ID, arg.UserID)
-			return db.ApproveMerchantApplicationTxResult{Application: approvedApp, Merchant: merchant}, nil
+			var appData map[string]any
+			require.NoError(t, json.Unmarshal(arg.AppData, &appData))
+			require.Equal(t, submittedApp.BusinessLicenseNumber, appData["business_license_number"])
+			require.Equal(t, submittedApp.MerchantName, appData["business_license_name"])
+			require.Equal(t, submittedApp.LegalPersonName, appData["legal_person_name"])
+			approvedProfile := *arg.SubjectProfile
+			approvedProfile.MerchantID = pgtype.Int8{Int64: merchant.ID, Valid: true}
+			return db.ApproveMerchantApplicationTxResult{
+				Application:    approvedApp,
+				Merchant:       merchant,
+				SubjectProfile: merchantSubjectProfileRowFromApprovalArg(submittedApp.ID+500, approvedProfile),
+			}, nil
 		})
 
 	store.EXPECT().
@@ -3517,16 +3778,27 @@ func TestSubmitMerchantApplication_FallsBackToSyncReviewWhenEnqueueFails(t *test
 
 	approvedApp := submittedApp
 	approvedApp.Status = "approved"
+	merchant := db.Merchant{
+		ID:          88,
+		OwnerUserID: user.ID,
+	}
+	expectMerchantSubjectProfileApprovalSync(t, store, submittedApp, merchant.ID)
 	store.EXPECT().
 		ApproveMerchantApplicationTx(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, arg db.ApproveMerchantApplicationTxParams) (db.ApproveMerchantApplicationTxResult, error) {
+			requireMerchantSubjectProfileApprovalTxParams(t, arg, submittedApp)
 			require.Equal(t, submittedApp.ID, arg.ApplicationID)
+			var appData map[string]any
+			require.NoError(t, json.Unmarshal(arg.AppData, &appData))
+			require.Equal(t, submittedApp.BusinessLicenseNumber, appData["business_license_number"])
+			require.Equal(t, submittedApp.MerchantName, appData["business_license_name"])
+			require.Equal(t, submittedApp.LegalPersonName, appData["legal_person_name"])
+			approvedProfile := *arg.SubjectProfile
+			approvedProfile.MerchantID = pgtype.Int8{Int64: merchant.ID, Valid: true}
 			return db.ApproveMerchantApplicationTxResult{
-				Application: approvedApp,
-				Merchant: db.Merchant{
-					ID:          88,
-					OwnerUserID: user.ID,
-				},
+				Application:    approvedApp,
+				Merchant:       merchant,
+				SubjectProfile: merchantSubjectProfileRowFromApprovalArg(submittedApp.ID+500, approvedProfile),
 			}, nil
 		})
 

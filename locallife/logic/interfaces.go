@@ -184,6 +184,7 @@ type CreateOrderCommandInput struct {
 	Notes          string
 	UserVoucherID  *int64
 	UseBalance     bool
+	IdempotencyKey string
 
 	RulesEngine        rules.Engine
 	RulesEngineEnabled bool

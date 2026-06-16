@@ -12,6 +12,11 @@ import {
   type CheckoutAddress
 } from './_services/takeout-checkout'
 import {
+  buildTakeoutOrderCreateRequestSignature,
+  clearTakeoutOrderCreateIdempotency,
+  ensureTakeoutOrderCreateIdempotencyKey
+} from './_services/takeout-order-create-idempotency'
+import {
   buildAddressSyncKey,
   buildCheckoutSnapshotPatch,
   buildCheckoutPaymentMethods,
@@ -459,12 +464,16 @@ Page({
 
     try {
       for (const cart of carts) {
-        const order = await createOrder(buildTakeoutCreateOrderRequest({
+        const orderRequest = buildTakeoutCreateOrderRequest({
           cart,
           addressId: address?.id,
           note: remarks[cart.merchantId] || '',
           useBalance: selectedPaymentMethod === 'balance'
-        }))
+        })
+        const orderRequestSignature = buildTakeoutOrderCreateRequestSignature(orderRequest)
+        const idempotencyKey = ensureTakeoutOrderCreateIdempotencyKey(orderRequestSignature)
+        const order = await createOrder(orderRequest, { idempotencyKey })
+        clearTakeoutOrderCreateIdempotency(idempotencyKey)
         createdOrder = order
         ordersCreated.push(order.id)
 

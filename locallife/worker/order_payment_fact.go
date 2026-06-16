@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -31,22 +30,6 @@ func enqueueOrderPaymentFactApplication(ctx context.Context, distributor any, ap
 		asynq.Queue(QueueCritical),
 		asynq.Unique(paymentFactApplicationTaskUnique),
 	)
-}
-
-func recoveredOrderPaymentFactResource(order db.PaymentOrder) []byte {
-	raw, err := json.Marshal(map[string]any{
-		"payment_order_id":    order.ID,
-		"out_trade_no":        order.OutTradeNo,
-		"transaction_id":      orderPaymentTextValue(order.TransactionID),
-		"business_type":       order.BusinessType,
-		"payment_channel":     order.PaymentChannel,
-		"combined_payment_id": orderPaymentInt8Value(order.CombinedPaymentID),
-		"recovery_reason":     "paid_unprocessed_scan",
-	})
-	if err != nil {
-		return nil
-	}
-	return raw
 }
 
 func orderPaymentStringPtr(value string) *string {
@@ -84,11 +67,4 @@ func orderPaymentTextValue(value pgtype.Text) string {
 		return ""
 	}
 	return value.String
-}
-
-func orderPaymentInt8Value(value pgtype.Int8) any {
-	if !value.Valid {
-		return nil
-	}
-	return value.Int64
 }

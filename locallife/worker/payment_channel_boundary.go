@@ -8,10 +8,6 @@ import (
 
 const paymentTypeProfitSharing = "profit_sharing"
 
-func paymentOrderRequiresProfitSharing(paymentOrder db.PaymentOrder) bool {
-	return db.PaymentOrderRequiresProfitSharing(paymentOrder)
-}
-
 func refundTypeForPaymentOrder(paymentOrder db.PaymentOrder) string {
 	if paymentOrder.RequiresProfitSharing {
 		return paymentTypeProfitSharing
@@ -20,10 +16,6 @@ func refundTypeForPaymentOrder(paymentOrder db.PaymentOrder) string {
 		return "miniprogram"
 	}
 	return paymentOrder.PaymentType
-}
-
-func paymentOrderUsesMainBusinessRefundChannel(paymentOrder db.PaymentOrder) bool {
-	return paymentOrder.PaymentChannel == db.PaymentChannelBaofuAggregate
 }
 
 func mainBusinessRefundChannelDriftError(paymentOrder db.PaymentOrder, action string) error {

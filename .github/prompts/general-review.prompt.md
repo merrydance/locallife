@@ -14,6 +14,11 @@ If the change is cross-area, high-risk, or touches security, status semantics, a
 
 When the review spans multiple stacks, use the shared implementation and review matrix in `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md` so implementation push items, prohibited shortcuts, and findings-first review checks stay on the same source of truth.
 
+If the review uses or updates `artifacts/codegraph/`, follow
+`artifacts/codegraph/README.md`: use CodeGraph only as a discovery and drift
+checking aid, then treat the reviewed `*.slice.md` and `*.edges.json` artifacts
+as the durable source for LocalLife business semantics.
+
 The protocol goal of this template is to surface concrete defects and missing validation early, especially when failures can disappear through silent fallbacks, vague error semantics, or incomplete propagation.
 
 ## General Review
@@ -28,6 +33,7 @@ Request:
 - Check whether the capability owner and single source of truth remain clear, or whether the change introduced duplicate state semantics or multiple writers
 - Check whether replay, duplicate delivery, authorization, signature, injection, or sensitive-data boundaries are missing, bypassed, or only implied by comments
 - Check whether known security patterns were handled by an explicit guard, validation, or fail-closed branch instead of a silent fallback
+- For codegraph artifact work, check whether CodeGraph findings were verified against current code, SQL, route groups, domain standards, and then written back to the artifact instead of left as tool output
 - Call out missing tests, missing regeneration steps, and residual risk
 - For `G2` and `G3` paths, call out missing failure-mode coverage, duplicate-trigger handling, rollback or recovery story, and user-visible degradation handling
 - If a high-risk path changed but was not actually validated, say exactly which path remains unverified

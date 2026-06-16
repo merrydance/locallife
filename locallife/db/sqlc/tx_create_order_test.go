@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"math/big"
+	"net/http"
+	"sync"
 	"testing"
 	"time"
 
@@ -238,6 +240,161 @@ func TestCreateOrderTxTakeoutOrder(t *testing.T) {
 	require.True(t, result.Order.DeliveryDistance.Valid)
 	require.Equal(t, int32(3000), result.Order.DeliveryDistance.Int32)
 	require.Equal(t, int64(5500), result.Order.TotalAmount)
+}
+
+func TestCreateOrderTx_RequestIdempotencyReplayAndConflict(t *testing.T) {
+	ctx := context.Background()
+	user := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	address := createRandomUserAddress(t, user)
+
+	items := []CreateOrderItemParams{{
+		DishID:    pgtype.Int8{Int64: 1, Valid: true},
+		Name:      "Idempotent Takeout Dish",
+		UnitPrice: 2500,
+		Quantity:  2,
+		Subtotal:  5000,
+	}}
+	idempotencyKey := "takeout-order-" + util.RandomString(12)
+	requestHash := "sha256:" + util.RandomString(64)
+
+	createParams := func(orderNo string, total int64, hash string) CreateOrderTxParams {
+		return CreateOrderTxParams{
+			CreateOrderParams: CreateOrderParams{
+				OrderNo:             orderNo,
+				UserID:              user.ID,
+				MerchantID:          merchant.ID,
+				OrderType:           OrderTypeTakeout,
+				AddressID:           pgtype.Int8{Int64: address.ID, Valid: true},
+				DeliveryFee:         500,
+				DeliveryDistance:    pgtype.Int4{Int32: 3000, Valid: true},
+				Subtotal:            total - 500,
+				DiscountAmount:      0,
+				DeliveryFeeDiscount: 0,
+				TotalAmount:         total,
+				Status:              OrderStatusPending,
+			},
+			Items:                     items,
+			IdempotencyOperationScope: "customer_order_create",
+			IdempotencyActorUserID:    user.ID,
+			IdempotencyKey:            idempotencyKey,
+			IdempotencyRequestHash:    hash,
+		}
+	}
+
+	first, err := testStore.CreateOrderTx(ctx, createParams(util.RandomString(20), 5500, requestHash))
+	require.NoError(t, err)
+	require.False(t, first.IdempotencyReplayed)
+
+	replayed, err := testStore.CreateOrderTx(ctx, createParams(util.RandomString(20), 5500, requestHash))
+	require.NoError(t, err)
+	require.True(t, replayed.IdempotencyReplayed)
+	require.Equal(t, first.Order.ID, replayed.Order.ID)
+	require.Equal(t, first.Order.OrderNo, replayed.Order.OrderNo)
+	require.Len(t, replayed.Items, 1)
+	require.Equal(t, first.Items[0].ID, replayed.Items[0].ID)
+
+	_, err = testStore.CreateOrderTx(ctx, createParams(util.RandomString(20), 6500, "sha256:"+util.RandomString(64)))
+	require.Error(t, err)
+	statusCode, ok := IsTxRequestError(err)
+	require.True(t, ok)
+	require.Equal(t, http.StatusConflict, statusCode)
+
+	orders, err := testStore.ListOrdersByUser(ctx, ListOrdersByUserParams{
+		UserID: user.ID,
+		Limit:  10,
+		Offset: 0,
+	})
+	require.NoError(t, err)
+	var matchingOrders []ListOrdersByUserRow
+	for _, order := range orders {
+		if order.MerchantID == merchant.ID && order.OrderType == OrderTypeTakeout {
+			matchingOrders = append(matchingOrders, order)
+		}
+	}
+	require.Len(t, matchingOrders, 1)
+	require.Equal(t, first.Order.ID, matchingOrders[0].ID)
+}
+
+func TestCreateOrderTx_ConcurrentSameIdempotencyKeyCreatesSingleOrder(t *testing.T) {
+	ctx := context.Background()
+	user := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	address := createRandomUserAddress(t, user)
+	idempotencyKey := "takeout-concurrent-" + util.RandomString(12)
+	requestHash := "sha256:" + util.RandomString(64)
+
+	createParams := func() CreateOrderTxParams {
+		return CreateOrderTxParams{
+			CreateOrderParams: CreateOrderParams{
+				OrderNo:             util.RandomString(20),
+				UserID:              user.ID,
+				MerchantID:          merchant.ID,
+				OrderType:           OrderTypeTakeout,
+				AddressID:           pgtype.Int8{Int64: address.ID, Valid: true},
+				DeliveryFee:         500,
+				DeliveryDistance:    pgtype.Int4{Int32: 3000, Valid: true},
+				Subtotal:            5000,
+				DiscountAmount:      0,
+				DeliveryFeeDiscount: 0,
+				TotalAmount:         5500,
+				Status:              OrderStatusPending,
+			},
+			Items: []CreateOrderItemParams{{
+				DishID:    pgtype.Int8{Int64: 1, Valid: true},
+				Name:      "Concurrent Idempotent Takeout",
+				UnitPrice: 5000,
+				Quantity:  1,
+				Subtotal:  5000,
+			}},
+			IdempotencyOperationScope: "customer_order_create",
+			IdempotencyActorUserID:    user.ID,
+			IdempotencyKey:            idempotencyKey,
+			IdempotencyRequestHash:    requestHash,
+		}
+	}
+
+	type createResult struct {
+		result CreateOrderTxResult
+		err    error
+	}
+	results := make(chan createResult, 2)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			result, err := testStore.CreateOrderTx(ctx, createParams())
+			results <- createResult{result: result, err: err}
+		}()
+	}
+	wg.Wait()
+	close(results)
+
+	var created []CreateOrderTxResult
+	for result := range results {
+		require.NoError(t, result.err)
+		created = append(created, result.result)
+	}
+	require.Len(t, created, 2)
+	require.Equal(t, created[0].Order.ID, created[1].Order.ID)
+	require.NotEqual(t, created[0].IdempotencyReplayed, created[1].IdempotencyReplayed)
+
+	orders, err := testStore.ListOrdersByUser(ctx, ListOrdersByUserParams{
+		UserID: user.ID,
+		Limit:  10,
+		Offset: 0,
+	})
+	require.NoError(t, err)
+	var matchingOrders []ListOrdersByUserRow
+	for _, order := range orders {
+		if order.MerchantID == merchant.ID && order.OrderType == OrderTypeTakeout {
+			matchingOrders = append(matchingOrders, order)
+		}
+	}
+	require.Len(t, matchingOrders, 1)
+	require.Equal(t, created[0].Order.ID, matchingOrders[0].ID)
 }
 
 func TestCreateOrderTxAllocatesMerchantDailyPickupCode(t *testing.T) {

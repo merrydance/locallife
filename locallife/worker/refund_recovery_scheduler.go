@@ -27,8 +27,6 @@ const (
 
 var (
 	errRefundRecoveryPaymentClientMissing = errors.New("refund recovery payment client not configured")
-	errRefundRecoverySubMchIDMissing      = errors.New("refund recovery sub mchid missing")
-	errRefundRecoveryMerchantUnresolved   = errors.New("refund recovery merchant could not be resolved")
 )
 
 // RefundRecoveryScheduler 扫描已取消但未退款的订单并触发退款任务
@@ -645,38 +643,4 @@ func paymentOrderInt8ForAlert(value pgtype.Int8) any {
 		return nil
 	}
 	return value.Int64
-}
-
-func (s *RefundRecoveryScheduler) resolveSubMchID(ctx context.Context, paymentOrder db.PaymentOrder) (string, error) {
-	if paymentOrder.OrderID.Valid {
-		order, err := s.store.GetOrder(ctx, paymentOrder.OrderID.Int64)
-		if err != nil {
-			return "", err
-		}
-		cfg, err := s.store.GetMerchantPaymentConfig(ctx, order.MerchantID)
-		if err != nil {
-			return "", err
-		}
-		if cfg.SubMchID == "" {
-			return "", errRefundRecoverySubMchIDMissing
-		}
-		return cfg.SubMchID, nil
-	}
-
-	if paymentOrder.ReservationID.Valid {
-		reservation, err := s.store.GetTableReservation(ctx, paymentOrder.ReservationID.Int64)
-		if err != nil {
-			return "", err
-		}
-		cfg, err := s.store.GetMerchantPaymentConfig(ctx, reservation.MerchantID)
-		if err != nil {
-			return "", err
-		}
-		if cfg.SubMchID == "" {
-			return "", errRefundRecoverySubMchIDMissing
-		}
-		return cfg.SubMchID, nil
-	}
-
-	return "", errRefundRecoveryMerchantUnresolved
 }

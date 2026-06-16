@@ -78,29 +78,12 @@ func TestIsVoucherValid(t *testing.T) {
 	require.False(t, isVoucherValid(voucher, OrderContext{MerchantID: 10, OrderType: "takeaway", Subtotal: 1500}, now))
 }
 
-func TestSuggestBestVoucher(t *testing.T) {
-	userID := int64(1)
-	merchantID := int64(2)
-	ctx := context.Background()
+func TestSuggestBestVoucherFromList(t *testing.T) {
+	result := suggestBestVoucherFromList([]db.ListUserAvailableVouchersForMerchantRow{
+		{ID: 10, Name: "Voucher A", Amount: 300, AllowedOrderTypes: []string{"takeaway"}},
+		{ID: 20, Name: "Voucher B", Amount: 500, AllowedOrderTypes: []string{}},
+	}, OrderContext{OrderType: "takeaway", Subtotal: 2000})
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	store := mockdb.NewMockStore(ctrl)
-	store.EXPECT().
-		ListUserAvailableVouchersForMerchant(gomock.Any(), db.ListUserAvailableVouchersForMerchantParams{
-			UserID:         userID,
-			MerchantID:     merchantID,
-			MinOrderAmount: 2000,
-		}).
-		Times(1).
-		Return([]db.ListUserAvailableVouchersForMerchantRow{
-			{ID: 10, Name: "Voucher A", Amount: 300, AllowedOrderTypes: []string{"takeaway"}},
-			{ID: 20, Name: "Voucher B", Amount: 500, AllowedOrderTypes: []string{}},
-		}, nil)
-
-	result, err := suggestBestVoucher(ctx, store, OrderContext{UserID: userID, MerchantID: merchantID, OrderType: "takeaway", Subtotal: 2000})
-	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Equal(t, int64(10), result.ID)
 }
