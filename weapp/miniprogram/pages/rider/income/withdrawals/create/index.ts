@@ -77,6 +77,10 @@ Page({
     void this.loadBalance()
   },
 
+  onGoToSettlementAccount() {
+    wx.navigateTo({ url: '/pages/rider/settlement-account/index' })
+  },
+
   onAmountChange(e: WechatMiniprogram.CustomEvent<{ value?: string }>) {
     this.setData({
       amountInput: String(e.detail.value || ''),
