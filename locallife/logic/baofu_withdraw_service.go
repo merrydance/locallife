@@ -23,6 +23,10 @@ var (
 	ErrBaofuWithdrawInsufficientBalance  = errors.New("可提现金额不足")
 )
 
+const (
+	BaofuWithdrawBalanceAccountStatusNotReady = "not_ready"
+)
+
 type baofuWithdrawStore interface {
 	GetBaofuAccountBindingByOwner(ctx context.Context, arg db.GetBaofuAccountBindingByOwnerParams) (db.BaofuAccountBinding, error)
 	GetBaofuWithdrawalOrderByIdempotency(ctx context.Context, arg db.GetBaofuWithdrawalOrderByIdempotencyParams) (db.BaofuWithdrawalOrder, error)
@@ -66,6 +70,10 @@ type BaofuBalanceQueryInput struct {
 
 type BaofuBalanceQueryResult struct {
 	Binding            db.BaofuAccountBinding
+	AccountStatus      string
+	StatusDesc         string
+	DisabledReason     string
+	CanWithdraw        bool
 	AvailableAmountFen int64
 	PendingAmountFen   int64
 	LedgerAmountFen    int64
@@ -96,11 +104,26 @@ func (s *BaofuWithdrawService) QueryBalance(ctx context.Context, input BaofuBala
 	if cfg.CollectMerchantID == "" || cfg.CollectTerminalID == "" {
 		return result, ErrBaofuWithdrawServiceNotConfigured
 	}
-	binding, err := s.readyBinding(ctx, input.OwnerType, input.OwnerID)
+	binding, err := s.store.GetBaofuAccountBindingByOwner(ctx, db.GetBaofuAccountBindingByOwnerParams{
+		OwnerType: strings.TrimSpace(input.OwnerType),
+		OwnerID:   input.OwnerID,
+	})
 	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return unavailableBaofuBalanceQueryResult(db.BaofuAccountOpeningStateProfilePending, "结算账户未开通", "请先开通结算账户后再提现"), nil
+		}
 		return result, err
 	}
 	result.Binding = binding
+	if strings.TrimSpace(binding.OpenState) != db.BaofuAccountOpenStateActive {
+		return unavailableBaofuBalanceQueryResult(BaofuWithdrawBalanceAccountStatusNotReady, "结算账户未开通", "请先开通结算账户后再提现"), nil
+	}
+	if strings.TrimSpace(binding.ContractNo.String) == "" {
+		return unavailableBaofuBalanceQueryResult(BaofuWithdrawBalanceAccountStatusNotReady, "结算账户状态异常", "结算账户状态异常，请联系平台处理"), nil
+	}
+	if strings.TrimSpace(binding.SharingMerID.String) == "" {
+		return unavailableBaofuBalanceQueryResult(BaofuWithdrawBalanceAccountStatusNotReady, "结算账户状态异常", "结算账户状态异常，请联系平台处理"), nil
+	}
 
 	upstream, err := s.client.QueryBalance(ctx, baofucontracts.BalanceQueryRequest{
 		MerchantID:  cfg.CollectMerchantID,
@@ -118,6 +141,9 @@ func (s *BaofuWithdrawService) QueryBalance(ctx context.Context, input BaofuBala
 	result.PendingAmountFen = upstream.PendingAmountFen
 	result.LedgerAmountFen = upstream.LedgerAmountFen
 	result.FrozenAmountFen = upstream.FrozenAmountFen
+	result.AccountStatus = db.BaofuAccountOpenStateActive
+	result.StatusDesc = "结算账户已开通"
+	result.CanWithdraw = true
 	return result, nil
 }
 
@@ -246,6 +272,15 @@ func baofuWithdrawalCreateRequestHash(ownerType string, ownerID int64, amountFen
 	return fmt.Sprintf("sha256:%x", sum)
 }
 
+func unavailableBaofuBalanceQueryResult(accountStatus string, statusDesc string, disabledReason string) BaofuBalanceQueryResult {
+	return BaofuBalanceQueryResult{
+		AccountStatus:  strings.TrimSpace(accountStatus),
+		StatusDesc:     strings.TrimSpace(statusDesc),
+		DisabledReason: strings.TrimSpace(disabledReason),
+		CanWithdraw:    false,
+	}
+}
+
 func businessOwnerForBaofuWithdrawal(ownerType string) string {
 	switch strings.TrimSpace(ownerType) {
 	case db.BaofuAccountOwnerTypeMerchant:
@@ -267,6 +302,9 @@ func (s *BaofuWithdrawService) readyBinding(ctx context.Context, ownerType strin
 		OwnerID:   ownerID,
 	})
 	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return db.BaofuAccountBinding{}, ErrBaofuWithdrawAccountNotReady
+		}
 		return db.BaofuAccountBinding{}, err
 	}
 	if strings.TrimSpace(binding.OpenState) != db.BaofuAccountOpenStateActive {

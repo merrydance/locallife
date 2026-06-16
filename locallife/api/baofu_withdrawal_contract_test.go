@@ -310,6 +310,54 @@ func TestBaofuWithdrawalBalanceRoutesUseServerResolvedOwnerScope(t *testing.T) {
 	}
 }
 
+func TestRiderBaofuWithdrawalBalanceReturnsUnopenedStateWhenBindingMissing(t *testing.T) {
+	riderUser, _ := randomUser(t)
+	rider := randomRider(riderUser.ID)
+	rider.Status = "approved"
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetRiderByUserID(gomock.Any(), riderUser.ID).
+		Return(rider, nil)
+	store.EXPECT().
+		GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeRider,
+			OwnerID:   rider.ID,
+		}).
+		Return(db.BaofuAccountBinding{}, db.ErrRecordNotFound)
+
+	client := &fakeAPIBaofuWithdrawClient{
+		balanceRes: &baofucontracts.BalanceResult{AvailableAmountFen: 2600},
+	}
+	server := newTestServer(t, store)
+	configureBaofuWithdrawServiceForAPITest(server, store, client)
+
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodGet, "/v1/rider/income/baofu-withdrawal/balance", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, riderUser.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var resp baofuWithdrawalBalanceResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, db.BaofuAccountOpeningStateProfilePending, resp.AccountStatus)
+	require.Equal(t, "结算账户未开通", resp.StatusDesc)
+	require.Zero(t, resp.AvailableAmount)
+	require.Zero(t, resp.PendingAmount)
+	require.Zero(t, resp.LedgerAmount)
+	require.Zero(t, resp.FrozenAmount)
+	require.Equal(t, baofuWithdrawalMinAmountFen, resp.MinWithdrawAmount)
+	require.Equal(t, baofuWithdrawalMaxAmountFen, resp.MaxWithdrawAmount)
+	require.False(t, resp.CanWithdraw)
+	require.Equal(t, "请先开通结算账户后再提现", resp.DisabledReason)
+	require.Empty(t, client.balanceReqs)
+}
+
 func TestMerchantFinanceOverviewAndBaofuWithdrawalBalanceUseSeparateTruthSources(t *testing.T) {
 	owner, _ := randomUser(t)
 	merchant := randomMerchant(owner.ID)
@@ -845,6 +893,51 @@ func TestCreateBaofuWithdrawalMapsBalanceQueryFailureToBadGateway(t *testing.T) 
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
 	require.Equal(t, CodeBadGateway, resp.Code)
 	require.Equal(t, "提现账户余额暂不可确认，请稍后刷新", resp.Message)
+	require.Empty(t, client.withdrawReqs)
+}
+
+func TestCreateBaofuWithdrawalRejectsMissingBindingBeforeProviderCall(t *testing.T) {
+	owner, _ := randomUser(t)
+	merchant := randomMerchant(owner.ID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+	expectNoBaofuWithdrawalIdempotency(store, db.BaofuAccountOwnerTypeMerchant, merchant.ID, "missing-binding-1")
+	store.EXPECT().
+		GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:   merchant.ID,
+		}).
+		Return(db.BaofuAccountBinding{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		CreateBaofuWithdrawalOrderWithSubmittedCommandTx(gomock.Any(), gomock.Any()).
+		Times(0)
+
+	client := &fakeAPIBaofuWithdrawClient{
+		balanceRes: &baofucontracts.BalanceResult{AvailableAmountFen: 5000},
+	}
+	server := newTestServer(t, store)
+	configureBaofuWithdrawServiceForAPITest(server, store, client)
+
+	body := []byte(`{"amount":1200,"remark":"测试提现"}`)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodPost, "/v1/merchant/finance/baofu-withdrawal/withdraw", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Idempotency-Key", "missing-binding-1")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusConflict, recorder.Code)
+	var resp APIResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, CodeConflict, resp.Code)
+	require.Equal(t, "结算账户未开通，暂不能提现", resp.Message)
+	require.Empty(t, client.balanceReqs)
 	require.Empty(t, client.withdrawReqs)
 }
 

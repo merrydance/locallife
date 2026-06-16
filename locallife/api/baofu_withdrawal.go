@@ -262,16 +262,16 @@ func (server *Server) handleGetBaofuWithdrawalBalance(ctx *gin.Context, scope ba
 		return
 	}
 	ctx.JSON(http.StatusOK, baofuWithdrawalBalanceResponse{
-		AccountStatus:     "active",
-		StatusDesc:        "结算账户已开通",
+		AccountStatus:     baofuWithdrawalBalanceAccountStatus(result),
+		StatusDesc:        baofuWithdrawalBalanceStatusDesc(result),
 		AvailableAmount:   result.AvailableAmountFen,
 		PendingAmount:     result.PendingAmountFen,
 		LedgerAmount:      result.LedgerAmountFen,
 		FrozenAmount:      result.FrozenAmountFen,
 		MinWithdrawAmount: baofuWithdrawalMinAmountFen,
 		MaxWithdrawAmount: baofuWithdrawalMaxAmountFen,
-		CanWithdraw:       result.AvailableAmountFen >= baofuWithdrawalMinAmountFen,
-		DisabledReason:    baofuWithdrawalDisabledReason(result.AvailableAmountFen),
+		CanWithdraw:       baofuWithdrawalCanWithdraw(result),
+		DisabledReason:    baofuWithdrawalBalanceDisabledReason(result),
 	})
 }
 
@@ -447,6 +447,34 @@ func baofuWithdrawalDisabledReason(availableAmount int64) string {
 		return ""
 	}
 	return "可提现金额不足"
+}
+
+func baofuWithdrawalBalanceAccountStatus(result logic.BaofuBalanceQueryResult) string {
+	if status := strings.TrimSpace(result.AccountStatus); status != "" {
+		return status
+	}
+	return db.BaofuAccountOpenStateActive
+}
+
+func baofuWithdrawalBalanceStatusDesc(result logic.BaofuBalanceQueryResult) string {
+	if desc := strings.TrimSpace(result.StatusDesc); desc != "" {
+		return desc
+	}
+	return "结算账户已开通"
+}
+
+func baofuWithdrawalCanWithdraw(result logic.BaofuBalanceQueryResult) bool {
+	if strings.TrimSpace(result.AccountStatus) != "" && strings.TrimSpace(result.AccountStatus) != db.BaofuAccountOpenStateActive {
+		return false
+	}
+	return result.CanWithdraw && result.AvailableAmountFen >= baofuWithdrawalMinAmountFen
+}
+
+func baofuWithdrawalBalanceDisabledReason(result logic.BaofuBalanceQueryResult) string {
+	if reason := strings.TrimSpace(result.DisabledReason); reason != "" {
+		return reason
+	}
+	return baofuWithdrawalDisabledReason(result.AvailableAmountFen)
 }
 
 func newBaofuWithdrawalItem(order db.BaofuWithdrawalOrder) baofuWithdrawalItem {
