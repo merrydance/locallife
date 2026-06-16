@@ -35,6 +35,47 @@ func TestCreateTag(t *testing.T) {
 	createRandomTag(t, "merchant")
 }
 
+func TestCreateTagAllowsSameNameAcrossTypes(t *testing.T) {
+	name := "shared-tag-" + util.RandomString(8)
+
+	_, err := testStore.CreateTag(context.Background(), CreateTagParams{
+		Name:      name,
+		Type:      "customization",
+		SortOrder: 1,
+		Status:    "active",
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.CreateTag(context.Background(), CreateTagParams{
+		Name:      name,
+		Type:      "dish",
+		SortOrder: 1,
+		Status:    "active",
+	})
+	require.NoError(t, err)
+}
+
+func TestCreateTagRejectsDuplicateNameWithinType(t *testing.T) {
+	name := "duplicate-tag-" + util.RandomString(8)
+	tagType := "dish"
+
+	_, err := testStore.CreateTag(context.Background(), CreateTagParams{
+		Name:      name,
+		Type:      tagType,
+		SortOrder: 1,
+		Status:    "active",
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.CreateTag(context.Background(), CreateTagParams{
+		Name:      name,
+		Type:      tagType,
+		SortOrder: 2,
+		Status:    "active",
+	})
+	require.Error(t, err)
+}
+
 func TestGetTag(t *testing.T) {
 	tag1 := createRandomTag(t, "merchant")
 
