@@ -172,8 +172,12 @@ assert(
   'deposit page must persist the draft idempotency key with pending withdrawal context'
 )
 assert(
-  depositPageSource.includes("result.status !== 'success' && result.status !== 'failed'"),
-  'deposit page must not poll or persist terminal failed rider deposit withdrawal responses as pending'
+  depositPageSource.includes('withdrawStatusView.shouldScheduleRefresh && (result.refunds || []).length > 0'),
+  'deposit page must use the shared withdrawal status helper before polling or persisting pending withdrawal responses'
+)
+assert(
+  !depositPageSource.includes("result.status !== 'success'") && !depositPageSource.includes("result.status !== 'failed'"),
+  'deposit page must not compare rider deposit withdrawal status strings directly'
 )
 assert(
   !depositPageSource.includes('baofu-withdrawal'),
