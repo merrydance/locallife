@@ -22,13 +22,27 @@
     <t-cell-group>
       <t-cell title="可提现收入" note="{{balanceView.availableAmountText}}" />
       <t-cell title="账户在途提现" note="{{balanceView.pendingAmountText}}" />
-      <t-cell wx:if="{{!balanceView.canSubmit}}" title="暂不能提现" note="{{balanceView.disabledReason}}" />
+      <t-cell
+        wx:if="{{!balanceView.settlementAccountReady}}"
+        title="{{balanceView.primaryDisabledReason}}"
+        note="{{balanceView.disabledReason}}"
+        arrow
+        bind:tap="onOpenSettlementAccount"
+      />
+      <t-cell wx:elif="{{!balanceView.canSubmit}}" title="暂不能提现" note="{{balanceView.disabledReason}}" />
       <t-cell title="结算账户" note="{{balanceView.statusDesc || '结算账户已开通'}}" arrow url="/pages/rider/settlement-account/index" />
     </t-cell-group>
 
     <t-notice-bar wx:if="{{balanceErrorMessage}}" theme="warning" content="{{balanceErrorMessage}}" />
 
-    <t-button theme="primary" block loading="{{loadingWithdrawals}}" disabled="{{!balanceView.canSubmit || loadingWithdrawals}}" bind:tap="onOpenCreate">申请收入提现</t-button>
+    <t-button
+      wx:if="{{!balanceView.settlementAccountReady}}"
+      theme="primary"
+      block
+      disabled="{{loadingWithdrawals}}"
+      bind:tap="onOpenSettlementAccount"
+    >{{balanceView.settlementActionText || '去开通结算账户'}}</t-button>
+    <t-button wx:else theme="primary" block loading="{{loadingWithdrawals}}" disabled="{{!balanceView.canSubmit || loadingWithdrawals}}" bind:tap="onOpenCreate">申请收入提现</t-button>
 
     <t-empty wx:if="{{recordsErrorMessage && !rows.length}}" icon="error-circle" description="{{recordsErrorMessage}}" />
     <t-empty wx:elif="{{!rows.length}}" icon="info-circle" description="暂无收入提现记录" />

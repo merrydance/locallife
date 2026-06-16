@@ -14,21 +14,35 @@
     <t-cell-group>
       <t-cell title="可提现收入" note="{{balanceView.availableAmountText}}" />
       <t-cell title="最低提现金额" note="{{balanceView.minWithdrawAmountText}}" />
-      <t-cell wx:if="{{!balanceView.canSubmit}}" title="暂不能提现" note="{{balanceView.disabledReason}}" />
-      <t-input
-        label="提现金额"
-        type="digit"
-        suffix="元"
-        placeholder="例如 100.00"
-        value="{{amountInput}}"
-        disabled="{{!balanceView.canSubmit || submitting}}"
-        bind:change="onAmountChange"
+      <t-cell
+        wx:if="{{!balanceView.settlementAccountReady}}"
+        title="{{balanceView.primaryDisabledReason}}"
+        note="{{balanceView.disabledReason}}"
+        arrow
+        bind:tap="onGoToSettlementAccount"
       />
-      <t-cell title="结算账户" arrow url="/pages/rider/settlement-account/index" />
+      <block wx:else>
+        <t-cell wx:if="{{!balanceView.canSubmit}}" title="暂不能提现" note="{{balanceView.disabledReason}}" />
+        <t-input
+          label="提现金额"
+          type="digit"
+          suffix="元"
+          placeholder="例如 100.00"
+          value="{{amountInput}}"
+          disabled="{{!balanceView.canSubmit || submitting}}"
+          bind:change="onAmountChange"
+        />
+        <t-cell title="结算账户" note="{{balanceView.statusDesc || '结算账户已开通'}}" arrow url="/pages/rider/settlement-account/index" />
+      </block>
     </t-cell-group>
 
     <view class="form-actions">
-      <t-button theme="primary" loading="{{submitting}}" disabled="{{submitting || !balanceView.canSubmit}}" bind:tap="onSubmit">确认提现</t-button>
+      <t-button
+        wx:if="{{!balanceView.settlementAccountReady}}"
+        theme="primary"
+        bind:tap="onGoToSettlementAccount"
+      >{{balanceView.settlementActionText || '去开通结算账户'}}</t-button>
+      <t-button wx:else theme="primary" loading="{{submitting}}" disabled="{{submitting || !balanceView.canSubmit}}" bind:tap="onSubmit">确认提现</t-button>
     </view>
   </view>
 </view>

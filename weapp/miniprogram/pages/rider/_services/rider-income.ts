@@ -348,7 +348,7 @@ function buildRiderIncomeWithdrawalEntryNote(
   if (withdrawalBalanceView.canSubmit) {
     return `可提现 ${withdrawalBalanceView.availableAmountText}`
   }
-  return withdrawalBalanceView.disabledReason || withdrawalBalanceView.statusDesc || '暂不能提现'
+  return withdrawalBalanceView.primaryDisabledReason || withdrawalBalanceView.disabledReason || withdrawalBalanceView.statusDesc || '暂不能提现'
 }
 
 async function loadRiderIncomeWithdrawalBalance(): Promise<BaofuWithdrawalBalanceResponse | null> {

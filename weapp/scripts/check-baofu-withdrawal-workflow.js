@@ -120,6 +120,7 @@ assert(!('owner_type' in capturedRequests[3].data), 'Create request must not inc
 assert(!('owner_id' in capturedRequests[3].data), 'Create request must not include owner_id')
 
 const workflow = loadTsModule('miniprogram/pages/merchant/_main_shared/services/baofu-withdrawal-workflow.ts')
+const riderWorkflow = loadTsModule('miniprogram/pages/rider/_main_shared/services/baofu-withdrawal-workflow.ts')
 
 assert.strictEqual(workflow.formatFenToYuanText(12345), '¥123.45')
 assert.strictEqual(workflow.parseYuanInputToFen('12.30').amount, 1230)
@@ -142,6 +143,37 @@ assert.strictEqual(workflow.buildBaofuWithdrawalBalanceView({
   can_withdraw: false,
   disabled_reason: ''
 }).disabledReason, '可提现金额不足')
+const unopenedRiderBalanceView = riderWorkflow.buildBaofuWithdrawalBalanceView({
+  account_status: 'profile_pending',
+  status_desc: '结算账户未开通',
+  available_amount: 0,
+  pending_amount: 0,
+  ledger_amount: 0,
+  frozen_amount: 0,
+  min_withdraw_amount: 100,
+  max_withdraw_amount: 500000000,
+  can_withdraw: false,
+  disabled_reason: '请先开通结算账户后再提现'
+})
+assert.strictEqual(unopenedRiderBalanceView.canSubmit, false)
+assert.strictEqual(unopenedRiderBalanceView.statusDesc, '结算账户未开通')
+assert.strictEqual(unopenedRiderBalanceView.disabledReason, '请先开通结算账户后再提现')
+assert.strictEqual(unopenedRiderBalanceView.settlementAccountReady, false)
+assert.strictEqual(unopenedRiderBalanceView.settlementActionText, '去开通结算账户')
+assert.strictEqual(unopenedRiderBalanceView.settlementActionUrl, '/pages/rider/settlement-account/index')
+assert.strictEqual(unopenedRiderBalanceView.primaryDisabledReason, '结算账户未开通')
+assert.strictEqual(riderWorkflow.buildBaofuWithdrawalBalanceView({
+  account_status: 'ACTIVE',
+  status_desc: '结算账户已开通',
+  available_amount: 20000,
+  pending_amount: 0,
+  ledger_amount: 20000,
+  frozen_amount: 0,
+  min_withdraw_amount: 100,
+  max_withdraw_amount: 500000000,
+  can_withdraw: true,
+  disabled_reason: ''
+}).settlementAccountReady, true)
 assert.strictEqual(workflow.buildBaofuWithdrawalSubmitCheck('200.00', workflow.buildBaofuWithdrawalBalanceView({
   available_amount: 30000,
   pending_amount: 0,
@@ -538,6 +570,34 @@ assert(!riderIncomeWxml.includes('wx:if="{{withdrawalBalanceReady}}"'), 'Rider i
 assert(riderIncomeService.includes("getBaofuWithdrawalBalance('rider')"), 'Rider income service must use backend withdrawal balance for income withdrawal entry')
 assert(riderIncomeService.includes('可提现余额暂不可确认'), 'Rider income service must provide unavailable-balance copy for the withdrawal entry')
 assert(!riderIncomePage.includes('summary.totalRiderIncome'), 'Rider income page must not infer withdrawable balance from cumulative income')
+
+const riderWithdrawalCreateWxml = read('miniprogram/pages/rider/income/withdrawals/create/index.wxml')
+assert(
+  riderWithdrawalCreateWxml.includes('wx:if="{{!balanceView.settlementAccountReady}}"'),
+  'Rider withdrawal create page must branch non-active settlement account states before amount input'
+)
+assert(
+  riderWithdrawalCreateWxml.includes('bind:tap="onGoToSettlementAccount"'),
+  'Rider withdrawal create page must give a direct settlement account action for unopened account state'
+)
+assert(
+  riderWithdrawalCreateWxml.includes('{{balanceView.primaryDisabledReason}}'),
+  'Rider withdrawal create page must prioritize settlement status/disabled reason copy for non-active account states'
+)
+const riderWithdrawalListWxml = read('miniprogram/pages/rider/income/withdrawals/index.wxml')
+const riderWithdrawalListSource = read('miniprogram/pages/rider/income/withdrawals/index.ts')
+assert(
+  riderWithdrawalListWxml.includes('wx:if="{{!balanceView.settlementAccountReady}}"'),
+  'Rider withdrawal list primary entry must branch non-active settlement account states'
+)
+assert(
+  riderWithdrawalListWxml.includes("{{balanceView.settlementActionText || '去开通结算账户'}}"),
+  'Rider withdrawal list primary entry must show settlement action copy for non-active account states'
+)
+assert(
+  riderWithdrawalListSource.includes('onOpenSettlementAccount'),
+  'Rider withdrawal list must navigate directly to settlement account when account is not active'
+)
 
 const riderDepositSources = [
   read('miniprogram/pages/rider/deposit/index.ts'),

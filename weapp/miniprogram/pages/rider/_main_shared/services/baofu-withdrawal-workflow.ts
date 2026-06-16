@@ -39,6 +39,10 @@ export interface BaofuWithdrawalBalanceView {
   canSubmit: boolean
   disabledReason: string
   statusDesc: string
+  settlementAccountReady: boolean
+  settlementActionText: string
+  settlementActionUrl: string
+  primaryDisabledReason: string
 }
 
 export interface BaofuWithdrawalSubmitCheck {
@@ -177,8 +181,14 @@ export function buildBaofuWithdrawalBalanceView(
   const minWithdrawAmount = normalizeAmount(balance?.min_withdraw_amount || 100)
   const maxWithdrawAmount = normalizeAmount(balance?.max_withdraw_amount || 500000000)
   const canSubmit = Boolean(balance?.can_withdraw) && availableAmount >= minWithdrawAmount
+  const accountStatus = String(balance?.account_status || '').trim().toLowerCase()
+  const statusDesc = String(balance?.status_desc || '').trim()
   const disabledReason = String(balance?.disabled_reason || '').trim() ||
     (canSubmit ? '' : '可提现金额不足')
+  const settlementAccountReady = !accountStatus || accountStatus === 'active'
+  const primaryDisabledReason = settlementAccountReady
+    ? disabledReason
+    : (statusDesc || disabledReason || '结算账户未开通')
 
   return {
     availableAmount,
@@ -195,7 +205,11 @@ export function buildBaofuWithdrawalBalanceView(
     maxWithdrawAmountText: formatFenToYuanText(maxWithdrawAmount),
     canSubmit,
     disabledReason,
-    statusDesc: String(balance?.status_desc || '').trim()
+    statusDesc,
+    settlementAccountReady,
+    settlementActionText: settlementAccountReady ? '' : '去开通结算账户',
+    settlementActionUrl: settlementAccountReady ? '' : '/pages/rider/settlement-account/index',
+    primaryDisabledReason
   }
 }
 
@@ -218,7 +232,11 @@ export function withdrawalBalanceUnavailableView(message?: string): BaofuWithdra
     maxWithdrawAmountText: formatFenToYuanText(maxWithdrawAmount),
     canSubmit: false,
     disabledReason: fallback,
-    statusDesc: '余额暂不可确认'
+    statusDesc: '余额暂不可确认',
+    settlementAccountReady: true,
+    settlementActionText: '',
+    settlementActionUrl: '',
+    primaryDisabledReason: fallback
   }
 }
 

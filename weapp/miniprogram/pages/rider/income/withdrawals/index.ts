@@ -21,6 +21,7 @@ import { getErrorUserMessage } from '../../../../utils/user-facing'
 const PAGE_SIZE = 20
 const CREATE_PAGE_PATH = '/pages/rider/income/withdrawals/create/index'
 const DETAIL_PAGE_PATH = '/pages/rider/income/withdrawals/detail/index'
+const SETTLEMENT_ACCOUNT_PAGE_PATH = '/pages/rider/settlement-account/index'
 
 interface RiderIncomeWithdrawalFetchResult {
   balance?: BaofuWithdrawalBalanceResponse
@@ -174,12 +175,20 @@ Page({
     void this.loadWithdrawals({ page: 1 })
   },
 
+  onOpenSettlementAccount() {
+    wx.navigateTo({ url: SETTLEMENT_ACCOUNT_PAGE_PATH })
+  },
+
   onOpenCreate() {
     if (this.data.balanceErrorMessage) {
       wx.showToast({
         title: this.data.balanceErrorMessage,
         icon: 'none'
       })
+      return
+    }
+    if (!this.data.balanceView.settlementAccountReady) {
+      this.onOpenSettlementAccount()
       return
     }
     if (!this.data.balanceView.canSubmit) {
