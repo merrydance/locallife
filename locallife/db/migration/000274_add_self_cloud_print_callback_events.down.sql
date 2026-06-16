@@ -1,0 +1,3 @@
+DROP INDEX IF EXISTS self_cloud_print_callback_events_print_job_id_idx;
+DROP INDEX IF EXISTS self_cloud_print_callback_events_print_log_id_idx;
+DROP TABLE IF EXISTS self_cloud_print_callback_events;

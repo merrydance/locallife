@@ -21,7 +21,12 @@ var ErrUnsupportedCapability = errors.New("cloud printer provider capability uns
 
 const (
 	PrintStatePending   = "pending"
+	PrintStateQueued    = "queued"
+	PrintStateSent      = "sent"
+	PrintStateAcked     = "acked"
 	PrintStateSuccess   = "success"
+	PrintStateFailed    = "failed"
+	PrintStateTimeout   = "timeout"
 	PrintStateCancelled = "cancelled"
 
 	PrinterProviderStatusOffline    = "offline"
@@ -40,7 +45,9 @@ type PrintResult struct {
 }
 
 type PrintState struct {
-	Status string
+	Status       string
+	ErrorCode    string
+	ErrorMessage string
 }
 
 type PrinterStatus struct {

@@ -121,6 +121,14 @@ type Config struct {
 	ShangpengAppID                        string        `mapstructure:"SHANGPENG_APPID"`
 	ShangpengAppSecret                    string        `mapstructure:"SHANGPENG_APPSECRET"`
 	ShangpengHTTPTimeout                  time.Duration `mapstructure:"SHANGPENG_HTTP_TIMEOUT"`
+	PrintServerEnabled                    bool          `mapstructure:"PRINT_SERVER_ENABLED"`
+	PrintServerAPIBaseURL                 string        `mapstructure:"PRINT_SERVER_API_BASE_URL"`
+	PrintServerAppID                      string        `mapstructure:"PRINT_SERVER_APP_ID"`
+	PrintServerSecret                     string        `mapstructure:"PRINT_SERVER_SECRET"`
+	PrintServerHTTPTimeout                time.Duration `mapstructure:"PRINT_SERVER_HTTP_TIMEOUT"`
+	PrintServerCallbackURL                string        `mapstructure:"PRINT_SERVER_CALLBACK_URL"`
+	PrintServerCallbackSigningSecret      string        `mapstructure:"PRINT_SERVER_CALLBACK_SIGNING_SECRET"`
+	PrintServerCallbackFreshnessWindow    time.Duration `mapstructure:"PRINT_SERVER_CALLBACK_FRESHNESS_WINDOW"`
 
 	CloudPrinterFailOnProviderConfigError bool          `mapstructure:"CLOUD_PRINTER_FAIL_ON_PROVIDER_CONFIG_ERROR"`
 	CloudPrinterStatusPollInterval        time.Duration `mapstructure:"CLOUD_PRINTER_STATUS_POLL_INTERVAL"`
@@ -365,7 +373,35 @@ func (c Config) ValidateCloudPrinterProviderConfig() error {
 		}
 	}
 
-	if c.YilianyunEnabled || c.ShangpengEnabled {
+	if c.PrintServerEnabled {
+		if strings.TrimSpace(c.PrintServerAPIBaseURL) == "" ||
+			strings.TrimSpace(c.PrintServerAppID) == "" ||
+			strings.TrimSpace(c.PrintServerSecret) == "" {
+			return fmt.Errorf("PRINT_SERVER_API_BASE_URL, PRINT_SERVER_APP_ID and PRINT_SERVER_SECRET are required when PRINT_SERVER_ENABLED=true")
+		}
+		if err := validateRequiredAbsoluteConfigURL("PRINT_SERVER_API_BASE_URL", c.PrintServerAPIBaseURL, "PRINT_SERVER_ENABLED=true"); err != nil {
+			return err
+		}
+		if c.PrintServerHTTPTimeout <= 0 {
+			return fmt.Errorf("PRINT_SERVER_HTTP_TIMEOUT must be > 0 when PRINT_SERVER_ENABLED=true")
+		}
+		callbackURLSet := strings.TrimSpace(c.PrintServerCallbackURL) != ""
+		callbackSecretSet := strings.TrimSpace(c.PrintServerCallbackSigningSecret) != ""
+		if callbackURLSet != callbackSecretSet {
+			if callbackURLSet {
+				return fmt.Errorf("PRINT_SERVER_CALLBACK_SIGNING_SECRET is required when PRINT_SERVER_CALLBACK_URL is set")
+			}
+			return fmt.Errorf("PRINT_SERVER_CALLBACK_URL is required when PRINT_SERVER_CALLBACK_SIGNING_SECRET is set")
+		}
+		if err := validateOptionalAbsoluteConfigURL("PRINT_SERVER_CALLBACK_URL", c.PrintServerCallbackURL, "PRINT_SERVER_ENABLED=true"); err != nil {
+			return err
+		}
+		if (callbackURLSet || callbackSecretSet) && c.PrintServerCallbackFreshnessWindow <= 0 {
+			return fmt.Errorf("PRINT_SERVER_CALLBACK_FRESHNESS_WINDOW must be > 0 when PRINT_SERVER_CALLBACK_URL is set")
+		}
+	}
+
+	if c.YilianyunEnabled || c.ShangpengEnabled || c.PrintServerEnabled {
 		if c.CloudPrinterStatusPollInterval <= 0 {
 			return fmt.Errorf("CLOUD_PRINTER_STATUS_POLL_INTERVAL must be > 0 when a cloud printer provider is enabled")
 		}
@@ -505,6 +541,9 @@ func LoadConfig(path string) (config Config, err error) {
 	v.SetDefault("SHANGPENG_ENABLED", false)
 	v.SetDefault("SHANGPENG_API_BASE_URL", "https://open.spyun.net")
 	v.SetDefault("SHANGPENG_HTTP_TIMEOUT", "5s")
+	v.SetDefault("PRINT_SERVER_ENABLED", false)
+	v.SetDefault("PRINT_SERVER_HTTP_TIMEOUT", "5s")
+	v.SetDefault("PRINT_SERVER_CALLBACK_FRESHNESS_WINDOW", "10m")
 	v.SetDefault("CLOUD_PRINTER_FAIL_ON_PROVIDER_CONFIG_ERROR", false)
 	v.SetDefault("CLOUD_PRINTER_STATUS_POLL_INTERVAL", "1m")
 	v.SetDefault("CLOUD_PRINTER_STATUS_POLL_BATCH_SIZE", 50)

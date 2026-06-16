@@ -5432,6 +5432,21 @@ func (mr *MockStoreMockRecorder) CreateSearchHistory(ctx, arg any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateSearchHistory", reflect.TypeOf((*MockStore)(nil).CreateSearchHistory), ctx, arg)
 }
 
+// CreateSelfCloudPrintCallbackEvent mocks base method.
+func (m *MockStore) CreateSelfCloudPrintCallbackEvent(ctx context.Context, arg db.CreateSelfCloudPrintCallbackEventParams) (db.SelfCloudPrintCallbackEvent, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateSelfCloudPrintCallbackEvent", ctx, arg)
+	ret0, _ := ret[0].(db.SelfCloudPrintCallbackEvent)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateSelfCloudPrintCallbackEvent indicates an expected call of CreateSelfCloudPrintCallbackEvent.
+func (mr *MockStoreMockRecorder) CreateSelfCloudPrintCallbackEvent(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateSelfCloudPrintCallbackEvent", reflect.TypeOf((*MockStore)(nil).CreateSelfCloudPrintCallbackEvent), ctx, arg)
+}
+
 // CreateSession mocks base method.
 func (m *MockStore) CreateSession(ctx context.Context, arg db.CreateSessionParams) (db.Session, error) {
 	m.ctrl.T.Helper()
@@ -11172,6 +11187,21 @@ func (mr *MockStoreMockRecorder) GetPrintLog(ctx, id any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPrintLog", reflect.TypeOf((*MockStore)(nil).GetPrintLog), ctx, id)
 }
 
+// GetPrintLogByIDProviderAndVendorOrderID mocks base method.
+func (m *MockStore) GetPrintLogByIDProviderAndVendorOrderID(ctx context.Context, arg db.GetPrintLogByIDProviderAndVendorOrderIDParams) (db.PrintLog, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetPrintLogByIDProviderAndVendorOrderID", ctx, arg)
+	ret0, _ := ret[0].(db.PrintLog)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetPrintLogByIDProviderAndVendorOrderID indicates an expected call of GetPrintLogByIDProviderAndVendorOrderID.
+func (mr *MockStoreMockRecorder) GetPrintLogByIDProviderAndVendorOrderID(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPrintLogByIDProviderAndVendorOrderID", reflect.TypeOf((*MockStore)(nil).GetPrintLogByIDProviderAndVendorOrderID), ctx, arg)
+}
+
 // GetPrintLogByProviderAndOriginID mocks base method.
 func (m *MockStore) GetPrintLogByProviderAndOriginID(ctx context.Context, arg db.GetPrintLogByProviderAndOriginIDParams) (db.PrintLog, error) {
 	m.ctrl.T.Helper()
@@ -12325,6 +12355,21 @@ func (m *MockStore) GetRuleVersion(ctx context.Context, id int64) (db.RuleVersio
 func (mr *MockStoreMockRecorder) GetRuleVersion(ctx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRuleVersion", reflect.TypeOf((*MockStore)(nil).GetRuleVersion), ctx, id)
+}
+
+// GetSelfCloudPrintCallbackEventByEventID mocks base method.
+func (m *MockStore) GetSelfCloudPrintCallbackEventByEventID(ctx context.Context, eventID string) (db.SelfCloudPrintCallbackEvent, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSelfCloudPrintCallbackEventByEventID", ctx, eventID)
+	ret0, _ := ret[0].(db.SelfCloudPrintCallbackEvent)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetSelfCloudPrintCallbackEventByEventID indicates an expected call of GetSelfCloudPrintCallbackEventByEventID.
+func (mr *MockStoreMockRecorder) GetSelfCloudPrintCallbackEventByEventID(ctx, eventID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSelfCloudPrintCallbackEventByEventID", reflect.TypeOf((*MockStore)(nil).GetSelfCloudPrintCallbackEventByEventID), ctx, eventID)
 }
 
 // GetSession mocks base method.
@@ -19122,6 +19167,21 @@ func (m *MockStore) ProcessPaymentSuccessTx(ctx context.Context, arg db.ProcessP
 func (mr *MockStoreMockRecorder) ProcessPaymentSuccessTx(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessPaymentSuccessTx", reflect.TypeOf((*MockStore)(nil).ProcessPaymentSuccessTx), ctx, arg)
+}
+
+// ProcessSelfCloudPrintCallbackTx mocks base method.
+func (m *MockStore) ProcessSelfCloudPrintCallbackTx(ctx context.Context, arg db.ProcessSelfCloudPrintCallbackTxParams) (db.ProcessSelfCloudPrintCallbackTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ProcessSelfCloudPrintCallbackTx", ctx, arg)
+	ret0, _ := ret[0].(db.ProcessSelfCloudPrintCallbackTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ProcessSelfCloudPrintCallbackTx indicates an expected call of ProcessSelfCloudPrintCallbackTx.
+func (mr *MockStoreMockRecorder) ProcessSelfCloudPrintCallbackTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessSelfCloudPrintCallbackTx", reflect.TypeOf((*MockStore)(nil).ProcessSelfCloudPrintCallbackTx), ctx, arg)
 }
 
 // ReactivateDisabledMerchantStaff mocks base method.

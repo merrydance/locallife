@@ -137,6 +137,7 @@ type Store interface {
 	AuthorizeYilianyunCloudPrinterTx(ctx context.Context, arg AuthorizeYilianyunCloudPrinterTxParams) (AuthorizeYilianyunCloudPrinterTxResult, error)
 	AuthorizeYilianyunCloudPrinterWithDeviceTx(ctx context.Context, arg AuthorizeYilianyunCloudPrinterWithDeviceTxParams) (AuthorizeYilianyunCloudPrinterWithDeviceTxResult, error)
 	CreateAuthorizedYilianyunCloudPrinterTx(ctx context.Context, arg CreateAuthorizedYilianyunCloudPrinterTxParams) (CreateAuthorizedYilianyunCloudPrinterTxResult, error)
+	ProcessSelfCloudPrintCallbackTx(ctx context.Context, arg ProcessSelfCloudPrintCallbackTxParams) (ProcessSelfCloudPrintCallbackTxResult, error)
 	// Order replacement transaction
 	ReplaceOrderTx(ctx context.Context, arg ReplaceOrderTxParams) (ReplaceOrderTxResult, error)
 	ReplaceOrderWithRefundOrdersTx(ctx context.Context, arg ReplaceOrderWithRefundOrdersTxParams) (ReplaceOrderWithRefundOrdersTxResult, error)

@@ -209,6 +209,7 @@ const (
 	CloudPrinterReconciliationStatusResolved = "resolved"
 
 	CloudPrinterProviderYilianyun = "yilianyun"
+	CloudPrinterProviderSelfCloud = "self_cloud"
 
 	CloudPrinterAuthorizationStatusActive        = "active"
 	CloudPrinterAuthorizationStatusRefreshFailed = "refresh_failed"
