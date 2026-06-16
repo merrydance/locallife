@@ -79,7 +79,7 @@ const CONFIG_SECTIONS: ConfigSection[] = [
     desc: '维护显示、打印和门店设备设置。',
     items: [
       { id: 'display-config', title: '后厨协同设置', desc: '统一维护打印分发与自动接单配置', path: '/pages/merchant/settings/display-config/index' },
-      { id: 'printers', title: '打印机管理', desc: '添加、配置和维护云打印机设备', path: '/pages/merchant/printers/index' }
+      { id: 'printers', title: '乐客来福打印机', desc: '输入 SN 和绑定码绑定打印机，维护云打印设备和测试状态', path: '/pages/merchant/printers/index' }
     ]
   },
   {

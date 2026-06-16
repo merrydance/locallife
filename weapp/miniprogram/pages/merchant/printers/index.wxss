@@ -38,6 +38,17 @@
     font-weight: 600;
 }
 
+.printer-entry-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacer-sm);
+  padding: 0 4rpx;
+}
+
+.printer-entry-actions t-button {
+  flex: 1 1 260rpx;
+}
+
 .command-result {
   display: flex;
   align-items: center;

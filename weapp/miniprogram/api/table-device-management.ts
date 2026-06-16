@@ -16,7 +16,7 @@ export type TableType = 'table' | 'room'
 export type TableStatus = 'available' | 'occupied' | 'reserved' | 'disabled'
 
 /** 打印机类型枚举 - 对齐后端 api.createPrinterRequest / 授权型打印机契约 */
-export type PrinterType = 'feieyun' | 'shangpeng' | 'yilianyun' | 'other'
+export type PrinterType = 'feieyun' | 'shangpeng' | 'self_cloud' | 'yilianyun' | 'other'
 
 /** 打印机角色枚举 - 对齐后端 api.createPrinterRequest */
 export type PrinterRole = 'front' | 'kitchen'

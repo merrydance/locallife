@@ -19,6 +19,8 @@ import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 interface PrinterEditOptions {
   id?: string
+  provider?: string
+  type?: string
 }
 
 interface PrinterFormData {
@@ -39,9 +41,22 @@ interface PrinterOption<T extends string> {
   desc: string
 }
 
-type DirectCreatePrinterType = 'feieyun' | 'shangpeng'
+type DirectCreatePrinterType = 'feieyun' | 'shangpeng' | 'self_cloud'
+
+const PRINTER_TYPE_LABELS: Record<PrinterType, string> = {
+  feieyun: '飞鹅云',
+  shangpeng: '商鹏云',
+  self_cloud: '乐客来福云打印机',
+  yilianyun: '易联云',
+  other: '其他设备'
+}
 
 const PRINTER_TYPE_OPTIONS: Array<PrinterOption<PrinterType>> = [
+  {
+    label: '乐客来福打印机',
+    value: 'self_cloud',
+    desc: '输入打印机 SN 和绑定码，绑定到乐客来福云打印服务。'
+  },
   {
     label: '飞鹅云',
     value: 'feieyun',
@@ -74,12 +89,48 @@ const PRINTER_ROLE_OPTIONS: Array<PrinterOption<PrinterRole>> = [
 
 const getErrorMessage = getErrorUserMessage
 
-function createDefaultFormData(): PrinterFormData {
+function normalizeInitialPrinterType(value?: string): PrinterType {
+  switch (String(value || '').trim()) {
+    case 'self_cloud':
+      return 'self_cloud'
+    case 'shangpeng':
+      return 'shangpeng'
+    case 'yilianyun':
+      return 'yilianyun'
+    case 'feieyun':
+    default:
+      return 'feieyun'
+  }
+}
+
+function buildFormViewState(formData: PrinterFormData, isEdit: boolean) {
+  const printerType = formData.printer_type
+  const isYilianyunAuthorization = !isEdit && printerType === 'yilianyun'
+  const isSelfCloud = printerType === 'self_cloud'
+
+  return {
+    selectedPrinterTypeLabel: PRINTER_TYPE_LABELS[printerType] || '其他设备',
+    bindingSectionCaption: isYilianyunAuthorization
+      ? '填写机器码和终端密钥，系统会完成易联云开放应用授权。'
+      : (isSelfCloud ? '填写打印机 SN 和绑定码，系统会绑定乐客来福云打印机。' : '名称、序列号和密钥与云打印机平台保持一致。'),
+    printerSnLabel: isYilianyunAuthorization ? '机器码' : (isSelfCloud ? '打印机 SN' : '序列号'),
+    printerSnPlaceholder: isYilianyunAuthorization
+      ? '机身或自检页上的终端号'
+      : (isSelfCloud ? '请输入机身标签上的 SN' : '请输入打印机序列号'),
+    printerKeyLabel: isYilianyunAuthorization ? '终端密钥' : (isSelfCloud ? '绑定码' : '打印机密钥'),
+    printerKeyPlaceholder: isEdit
+      ? '编辑时留空则不修改'
+      : (isYilianyunAuthorization ? '机身或自检页上的终端密钥' : (isSelfCloud ? '请输入打印机绑定码' : '请输入打印机密钥')),
+    submitButtonText: isEdit ? '保存打印机' : (isYilianyunAuthorization ? '授权绑定' : (isSelfCloud ? '绑定打印机' : '新增打印机'))
+  }
+}
+
+function createDefaultFormData(printerType: PrinterType = 'feieyun'): PrinterFormData {
   return {
     printer_name: '',
     printer_sn: '',
     printer_key: '',
-    printer_type: 'feieyun',
+    printer_type: printerType,
     printer_role: 'front',
     print_takeout: true,
     print_dine_in: true,
@@ -115,18 +166,31 @@ Page({
     submitting: false,
     isEdit: false,
     printerId: 0,
+    initialPrinterType: 'feieyun' as PrinterType,
     formData: createDefaultFormData() as PrinterFormData,
     printerTypeOptions: PRINTER_TYPE_OPTIONS,
-    printerRoleOptions: PRINTER_ROLE_OPTIONS
+    printerRoleOptions: PRINTER_ROLE_OPTIONS,
+    selectedPrinterTypeLabel: '飞鹅云',
+    bindingSectionCaption: '名称、序列号和密钥与云打印机平台保持一致。',
+    printerSnLabel: '序列号',
+    printerSnPlaceholder: '请输入打印机序列号',
+    printerKeyLabel: '打印机密钥',
+    printerKeyPlaceholder: '请输入打印机密钥',
+    submitButtonText: '新增打印机'
   },
 
   async onLoad(options: PrinterEditOptions) {
     const { navBarHeight } = getStableBarHeights()
     const printerId = Number(options.id || 0)
+    const initialPrinterType = normalizeInitialPrinterType(options.provider || options.type)
+    const formData = createDefaultFormData(initialPrinterType)
     this.setData({
       navBarHeight,
       isEdit: printerId > 0,
-      printerId
+      printerId,
+      initialPrinterType,
+      formData,
+      ...buildFormViewState(formData, printerId > 0)
     })
 
     await this.bootstrapPage()
@@ -167,11 +231,13 @@ Page({
       return
     }
 
+    const formData = createDefaultFormData(this.data.initialPrinterType)
     this.setData({
       initialLoading: false,
       initialError: false,
       initialErrorMessage: '',
-      formData: createDefaultFormData()
+      formData,
+      ...buildFormViewState(formData, false)
     })
   },
 
@@ -184,8 +250,10 @@ Page({
 
     try {
       const printer = await deviceManagementService.getPrinterDetail(this.data.printerId)
+      const formData = buildFormData(printer)
       this.setData({
-        formData: buildFormData(printer),
+        formData,
+        ...buildFormViewState(formData, true),
         initialLoading: false,
         initialError: false,
         initialErrorMessage: ''
@@ -221,10 +289,15 @@ Page({
 
   onPrinterTypeChange(e: WechatMiniprogram.CustomEvent<{ value: PrinterType }>) {
     const printerType = e.detail.value
+    const formData: PrinterFormData = {
+      ...this.data.formData,
+      printer_type: printerType,
+      printer_sn: '',
+      printer_key: ''
+    }
     this.setData({
-      'formData.printer_type': printerType,
-      'formData.printer_sn': '',
-      'formData.printer_key': ''
+      formData,
+      ...buildFormViewState(formData, false)
     })
   },
 
@@ -247,17 +320,18 @@ Page({
       return
     }
     const isYilianyunAuthorization = !isEdit && formData.printer_type === 'yilianyun'
+    const isSelfCloudBinding = !isEdit && formData.printer_type === 'self_cloud'
     if (!isEdit && !formData.printer_sn.trim()) {
-      wx.showToast({ title: isYilianyunAuthorization ? '请填写机器码' : '请填写打印机序列号', icon: 'none' })
+      wx.showToast({ title: isYilianyunAuthorization ? '请填写机器码' : (isSelfCloudBinding ? '请填写打印机 SN' : '请填写打印机序列号'), icon: 'none' })
       return
     }
     if (!isEdit && !formData.printer_key.trim()) {
-      wx.showToast({ title: isYilianyunAuthorization ? '请填写终端密钥' : '请填写打印机密钥', icon: 'none' })
+      wx.showToast({ title: isYilianyunAuthorization ? '请填写终端密钥' : (isSelfCloudBinding ? '请填写绑定码' : '请填写打印机密钥'), icon: 'none' })
       return
     }
 
     this.setData({ submitting: true })
-    wx.showLoading({ title: isYilianyunAuthorization ? '授权中...' : '保存中...' })
+    wx.showLoading({ title: isYilianyunAuthorization ? '授权中...' : (isSelfCloudBinding ? '绑定中...' : '保存中...') })
 
     try {
       if (isEdit) {
@@ -285,7 +359,7 @@ Page({
         }
         await deviceManagementService.authorizeScannedYilianyunPrinter(authorizeParams)
       } else {
-        if (formData.printer_type !== 'feieyun' && formData.printer_type !== 'shangpeng') {
+        if (formData.printer_type !== 'feieyun' && formData.printer_type !== 'shangpeng' && formData.printer_type !== 'self_cloud') {
           wx.showToast({ title: '当前设备类型需要通过授权绑定', icon: 'none' })
           return
         }
@@ -303,7 +377,7 @@ Page({
       }
 
       wx.showToast({
-        title: isEdit ? '打印机已更新' : (isYilianyunAuthorization ? '授权已完成' : '打印机已添加'),
+        title: isEdit ? '打印机已更新' : (isYilianyunAuthorization ? '授权已完成' : (isSelfCloudBinding ? '打印机已绑定' : '打印机已添加')),
         icon: 'success'
       })
       wx.navigateBack()
