@@ -37,6 +37,11 @@
         <text class="result-summary">{{resultSummaryText}}</text>
       </view>
 
+      <view class="printer-entry-actions">
+        <t-button theme="primary" icon="print" bind:tap="onBindSelfCloudPrinter">绑定乐客来福打印机</t-button>
+        <t-button theme="default" variant="outline" icon="add" bind:tap="onCreatePrinter">添加其他打印机</t-button>
+      </view>
+
       <view wx:if="{{commandResultText}}" class="command-result">
         <view class="command-result__copy">
           <text class="command-result__title">{{commandResultText}}</text>
@@ -65,7 +70,7 @@
         <t-loading theme="circular" size="40rpx" text="加载中..." vertical />
       </view>
 
-      <t-empty wx:elif="{{!loading && !printers.length}}" icon="info-circle" description="当前还没有打印设备，先添加一台" />
+      <t-empty wx:elif="{{!loading && !printers.length}}" icon="info-circle" description="当前还没有打印设备，先绑定或添加一台" />
 
       <view wx:else class="printer-list">
         <block wx:for="{{printers}}" wx:key="id">

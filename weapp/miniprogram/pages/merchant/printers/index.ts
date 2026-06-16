@@ -416,6 +416,12 @@ Page({
     wx.navigateTo({ url: '/pages/merchant/printers/edit/index' })
   },
 
+  onBindSelfCloudPrinter() {
+    if (this.data.initialLoading || this.data.initialError) return
+    this.setData({ needsReloadOnShow: true })
+    wx.navigateTo({ url: '/pages/merchant/printers/edit/index?provider=self_cloud' })
+  },
+
   onOpenEditPrinter(e: WechatMiniprogram.TouchEvent) {
     const { id } = e.currentTarget.dataset as { id?: number }
     if (!id) return
