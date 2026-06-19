@@ -65,7 +65,8 @@ function formatPrinterType(type?: string) {
   const typeMap: Record<string, string> = {
     feieyun: '飞鹅云',
     shangpeng: '商鹏云',
-    yilianyun: '易联云'
+    yilianyun: '易联云',
+    self_cloud: '东为打印机'
   }
   return typeMap[String(type || '').trim()] || '云打印'
 }

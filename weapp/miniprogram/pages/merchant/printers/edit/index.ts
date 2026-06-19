@@ -39,7 +39,7 @@ interface PrinterOption<T extends string> {
   desc: string
 }
 
-type DirectCreatePrinterType = 'feieyun' | 'shangpeng'
+type DirectCreatePrinterType = 'feieyun' | 'shangpeng' | 'self_cloud'
 
 const PRINTER_TYPE_OPTIONS: Array<PrinterOption<PrinterType>> = [
   {
@@ -51,6 +51,11 @@ const PRINTER_TYPE_OPTIONS: Array<PrinterOption<PrinterType>> = [
     label: '商鹏云',
     value: 'shangpeng',
     desc: '输入设备序列号和密钥，系统会远程添加到商鹏云应用。'
+  },
+  {
+    label: '东为打印机',
+    value: 'self_cloud',
+    desc: '输入设备 SN 和绑定码，系统会绑定到乐客来福自有云打印服务。'
   },
   {
     label: '易联云',
@@ -285,7 +290,11 @@ Page({
         }
         await deviceManagementService.authorizeScannedYilianyunPrinter(authorizeParams)
       } else {
-        if (formData.printer_type !== 'feieyun' && formData.printer_type !== 'shangpeng') {
+        if (
+          formData.printer_type !== 'feieyun' &&
+          formData.printer_type !== 'shangpeng' &&
+          formData.printer_type !== 'self_cloud'
+        ) {
           wx.showToast({ title: '当前设备类型需要通过授权绑定', icon: 'none' })
           return
         }

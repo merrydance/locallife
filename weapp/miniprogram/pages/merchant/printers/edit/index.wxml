@@ -41,7 +41,7 @@
         </view>
 
         <view wx:else class="readonly-provider">
-          <text class="readonly-provider__name">{{formData.printer_type === 'feieyun' ? '飞鹅云' : (formData.printer_type === 'shangpeng' ? '商鹏云' : (formData.printer_type === 'yilianyun' ? '易联云' : '其他设备'))}}</text>
+          <text class="readonly-provider__name">{{formData.printer_type === 'feieyun' ? '飞鹅云' : (formData.printer_type === 'shangpeng' ? '商鹏云' : (formData.printer_type === 'self_cloud' ? '东为打印机' : (formData.printer_type === 'yilianyun' ? '易联云' : '其他设备')))}}</text>
           <text class="readonly-provider__desc">设备编号 {{formData.printer_sn}}</text>
         </view>
       </view>
@@ -49,7 +49,7 @@
       <view class="section-panel">
         <view class="section-top-main">
           <text class="section-title">2. 绑定信息</text>
-          <text class="section-caption">{{formData.printer_type === 'yilianyun' && !isEdit ? '填写机器码和终端密钥，系统会完成易联云开放应用授权。' : '名称、序列号和密钥与云打印机平台保持一致。'}}</text>
+          <text class="section-caption">{{formData.printer_type === 'yilianyun' && !isEdit ? '填写机器码和终端密钥，系统会完成易联云开放应用授权。' : (formData.printer_type === 'self_cloud' && !isEdit ? '填写设备 SN 和绑定码，系统会绑定到乐客来福自有云打印服务。' : '名称、序列号和密钥与云打印机平台保持一致。')}}</text>
         </view>
 
         <t-cell-group theme="card">
@@ -62,18 +62,18 @@
           />
           <t-input
             wx:if="{{!isEdit}}"
-            label="{{formData.printer_type === 'yilianyun' ? '机器码' : '序列号'}}"
+            label="{{formData.printer_type === 'yilianyun' ? '机器码' : (formData.printer_type === 'self_cloud' ? 'SN' : '序列号')}}"
             value="{{formData.printer_sn}}"
             data-field="printer_sn"
-            placeholder="{{formData.printer_type === 'yilianyun' ? '机身或自检页上的终端号' : ''}}"
+            placeholder="{{formData.printer_type === 'yilianyun' ? '机身或自检页上的终端号' : (formData.printer_type === 'self_cloud' ? '设备贴纸上的 SN' : '')}}"
             bind:change="onFormInputChange"
           />
           <t-input
             wx:if="{{formData.printer_type !== 'yilianyun' || !isEdit}}"
-            label="{{formData.printer_type === 'yilianyun' ? '终端密钥' : '打印机密钥'}}"
+            label="{{formData.printer_type === 'yilianyun' ? '终端密钥' : (formData.printer_type === 'self_cloud' ? '绑定码' : '打印机密钥')}}"
             value="{{formData.printer_key}}"
             data-field="printer_key"
-            placeholder="{{isEdit ? '编辑时留空则不修改' : (formData.printer_type === 'yilianyun' ? '机身或自检页上的终端密钥' : '')}}"
+            placeholder="{{isEdit ? '编辑时留空则不修改' : (formData.printer_type === 'yilianyun' ? '机身或自检页上的终端密钥' : (formData.printer_type === 'self_cloud' ? '设备贴纸上的短码' : ''))}}"
             bind:change="onFormInputChange"
           />
         </t-cell-group>
