@@ -100,6 +100,47 @@ func TestBuildMerchantOrderFeeBreakdown_UsesLabTakeoutAmounts(t *testing.T) {
 	require.Equal(t, int64(0), breakdown.RiderNetEarningsAmount)
 }
 
+func TestBuildMerchantOrderFeeBreakdown_IncludesPackagingFeeSeparately(t *testing.T) {
+	order := db.Order{
+		ID:                  101,
+		Subtotal:            3000,
+		DiscountAmount:      300,
+		VoucherAmount:       200,
+		PackagingFee:        150,
+		DeliveryFee:         500,
+		DeliveryFeeDiscount: 100,
+		TotalAmount:         3050,
+		Status:              db.OrderStatusPaid,
+		OrderType:           db.OrderTypeTakeout,
+	}
+	profitSharingOrder := db.ProfitSharingOrder{
+		ID:                 202,
+		PaymentOrderID:     303,
+		TotalAmount:        3050,
+		PlatformCommission: 30,
+		OperatorCommission: 45,
+		MerchantAmount:     2575,
+		PaymentFee:         8,
+		RiderGrossAmount:   400,
+		RiderPaymentFee:    3,
+		RiderAmount:        397,
+	}
+
+	breakdown, err := BuildMerchantOrderFeeBreakdown(BuildMerchantOrderFeeBreakdownInput{
+		Order:              order,
+		ProfitSharingOrder: &profitSharingOrder,
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, int64(3000), breakdown.FoodAmount)
+	require.Equal(t, int64(2500), breakdown.FoodPayableAmount)
+	require.Equal(t, int64(150), breakdown.PackagingFeeAmount)
+	require.Equal(t, int64(400), breakdown.DeliveryPayableAmount)
+	require.Equal(t, int64(3050), breakdown.CustomerPayableAmount)
+	require.Equal(t, int64(2575), breakdown.MerchantReceivableAmount)
+	require.Equal(t, int64(400), breakdown.RiderGrossAmount)
+}
+
 func TestBuildMerchantOrderFeeBreakdown_ReturnsUnavailableWhenProfitSharingMissing(t *testing.T) {
 	_, err := BuildMerchantOrderFeeBreakdown(BuildMerchantOrderFeeBreakdownInput{
 		Order: db.Order{
