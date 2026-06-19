@@ -104,6 +104,7 @@ type Querier interface {
 	ClearAbnormalStatsDailyForBackfill(ctx context.Context, arg ClearAbnormalStatsDailyForBackfillParams) error
 	ClearBrowseHistory(ctx context.Context, userID int64) error
 	ClearCart(ctx context.Context, cartID int64) error
+	ClearCartPackagingSelection(ctx context.Context, cartID int64) (CartPackagingSelection, error)
 	ClearExpiredMerchantManualOpenStatusOverrides(ctx context.Context) (int64, error)
 	ClearGroupApplicationBusinessLicense(ctx context.Context, id int64) (MerchantGroupApplication, error)
 	ClearGroupApplicationIDCardBack(ctx context.Context, id int64) (MerchantGroupApplication, error)
@@ -435,6 +436,7 @@ type Querier interface {
 	CreateMerchantMembership(ctx context.Context, arg CreateMerchantMembershipParams) (MerchantMembership, error)
 	CreateMerchantMembershipSettings(ctx context.Context, arg CreateMerchantMembershipSettingsParams) (MerchantMembershipSetting, error)
 	CreateMerchantOnboardingReviewRun(ctx context.Context, arg CreateMerchantOnboardingReviewRunParams) (OnboardingReviewRun, error)
+	CreateMerchantPackagingOption(ctx context.Context, arg CreateMerchantPackagingOptionParams) (MerchantPackagingOption, error)
 	CreateMerchantPaymentConfig(ctx context.Context, arg CreateMerchantPaymentConfigParams) (MerchantPaymentConfig, error)
 	// M9: TrustScore信任分系统查询
 	// 设计理念：信用驱动，非证据驱动
@@ -458,6 +460,7 @@ type Querier interface {
 	CreateOrder(ctx context.Context, arg CreateOrderParams) (Order, error)
 	CreateOrderDisplayConfig(ctx context.Context, arg CreateOrderDisplayConfigParams) (OrderDisplayConfig, error)
 	CreateOrderItem(ctx context.Context, arg CreateOrderItemParams) (OrderItem, error)
+	CreateOrderPackagingItem(ctx context.Context, arg CreateOrderPackagingItemParams) (OrderPackagingItem, error)
 	CreateOrderPaymentFeeLedger(ctx context.Context, arg CreateOrderPaymentFeeLedgerParams) (OrderPaymentFeeLedger, error)
 	CreateOrderRequestIdempotency(ctx context.Context, arg CreateOrderRequestIdempotencyParams) (OrderCreateRequestIdempotency, error)
 	CreateOrderStatusLog(ctx context.Context, arg CreateOrderStatusLogParams) (OrderStatusLog, error)
@@ -694,6 +697,7 @@ type Querier interface {
 	GetCartItem(ctx context.Context, id int64) (GetCartItemRow, error)
 	GetCartItemByCombo(ctx context.Context, arg GetCartItemByComboParams) (CartItem, error)
 	GetCartItemByDishAndCustomizations(ctx context.Context, arg GetCartItemByDishAndCustomizationsParams) (CartItem, error)
+	GetCartPackagingSelection(ctx context.Context, cartID int64) (CartPackagingSelection, error)
 	GetCartWithItems(ctx context.Context, arg GetCartWithItemsParams) (GetCartWithItemsRow, error)
 	// 分类销售统计
 	GetCategoryStats(ctx context.Context, arg GetCategoryStatsParams) ([]GetCategoryStatsRow, error)
@@ -904,6 +908,9 @@ type Querier interface {
 	// 商户概览: 指定日期范围的汇总统计
 	GetMerchantOverview(ctx context.Context, arg GetMerchantOverviewParams) (GetMerchantOverviewRow, error)
 	GetMerchantOwnedByUser(ctx context.Context, ownerUserID int64) (Merchant, error)
+	GetMerchantPackagingOption(ctx context.Context, arg GetMerchantPackagingOptionParams) (MerchantPackagingOption, error)
+	GetMerchantPackagingOptionForUpdate(ctx context.Context, arg GetMerchantPackagingOptionForUpdateParams) (MerchantPackagingOption, error)
+	GetMerchantPackagingSettings(ctx context.Context, merchantID int64) (MerchantPackagingSetting, error)
 	GetMerchantPaymentConfig(ctx context.Context, merchantID int64) (MerchantPaymentConfig, error)
 	GetMerchantPaymentConfigBySubMchID(ctx context.Context, subMchID string) (MerchantPaymentConfig, error)
 	GetMerchantProfile(ctx context.Context, merchantID int64) (GetMerchantProfileRow, error)
@@ -1346,6 +1353,7 @@ type Querier interface {
 	// 获取商户上架菜品（用于扫码点餐菜单展示）
 	ListDishesForMenu(ctx context.Context, merchantID int64) ([]ListDishesForMenuRow, error)
 	ListDueClaimRecoveries(ctx context.Context, arg ListDueClaimRecoveriesParams) ([]ClaimRecovery, error)
+	ListEnabledMerchantPackagingOptions(ctx context.Context, merchantID int64) ([]MerchantPackagingOption, error)
 	ListExpiredActiveCredentialLedgers(ctx context.Context, arg ListExpiredActiveCredentialLedgersParams) ([]CredentialLedger, error)
 	// 列出已过期的运营商
 	ListExpiredOperators(ctx context.Context) ([]ListExpiredOperatorsRow, error)
@@ -1409,6 +1417,7 @@ type Querier interface {
 	// ==================== KDS 厨房显示系统查询 ====================
 	// 根据商户ID和状态查询订单（用于厨房显示）
 	ListMerchantOrdersByStatus(ctx context.Context, arg ListMerchantOrdersByStatusParams) ([]Order, error)
+	ListMerchantPackagingOptions(ctx context.Context, merchantID int64) ([]MerchantPackagingOption, error)
 	ListMerchantPrintAnomalies(ctx context.Context, arg ListMerchantPrintAnomaliesParams) ([]ListMerchantPrintAnomaliesRow, error)
 	// 商户满返支出明细
 	ListMerchantPromotionOrders(ctx context.Context, arg ListMerchantPromotionOrdersParams) ([]ListMerchantPromotionOrdersRow, error)
@@ -1470,6 +1479,8 @@ type Querier interface {
 	ListOrderItemsByOrder(ctx context.Context, orderID int64) ([]OrderItem, error)
 	ListOrderItemsWithDishByOrder(ctx context.Context, orderID int64) ([]ListOrderItemsWithDishByOrderRow, error)
 	ListOrderItemsWithDishByOrderIDs(ctx context.Context, dollar_1 []int64) ([]ListOrderItemsWithDishByOrderIDsRow, error)
+	ListOrderPackagingItems(ctx context.Context, orderID int64) ([]OrderPackagingItem, error)
+	ListOrderPackagingItemsByOrderIDs(ctx context.Context, orderIds []int64) ([]OrderPackagingItem, error)
 	ListOrderPaymentFeeLedgersByPayer(ctx context.Context, arg ListOrderPaymentFeeLedgersByPayerParams) ([]OrderPaymentFeeLedger, error)
 	ListOrderStatusLogs(ctx context.Context, orderID int64) ([]OrderStatusLog, error)
 	ListOrderStatusLogsWithOperator(ctx context.Context, orderID int64) ([]ListOrderStatusLogsWithOperatorRow, error)
@@ -1794,6 +1805,7 @@ type Querier interface {
 	// 设置用户需要提交证据
 	SetUserRequiresEvidence(ctx context.Context, arg SetUserRequiresEvidenceParams) error
 	SoftDeleteMediaAsset(ctx context.Context, id int64) (MediaAsset, error)
+	SoftDeleteMerchantPackagingOption(ctx context.Context, arg SoftDeleteMerchantPackagingOptionParams) (MerchantPackagingOption, error)
 	// 软删除员工（设置 status='disabled'），保留历史记录
 	SoftDeleteMerchantStaff(ctx context.Context, id int64) (MerchantStaff, error)
 	SubmitGroupApplication(ctx context.Context, id int64) (MerchantGroupApplication, error)
@@ -1837,6 +1849,7 @@ type Querier interface {
 	UpdateCartItem(ctx context.Context, arg UpdateCartItemParams) (CartItem, error)
 	// P1-016 修复：在数据库层确保数量不超过上限（原子性保证）
 	UpdateCartItemQuantityRelative(ctx context.Context, arg UpdateCartItemQuantityRelativeParams) (CartItem, error)
+	UpdateCartPackagingSelectionIfChanged(ctx context.Context, arg UpdateCartPackagingSelectionIfChangedParams) (CartPackagingSelection, error)
 	UpdateClaimLookbackResult(ctx context.Context, arg UpdateClaimLookbackResultParams) error
 	UpdateClaimStatus(ctx context.Context, arg UpdateClaimStatusParams) error
 	UpdateClaimStatusIfCurrent(ctx context.Context, arg UpdateClaimStatusIfCurrentParams) (Claim, error)
@@ -1910,6 +1923,7 @@ type Querier interface {
 	// 更新商户营业状态（手动开店/打烊）
 	UpdateMerchantIsOpen(ctx context.Context, arg UpdateMerchantIsOpenParams) (Merchant, error)
 	UpdateMerchantMembershipSettings(ctx context.Context, arg UpdateMerchantMembershipSettingsParams) (MerchantMembershipSetting, error)
+	UpdateMerchantPackagingOption(ctx context.Context, arg UpdateMerchantPackagingOptionParams) (MerchantPackagingOption, error)
 	UpdateMerchantPaymentConfig(ctx context.Context, arg UpdateMerchantPaymentConfigParams) (MerchantPaymentConfig, error)
 	UpdateMerchantPaymentConfigSettlementApplication(ctx context.Context, arg UpdateMerchantPaymentConfigSettlementApplicationParams) (MerchantPaymentConfig, error)
 	UpdateMerchantProfile(ctx context.Context, arg UpdateMerchantProfileParams) error
@@ -2033,6 +2047,7 @@ type Querier interface {
 	UpsertBaofuAccountBinding(ctx context.Context, arg UpsertBaofuAccountBindingParams) (BaofuAccountBinding, error)
 	UpsertBaofuAccountOpeningProfile(ctx context.Context, arg UpsertBaofuAccountOpeningProfileParams) (BaofuAccountOpeningProfile, error)
 	UpsertBaofuMerchantReportProcessing(ctx context.Context, arg UpsertBaofuMerchantReportProcessingParams) (BaofuMerchantReport, error)
+	UpsertCartPackagingSelection(ctx context.Context, arg UpsertCartPackagingSelectionParams) (CartPackagingSelection, error)
 	UpsertCloudPrinterProviderAuthorization(ctx context.Context, arg UpsertCloudPrinterProviderAuthorizationParams) (CloudPrinterProviderAuthorization, error)
 	UpsertCloudPrinterReconciliationJob(ctx context.Context, arg UpsertCloudPrinterReconciliationJobParams) (CloudPrinterReconciliationJob, error)
 	// 添加或更新菜品标签关联
@@ -2044,6 +2059,7 @@ type Querier interface {
 	UpsertMerchantLocalPrintEvent(ctx context.Context, arg UpsertMerchantLocalPrintEventParams) (MerchantLocalPrintEvent, error)
 	UpsertMerchantMembershipSettings(ctx context.Context, arg UpsertMerchantMembershipSettingsParams) (MerchantMembershipSetting, error)
 	UpsertMerchantOfflineCustomer(ctx context.Context, arg UpsertMerchantOfflineCustomerParams) (MerchantOfflineCustomer, error)
+	UpsertMerchantPackagingSettings(ctx context.Context, arg UpsertMerchantPackagingSettingsParams) (MerchantPackagingSetting, error)
 	UpsertMerchantPaymentConfig(ctx context.Context, arg UpsertMerchantPaymentConfigParams) (MerchantPaymentConfig, error)
 	UpsertMerchantSubjectProfile(ctx context.Context, arg UpsertMerchantSubjectProfileParams) (MerchantSubjectProfile, error)
 	UpsertMerchantSystemLabel(ctx context.Context, arg UpsertMerchantSystemLabelParams) error

@@ -1162,6 +1162,21 @@ func (mr *MockStoreMockRecorder) ClearCart(ctx, cartID any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearCart", reflect.TypeOf((*MockStore)(nil).ClearCart), ctx, cartID)
 }
 
+// ClearCartPackagingSelection mocks base method.
+func (m *MockStore) ClearCartPackagingSelection(ctx context.Context, cartID int64) (db.CartPackagingSelection, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClearCartPackagingSelection", ctx, cartID)
+	ret0, _ := ret[0].(db.CartPackagingSelection)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ClearCartPackagingSelection indicates an expected call of ClearCartPackagingSelection.
+func (mr *MockStoreMockRecorder) ClearCartPackagingSelection(ctx, cartID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearCartPackagingSelection", reflect.TypeOf((*MockStore)(nil).ClearCartPackagingSelection), ctx, cartID)
+}
+
 // ClearExpiredMerchantManualOpenStatusOverrides mocks base method.
 func (m *MockStore) ClearExpiredMerchantManualOpenStatusOverrides(ctx context.Context) (int64, error) {
 	m.ctrl.T.Helper()
@@ -4502,6 +4517,21 @@ func (mr *MockStoreMockRecorder) CreateMerchantOnboardingReviewRun(ctx, arg any)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateMerchantOnboardingReviewRun", reflect.TypeOf((*MockStore)(nil).CreateMerchantOnboardingReviewRun), ctx, arg)
 }
 
+// CreateMerchantPackagingOption mocks base method.
+func (m *MockStore) CreateMerchantPackagingOption(ctx context.Context, arg db.CreateMerchantPackagingOptionParams) (db.MerchantPackagingOption, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateMerchantPackagingOption", ctx, arg)
+	ret0, _ := ret[0].(db.MerchantPackagingOption)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateMerchantPackagingOption indicates an expected call of CreateMerchantPackagingOption.
+func (mr *MockStoreMockRecorder) CreateMerchantPackagingOption(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateMerchantPackagingOption", reflect.TypeOf((*MockStore)(nil).CreateMerchantPackagingOption), ctx, arg)
+}
+
 // CreateMerchantPaymentConfig mocks base method.
 func (m *MockStore) CreateMerchantPaymentConfig(ctx context.Context, arg db.CreateMerchantPaymentConfigParams) (db.MerchantPaymentConfig, error) {
 	m.ctrl.T.Helper()
@@ -4710,6 +4740,21 @@ func (m *MockStore) CreateOrderItem(ctx context.Context, arg db.CreateOrderItemP
 func (mr *MockStoreMockRecorder) CreateOrderItem(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOrderItem", reflect.TypeOf((*MockStore)(nil).CreateOrderItem), ctx, arg)
+}
+
+// CreateOrderPackagingItem mocks base method.
+func (m *MockStore) CreateOrderPackagingItem(ctx context.Context, arg db.CreateOrderPackagingItemParams) (db.OrderPackagingItem, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateOrderPackagingItem", ctx, arg)
+	ret0, _ := ret[0].(db.OrderPackagingItem)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateOrderPackagingItem indicates an expected call of CreateOrderPackagingItem.
+func (mr *MockStoreMockRecorder) CreateOrderPackagingItem(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOrderPackagingItem", reflect.TypeOf((*MockStore)(nil).CreateOrderPackagingItem), ctx, arg)
 }
 
 // CreateOrderPaymentFeeLedger mocks base method.
@@ -7692,6 +7737,21 @@ func (mr *MockStoreMockRecorder) GetCartItemByDishAndCustomizations(ctx, arg any
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCartItemByDishAndCustomizations", reflect.TypeOf((*MockStore)(nil).GetCartItemByDishAndCustomizations), ctx, arg)
 }
 
+// GetCartPackagingSelection mocks base method.
+func (m *MockStore) GetCartPackagingSelection(ctx context.Context, cartID int64) (db.CartPackagingSelection, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCartPackagingSelection", ctx, cartID)
+	ret0, _ := ret[0].(db.CartPackagingSelection)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetCartPackagingSelection indicates an expected call of GetCartPackagingSelection.
+func (mr *MockStoreMockRecorder) GetCartPackagingSelection(ctx, cartID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCartPackagingSelection", reflect.TypeOf((*MockStore)(nil).GetCartPackagingSelection), ctx, cartID)
+}
+
 // GetCartWithItems mocks base method.
 func (m *MockStore) GetCartWithItems(ctx context.Context, arg db.GetCartWithItemsParams) (db.GetCartWithItemsRow, error) {
 	m.ctrl.T.Helper()
@@ -9970,6 +10030,51 @@ func (m *MockStore) GetMerchantOwnedByUser(ctx context.Context, ownerUserID int6
 func (mr *MockStoreMockRecorder) GetMerchantOwnedByUser(ctx, ownerUserID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMerchantOwnedByUser", reflect.TypeOf((*MockStore)(nil).GetMerchantOwnedByUser), ctx, ownerUserID)
+}
+
+// GetMerchantPackagingOption mocks base method.
+func (m *MockStore) GetMerchantPackagingOption(ctx context.Context, arg db.GetMerchantPackagingOptionParams) (db.MerchantPackagingOption, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMerchantPackagingOption", ctx, arg)
+	ret0, _ := ret[0].(db.MerchantPackagingOption)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMerchantPackagingOption indicates an expected call of GetMerchantPackagingOption.
+func (mr *MockStoreMockRecorder) GetMerchantPackagingOption(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMerchantPackagingOption", reflect.TypeOf((*MockStore)(nil).GetMerchantPackagingOption), ctx, arg)
+}
+
+// GetMerchantPackagingOptionForUpdate mocks base method.
+func (m *MockStore) GetMerchantPackagingOptionForUpdate(ctx context.Context, arg db.GetMerchantPackagingOptionForUpdateParams) (db.MerchantPackagingOption, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMerchantPackagingOptionForUpdate", ctx, arg)
+	ret0, _ := ret[0].(db.MerchantPackagingOption)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMerchantPackagingOptionForUpdate indicates an expected call of GetMerchantPackagingOptionForUpdate.
+func (mr *MockStoreMockRecorder) GetMerchantPackagingOptionForUpdate(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMerchantPackagingOptionForUpdate", reflect.TypeOf((*MockStore)(nil).GetMerchantPackagingOptionForUpdate), ctx, arg)
+}
+
+// GetMerchantPackagingSettings mocks base method.
+func (m *MockStore) GetMerchantPackagingSettings(ctx context.Context, merchantID int64) (db.MerchantPackagingSetting, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMerchantPackagingSettings", ctx, merchantID)
+	ret0, _ := ret[0].(db.MerchantPackagingSetting)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMerchantPackagingSettings indicates an expected call of GetMerchantPackagingSettings.
+func (mr *MockStoreMockRecorder) GetMerchantPackagingSettings(ctx, merchantID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMerchantPackagingSettings", reflect.TypeOf((*MockStore)(nil).GetMerchantPackagingSettings), ctx, merchantID)
 }
 
 // GetMerchantPaymentConfig mocks base method.
@@ -14826,6 +14931,21 @@ func (mr *MockStoreMockRecorder) ListDueClaimRecoveries(ctx, arg any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListDueClaimRecoveries", reflect.TypeOf((*MockStore)(nil).ListDueClaimRecoveries), ctx, arg)
 }
 
+// ListEnabledMerchantPackagingOptions mocks base method.
+func (m *MockStore) ListEnabledMerchantPackagingOptions(ctx context.Context, merchantID int64) ([]db.MerchantPackagingOption, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListEnabledMerchantPackagingOptions", ctx, merchantID)
+	ret0, _ := ret[0].([]db.MerchantPackagingOption)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListEnabledMerchantPackagingOptions indicates an expected call of ListEnabledMerchantPackagingOptions.
+func (mr *MockStoreMockRecorder) ListEnabledMerchantPackagingOptions(ctx, merchantID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListEnabledMerchantPackagingOptions", reflect.TypeOf((*MockStore)(nil).ListEnabledMerchantPackagingOptions), ctx, merchantID)
+}
+
 // ListExpiredActiveCredentialLedgers mocks base method.
 func (m *MockStore) ListExpiredActiveCredentialLedgers(ctx context.Context, arg db.ListExpiredActiveCredentialLedgersParams) ([]db.CredentialLedger, error) {
 	m.ctrl.T.Helper()
@@ -15531,6 +15651,21 @@ func (mr *MockStoreMockRecorder) ListMerchantOrdersByStatus(ctx, arg any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListMerchantOrdersByStatus", reflect.TypeOf((*MockStore)(nil).ListMerchantOrdersByStatus), ctx, arg)
 }
 
+// ListMerchantPackagingOptions mocks base method.
+func (m *MockStore) ListMerchantPackagingOptions(ctx context.Context, merchantID int64) ([]db.MerchantPackagingOption, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListMerchantPackagingOptions", ctx, merchantID)
+	ret0, _ := ret[0].([]db.MerchantPackagingOption)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListMerchantPackagingOptions indicates an expected call of ListMerchantPackagingOptions.
+func (mr *MockStoreMockRecorder) ListMerchantPackagingOptions(ctx, merchantID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListMerchantPackagingOptions", reflect.TypeOf((*MockStore)(nil).ListMerchantPackagingOptions), ctx, merchantID)
+}
+
 // ListMerchantPrintAnomalies mocks base method.
 func (m *MockStore) ListMerchantPrintAnomalies(ctx context.Context, arg db.ListMerchantPrintAnomaliesParams) ([]db.ListMerchantPrintAnomaliesRow, error) {
 	m.ctrl.T.Helper()
@@ -16144,6 +16279,36 @@ func (m *MockStore) ListOrderItemsWithDishByOrderIDs(ctx context.Context, dollar
 func (mr *MockStoreMockRecorder) ListOrderItemsWithDishByOrderIDs(ctx, dollar_1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListOrderItemsWithDishByOrderIDs", reflect.TypeOf((*MockStore)(nil).ListOrderItemsWithDishByOrderIDs), ctx, dollar_1)
+}
+
+// ListOrderPackagingItems mocks base method.
+func (m *MockStore) ListOrderPackagingItems(ctx context.Context, orderID int64) ([]db.OrderPackagingItem, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListOrderPackagingItems", ctx, orderID)
+	ret0, _ := ret[0].([]db.OrderPackagingItem)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListOrderPackagingItems indicates an expected call of ListOrderPackagingItems.
+func (mr *MockStoreMockRecorder) ListOrderPackagingItems(ctx, orderID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListOrderPackagingItems", reflect.TypeOf((*MockStore)(nil).ListOrderPackagingItems), ctx, orderID)
+}
+
+// ListOrderPackagingItemsByOrderIDs mocks base method.
+func (m *MockStore) ListOrderPackagingItemsByOrderIDs(ctx context.Context, orderIds []int64) ([]db.OrderPackagingItem, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListOrderPackagingItemsByOrderIDs", ctx, orderIds)
+	ret0, _ := ret[0].([]db.OrderPackagingItem)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListOrderPackagingItemsByOrderIDs indicates an expected call of ListOrderPackagingItemsByOrderIDs.
+func (mr *MockStoreMockRecorder) ListOrderPackagingItemsByOrderIDs(ctx, orderIds any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListOrderPackagingItemsByOrderIDs", reflect.TypeOf((*MockStore)(nil).ListOrderPackagingItemsByOrderIDs), ctx, orderIds)
 }
 
 // ListOrderPaymentFeeLedgersByPayer mocks base method.
@@ -20670,6 +20835,21 @@ func (mr *MockStoreMockRecorder) SoftDeleteMediaAsset(ctx, id any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SoftDeleteMediaAsset", reflect.TypeOf((*MockStore)(nil).SoftDeleteMediaAsset), ctx, id)
 }
 
+// SoftDeleteMerchantPackagingOption mocks base method.
+func (m *MockStore) SoftDeleteMerchantPackagingOption(ctx context.Context, arg db.SoftDeleteMerchantPackagingOptionParams) (db.MerchantPackagingOption, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SoftDeleteMerchantPackagingOption", ctx, arg)
+	ret0, _ := ret[0].(db.MerchantPackagingOption)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SoftDeleteMerchantPackagingOption indicates an expected call of SoftDeleteMerchantPackagingOption.
+func (mr *MockStoreMockRecorder) SoftDeleteMerchantPackagingOption(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SoftDeleteMerchantPackagingOption", reflect.TypeOf((*MockStore)(nil).SoftDeleteMerchantPackagingOption), ctx, arg)
+}
+
 // SoftDeleteMerchantStaff mocks base method.
 func (m *MockStore) SoftDeleteMerchantStaff(ctx context.Context, id int64) (db.MerchantStaff, error) {
 	m.ctrl.T.Helper()
@@ -21240,6 +21420,21 @@ func (m *MockStore) UpdateCartItemQuantityRelative(ctx context.Context, arg db.U
 func (mr *MockStoreMockRecorder) UpdateCartItemQuantityRelative(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateCartItemQuantityRelative", reflect.TypeOf((*MockStore)(nil).UpdateCartItemQuantityRelative), ctx, arg)
+}
+
+// UpdateCartPackagingSelectionIfChanged mocks base method.
+func (m *MockStore) UpdateCartPackagingSelectionIfChanged(ctx context.Context, arg db.UpdateCartPackagingSelectionIfChangedParams) (db.CartPackagingSelection, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateCartPackagingSelectionIfChanged", ctx, arg)
+	ret0, _ := ret[0].(db.CartPackagingSelection)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateCartPackagingSelectionIfChanged indicates an expected call of UpdateCartPackagingSelectionIfChanged.
+func (mr *MockStoreMockRecorder) UpdateCartPackagingSelectionIfChanged(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateCartPackagingSelectionIfChanged", reflect.TypeOf((*MockStore)(nil).UpdateCartPackagingSelectionIfChanged), ctx, arg)
 }
 
 // UpdateClaimLookbackResult mocks base method.
@@ -22220,6 +22415,21 @@ func (m *MockStore) UpdateMerchantMembershipSettings(ctx context.Context, arg db
 func (mr *MockStoreMockRecorder) UpdateMerchantMembershipSettings(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMerchantMembershipSettings", reflect.TypeOf((*MockStore)(nil).UpdateMerchantMembershipSettings), ctx, arg)
+}
+
+// UpdateMerchantPackagingOption mocks base method.
+func (m *MockStore) UpdateMerchantPackagingOption(ctx context.Context, arg db.UpdateMerchantPackagingOptionParams) (db.MerchantPackagingOption, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateMerchantPackagingOption", ctx, arg)
+	ret0, _ := ret[0].(db.MerchantPackagingOption)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateMerchantPackagingOption indicates an expected call of UpdateMerchantPackagingOption.
+func (mr *MockStoreMockRecorder) UpdateMerchantPackagingOption(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMerchantPackagingOption", reflect.TypeOf((*MockStore)(nil).UpdateMerchantPackagingOption), ctx, arg)
 }
 
 // UpdateMerchantPaymentConfig mocks base method.
@@ -23884,6 +24094,21 @@ func (mr *MockStoreMockRecorder) UpsertBaofuMerchantReportProcessing(ctx, arg an
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertBaofuMerchantReportProcessing", reflect.TypeOf((*MockStore)(nil).UpsertBaofuMerchantReportProcessing), ctx, arg)
 }
 
+// UpsertCartPackagingSelection mocks base method.
+func (m *MockStore) UpsertCartPackagingSelection(ctx context.Context, arg db.UpsertCartPackagingSelectionParams) (db.CartPackagingSelection, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpsertCartPackagingSelection", ctx, arg)
+	ret0, _ := ret[0].(db.CartPackagingSelection)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpsertCartPackagingSelection indicates an expected call of UpsertCartPackagingSelection.
+func (mr *MockStoreMockRecorder) UpsertCartPackagingSelection(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertCartPackagingSelection", reflect.TypeOf((*MockStore)(nil).UpsertCartPackagingSelection), ctx, arg)
+}
+
 // UpsertCloudPrinterProviderAuthorization mocks base method.
 func (m *MockStore) UpsertCloudPrinterProviderAuthorization(ctx context.Context, arg db.UpsertCloudPrinterProviderAuthorizationParams) (db.CloudPrinterProviderAuthorization, error) {
 	m.ctrl.T.Helper()
@@ -24015,6 +24240,21 @@ func (m *MockStore) UpsertMerchantOfflineCustomer(ctx context.Context, arg db.Up
 func (mr *MockStoreMockRecorder) UpsertMerchantOfflineCustomer(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertMerchantOfflineCustomer", reflect.TypeOf((*MockStore)(nil).UpsertMerchantOfflineCustomer), ctx, arg)
+}
+
+// UpsertMerchantPackagingSettings mocks base method.
+func (m *MockStore) UpsertMerchantPackagingSettings(ctx context.Context, arg db.UpsertMerchantPackagingSettingsParams) (db.MerchantPackagingSetting, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpsertMerchantPackagingSettings", ctx, arg)
+	ret0, _ := ret[0].(db.MerchantPackagingSetting)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpsertMerchantPackagingSettings indicates an expected call of UpsertMerchantPackagingSettings.
+func (mr *MockStoreMockRecorder) UpsertMerchantPackagingSettings(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertMerchantPackagingSettings", reflect.TypeOf((*MockStore)(nil).UpsertMerchantPackagingSettings), ctx, arg)
 }
 
 // UpsertMerchantPaymentConfig mocks base method.
