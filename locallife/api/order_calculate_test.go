@@ -42,20 +42,23 @@ func (s stubOrderQueryService) CalculateOrderPreview(context.Context, logic.Calc
 }
 
 func TestCalculateOrderAPI_ReturnsPromotionEngineFields(t *testing.T) {
+	selectedOptionID := int64(101)
 	server := newTestServer(t, nil)
 	server.orderQuerySvc = stubOrderQueryService{
 		preview: logic.OrderCalculationResult{
 			Subtotal:            1800,
+			PackagingFee:        120,
+			Packaging:           logic.CartPackagingState{Enabled: true, Required: true, Applicable: true, SelectedOptionID: &selectedOptionID, SelectionVersion: 8},
 			DeliveryFee:         300,
 			DeliveryFeeDiscount: 100,
 			DiscountAmount:      250,
-			TotalAmount:         1750,
+			TotalAmount:         1870,
 			Promotions:          []logic.OrderPromotion{{Type: "merchant", Title: "满减", Amount: 250}},
 			Items:               []logic.OrderCalculationItem{{Name: "鱼香肉丝", UnitPrice: 1800, Quantity: 1, Subtotal: 1800}},
 			SuggestedVoucher:    &logic.SuggestedVoucher{ID: 12, Name: "推荐券", Amount: 200},
 			LadderPromotions:    []logic.LadderPromotion{{RuleID: 9, Name: "满20减3", Threshold: 2000, Discount: 300, MissingNeed: 200}},
-			VoucherTrials:       []logic.VoucherTrial{{VoucherID: 12, VoucherName: "推荐券", Amount: 200, TrialPayable: 1550}},
-			PaymentAssessment:   logic.PaymentAssessment{IsBalancePayable: true, UsableBalance: 2200, PrincipalPart: 1000, BonusPart: 750, PaymentHint: "余额可覆盖本单"},
+			VoucherTrials:       []logic.VoucherTrial{{VoucherID: 12, VoucherName: "推荐券", Amount: 200, TrialPayable: 1670}},
+			PaymentAssessment:   logic.PaymentAssessment{IsBalancePayable: true, UsableBalance: 2200, PrincipalPart: 1000, BonusPart: 870, PaymentHint: "余额可覆盖本单"},
 		},
 	}
 
@@ -72,14 +75,26 @@ func TestCalculateOrderAPI_ReturnsPromotionEngineFields(t *testing.T) {
 		Code    int    `json:"code"`
 		Message string `json:"message"`
 		Data    struct {
-			SuggestedVoucher  *logic.SuggestedVoucher `json:"suggested_voucher"`
-			LadderPromotions  []logic.LadderPromotion `json:"ladder_promotions"`
-			VoucherTrials     []logic.VoucherTrial    `json:"voucher_trials"`
-			PaymentAssessment logic.PaymentAssessment `json:"payment_assessment"`
+			PackagingFee      int64                    `json:"packaging_fee"`
+			Packaging         packagingPreviewResponse `json:"packaging"`
+			TotalAmount       int64                    `json:"total_amount"`
+			SuggestedVoucher  *logic.SuggestedVoucher  `json:"suggested_voucher"`
+			LadderPromotions  []logic.LadderPromotion  `json:"ladder_promotions"`
+			VoucherTrials     []logic.VoucherTrial     `json:"voucher_trials"`
+			PaymentAssessment logic.PaymentAssessment  `json:"payment_assessment"`
 		} `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
 	require.Equal(t, 0, response.Code)
+	require.Equal(t, int64(120), response.Data.PackagingFee)
+	require.Equal(t, int64(1870), response.Data.TotalAmount)
+	require.True(t, response.Data.Packaging.Enabled)
+	require.True(t, response.Data.Packaging.Required)
+	require.True(t, response.Data.Packaging.Applicable)
+	require.NotNil(t, response.Data.Packaging.SelectedOptionID)
+	require.Equal(t, selectedOptionID, *response.Data.Packaging.SelectedOptionID)
+	require.Equal(t, int64(8), response.Data.Packaging.SelectionVersion)
+	require.Equal(t, int64(120), response.Data.Packaging.Fee)
 	require.NotNil(t, response.Data.SuggestedVoucher)
 	require.Equal(t, int64(12), response.Data.SuggestedVoucher.ID)
 	require.Len(t, response.Data.LadderPromotions, 1)

@@ -48,6 +48,8 @@ type OrderPromotion struct {
 // OrderCalculationResult contains computed preview totals.
 type OrderCalculationResult struct {
 	Subtotal            int64
+	PackagingFee        int64
+	Packaging           CartPackagingState
 	DeliveryFee         int64
 	DeliveryFeeDiscount int64
 	DiscountAmount      int64
@@ -222,6 +224,20 @@ func CalculateOrderPreview(
 		}
 	}
 
+	packagingRequirement, err := NewPackagingService(store).ResolvePackagingRequirement(ctx, ResolvePackagingInput{
+		UserID:     input.UserID,
+		MerchantID: input.MerchantID,
+		OrderType:  input.OrderType,
+		CartID:     &cart.ID,
+	})
+	if err != nil {
+		return result, err
+	}
+	result.Packaging = cartPackagingStateFromRequirement(packagingRequirement)
+	if packagingRequirement.SelectedOption != nil {
+		result.PackagingFee = packagingRequirement.SelectedOption.Price
+	}
+
 	if input.VoucherCode != "" {
 		return result, NewRequestError(http.StatusBadRequest, errors.New("请使用 user_voucher_id 进行金额预览"))
 	}
@@ -251,6 +267,7 @@ func CalculateOrderPreview(
 		UserID:              input.UserID,
 		OrderType:           input.OrderType,
 		Subtotal:            result.Subtotal,
+		PackagingFee:        result.PackagingFee,
 		VoucherID:           input.UserVoucherID,
 		DeliveryFee:         result.DeliveryFee,
 		DeliveryFeeDiscount: result.DeliveryFeeDiscount,
@@ -262,6 +279,7 @@ func CalculateOrderPreview(
 	result.DeliveryFee = calcResult.DeliveryFee
 	result.DeliveryFeeDiscount = calcResult.DeliveryFeeDiscount
 	result.DiscountAmount = calcResult.MerchantDiscount + calcResult.VoucherDiscount
+	result.PackagingFee = calcResult.PackagingFee
 	result.TotalAmount = calcResult.TotalAmount
 	result.SuggestedVoucher = calcResult.SuggestedVoucher
 	result.LadderPromotions = calcResult.LadderPromotions

@@ -1384,6 +1384,13 @@ definitions:
           当前前端不应依赖此字段阻止下单——订单创建服务端会再次校验。
           omitempty：值为 0 时不序列化，前端收不到 0 即视为无限制。
         type: integer
+      packaging:
+        allOf:
+        - $ref: '#/definitions/api.packagingPreviewResponse'
+        description: 包装选择状态
+      packaging_fee:
+        description: 包装费（分）
+        type: integer
       payment_assessment:
         allOf:
         - $ref: '#/definitions/logic.PaymentAssessment'
@@ -6250,6 +6257,14 @@ definitions:
         items:
           $ref: '#/definitions/logic.LadderPromotion'
         type: array
+      packaging:
+        allOf:
+        - $ref: '#/definitions/api.packagingPreviewResponse'
+        description: 包装选择状态
+      packaging_fee:
+        description: 包装费 (单位：分)
+        example: 100
+        type: integer
       payment_assessment:
         allOf:
         - $ref: '#/definitions/logic.PaymentAssessment'
@@ -6604,6 +6619,21 @@ definitions:
       preparing_count:
         type: integer
       ready_count:
+        type: integer
+    type: object
+  api.packagingPreviewResponse:
+    properties:
+      applicable:
+        type: boolean
+      enabled:
+        type: boolean
+      fee:
+        type: integer
+      required:
+        type: boolean
+      selected_option_id:
+        type: integer
+      selection_version:
         type: integer
     type: object
   api.patchMerchantDocumentOCRFieldsRequest:

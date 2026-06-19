@@ -28,6 +28,8 @@ type CartPreviewInput struct {
 // CartPreviewResult holds the fully computed cart preview.
 type CartPreviewResult struct {
 	Subtotal            int64
+	PackagingFee        int64
+	Packaging           CartPackagingState
 	DeliveryFee         int64
 	DeliveryFeeDiscount int64
 	DeliveryDistance    int32
@@ -133,6 +135,20 @@ func CalculateCartPreview(
 		result.ETA = ComputeDeliveryETA(ctx, store, merchant.ID, result.DeliveryDistance, result.RouteDurationSec)
 	}
 
+	packagingRequirement, err := NewPackagingService(store).ResolvePackagingRequirement(ctx, ResolvePackagingInput{
+		UserID:     input.UserID,
+		MerchantID: input.MerchantID,
+		OrderType:  input.OrderType,
+		CartID:     &cart.ID,
+	})
+	if err != nil {
+		return result, err
+	}
+	result.Packaging = cartPackagingStateFromRequirement(packagingRequirement)
+	if packagingRequirement.SelectedOption != nil {
+		result.PackagingFee = packagingRequirement.SelectedOption.Price
+	}
+
 	// Run the promotion engine for discounts, vouchers, and payment assessment.
 	engine := NewPromotionEngine(store)
 	calcResult, err := engine.CalculateFinalPrice(ctx, OrderContext{
@@ -140,6 +156,7 @@ func CalculateCartPreview(
 		UserID:              input.UserID,
 		OrderType:           input.OrderType,
 		Subtotal:            subtotal,
+		PackagingFee:        result.PackagingFee,
 		VoucherID:           input.VoucherID,
 		DeliveryFee:         result.DeliveryFee,
 		DeliveryFeeDiscount: result.DeliveryFeeDiscount,

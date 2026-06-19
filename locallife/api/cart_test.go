@@ -68,6 +68,13 @@ func randomListCartItemsRow(cartItem db.CartItem, dish db.Dish) db.ListCartItems
 	}
 }
 
+func expectCartPackagingNotConfigured(store *mockdb.MockStore, merchantID int64) {
+	store.EXPECT().
+		GetMerchantPackagingSettings(gomock.Any(), merchantID).
+		Times(1).
+		Return(db.MerchantPackagingSetting{}, db.ErrRecordNotFound)
+}
+
 type combinedCheckoutMapClientStub struct {
 	route *maps.RouteResult
 	err   error
@@ -1370,6 +1377,8 @@ func TestCalculateCartAPI(t *testing.T) {
 					Times(1).
 					Return([]db.ListCartItemsRow{listRow}, nil)
 
+				expectCartPackagingNotConfigured(store, merchant.ID)
+
 				store.EXPECT().
 					ListUserAvailableVouchersForMerchant(gomock.Any(), db.ListUserAvailableVouchersForMerchantParams{
 						UserID:         user.ID,
@@ -1465,6 +1474,139 @@ func TestCalculateCartAPI(t *testing.T) {
 			tc.checkResponse(t, recorder)
 		})
 	}
+}
+
+func TestCalculateCartAPIIncludesPackagingFee(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	merchant.Status = "active"
+	merchant.IsOpen = true
+	cart := randomCart(user.ID, merchant.ID)
+	cart.OrderType = db.OrderTypeTakeaway
+	dish := randomDish(merchant.ID, nil)
+	dish.Price = 1000
+	cartItem := randomCartItem(cart.ID, dish)
+	cartItem.Quantity = 1
+	listRow := randomListCartItemsRow(cartItem, dish)
+	option := db.MerchantPackagingOption{
+		ID:         util.RandomInt(1000, 2000),
+		MerchantID: merchant.ID,
+		Name:       "普通餐盒",
+		Price:      100,
+		IsEnabled:  true,
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(merchant, nil)
+	store.EXPECT().
+		GetCartByUserAndMerchant(gomock.Any(), db.GetCartByUserAndMerchantParams{
+			UserID:     user.ID,
+			MerchantID: merchant.ID,
+			OrderType:  db.OrderTypeTakeaway,
+		}).
+		Times(1).
+		Return(cart, nil)
+	store.EXPECT().
+		ListCartItems(gomock.Any(), cart.ID).
+		Times(1).
+		Return([]db.ListCartItemsRow{listRow}, nil)
+	store.EXPECT().
+		GetMerchantPackagingSettings(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(db.MerchantPackagingSetting{
+			MerchantID:           merchant.ID,
+			Enabled:              true,
+			Required:             true,
+			ApplicableOrderTypes: []string{db.OrderTypeTakeaway},
+		}, nil)
+	store.EXPECT().
+		GetCart(gomock.Any(), cart.ID).
+		Times(1).
+		Return(cart, nil)
+	store.EXPECT().
+		GetCartPackagingSelection(gomock.Any(), cart.ID).
+		Times(1).
+		Return(db.CartPackagingSelection{
+			CartID:            cart.ID,
+			PackagingOptionID: pgtype.Int8{Int64: option.ID, Valid: true},
+			SelectionVersion:  7,
+		}, nil)
+	store.EXPECT().
+		ListEnabledMerchantPackagingOptions(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.MerchantPackagingOption{option}, nil)
+	store.EXPECT().
+		GetMerchantPackagingOption(gomock.Any(), db.GetMerchantPackagingOptionParams{
+			ID:         option.ID,
+			MerchantID: merchant.ID,
+		}).
+		Times(1).
+		Return(option, nil)
+	store.EXPECT().
+		ListActiveDiscountRules(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.DiscountRule{}, nil)
+	store.EXPECT().
+		ListUserAvailableVouchersForMerchant(gomock.Any(), db.ListUserAvailableVouchersForMerchantParams{
+			UserID:         user.ID,
+			MerchantID:     merchant.ID,
+			MinOrderAmount: int64(1000),
+		}).
+		Times(1).
+		Return([]db.ListUserAvailableVouchersForMerchantRow{}, nil)
+	store.EXPECT().
+		GetMembershipByMerchantAndUser(gomock.Any(), db.GetMembershipByMerchantAndUserParams{
+			MerchantID: merchant.ID,
+			UserID:     user.ID,
+		}).
+		Times(1).
+		Return(db.MerchantMembership{}, db.ErrRecordNotFound)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	body, err := json.Marshal(gin.H{
+		"merchant_id": merchant.ID,
+		"order_type":  db.OrderTypeTakeaway,
+	})
+	require.NoError(t, err)
+	request, err := http.NewRequest(http.MethodPost, "/v1/cart/calculate", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response struct {
+		Subtotal     int64 `json:"subtotal"`
+		PackagingFee int64 `json:"packaging_fee"`
+		TotalAmount  int64 `json:"total_amount"`
+		Packaging    struct {
+			Enabled          bool   `json:"enabled"`
+			Required         bool   `json:"required"`
+			Applicable       bool   `json:"applicable"`
+			SelectedOptionID *int64 `json:"selected_option_id"`
+			SelectionVersion int64  `json:"selection_version"`
+			Fee              int64  `json:"fee"`
+		} `json:"packaging"`
+	}
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.Equal(t, int64(1000), response.Subtotal)
+	require.Equal(t, int64(100), response.PackagingFee)
+	require.Equal(t, int64(1100), response.TotalAmount)
+	require.True(t, response.Packaging.Enabled)
+	require.True(t, response.Packaging.Required)
+	require.True(t, response.Packaging.Applicable)
+	require.NotNil(t, response.Packaging.SelectedOptionID)
+	require.Equal(t, option.ID, *response.Packaging.SelectedOptionID)
+	require.Equal(t, int64(7), response.Packaging.SelectionVersion)
+	require.Equal(t, int64(100), response.Packaging.Fee)
 }
 
 // ==================== GetAllCarts Tests (多商户购物车汇总) ====================

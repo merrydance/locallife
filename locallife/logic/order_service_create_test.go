@@ -460,6 +460,7 @@ func TestOrderServiceCreateOrder_MarketingTotalsMatchCartAndOrderPreview(t *test
 		GetUserAddress(gomock.Any(), addressID).
 		Times(1).
 		Return(address, nil)
+	expectPackagingNotConfigured(store, merchantID)
 	store.EXPECT().
 		ListActiveDiscountRules(gomock.Any(), merchantID).
 		Times(1).
@@ -524,6 +525,7 @@ func TestOrderServiceCreateOrder_MarketingTotalsMatchCartAndOrderPreview(t *test
 		GetUserAddress(gomock.Any(), addressID).
 		Times(1).
 		Return(address, nil)
+	expectPackagingNotConfigured(store, merchantID)
 	store.EXPECT().
 		GetUserVoucher(gomock.Any(), voucherID).
 		Times(2).

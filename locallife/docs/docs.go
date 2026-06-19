@@ -34683,6 +34683,18 @@ const docTemplate = `{
                     "description": "最小起送金额（分）。0 表示无起送限制，或该商户尚未配置起送金额。\n商户级起送金额配置上线后此字段将从商户配置读取；\n当前前端不应依赖此字段阻止下单——订单创建服务端会再次校验。\nomitempty：值为 0 时不序列化，前端收不到 0 即视为无限制。",
                     "type": "integer"
                 },
+                "packaging": {
+                    "description": "包装选择状态",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/api.packagingPreviewResponse"
+                        }
+                    ]
+                },
+                "packaging_fee": {
+                    "description": "包装费（分）",
+                    "type": "integer"
+                },
                 "payment_assessment": {
                     "description": "会员余额支付能力评估",
                     "allOf": [
@@ -41819,6 +41831,19 @@ const docTemplate = `{
                         "$ref": "#/definitions/logic.LadderPromotion"
                     }
                 },
+                "packaging": {
+                    "description": "包装选择状态",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/api.packagingPreviewResponse"
+                        }
+                    ]
+                },
+                "packaging_fee": {
+                    "description": "包装费 (单位：分)",
+                    "type": "integer",
+                    "example": 100
+                },
                 "payment_assessment": {
                     "description": "会员余额支付能力评估",
                     "allOf": [
@@ -42301,6 +42326,29 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "ready_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.packagingPreviewResponse": {
+            "type": "object",
+            "properties": {
+                "applicable": {
+                    "type": "boolean"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "fee": {
+                    "type": "integer"
+                },
+                "required": {
+                    "type": "boolean"
+                },
+                "selected_option_id": {
+                    "type": "integer"
+                },
+                "selection_version": {
                     "type": "integer"
                 }
             }

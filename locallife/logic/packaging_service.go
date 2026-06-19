@@ -11,11 +11,12 @@ import (
 )
 
 type PackagingRequirement struct {
-	Enabled        bool
-	Required       bool
-	Applicable     bool
-	Options        []db.MerchantPackagingOption
-	SelectedOption *db.MerchantPackagingOption
+	Enabled          bool
+	Required         bool
+	Applicable       bool
+	SelectionVersion int64
+	Options          []db.MerchantPackagingOption
+	SelectedOption   *db.MerchantPackagingOption
 }
 
 type ResolvePackagingInput struct {
@@ -183,10 +184,11 @@ func (s *PackagingService) ResolvePackagingRequirement(ctx context.Context, inpu
 		return requirement, nil
 	}
 
-	selectedOptionID, err := s.resolveSelectedPackagingOptionID(ctx, input)
+	selectedOptionID, selectionVersion, err := s.resolveSelectedPackagingOptionID(ctx, input)
 	if err != nil {
 		return requirement, err
 	}
+	requirement.SelectionVersion = selectionVersion
 
 	options, err := s.store.ListEnabledMerchantPackagingOptions(ctx, input.MerchantID)
 	if err != nil {
@@ -299,6 +301,21 @@ func cartPackagingSelectionResult(selection db.CartPackagingSelection) CartPacka
 	return result
 }
 
+func cartPackagingStateFromRequirement(requirement PackagingRequirement) CartPackagingState {
+	state := CartPackagingState{
+		Enabled:          requirement.Enabled,
+		Required:         requirement.Required,
+		Applicable:       requirement.Applicable,
+		SelectionVersion: requirement.SelectionVersion,
+		Options:          requirement.Options,
+	}
+	if requirement.SelectedOption != nil {
+		optionID := requirement.SelectedOption.ID
+		state.SelectedOptionID = &optionID
+	}
+	return state
+}
+
 func pgInt8FromInt64Ptr(value *int64) pgtype.Int8 {
 	if value == nil {
 		return pgtype.Int8{}
@@ -313,40 +330,40 @@ func pgInt8MatchesInt64Ptr(value pgtype.Int8, expected *int64) bool {
 	return value.Valid && value.Int64 == *expected
 }
 
-func (s *PackagingService) resolveSelectedPackagingOptionID(ctx context.Context, input ResolvePackagingInput) (*int64, error) {
+func (s *PackagingService) resolveSelectedPackagingOptionID(ctx context.Context, input ResolvePackagingInput) (*int64, int64, error) {
 	if input.CartID == nil {
-		return input.PackagingOptionID, nil
+		return input.PackagingOptionID, 0, nil
 	}
 
 	cart, err := s.store.GetCart(ctx, *input.CartID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
-			return nil, NewRequestError(http.StatusBadRequest, errors.New("购物车不存在"))
+			return nil, 0, NewRequestError(http.StatusBadRequest, errors.New("购物车不存在"))
 		}
-		return nil, err
+		return nil, 0, err
 	}
 	if cart.UserID != input.UserID {
-		return nil, NewRequestError(http.StatusForbidden, errors.New("购物车不属于你"))
+		return nil, 0, NewRequestError(http.StatusForbidden, errors.New("购物车不属于你"))
 	}
 	if cart.MerchantID != input.MerchantID || cart.OrderType != input.OrderType {
-		return nil, NewRequestError(http.StatusConflict, errors.New("购物车状态已变化，请刷新后重试"))
+		return nil, 0, NewRequestError(http.StatusConflict, errors.New("购物车状态已变化，请刷新后重试"))
 	}
 	if input.PackagingOptionID != nil {
-		return input.PackagingOptionID, nil
+		return input.PackagingOptionID, 0, nil
 	}
 
 	selection, err := s.store.GetCartPackagingSelection(ctx, *input.CartID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
-			return nil, nil
+			return nil, 0, nil
 		}
-		return nil, err
+		return nil, 0, err
 	}
 	if !selection.PackagingOptionID.Valid {
-		return nil, nil
+		return nil, selection.SelectionVersion, nil
 	}
 	optionID := selection.PackagingOptionID.Int64
-	return &optionID, nil
+	return &optionID, selection.SelectionVersion, nil
 }
 
 func BuildOrderPackagingSnapshot(option db.MerchantPackagingOption) OrderPackagingSnapshot {

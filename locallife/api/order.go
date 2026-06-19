@@ -2720,6 +2720,10 @@ func (server *Server) getMerchantOrderSummary(ctx *gin.Context) {
 type orderCalculationResponse struct {
 	// 商品小计 (单位：分)
 	Subtotal int64 `json:"subtotal" example:"5760"`
+	// 包装费 (单位：分)
+	PackagingFee int64 `json:"packaging_fee" example:"100"`
+	// 包装选择状态
+	Packaging packagingPreviewResponse `json:"packaging"`
 	// 代取费 (单位：分)
 	DeliveryFee int64 `json:"delivery_fee" example:"500"`
 	// 代取费优惠 (单位：分)
@@ -2859,6 +2863,8 @@ func (server *Server) calculateOrder(ctx *gin.Context) {
 
 	response := orderCalculationResponse{
 		Subtotal:            result.Subtotal,
+		PackagingFee:        result.PackagingFee,
+		Packaging:           toPackagingPreviewResponse(result.Packaging, result.PackagingFee),
 		DeliveryFee:         result.DeliveryFee,
 		DeliveryFeeDiscount: result.DeliveryFeeDiscount,
 		DiscountAmount:      result.DiscountAmount,

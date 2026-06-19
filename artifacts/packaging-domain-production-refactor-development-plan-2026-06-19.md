@@ -790,12 +790,18 @@ make check-generated
 
 - Modify: `locallife/logic/cart_calculation.go`
 - Modify: `locallife/logic/order_calculation.go` only if existing preview helpers share totals.
+- Modify: `locallife/logic/promotion_engine.go` when the shared preview total formula needs `packaging_fee`.
+- Modify: `locallife/logic/packaging_service.go` when preview response needs the selected option identity or `selection_version`.
 - Modify: `locallife/logic/order_calculation_test.go`
+- Modify: `locallife/logic/order_service_create_test.go` only to preserve existing no-packaging preview/create formula parity coverage.
 - Modify: `locallife/api/cart.go`
+- Modify: `locallife/api/cart_packaging.go` when sharing packaging preview response DTOs.
 - Modify: `locallife/api/cart_test.go`
+- Modify: `locallife/api/order.go` and `locallife/api/order_calculate_test.go` when `/v1/orders/calculate` must stay contract-compatible with `/v1/cart/calculate`.
+- Modify this plan if review finds Task 5/Task 6 boundary drift.
 - Modify generated Swagger after annotations: `locallife/docs/*`
 
-**Response additions for `/v1/cart/calculate`:**
+**Response additions for `/v1/cart/calculate` and `/v1/orders/calculate`:**
 
 ```json
 {
@@ -818,31 +824,33 @@ make check-generated
 
 **Required behavior:**
 
-- `CalculateCartPreview` resolves packaging through the same domain service as order creation.
+- `CalculateCartPreview` and `CalculateOrderPreview` resolve packaging through the shared packaging domain service.
 - Preview returns backend-computed `packaging_fee` and `total_amount`; frontend must render these values directly.
 - Packaging fee is excluded from food subtotal, merchant discount threshold, voucher threshold, and delivery fee calculation input.
 - Required packaging with no selected option returns a request error and blocks checkout.
 - Stale selected option, disabled option, deleted option, or option from another merchant fails closed.
 - Preview exposes `selection_version` so order creation can validate checkout freshness.
-- A focused test proves preview total equals create-order total for the same cart, selected packaging, delivery fee, and discounts.
+- Task 5 proves preview formula parity through shared total computation and preserves existing no-packaging preview/create parity. The selected-packaging real `CreateOrder` parity test is intentionally deferred to Task 6, because Task 6 owns order creation persistence, idempotency hash, and `packaging_selection_version` validation.
 
 **Steps:**
 
-- [ ] Extend cart preview result and API response with `packaging_fee` and packaging selection identity.
+- [ ] Extend cart and order preview result/API responses with `packaging_fee` and packaging selection identity.
 - [ ] Use packaging domain logic to resolve selected packaging from `cart_packaging_selections`.
 - [ ] Update total formula in preview to match Section 6.
 - [ ] Add tests:
   - selected packaging adds fee to preview total.
   - required missing packaging returns request error.
   - packaging fee does not change discount/voucher threshold input.
-  - preview total matches order create total for the same inputs.
-  - stale/foreign/disabled/deleted option fails closed.
+  - shared formula preview total matches `ComputeOrderTotals` with packaging.
+  - existing no-packaging preview/create parity still passes.
+  - stale/foreign/disabled/deleted option fails closed through the packaging service; add preview-level coverage for at least one stale or disabled selected option.
+  - `/v1/orders/calculate` exposes the same packaging fields as `/v1/cart/calculate`.
 - [ ] Update Swagger.
-- [ ] Review gate: verify no frontend-owned amount calculation is required and preview/create formulas remain identical.
+- [ ] Review gate: verify no frontend-owned amount calculation is required; verify selected-packaging real create parity remains explicitly assigned to Task 6.
 - [ ] Commit:
 
 ```bash
-git add locallife/logic/cart_calculation.go locallife/logic/order_calculation.go locallife/logic/order_calculation_test.go locallife/api/cart.go locallife/api/cart_test.go locallife/docs
+git add artifacts/packaging-domain-production-refactor-development-plan-2026-06-19.md locallife/logic/cart_calculation.go locallife/logic/order_calculation.go locallife/logic/promotion_engine.go locallife/logic/packaging_service.go locallife/logic/order_calculation_test.go locallife/logic/order_service_create_test.go locallife/api/cart.go locallife/api/cart_packaging.go locallife/api/cart_test.go locallife/api/order.go locallife/api/order_calculate_test.go locallife/docs
 git commit -m "feat: include packaging in cart preview totals"
 ```
 
@@ -851,7 +859,8 @@ git commit -m "feat: include packaging in cart preview totals"
 ```bash
 cd locallife
 go test ./logic -run 'TestCalculateCartPreview.*Packaging|TestCalculateOrderPreview.*Packaging|TestComputeOrderTotals' -count=1
-go test ./api -run 'TestCalculateCart.*Packaging' -count=1
+go test ./logic -run 'TestResolvePackagingRequirement|TestResolveCartPackagingState|TestBuildOrderPackagingSnapshot' -count=1
+go test ./api -run 'TestCalculateCart.*Packaging|TestCalculateOrderAPI_ReturnsPromotionEngineFields' -count=1
 make swagger
 make check-generated
 ```
@@ -886,6 +895,7 @@ make check-generated
 - Reusing the same `Idempotency-Key` with a different packaging identity returns conflict before an order is bound; once an order is bound, replay returns the existing order and snapshot.
 - Full balance payment branch keeps current atomic behavior and includes packaging fee in total amount.
 - No external side effects inside transaction.
+- Selected-packaging preview/create parity must be proven with a real `CreateOrder` path test in this task; Task 5 only prepared the preview-side formula and response contract.
 
 **Steps:**
 
@@ -911,6 +921,7 @@ type CreateOrderTxParams struct {
   - `dine_in` ignores packaging settings.
   - foreign option rejected.
   - total amount includes packaging fee.
+  - selected-packaging cart/order preview total matches the real created order total.
   - stale `packaging_selection_version` rejects with conflict.
   - same `Idempotency-Key` with changed packaging identity conflicts before order binding.
   - idempotent replay returns existing snapshot without reading current merchant option price/name.

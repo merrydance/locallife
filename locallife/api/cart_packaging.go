@@ -35,6 +35,15 @@ type cartPackagingSelectionResponse struct {
 	SelectionVersion int64  `json:"selection_version"`
 }
 
+type packagingPreviewResponse struct {
+	Enabled          bool   `json:"enabled"`
+	Required         bool   `json:"required"`
+	Applicable       bool   `json:"applicable"`
+	SelectedOptionID *int64 `json:"selected_option_id"`
+	SelectionVersion int64  `json:"selection_version"`
+	Fee              int64  `json:"fee"`
+}
+
 type putCartPackagingSelectionRequest struct {
 	MerchantID        int64  `json:"merchant_id" binding:"required,min=1"`
 	OrderType         string `json:"order_type"`
@@ -162,5 +171,16 @@ func toCartPackagingSelectionResponse(result logic.CartPackagingSelectionResult)
 	return cartPackagingSelectionResponse{
 		SelectedOptionID: result.SelectedOptionID,
 		SelectionVersion: result.SelectionVersion,
+	}
+}
+
+func toPackagingPreviewResponse(state logic.CartPackagingState, fee int64) packagingPreviewResponse {
+	return packagingPreviewResponse{
+		Enabled:          state.Enabled,
+		Required:         state.Required,
+		Applicable:       state.Applicable,
+		SelectedOptionID: state.SelectedOptionID,
+		SelectionVersion: state.SelectionVersion,
+		Fee:              fee,
 	}
 }

@@ -549,6 +549,10 @@ type calculateCartRequest struct {
 type calculateCartResponse struct {
 	// 商品小计（分）
 	Subtotal int64 `json:"subtotal"`
+	// 包装费（分）
+	PackagingFee int64 `json:"packaging_fee"`
+	// 包装选择状态
+	Packaging packagingPreviewResponse `json:"packaging"`
 	// 代取费（分）
 	DeliveryFee int64 `json:"delivery_fee"`
 	// 代取费满返减免（分）
@@ -683,10 +687,13 @@ func (server *Server) calculateCart(ctx *gin.Context) {
 		Str("order_type", req.OrderType).
 		Int32("delivery_distance", preview.DeliveryDistance).
 		Int64("total_amount", calcResult.TotalAmount).
+		Int64("packaging_fee", preview.PackagingFee).
 		Msg("calculateCart result from engine")
 
 	resp := calculateCartResponse{
 		Subtotal:            calcResult.Subtotal,
+		PackagingFee:        preview.PackagingFee,
+		Packaging:           toPackagingPreviewResponse(preview.Packaging, preview.PackagingFee),
 		DeliveryFee:         calcResult.DeliveryFee,
 		DeliveryFeeDiscount: calcResult.DeliveryFeeDiscount,
 		DeliveryDistance:    preview.DeliveryDistance,
