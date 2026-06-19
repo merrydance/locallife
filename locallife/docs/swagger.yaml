@@ -5044,6 +5044,53 @@ definitions:
       total_sales:
         type: integer
     type: object
+  api.merchantPackagingOptionListResponse:
+    properties:
+      limit:
+        type: integer
+      options:
+        items:
+          $ref: '#/definitions/api.merchantPackagingOptionResponse'
+        type: array
+      page:
+        type: integer
+      total:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
+  api.merchantPackagingOptionResponse:
+    properties:
+      description:
+        type: string
+      id:
+        type: integer
+      is_enabled:
+        type: boolean
+      merchant_id:
+        type: integer
+      name:
+        type: string
+      price:
+        type: integer
+      sort_order:
+        type: integer
+    type: object
+  api.merchantPackagingSettingsResponse:
+    properties:
+      applicable_order_types:
+        items:
+          type: string
+        type: array
+      default_option_id:
+        type: integer
+      enabled:
+        type: boolean
+      merchant_id:
+        type: integer
+      required:
+        type: boolean
+    type: object
   api.merchantPrintAnomalyResponse:
     properties:
       can_retry:
@@ -10330,6 +10377,45 @@ definitions:
     - menu_mode
     - pricing_mode
     - promotion_mode
+    type: object
+  api.upsertMerchantPackagingOptionRequest:
+    properties:
+      description:
+        type: string
+      is_enabled:
+        type: boolean
+      name:
+        type: string
+      price:
+        maximum: 9999900
+        minimum: 0
+        type: integer
+      sort_order:
+        maximum: 999
+        minimum: 0
+        type: integer
+    required:
+    - is_enabled
+    - name
+    - price
+    - sort_order
+    type: object
+  api.upsertMerchantPackagingSettingsRequest:
+    properties:
+      applicable_order_types:
+        items:
+          type: string
+        type: array
+      default_option_id:
+        minimum: 1
+        type: integer
+      enabled:
+        type: boolean
+      required:
+        type: boolean
+    required:
+    - enabled
+    - required
     type: object
   api.userAddressResponse:
     properties:
@@ -19191,6 +19277,235 @@ paths:
       summary: 获取商户订单汇总
       tags:
       - 商户订单管理
+  /v1/merchant/packaging-options:
+    get:
+      description: 获取当前商户未删除的包装选项列表
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 包装选项列表
+          schema:
+            $ref: '#/definitions/api.merchantPackagingOptionListResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取商户包装选项
+      tags:
+      - 商户包装管理
+    post:
+      consumes:
+      - application/json
+      description: 为当前商户创建一个包装选项，活动选项名称在商户内唯一
+      parameters:
+      - description: 包装选项
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.upsertMerchantPackagingOptionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: 创建成功
+          schema:
+            $ref: '#/definitions/api.merchantPackagingOptionResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: 包装选项名称重复
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 创建商户包装选项
+      tags:
+      - 商户包装管理
+  /v1/merchant/packaging-options/{id}:
+    delete:
+      description: 软删除当前商户拥有的包装选项；重复删除已删除的自有选项保持幂等成功
+      parameters:
+      - description: 包装选项ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 删除成功
+          schema:
+            $ref: '#/definitions/api.merchantPackagingOptionResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 包装选项不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 删除商户包装选项
+      tags:
+      - 商户包装管理
+    put:
+      consumes:
+      - application/json
+      description: 幂等更新当前商户拥有的包装选项
+      parameters:
+      - description: 包装选项ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 包装选项
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.upsertMerchantPackagingOptionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 更新成功
+          schema:
+            $ref: '#/definitions/api.merchantPackagingOptionResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 包装选项不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: 包装选项名称重复
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 更新商户包装选项
+      tags:
+      - 商户包装管理
+  /v1/merchant/packaging-settings:
+    get:
+      description: 获取当前商户包装启用状态、适用订单类型和默认包装选项
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 包装设置
+          schema:
+            $ref: '#/definitions/api.merchantPackagingSettingsResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取商户包装设置
+      tags:
+      - 商户包装管理
+    put:
+      consumes:
+      - application/json
+      description: 幂等更新当前商户包装启用状态、必选规则、适用订单类型和默认包装选项
+      parameters:
+      - description: 包装设置
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.upsertMerchantPackagingSettingsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 更新成功
+          schema:
+            $ref: '#/definitions/api.merchantPackagingSettingsResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 更新商户包装设置
+      tags:
+      - 商户包装管理
   /v1/merchant/recoveries/{id}:
     get:
       consumes:

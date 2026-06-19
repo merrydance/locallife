@@ -55,6 +55,25 @@ func (q *Queries) ClearCartPackagingSelection(ctx context.Context, cartID int64)
 	return i, err
 }
 
+const clearMerchantPackagingDefaultOptionIfMatches = `-- name: ClearMerchantPackagingDefaultOptionIfMatches :exec
+UPDATE merchant_packaging_settings
+SET
+  default_option_id = NULL,
+  updated_at = now()
+WHERE merchant_id = $1
+  AND default_option_id = $2
+`
+
+type ClearMerchantPackagingDefaultOptionIfMatchesParams struct {
+	MerchantID      int64       `json:"merchant_id"`
+	DefaultOptionID pgtype.Int8 `json:"default_option_id"`
+}
+
+func (q *Queries) ClearMerchantPackagingDefaultOptionIfMatches(ctx context.Context, arg ClearMerchantPackagingDefaultOptionIfMatchesParams) error {
+	_, err := q.db.Exec(ctx, clearMerchantPackagingDefaultOptionIfMatches, arg.MerchantID, arg.DefaultOptionID)
+	return err
+}
+
 const createMerchantPackagingOption = `-- name: CreateMerchantPackagingOption :one
 INSERT INTO merchant_packaging_options (
   merchant_id,

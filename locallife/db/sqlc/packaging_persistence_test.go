@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -161,6 +162,92 @@ func TestCartPackagingSelectionVersionIsIdempotent(t *testing.T) {
 	require.False(t, clearedAgain.PackagingOptionID.Valid)
 }
 
+func TestUpsertMerchantPackagingSettingsTxStoresEnabledDefaultOption(t *testing.T) {
+	ctx := context.Background()
+
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	option, err := testStore.CreateMerchantPackagingOption(ctx, CreateMerchantPackagingOptionParams{
+		MerchantID:  merchant.ID,
+		Name:        "默认餐盒-" + util.RandomString(8),
+		Description: pgtype.Text{String: "默认包装", Valid: true},
+		Price:       100,
+		IsEnabled:   true,
+		SortOrder:   1,
+	})
+	require.NoError(t, err)
+
+	settings, err := testStore.UpsertMerchantPackagingSettingsTx(ctx, UpsertMerchantPackagingSettingsParams{
+		MerchantID:           merchant.ID,
+		Enabled:              true,
+		Required:             true,
+		ApplicableOrderTypes: []string{OrderTypeTakeout, OrderTypeTakeaway},
+		DefaultOptionID:      pgtype.Int8{Int64: option.ID, Valid: true},
+	})
+	require.NoError(t, err)
+	require.True(t, settings.DefaultOptionID.Valid)
+	require.Equal(t, option.ID, settings.DefaultOptionID.Int64)
+}
+
+func TestUpsertMerchantPackagingSettingsTxRejectsUnavailableDefaultOption(t *testing.T) {
+	ctx := context.Background()
+
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	option, err := testStore.CreateMerchantPackagingOption(ctx, CreateMerchantPackagingOptionParams{
+		MerchantID:  merchant.ID,
+		Name:        "停用餐盒-" + util.RandomString(8),
+		Description: pgtype.Text{String: "不可用包装", Valid: true},
+		Price:       100,
+		IsEnabled:   false,
+		SortOrder:   1,
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.UpsertMerchantPackagingSettingsTx(ctx, UpsertMerchantPackagingSettingsParams{
+		MerchantID:           merchant.ID,
+		Enabled:              true,
+		Required:             true,
+		ApplicableOrderTypes: []string{OrderTypeTakeout, OrderTypeTakeaway},
+		DefaultOptionID:      pgtype.Int8{Int64: option.ID, Valid: true},
+	})
+	require.Error(t, err)
+	require.True(t, errors.Is(err, ErrMerchantPackagingDefaultOptionUnavailable))
+
+	_, err = testStore.GetMerchantPackagingSettings(ctx, merchant.ID)
+	require.ErrorIs(t, err, ErrRecordNotFound)
+}
+
+func TestUpsertMerchantPackagingSettingsTxRejectsForeignDefaultOption(t *testing.T) {
+	ctx := context.Background()
+
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	otherMerchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	foreignOption, err := testStore.CreateMerchantPackagingOption(ctx, CreateMerchantPackagingOptionParams{
+		MerchantID:  otherMerchant.ID,
+		Name:        "外店餐盒-" + util.RandomString(8),
+		Description: pgtype.Text{String: "其他商户包装", Valid: true},
+		Price:       100,
+		IsEnabled:   true,
+		SortOrder:   1,
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.UpsertMerchantPackagingSettingsTx(ctx, UpsertMerchantPackagingSettingsParams{
+		MerchantID:           merchant.ID,
+		Enabled:              true,
+		Required:             true,
+		ApplicableOrderTypes: []string{OrderTypeTakeout, OrderTypeTakeaway},
+		DefaultOptionID:      pgtype.Int8{Int64: foreignOption.ID, Valid: true},
+	})
+	require.Error(t, err)
+	require.True(t, errors.Is(err, ErrMerchantPackagingDefaultOptionUnavailable))
+
+	_, err = testStore.GetMerchantPackagingSettings(ctx, merchant.ID)
+	require.ErrorIs(t, err, ErrRecordNotFound)
+}
+
 func TestSoftDeleteMerchantPackagingOptionIsIdempotent(t *testing.T) {
 	ctx := context.Background()
 	pool := testStore.(*SQLStore).connPool
@@ -204,4 +291,115 @@ func TestSoftDeleteMerchantPackagingOptionIsIdempotent(t *testing.T) {
 	require.True(t, deletedAgain.UpdatedAt.Valid)
 	require.Equal(t, fixedTime, deletedAgain.DeletedAt.Time.UTC())
 	require.Equal(t, fixedTime, deletedAgain.UpdatedAt.Time.UTC())
+}
+
+func TestUpdateMerchantPackagingOptionTxClearsDefaultWhenDisabling(t *testing.T) {
+	ctx := context.Background()
+
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	option, err := testStore.CreateMerchantPackagingOption(ctx, CreateMerchantPackagingOptionParams{
+		MerchantID:  merchant.ID,
+		Name:        "默认餐盒-" + util.RandomString(8),
+		Description: pgtype.Text{String: "默认包装", Valid: true},
+		Price:       100,
+		IsEnabled:   true,
+		SortOrder:   1,
+	})
+	require.NoError(t, err)
+	_, err = testStore.UpsertMerchantPackagingSettings(ctx, UpsertMerchantPackagingSettingsParams{
+		MerchantID:           merchant.ID,
+		Enabled:              true,
+		Required:             true,
+		ApplicableOrderTypes: []string{OrderTypeTakeout, OrderTypeTakeaway},
+		DefaultOptionID:      pgtype.Int8{Int64: option.ID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	otherMerchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	otherOption, err := testStore.CreateMerchantPackagingOption(ctx, CreateMerchantPackagingOptionParams{
+		MerchantID:  otherMerchant.ID,
+		Name:        "其他商户餐盒-" + util.RandomString(8),
+		Description: pgtype.Text{String: "其他包装", Valid: true},
+		Price:       200,
+		IsEnabled:   true,
+		SortOrder:   1,
+	})
+	require.NoError(t, err)
+	_, err = testStore.UpsertMerchantPackagingSettings(ctx, UpsertMerchantPackagingSettingsParams{
+		MerchantID:           otherMerchant.ID,
+		Enabled:              true,
+		Required:             true,
+		ApplicableOrderTypes: []string{OrderTypeTakeout},
+		DefaultOptionID:      pgtype.Int8{Int64: otherOption.ID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	updated, err := testStore.UpdateMerchantPackagingOptionTx(ctx, UpdateMerchantPackagingOptionParams{
+		ID:          option.ID,
+		MerchantID:  merchant.ID,
+		Name:        option.Name,
+		Description: option.Description,
+		Price:       option.Price,
+		IsEnabled:   false,
+		SortOrder:   option.SortOrder,
+	})
+	require.NoError(t, err)
+	require.False(t, updated.IsEnabled)
+
+	settings, err := testStore.GetMerchantPackagingSettings(ctx, merchant.ID)
+	require.NoError(t, err)
+	require.False(t, settings.DefaultOptionID.Valid)
+
+	otherSettings, err := testStore.GetMerchantPackagingSettings(ctx, otherMerchant.ID)
+	require.NoError(t, err)
+	require.True(t, otherSettings.DefaultOptionID.Valid)
+	require.Equal(t, otherOption.ID, otherSettings.DefaultOptionID.Int64)
+}
+
+func TestSoftDeleteMerchantPackagingOptionTxClearsDefault(t *testing.T) {
+	ctx := context.Background()
+
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	option, err := testStore.CreateMerchantPackagingOption(ctx, CreateMerchantPackagingOptionParams{
+		MerchantID:  merchant.ID,
+		Name:        "删除餐盒-" + util.RandomString(8),
+		Description: pgtype.Text{String: "待删除包装", Valid: true},
+		Price:       100,
+		IsEnabled:   true,
+		SortOrder:   1,
+	})
+	require.NoError(t, err)
+	_, err = testStore.UpsertMerchantPackagingSettings(ctx, UpsertMerchantPackagingSettingsParams{
+		MerchantID:           merchant.ID,
+		Enabled:              true,
+		Required:             true,
+		ApplicableOrderTypes: []string{OrderTypeTakeout, OrderTypeTakeaway},
+		DefaultOptionID:      pgtype.Int8{Int64: option.ID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	deleted, err := testStore.SoftDeleteMerchantPackagingOptionTx(ctx, SoftDeleteMerchantPackagingOptionParams{
+		ID:         option.ID,
+		MerchantID: merchant.ID,
+	})
+	require.NoError(t, err)
+	require.False(t, deleted.IsEnabled)
+	require.True(t, deleted.DeletedAt.Valid)
+
+	settings, err := testStore.GetMerchantPackagingSettings(ctx, merchant.ID)
+	require.NoError(t, err)
+	require.False(t, settings.DefaultOptionID.Valid)
+
+	deletedAgain, err := testStore.SoftDeleteMerchantPackagingOptionTx(ctx, SoftDeleteMerchantPackagingOptionParams{
+		ID:         option.ID,
+		MerchantID: merchant.ID,
+	})
+	require.NoError(t, err)
+	require.False(t, deletedAgain.IsEnabled)
+
+	settingsAgain, err := testStore.GetMerchantPackagingSettings(ctx, merchant.ID)
+	require.NoError(t, err)
+	require.False(t, settingsAgain.DefaultOptionID.Valid)
 }

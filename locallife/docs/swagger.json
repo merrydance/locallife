@@ -12580,6 +12580,364 @@
                 }
             }
         },
+        "/v1/merchant/packaging-options": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取当前商户未删除的包装选项列表",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户包装管理"
+                ],
+                "summary": "获取商户包装选项",
+                "responses": {
+                    "200": {
+                        "description": "包装选项列表",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantPackagingOptionListResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "为当前商户创建一个包装选项，活动选项名称在商户内唯一",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户包装管理"
+                ],
+                "summary": "创建商户包装选项",
+                "parameters": [
+                    {
+                        "description": "包装选项",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.upsertMerchantPackagingOptionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "创建成功",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantPackagingOptionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "包装选项名称重复",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchant/packaging-options/{id}": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "幂等更新当前商户拥有的包装选项",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户包装管理"
+                ],
+                "summary": "更新商户包装选项",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "包装选项ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "包装选项",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.upsertMerchantPackagingOptionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "更新成功",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantPackagingOptionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "包装选项不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "包装选项名称重复",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "软删除当前商户拥有的包装选项；重复删除已删除的自有选项保持幂等成功",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户包装管理"
+                ],
+                "summary": "删除商户包装选项",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "包装选项ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "删除成功",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantPackagingOptionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "包装选项不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchant/packaging-settings": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取当前商户包装启用状态、适用订单类型和默认包装选项",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户包装管理"
+                ],
+                "summary": "获取商户包装设置",
+                "responses": {
+                    "200": {
+                        "description": "包装设置",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantPackagingSettingsResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "幂等更新当前商户包装启用状态、必选规则、适用订单类型和默认包装选项",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户包装管理"
+                ],
+                "summary": "更新商户包装设置",
+                "parameters": [
+                    {
+                        "description": "包装设置",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.upsertMerchantPackagingSettingsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "更新成功",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantPackagingSettingsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/merchant/recoveries/{id}": {
             "get": {
                 "security": [
@@ -39524,6 +39882,78 @@
                 }
             }
         },
+        "api.merchantPackagingOptionListResponse": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer"
+                },
+                "options": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.merchantPackagingOptionResponse"
+                    }
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "total_pages": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.merchantPackagingOptionResponse": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "is_enabled": {
+                    "type": "boolean"
+                },
+                "merchant_id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "price": {
+                    "type": "integer"
+                },
+                "sort_order": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.merchantPackagingSettingsResponse": {
+            "type": "object",
+            "properties": {
+                "applicable_order_types": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "default_option_id": {
+                    "type": "integer"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "merchant_id": {
+                    "type": "integer"
+                },
+                "required": {
+                    "type": "boolean"
+                }
+            }
+        },
         "api.merchantPrintAnomalyResponse": {
             "type": "object",
             "properties": {
@@ -47313,6 +47743,61 @@
                 },
                 "promotion_mode": {
                     "type": "string"
+                }
+            }
+        },
+        "api.upsertMerchantPackagingOptionRequest": {
+            "type": "object",
+            "required": [
+                "is_enabled",
+                "name",
+                "price",
+                "sort_order"
+            ],
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "is_enabled": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "price": {
+                    "type": "integer",
+                    "maximum": 9999900,
+                    "minimum": 0
+                },
+                "sort_order": {
+                    "type": "integer",
+                    "maximum": 999,
+                    "minimum": 0
+                }
+            }
+        },
+        "api.upsertMerchantPackagingSettingsRequest": {
+            "type": "object",
+            "required": [
+                "enabled",
+                "required"
+            ],
+            "properties": {
+                "applicable_order_types": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "default_option_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "required": {
+                    "type": "boolean"
                 }
             }
         },

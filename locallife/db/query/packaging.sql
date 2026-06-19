@@ -115,6 +115,14 @@ WHERE id = sqlc.arg('id')
 LIMIT 1
 FOR UPDATE;
 
+-- name: ClearMerchantPackagingDefaultOptionIfMatches :exec
+UPDATE merchant_packaging_settings
+SET
+  default_option_id = NULL,
+  updated_at = now()
+WHERE merchant_id = sqlc.arg('merchant_id')
+  AND default_option_id = sqlc.arg('default_option_id');
+
 -- name: ListMerchantPackagingOptions :many
 SELECT
   id,

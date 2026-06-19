@@ -121,6 +121,7 @@ type Querier interface {
 	ClearMerchantApplicationIDCardFront(ctx context.Context, id int64) (MerchantApplication, error)
 	ClearMerchantFoodSafetyPausedOrders(ctx context.Context, merchantID int64) (int64, error)
 	ClearMerchantLogo(ctx context.Context, arg ClearMerchantLogoParams) (Merchant, error)
+	ClearMerchantPackagingDefaultOptionIfMatches(ctx context.Context, arg ClearMerchantPackagingDefaultOptionIfMatchesParams) error
 	ClearMerchantTags(ctx context.Context, merchantID int64) error
 	// 批量清空购物车（合单支付成功后）
 	ClearMultipleCarts(ctx context.Context, dollar_1 []int64) error

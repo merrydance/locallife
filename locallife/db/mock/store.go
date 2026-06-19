@@ -1357,6 +1357,20 @@ func (mr *MockStoreMockRecorder) ClearMerchantLogo(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearMerchantLogo", reflect.TypeOf((*MockStore)(nil).ClearMerchantLogo), ctx, arg)
 }
 
+// ClearMerchantPackagingDefaultOptionIfMatches mocks base method.
+func (m *MockStore) ClearMerchantPackagingDefaultOptionIfMatches(ctx context.Context, arg db.ClearMerchantPackagingDefaultOptionIfMatchesParams) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClearMerchantPackagingDefaultOptionIfMatches", ctx, arg)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ClearMerchantPackagingDefaultOptionIfMatches indicates an expected call of ClearMerchantPackagingDefaultOptionIfMatches.
+func (mr *MockStoreMockRecorder) ClearMerchantPackagingDefaultOptionIfMatches(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearMerchantPackagingDefaultOptionIfMatches", reflect.TypeOf((*MockStore)(nil).ClearMerchantPackagingDefaultOptionIfMatches), ctx, arg)
+}
+
 // ClearMerchantTags mocks base method.
 func (m *MockStore) ClearMerchantTags(ctx context.Context, merchantID int64) error {
 	m.ctrl.T.Helper()
@@ -20850,6 +20864,21 @@ func (mr *MockStoreMockRecorder) SoftDeleteMerchantPackagingOption(ctx, arg any)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SoftDeleteMerchantPackagingOption", reflect.TypeOf((*MockStore)(nil).SoftDeleteMerchantPackagingOption), ctx, arg)
 }
 
+// SoftDeleteMerchantPackagingOptionTx mocks base method.
+func (m *MockStore) SoftDeleteMerchantPackagingOptionTx(ctx context.Context, arg db.SoftDeleteMerchantPackagingOptionParams) (db.MerchantPackagingOption, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SoftDeleteMerchantPackagingOptionTx", ctx, arg)
+	ret0, _ := ret[0].(db.MerchantPackagingOption)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SoftDeleteMerchantPackagingOptionTx indicates an expected call of SoftDeleteMerchantPackagingOptionTx.
+func (mr *MockStoreMockRecorder) SoftDeleteMerchantPackagingOptionTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SoftDeleteMerchantPackagingOptionTx", reflect.TypeOf((*MockStore)(nil).SoftDeleteMerchantPackagingOptionTx), ctx, arg)
+}
+
 // SoftDeleteMerchantStaff mocks base method.
 func (m *MockStore) SoftDeleteMerchantStaff(ctx context.Context, id int64) (db.MerchantStaff, error) {
 	m.ctrl.T.Helper()
@@ -22430,6 +22459,21 @@ func (m *MockStore) UpdateMerchantPackagingOption(ctx context.Context, arg db.Up
 func (mr *MockStoreMockRecorder) UpdateMerchantPackagingOption(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMerchantPackagingOption", reflect.TypeOf((*MockStore)(nil).UpdateMerchantPackagingOption), ctx, arg)
+}
+
+// UpdateMerchantPackagingOptionTx mocks base method.
+func (m *MockStore) UpdateMerchantPackagingOptionTx(ctx context.Context, arg db.UpdateMerchantPackagingOptionParams) (db.MerchantPackagingOption, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateMerchantPackagingOptionTx", ctx, arg)
+	ret0, _ := ret[0].(db.MerchantPackagingOption)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateMerchantPackagingOptionTx indicates an expected call of UpdateMerchantPackagingOptionTx.
+func (mr *MockStoreMockRecorder) UpdateMerchantPackagingOptionTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMerchantPackagingOptionTx", reflect.TypeOf((*MockStore)(nil).UpdateMerchantPackagingOptionTx), ctx, arg)
 }
 
 // UpdateMerchantPaymentConfig mocks base method.
@@ -24255,6 +24299,21 @@ func (m *MockStore) UpsertMerchantPackagingSettings(ctx context.Context, arg db.
 func (mr *MockStoreMockRecorder) UpsertMerchantPackagingSettings(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertMerchantPackagingSettings", reflect.TypeOf((*MockStore)(nil).UpsertMerchantPackagingSettings), ctx, arg)
+}
+
+// UpsertMerchantPackagingSettingsTx mocks base method.
+func (m *MockStore) UpsertMerchantPackagingSettingsTx(ctx context.Context, arg db.UpsertMerchantPackagingSettingsParams) (db.MerchantPackagingSetting, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpsertMerchantPackagingSettingsTx", ctx, arg)
+	ret0, _ := ret[0].(db.MerchantPackagingSetting)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpsertMerchantPackagingSettingsTx indicates an expected call of UpsertMerchantPackagingSettingsTx.
+func (mr *MockStoreMockRecorder) UpsertMerchantPackagingSettingsTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertMerchantPackagingSettingsTx", reflect.TypeOf((*MockStore)(nil).UpsertMerchantPackagingSettingsTx), ctx, arg)
 }
 
 // UpsertMerchantPaymentConfig mocks base method.
