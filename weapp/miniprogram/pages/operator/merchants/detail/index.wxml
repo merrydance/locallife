@@ -1,4 +1,4 @@
-<custom-navbar title="商户档案详情" showBack="{{true}}" bind:navheight="onNavHeight" />
+<custom-navbar title="商户详情" showBack="{{true}}" bind:navheight="onNavHeight" />
 
 <view
   class="page page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"

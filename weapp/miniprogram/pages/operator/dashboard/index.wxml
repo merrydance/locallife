@@ -83,7 +83,7 @@
           <view class="menu-icon-bg color-info">
             <t-icon name="shop" size="48rpx" />
           </view>
-          <text>商户档案</text>
+          <text>商户管理</text>
         </navigator>
         <navigator url="/pages/operator/riders/index?region_id={{selectedRegionId}}" class="menu-item">
           <view class="menu-icon-bg color-warning">
