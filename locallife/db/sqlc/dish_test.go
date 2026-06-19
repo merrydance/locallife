@@ -547,6 +547,149 @@ func TestCreateDishTxRollbackOnCustomizationFailure(t *testing.T) {
 	}
 }
 
+func TestSetDishCustomizationsTxResolvesOptionName(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	category := createRandomDishCategory(t)
+	dish := createRandomDish(t, merchant.ID, category.ID)
+	optionName := "规格-" + util.RandomString(8)
+
+	result, err := testStore.SetDishCustomizationsTx(context.Background(), SetDishCustomizationsTxParams{
+		DishID: dish.ID,
+		Groups: []CustomizationGroupInput{
+			{
+				Name:       "规格",
+				IsRequired: true,
+				SortOrder:  0,
+				Options: []CustomizationOptionInput{
+					{
+						Name:       optionName,
+						ExtraPrice: 100,
+						SortOrder:  0,
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Groups, 1)
+	require.Len(t, result.Groups[0].Options, 1)
+
+	firstOption := result.Groups[0].Options[0]
+	require.NotZero(t, firstOption.TagID)
+	require.Equal(t, int64(100), firstOption.ExtraPrice)
+
+	tag, err := testStore.GetTag(context.Background(), firstOption.TagID)
+	require.NoError(t, err)
+	require.Equal(t, optionName, tag.Name)
+	require.Equal(t, "customization", tag.Type)
+	require.Equal(t, "active", tag.Status)
+
+	secondResult, err := testStore.SetDishCustomizationsTx(context.Background(), SetDishCustomizationsTxParams{
+		DishID: dish.ID,
+		Groups: []CustomizationGroupInput{
+			{
+				Name:       "规格",
+				IsRequired: true,
+				SortOrder:  0,
+				Options: []CustomizationOptionInput{
+					{
+						Name:       optionName,
+						ExtraPrice: 200,
+						SortOrder:  0,
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, secondResult.Groups, 1)
+	require.Len(t, secondResult.Groups[0].Options, 1)
+	require.Equal(t, firstOption.TagID, secondResult.Groups[0].Options[0].TagID)
+	require.Equal(t, int64(200), secondResult.Groups[0].Options[0].ExtraPrice)
+}
+
+func TestSetDishCustomizationsTxRejectsInvalidExplicitTag(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	category := createRandomDishCategory(t)
+	dish := createRandomDish(t, merchant.ID, category.ID)
+	dishTag := createRandomTag(t, "dish")
+	previousResult, err := testStore.SetDishCustomizationsTx(context.Background(), SetDishCustomizationsTxParams{
+		DishID: dish.ID,
+		Groups: []CustomizationGroupInput{
+			{
+				Name:       "规格",
+				IsRequired: true,
+				SortOrder:  0,
+				Options: []CustomizationOptionInput{
+					{
+						Name:       "常规",
+						ExtraPrice: 0,
+						SortOrder:  0,
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, previousResult.Groups, 1)
+
+	_, err = testStore.SetDishCustomizationsTx(context.Background(), SetDishCustomizationsTxParams{
+		DishID: dish.ID,
+		Groups: []CustomizationGroupInput{
+			{
+				Name:       "规格",
+				IsRequired: true,
+				SortOrder:  0,
+				Options: []CustomizationOptionInput{
+					{
+						TagID:      dishTag.ID,
+						ExtraPrice: 100,
+						SortOrder:  0,
+					},
+				},
+			},
+		},
+	})
+	require.ErrorIs(t, err, ErrCustomizationTagUnavailable)
+
+	groups, listErr := testStore.ListDishCustomizationGroups(context.Background(), dish.ID)
+	require.NoError(t, listErr)
+	require.Len(t, groups, 1)
+	require.Equal(t, previousResult.Groups[0].Group.ID, groups[0].ID)
+}
+
+func TestSetDishCustomizationsTxRejectsDuplicateResolvedOption(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	category := createRandomDishCategory(t)
+	dish := createRandomDish(t, merchant.ID, category.ID)
+	optionName := "重复规格-" + util.RandomString(8)
+
+	_, err := testStore.SetDishCustomizationsTx(context.Background(), SetDishCustomizationsTxParams{
+		DishID: dish.ID,
+		Groups: []CustomizationGroupInput{
+			{
+				Name:       "规格",
+				IsRequired: true,
+				SortOrder:  0,
+				Options: []CustomizationOptionInput{
+					{
+						Name:       optionName,
+						ExtraPrice: 0,
+						SortOrder:  0,
+					},
+					{
+						Name:       " " + optionName + " ",
+						ExtraPrice: 100,
+						SortOrder:  1,
+					},
+				},
+			},
+		},
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "duplicate customization option")
+}
+
 func TestCreateDishTxRejectsUnlinkedCategory(t *testing.T) {
 	merchant := createRandomMerchantForDish(t)
 	category := createRandomDishCategory(t)

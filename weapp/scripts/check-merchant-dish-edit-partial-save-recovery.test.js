@@ -4,6 +4,8 @@ const path = require('path')
 const ts = require('typescript')
 const vm = require('vm')
 
+let customizationTagApiCalls = 0
+
 function loadModule(relativePath, stubs = {}) {
   const sourcePath = path.join(__dirname, '..', 'miniprogram', ...relativePath.split('/'))
   const source = fs.readFileSync(sourcePath, 'utf8')
@@ -28,7 +30,8 @@ function loadModule(relativePath, stubs = {}) {
     Number,
     String,
     Array,
-    Set
+    Set,
+    Promise
   }
   sandbox.exports = sandbox.module.exports
   vm.runInNewContext(compiled, sandbox, { filename: sourcePath })
@@ -38,8 +41,14 @@ function loadModule(relativePath, stubs = {}) {
 const view = loadModule('pages/merchant/_utils/merchant-dish-edit-view.ts', {
   '../_main_shared/api/dish': {
     TagService: {
-      listCustomizationTags: async () => [],
-      createTag: async ({ name }) => ({ id: 1, name })
+      listCustomizationTags: async () => {
+        customizationTagApiCalls += 1
+        throw new Error('merchant dish customization payload must not list admin-managed customization tags')
+      },
+      createTag: async () => {
+        customizationTagApiCalls += 1
+        throw new Error('merchant dish customization payload must not create admin-managed customization tags')
+      }
     }
   },
   '../../../utils/image': {
@@ -104,6 +113,94 @@ assert.strictEqual(
   'successful retry should clear the partial-save recovery message'
 )
 
+async function verifyCustomizationPayloadUsesOptionNames() {
+  const payload = await view.buildDishCustomizationPayload([
+    {
+      key: 'group_1',
+      name: ' 酱料 ',
+      is_required: true,
+      options: [
+        {
+          key: 'option_1',
+          name: ' 油醋汁 ',
+          extraPriceYuan: '1.50'
+        }
+      ]
+    }
+  ])
+
+  assert.strictEqual(
+    customizationTagApiCalls,
+    0,
+    'merchant dish customization payload should not call TagService for customization tags'
+  )
+  assert.deepStrictEqual(
+    JSON.parse(JSON.stringify(payload)),
+    [
+      {
+        name: '酱料',
+        is_required: true,
+        sort_order: 0,
+        options: [
+          {
+            name: '油醋汁',
+            extra_price: 150,
+            sort_order: 0
+          }
+        ]
+      }
+    ],
+    'merchant dish customization payload should send option names for backend atomic resolution'
+  )
+}
+
+function verifyCustomizationPayloadRejectsDuplicateOptionNames() {
+  assert.throws(
+    () => view.buildDishCustomizationPayload([
+      {
+        key: 'group_1',
+        name: '酱料',
+        is_required: true,
+        options: [
+          {
+            key: 'option_1',
+            name: '油醋汁',
+            extraPriceYuan: ''
+          },
+          {
+            key: 'option_2',
+            name: ' 油醋汁 ',
+            extraPriceYuan: '1'
+          }
+        ]
+      }
+    ]),
+    /重复规格项/,
+    'merchant dish customization payload should reject duplicate option names before saving the base dish'
+  )
+}
+
+function verifyCustomizationPayloadRejectsTooManyOptions() {
+  const options = Array.from({ length: 51 }, (_, index) => ({
+    key: `option_${index}`,
+    name: `规格${index}`,
+    extraPriceYuan: ''
+  }))
+
+  assert.throws(
+    () => view.buildDishCustomizationPayload([
+      {
+        key: 'group_1',
+        name: '加料',
+        is_required: true,
+        options
+      }
+    ]),
+    /最多50个规格项/,
+    'merchant dish customization payload should reject oversized option groups before saving the base dish'
+  )
+}
+
 const pageTsPath = path.join(__dirname, '..', 'miniprogram/pages/merchant/dishes/edit/index.ts')
 const pageSource = fs.readFileSync(pageTsPath, 'utf8')
 assert(
@@ -131,4 +228,13 @@ assert(
   'dish edit page should render a persistent TDesign notice for partial-save recovery'
 )
 
-console.log('check-merchant-dish-edit-partial-save-recovery: partial save recovery state is visible and retryable')
+verifyCustomizationPayloadUsesOptionNames()
+  .then(() => {
+    verifyCustomizationPayloadRejectsDuplicateOptionNames()
+    verifyCustomizationPayloadRejectsTooManyOptions()
+    console.log('check-merchant-dish-edit-partial-save-recovery: partial save recovery state is visible and retryable')
+  })
+  .catch((err) => {
+    console.error(err)
+    process.exit(1)
+  })

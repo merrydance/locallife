@@ -19,6 +19,9 @@ const (
 	UserRoleStatusActive   = "active"
 	UserRoleStatusDisabled = "disabled"
 
+	TagStatusActive      = "active"
+	TagTypeCustomization = "customization"
+
 	MerchantStatusApproved          = "approved"
 	MerchantStatusActive            = "active"
 	MerchantStatusBindbankSubmitted = "bindbank_submitted"

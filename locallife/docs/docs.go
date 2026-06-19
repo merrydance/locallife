@@ -36185,8 +36185,9 @@ const docTemplate = `{
                     "minLength": 1
                 },
                 "options": {
-                    "description": "选项列表",
+                    "description": "选项列表，每组最多50个",
                     "type": "array",
+                    "maxItems": 50,
                     "items": {
                         "$ref": "#/definitions/api.customizationOptionInput"
                     }
@@ -36243,9 +36244,6 @@ const docTemplate = `{
         },
         "api.customizationOptionInput": {
             "type": "object",
-            "required": [
-                "tag_id"
-            ],
             "properties": {
                 "extra_price": {
                     "description": "加价（分），最大1万元",
@@ -36253,13 +36251,19 @@ const docTemplate = `{
                     "maximum": 1000000,
                     "minimum": 0
                 },
+                "name": {
+                    "description": "规格项名称（如：微辣、中辣、特辣）",
+                    "type": "string",
+                    "maxLength": 50,
+                    "minLength": 1
+                },
                 "sort_order": {
                     "description": "排序",
                     "type": "integer",
                     "minimum": 0
                 },
                 "tag_id": {
-                    "description": "标签ID（如：微辣、中辣、特辣）",
+                    "description": "标签ID（兼容旧调用）",
                     "type": "integer",
                     "minimum": 1
                 }

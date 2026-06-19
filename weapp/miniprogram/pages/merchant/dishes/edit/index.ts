@@ -571,6 +571,7 @@ Page({
         selectedDishTagIds: this.data.selectedDishTagIds,
         isEdit: this.data.isEdit
       })
+      const customizationGroups = buildDishCustomizationPayload(this.data.customizationGroups)
 
       if (startedAsEdit) {
         const updatedDish = await DishManagementService.updateDish(this.data.dishId, payload as UpdateDishRequest)
@@ -602,7 +603,6 @@ Page({
       }
 
       syncStep = 'customizations'
-      const customizationGroups = await buildDishCustomizationPayload(this.data.customizationGroups)
       if (currentDishId > 0 && (startedAsEdit || customizationGroups.length > 0)) {
         await DishManagementService.setDishCustomizations(currentDishId, { groups: customizationGroups })
       }

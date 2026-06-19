@@ -374,14 +374,15 @@ export interface CustomizationGroupInput {
     name: string                                 // 分组名称（1-50字符，必填）
     is_required?: boolean                        // 是否必选
     sort_order?: number                          // 排序
-    options: CustomizationOptionInput[]          // 选项列表（必填）
+    options: CustomizationOptionInput[]          // 选项列表（必填，每组最多50个）
 }
 
 /**
  * 定制化选项输入 - 对齐 api.customizationOptionInput
  */
 export interface CustomizationOptionInput {
-    tag_id: number                               // 标签ID（必填）
+    tag_id?: number                              // 标签ID（兼容旧调用）
+    name?: string                                // 规格项名称（后端自动解析为定制标签）
     extra_price?: number                         // 加价（分，0-1000000）
     sort_order?: number                          // 排序
 }

@@ -10,6 +10,20 @@ INSERT INTO tags (
 )
 RETURNING *;
 
+-- name: UpsertActiveTagByNameAndType :one
+INSERT INTO tags (
+  name,
+  type,
+  sort_order,
+  status
+) VALUES (
+  $1, $2, $3, 'active'
+)
+ON CONFLICT (name, type) DO UPDATE
+SET sort_order = tags.sort_order
+WHERE tags.status = 'active'
+RETURNING id, name, type, sort_order, status, created_at, icon;
+
 -- name: GetTag :one
 SELECT id, name, type, sort_order, status, created_at, icon FROM tags
 WHERE id = $1 LIMIT 1;

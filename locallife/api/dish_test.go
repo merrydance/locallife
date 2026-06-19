@@ -560,7 +560,7 @@ func TestCreateDishAPI(t *testing.T) {
 				store.EXPECT().
 					GetTag(gomock.Any(), gomock.Eq(int64(101))).
 					Times(1).
-					Return(db.Tag{ID: 101, Name: "微辣"}, nil)
+					Return(db.Tag{ID: 101, Name: "微辣", Type: "customization", Status: "active"}, nil)
 
 				store.EXPECT().
 					CreateDishTx(gomock.Any(), gomock.Any()).
@@ -787,6 +787,353 @@ func TestCreateDishAPI(t *testing.T) {
 			tc.checkResponse(t, recorder)
 		})
 	}
+}
+
+func TestSetDishCustomizationsAPIAllowsOptionNames(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	dish := randomDish(merchant.ID, nil)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetDish(gomock.Any(), gomock.Eq(dish.ID)).
+		AnyTimes().
+		Return(dish, nil)
+	store.EXPECT().
+		SetDishCustomizationsTx(gomock.Any(), gomock.Any()).
+		AnyTimes().
+		Return(db.SetDishCustomizationsTxResult{
+			Groups: []db.DishCustomizationGroupWithOptions{
+				{
+					Group: db.DishCustomizationGroup{
+						ID:         1,
+						DishID:     dish.ID,
+						Name:       "酱料",
+						IsRequired: true,
+						SortOrder:  0,
+					},
+					Options: []db.DishCustomizationOption{
+						{
+							ID:         11,
+							GroupID:    1,
+							TagID:      101,
+							ExtraPrice: 0,
+							SortOrder:  0,
+						},
+					},
+				},
+			},
+			TagNames: map[int64]string{101: "油醋汁"},
+		}, nil)
+	store.EXPECT().
+		GetTag(gomock.Any(), gomock.Eq(int64(101))).
+		AnyTimes().
+		Return(db.Tag{ID: 101, Name: "油醋汁", Type: "customization", Status: "active"}, nil)
+
+	server := newTestServer(t, store)
+	body := gin.H{
+		"groups": []gin.H{
+			{
+				"name":        "酱料",
+				"is_required": true,
+				"sort_order":  0,
+				"options": []gin.H{
+					{
+						"name":        "油醋汁",
+						"extra_price": 0,
+						"sort_order":  0,
+					},
+				},
+			},
+		},
+	}
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	url := fmt.Sprintf("/v1/dishes/%d/customizations", dish.ID)
+	request, err := http.NewRequest(http.MethodPut, url, bytes.NewReader(data))
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp dishCustomizationsResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, dish.ID, resp.DishID)
+	require.Len(t, resp.Groups, 1)
+	require.Equal(t, "酱料", resp.Groups[0].Name)
+	require.Len(t, resp.Groups[0].Options, 1)
+	require.Equal(t, int64(101), resp.Groups[0].Options[0].TagID)
+	require.Equal(t, "油醋汁", resp.Groups[0].Options[0].TagName)
+}
+
+func TestSetDishCustomizationsAPIRejectsInvalidExplicitTag(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	dish := randomDish(merchant.ID, nil)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetDish(gomock.Any(), gomock.Eq(dish.ID)).
+		Times(1).
+		Return(dish, nil)
+	store.EXPECT().
+		GetTag(gomock.Any(), gomock.Eq(int64(202))).
+		Times(1).
+		Return(db.Tag{ID: 202, Name: "热卖", Type: "dish", Status: "active"}, nil)
+	store.EXPECT().
+		SetDishCustomizationsTx(gomock.Any(), gomock.Any()).
+		Times(0)
+
+	server := newTestServer(t, store)
+	body := gin.H{
+		"groups": []gin.H{
+			{
+				"name":        "规格",
+				"is_required": true,
+				"sort_order":  0,
+				"options": []gin.H{
+					{
+						"tag_id":      202,
+						"extra_price": 0,
+						"sort_order":  0,
+					},
+				},
+			},
+		},
+	}
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	url := fmt.Sprintf("/v1/dishes/%d/customizations", dish.ID)
+	request, err := http.NewRequest(http.MethodPut, url, bytes.NewReader(data))
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "active customization")
+}
+
+func TestSetDishCustomizationsAPIRejectsEmptyGroupOptions(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	dish := randomDish(merchant.ID, nil)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetDish(gomock.Any(), gomock.Eq(dish.ID)).
+		Times(1).
+		Return(dish, nil)
+	store.EXPECT().
+		GetTag(gomock.Any(), gomock.Any()).
+		Times(0)
+	store.EXPECT().
+		SetDishCustomizationsTx(gomock.Any(), gomock.Any()).
+		Times(0)
+
+	server := newTestServer(t, store)
+	body := gin.H{
+		"groups": []gin.H{
+			{
+				"name":        "规格",
+				"is_required": true,
+				"sort_order":  0,
+				"options":     []gin.H{},
+			},
+		},
+	}
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	url := fmt.Sprintf("/v1/dishes/%d/customizations", dish.ID)
+	request, err := http.NewRequest(http.MethodPut, url, bytes.NewReader(data))
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "at least one option")
+}
+
+func TestSetDishCustomizationsAPIRejectsDuplicateOptionNamesInGroup(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	dish := randomDish(merchant.ID, nil)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetDish(gomock.Any(), gomock.Eq(dish.ID)).
+		Times(1).
+		Return(dish, nil)
+	store.EXPECT().
+		GetTag(gomock.Any(), gomock.Any()).
+		Times(0)
+	store.EXPECT().
+		SetDishCustomizationsTx(gomock.Any(), gomock.Any()).
+		Times(0)
+
+	server := newTestServer(t, store)
+	body := gin.H{
+		"groups": []gin.H{
+			{
+				"name":        "酱料",
+				"is_required": true,
+				"sort_order":  0,
+				"options": []gin.H{
+					{
+						"name":        "油醋汁",
+						"extra_price": 0,
+						"sort_order":  0,
+					},
+					{
+						"name":        " 油醋汁 ",
+						"extra_price": 100,
+						"sort_order":  1,
+					},
+				},
+			},
+		},
+	}
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	url := fmt.Sprintf("/v1/dishes/%d/customizations", dish.ID)
+	request, err := http.NewRequest(http.MethodPut, url, bytes.NewReader(data))
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "duplicate customization option")
+}
+
+func TestSetDishCustomizationsAPIRejectsTooManyGroupOptions(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	dish := randomDish(merchant.ID, nil)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetDish(gomock.Any(), gomock.Any()).
+		Times(0)
+	store.EXPECT().
+		SetDishCustomizationsTx(gomock.Any(), gomock.Any()).
+		Times(0)
+
+	options := make([]gin.H, 0, 51)
+	for i := 0; i < 51; i++ {
+		options = append(options, gin.H{
+			"name":        fmt.Sprintf("规格%d", i),
+			"extra_price": 0,
+			"sort_order":  i,
+		})
+	}
+
+	server := newTestServer(t, store)
+	body := gin.H{
+		"groups": []gin.H{
+			{
+				"name":        "加料",
+				"is_required": true,
+				"sort_order":  0,
+				"options":     options,
+			},
+		},
+	}
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	url := fmt.Sprintf("/v1/dishes/%d/customizations", dish.ID)
+	request, err := http.NewRequest(http.MethodPut, url, bytes.NewReader(data))
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "max")
+}
+
+func TestSetDishCustomizationsAPIMapsUnavailableOptionNameToBadRequest(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	dish := randomDish(merchant.ID, nil)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetDish(gomock.Any(), gomock.Eq(dish.ID)).
+		Times(1).
+		Return(dish, nil)
+	store.EXPECT().
+		SetDishCustomizationsTx(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.SetDishCustomizationsTxResult{}, fmt.Errorf("%w: %q", db.ErrCustomizationTagUnavailable, "油醋汁"))
+
+	server := newTestServer(t, store)
+	body := gin.H{
+		"groups": []gin.H{
+			{
+				"name":        "酱料",
+				"is_required": true,
+				"sort_order":  0,
+				"options": []gin.H{
+					{
+						"name":        "油醋汁",
+						"extra_price": 0,
+						"sort_order":  0,
+					},
+				},
+			},
+		},
+	}
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	url := fmt.Sprintf("/v1/dishes/%d/customizations", dish.ID)
+	request, err := http.NewRequest(http.MethodPut, url, bytes.NewReader(data))
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "customization tag is unavailable")
 }
 
 func TestGetDishAPI(t *testing.T) {

@@ -562,37 +562,15 @@ func (server *Server) createDish(ctx *gin.Context) {
 		imageMediaAssetID = pgtype.Int8{Int64: *req.ImageAssetID, Valid: true}
 	}
 
-	customizationTagNames := make(map[int64]string)
-	customizationInputs := make([]db.CustomizationGroupInput, 0, len(req.CustomizationGroups))
-	for _, g := range req.CustomizationGroups {
-		options := make([]db.CustomizationOptionInput, 0, len(g.Options))
-		for _, o := range g.Options {
-			if _, exists := customizationTagNames[o.TagID]; !exists {
-				tag, err := server.store.GetTag(ctx, o.TagID)
-				if err != nil {
-					if isNotFoundError(err) {
-						ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("tag %d not found", o.TagID)))
-						return
-					}
-					ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get tag %d: %w", o.TagID, err)))
-					return
-				}
-				customizationTagNames[o.TagID] = tag.Name
-			}
-
-			options = append(options, db.CustomizationOptionInput{
-				TagID:      o.TagID,
-				ExtraPrice: o.ExtraPrice,
-				SortOrder:  o.SortOrder,
-			})
-		}
-
-		customizationInputs = append(customizationInputs, db.CustomizationGroupInput{
-			Name:       g.Name,
-			IsRequired: g.IsRequired,
-			SortOrder:  g.SortOrder,
-			Options:    options,
-		})
+	customizationInputs, err := buildCustomizationGroupInputs(req.CustomizationGroups)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+	customizationTagNames, missingTagID, err := server.loadExplicitCustomizationTagNames(ctx, customizationInputs)
+	if err != nil {
+		respondCustomizationTagLookupError(ctx, missingTagID, err)
+		return
 	}
 
 	// 处理预估制作时间默认值
@@ -626,30 +604,12 @@ func (server *Server) createDish(ctx *gin.Context) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("category does not belong to this merchant")))
 			return
 		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("create dish tx: %w", err)))
+		respondDishCustomizationTxError(ctx, "create dish tx", err)
 		return
 	}
 
-	var customizationGroups []customizationGroup
-	for _, g := range txResult.CustomizationGroups {
-		options := make([]customizationOption, 0, len(g.Options))
-		for _, o := range g.Options {
-			options = append(options, customizationOption{
-				ID:         o.ID,
-				TagID:      o.TagID,
-				TagName:    customizationTagNames[o.TagID],
-				ExtraPrice: o.ExtraPrice,
-				SortOrder:  o.SortOrder,
-			})
-		}
-		customizationGroups = append(customizationGroups, customizationGroup{
-			ID:         g.Group.ID,
-			Name:       g.Group.Name,
-			IsRequired: g.Group.IsRequired,
-			SortOrder:  g.Group.SortOrder,
-			Options:    options,
-		})
-	}
+	mergeCustomizationTagNames(customizationTagNames, txResult.CustomizationTagNames)
+	customizationGroups := buildCustomizationGroupsForDishResponse(txResult.CustomizationGroups, customizationTagNames)
 
 	assetID := int64PtrFromPgInt8(txResult.Dish.ImageMediaAssetID)
 	ctx.JSON(http.StatusCreated, dishResponse{
@@ -1684,16 +1644,17 @@ type batchDishStatusResponse struct {
 // ==================== 菜品定制选项管理 ====================
 
 type customizationOptionInput struct {
-	TagID      int64 `json:"tag_id" binding:"required,min=1"`         // 标签ID（如：微辣、中辣、特辣）
-	ExtraPrice int64 `json:"extra_price" binding:"min=0,max=1000000"` // 加价（分），最大1万元
-	SortOrder  int16 `json:"sort_order" binding:"min=0"`              // 排序
+	TagID      int64  `json:"tag_id" binding:"omitempty,min=1"`        // 标签ID（兼容旧调用）
+	Name       string `json:"name" binding:"omitempty,min=1,max=50"`   // 规格项名称（如：微辣、中辣、特辣）
+	ExtraPrice int64  `json:"extra_price" binding:"min=0,max=1000000"` // 加价（分），最大1万元
+	SortOrder  int16  `json:"sort_order" binding:"min=0"`              // 排序
 }
 
 type customizationGroupInput struct {
-	Name       string                     `json:"name" binding:"required,min=1,max=50"` // 分组名称（如：辣度、规格），最大50字符
-	IsRequired bool                       `json:"is_required"`                          // 是否必选
-	SortOrder  int16                      `json:"sort_order" binding:"min=0"`           // 排序
-	Options    []customizationOptionInput `json:"options" binding:"required,dive"`      // 选项列表
+	Name       string                     `json:"name" binding:"required,min=1,max=50"`   // 分组名称（如：辣度、规格），最大50字符
+	IsRequired bool                       `json:"is_required"`                            // 是否必选
+	SortOrder  int16                      `json:"sort_order" binding:"min=0"`             // 排序
+	Options    []customizationOptionInput `json:"options" binding:"required,max=50,dive"` // 选项列表，每组最多50个
 }
 
 type setDishCustomizationsRequest struct {
@@ -1781,42 +1742,16 @@ func (server *Server) setDishCustomizations(ctx *gin.Context) {
 		return
 	}
 
-	// 预先验证所有标签存在，并收集标签名称
-	tagNameMap := make(map[int64]string)
-	for _, g := range req.Groups {
-		for _, o := range g.Options {
-			if _, exists := tagNameMap[o.TagID]; !exists {
-				tag, err := server.store.GetTag(ctx, o.TagID)
-				if err != nil {
-					if isNotFoundError(err) {
-						ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("tag %d not found", o.TagID)))
-						return
-					}
-					ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get tag %d: %w", o.TagID, err)))
-					return
-				}
-				tagNameMap[o.TagID] = tag.Name
-			}
-		}
+	groups, err := buildCustomizationGroupInputs(req.Groups)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
 	}
 
-	// 构造事务参数
-	groups := make([]db.CustomizationGroupInput, 0, len(req.Groups))
-	for _, g := range req.Groups {
-		options := make([]db.CustomizationOptionInput, 0, len(g.Options))
-		for _, o := range g.Options {
-			options = append(options, db.CustomizationOptionInput{
-				TagID:      o.TagID,
-				ExtraPrice: o.ExtraPrice,
-				SortOrder:  o.SortOrder,
-			})
-		}
-		groups = append(groups, db.CustomizationGroupInput{
-			Name:       g.Name,
-			IsRequired: g.IsRequired,
-			SortOrder:  g.SortOrder,
-			Options:    options,
-		})
+	tagNameMap, missingTagID, err := server.loadExplicitCustomizationTagNames(ctx, groups)
+	if err != nil {
+		respondCustomizationTagLookupError(ctx, missingTagID, err)
+		return
 	}
 
 	// 使用事务设置定制选项（原子操作）
@@ -1825,31 +1760,12 @@ func (server *Server) setDishCustomizations(ctx *gin.Context) {
 		Groups: groups,
 	})
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("set dish customizations tx: %w", err)))
+		respondDishCustomizationTxError(ctx, "set dish customizations tx", err)
 		return
 	}
 
-	// 构建响应
-	var resultGroups []customizationGroupResponse
-	for _, g := range result.Groups {
-		var options []customizationOptionResponse
-		for _, o := range g.Options {
-			options = append(options, customizationOptionResponse{
-				ID:         o.ID,
-				TagID:      o.TagID,
-				TagName:    tagNameMap[o.TagID],
-				ExtraPrice: o.ExtraPrice,
-				SortOrder:  o.SortOrder,
-			})
-		}
-		resultGroups = append(resultGroups, customizationGroupResponse{
-			ID:         g.Group.ID,
-			Name:       g.Group.Name,
-			IsRequired: g.Group.IsRequired,
-			SortOrder:  g.Group.SortOrder,
-			Options:    options,
-		})
-	}
+	mergeCustomizationTagNames(tagNameMap, result.TagNames)
+	resultGroups := buildDishCustomizationsResponseGroups(result.Groups, tagNameMap)
 
 	ctx.JSON(http.StatusOK, dishCustomizationsResponse{
 		DishID: uri.ID,

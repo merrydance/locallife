@@ -10,6 +10,8 @@ interface CustomizationOptionDraft {
   extraPriceYuan: string
 }
 
+const MAX_CUSTOMIZATION_OPTIONS = 50
+
 function buildDraftKey(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 }
@@ -96,6 +98,11 @@ Component({
       }
 
       const nextOptions = cloneOptions(this.data.internalOptions)
+      if (nextOptions.length >= MAX_CUSTOMIZATION_OPTIONS) {
+        wx.showToast({ title: `每组最多${MAX_CUSTOMIZATION_OPTIONS}个规格项`, icon: 'none' })
+        return
+      }
+
       nextOptions.splice(index + 1, 0, createEmptyOptionDraft())
       this.emitChange(nextOptions)
     },

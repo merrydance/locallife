@@ -295,3 +295,39 @@ func (q *Queries) UpdateTag(ctx context.Context, arg UpdateTagParams) (Tag, erro
 	)
 	return i, err
 }
+
+const upsertActiveTagByNameAndType = `-- name: UpsertActiveTagByNameAndType :one
+INSERT INTO tags (
+  name,
+  type,
+  sort_order,
+  status
+) VALUES (
+  $1, $2, $3, 'active'
+)
+ON CONFLICT (name, type) DO UPDATE
+SET sort_order = tags.sort_order
+WHERE tags.status = 'active'
+RETURNING id, name, type, sort_order, status, created_at, icon
+`
+
+type UpsertActiveTagByNameAndTypeParams struct {
+	Name      string `json:"name"`
+	Type      string `json:"type"`
+	SortOrder int16  `json:"sort_order"`
+}
+
+func (q *Queries) UpsertActiveTagByNameAndType(ctx context.Context, arg UpsertActiveTagByNameAndTypeParams) (Tag, error) {
+	row := q.db.QueryRow(ctx, upsertActiveTagByNameAndType, arg.Name, arg.Type, arg.SortOrder)
+	var i Tag
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Type,
+		&i.SortOrder,
+		&i.Status,
+		&i.CreatedAt,
+		&i.Icon,
+	)
+	return i, err
+}

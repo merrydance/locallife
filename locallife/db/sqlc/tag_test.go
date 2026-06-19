@@ -76,6 +76,29 @@ func TestCreateTagRejectsDuplicateNameWithinType(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestUpsertActiveTagByNameAndTypeDoesNotReactivateInactiveTag(t *testing.T) {
+	name := "inactive-customization-" + util.RandomString(8)
+
+	inactiveTag, err := testStore.CreateTag(context.Background(), CreateTagParams{
+		Name:      name,
+		Type:      "customization",
+		SortOrder: 1,
+		Status:    "inactive",
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.UpsertActiveTagByNameAndType(context.Background(), UpsertActiveTagByNameAndTypeParams{
+		Name:      name,
+		Type:      "customization",
+		SortOrder: 0,
+	})
+	require.ErrorIs(t, err, ErrRecordNotFound)
+
+	reloaded, err := testStore.GetTag(context.Background(), inactiveTag.ID)
+	require.NoError(t, err)
+	require.Equal(t, "inactive", reloaded.Status)
+}
+
 func TestGetTag(t *testing.T) {
 	tag1 := createRandomTag(t, "merchant")
 

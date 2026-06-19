@@ -2799,9 +2799,10 @@ definitions:
         minLength: 1
         type: string
       options:
-        description: 选项列表
+        description: 选项列表，每组最多50个
         items:
           $ref: '#/definitions/api.customizationOptionInput'
+        maxItems: 50
         type: array
       sort_order:
         description: 排序
@@ -2846,16 +2847,19 @@ definitions:
         maximum: 1000000
         minimum: 0
         type: integer
+      name:
+        description: 规格项名称（如：微辣、中辣、特辣）
+        maxLength: 50
+        minLength: 1
+        type: string
       sort_order:
         description: 排序
         minimum: 0
         type: integer
       tag_id:
-        description: 标签ID（如：微辣、中辣、特辣）
+        description: 标签ID（兼容旧调用）
         minimum: 1
         type: integer
-    required:
-    - tag_id
     type: object
   api.customizationOptionResponse:
     properties:

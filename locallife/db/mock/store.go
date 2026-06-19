@@ -23824,6 +23824,21 @@ func (mr *MockStoreMockRecorder) UpdateWithdrawalStatus(ctx, arg any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWithdrawalStatus", reflect.TypeOf((*MockStore)(nil).UpdateWithdrawalStatus), ctx, arg)
 }
 
+// UpsertActiveTagByNameAndType mocks base method.
+func (m *MockStore) UpsertActiveTagByNameAndType(ctx context.Context, arg db.UpsertActiveTagByNameAndTypeParams) (db.Tag, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpsertActiveTagByNameAndType", ctx, arg)
+	ret0, _ := ret[0].(db.Tag)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpsertActiveTagByNameAndType indicates an expected call of UpsertActiveTagByNameAndType.
+func (mr *MockStoreMockRecorder) UpsertActiveTagByNameAndType(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertActiveTagByNameAndType", reflect.TypeOf((*MockStore)(nil).UpsertActiveTagByNameAndType), ctx, arg)
+}
+
 // UpsertBaofuAccountBinding mocks base method.
 func (m *MockStore) UpsertBaofuAccountBinding(ctx context.Context, arg db.UpsertBaofuAccountBindingParams) (db.BaofuAccountBinding, error) {
 	m.ctrl.T.Helper()

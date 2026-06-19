@@ -2029,6 +2029,7 @@ type Querier interface {
 	UpdateVoucher(ctx context.Context, arg UpdateVoucherParams) (Voucher, error)
 	UpdateWithdrawalAccountInfo(ctx context.Context, arg UpdateWithdrawalAccountInfoParams) (WithdrawalRecord, error)
 	UpdateWithdrawalStatus(ctx context.Context, arg UpdateWithdrawalStatusParams) (WithdrawalRecord, error)
+	UpsertActiveTagByNameAndType(ctx context.Context, arg UpsertActiveTagByNameAndTypeParams) (Tag, error)
 	UpsertBaofuAccountBinding(ctx context.Context, arg UpsertBaofuAccountBindingParams) (BaofuAccountBinding, error)
 	UpsertBaofuAccountOpeningProfile(ctx context.Context, arg UpsertBaofuAccountOpeningProfileParams) (BaofuAccountOpeningProfile, error)
 	UpsertBaofuMerchantReportProcessing(ctx context.Context, arg UpsertBaofuMerchantReportProcessingParams) (BaofuMerchantReport, error)

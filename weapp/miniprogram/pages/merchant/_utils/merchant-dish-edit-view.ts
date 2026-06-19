@@ -5,8 +5,7 @@ import {
   DishCategory,
   DishResponse,
   TagInfo,
-  UpdateDishRequest,
-  TagService
+  UpdateDishRequest
 } from '../_main_shared/api/dish'
 import { getPublicImageUrl } from '../../../utils/image'
 
@@ -67,6 +66,11 @@ export type CreatePopupMode = 'category' | 'tag' | ''
 export type DishPartialSaveStep = 'featured_tags' | 'customizations'
 
 const FEATURED_TAG_NAMES = new Set(['推荐', '热卖'])
+const MAX_CUSTOMIZATION_OPTIONS_PER_GROUP = 50
+
+function duplicateNameKey(name: string): string {
+  return name.trim()
+}
 
 export function parseCurrencyInput(value: string): CurrencyInputState {
   const trimmedValue = value.trim()
@@ -419,9 +423,9 @@ export function resolveDishCategoryConfirmResult(params: {
   }
 }
 
-export async function buildDishCustomizationPayload(
+export function buildDishCustomizationPayload(
   customizationGroups: CustomizationGroupDraft[]
-): Promise<CustomizationGroupInput[]> {
+): CustomizationGroupInput[] {
   const normalizedGroups = customizationGroups
     .map((group) => ({
       name: group.name.trim(),
@@ -448,11 +452,20 @@ export async function buildDishCustomizationPayload(
     if (!group.options.length) {
       throw new Error(`规格组“${group.name}”至少需要一个规格项`)
     }
+    if (group.options.length > MAX_CUSTOMIZATION_OPTIONS_PER_GROUP) {
+      throw new Error(`规格组“${group.name}”最多50个规格项`)
+    }
 
+    const optionNames = new Set<string>()
     for (const option of group.options) {
       if (!option.name) {
         throw new Error(`规格组“${group.name}”存在未填写名称的规格项`)
       }
+      const optionKey = duplicateNameKey(option.name)
+      if (optionNames.has(optionKey)) {
+        throw new Error(`规格组“${group.name}”存在重复规格项“${option.name}”`)
+      }
+      optionNames.add(optionKey)
       if (option.extraPriceYuan) {
         const extraPrice = Number(option.extraPriceYuan)
         if (!Number.isFinite(extraPrice) || extraPrice < 0) {
@@ -462,31 +475,12 @@ export async function buildDishCustomizationPayload(
     }
   }
 
-  const existingTags = await TagService.listCustomizationTags()
-  const tagIdByName = new Map(existingTags.map((tag) => [tag.name, tag.id]))
-  const optionNames = Array.from(new Set(
-    normalizedGroups.reduce<string[]>((result, group) => {
-      group.options.forEach((option) => {
-        result.push(option.name)
-      })
-      return result
-    }, [])
-  ))
-
-  for (const optionName of optionNames) {
-    if (tagIdByName.has(optionName)) {
-      continue
-    }
-    const created = await TagService.createTag({ name: optionName, type: 'customization' })
-    tagIdByName.set(created.name, created.id)
-  }
-
   return normalizedGroups.map((group, groupIndex) => ({
     name: group.name,
     is_required: true,
     sort_order: groupIndex,
     options: group.options.map((option, optionIndex) => ({
-      tag_id: tagIdByName.get(option.name) || 0,
+      name: option.name,
       extra_price: option.extraPriceYuan ? Math.round(Number(option.extraPriceYuan) * 100) : 0,
       sort_order: optionIndex
     }))
