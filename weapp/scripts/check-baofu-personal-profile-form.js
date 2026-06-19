@@ -5,6 +5,11 @@ const ts = require('typescript')
 
 const repoRoot = path.resolve(__dirname, '..')
 const sourcePath = path.join(repoRoot, 'miniprogram/pages/merchant/_main_shared/services/baofu-account-profile-form.ts')
+const personalServiceModulePaths = [
+  ['merchant', sourcePath],
+  ['operator', path.join(repoRoot, 'miniprogram/pages/operator/_main_shared/services/baofu-account-profile-form.ts')],
+  ['rider', path.join(repoRoot, 'miniprogram/pages/rider/_main_shared/services/baofu-account-profile-form.ts')]
+]
 const baofuAccountApiPath = path.join(repoRoot, 'miniprogram/pages/merchant/_main_shared/api/baofu-account.ts')
 const personalProfileFormComponentPaths = [
   path.join(repoRoot, 'miniprogram/pages/merchant/_components/baofu-personal-profile-form/index.wxml'),
@@ -35,8 +40,8 @@ const submitFormPaths = [
   bankFormTsPath
 ]
 
-function loadModule() {
-  const source = fs.readFileSync(sourcePath, 'utf8')
+function loadModule(modulePath = sourcePath) {
+  const source = fs.readFileSync(modulePath, 'utf8')
   const compiled = ts.transpileModule(source, {
     compilerOptions: {
       module: ts.ModuleKind.CommonJS,
@@ -50,7 +55,7 @@ function loadModule() {
     require
   }
   sandbox.exports = sandbox.module.exports
-  vm.runInNewContext(compiled, sandbox, { filename: sourcePath })
+  vm.runInNewContext(compiled, sandbox, { filename: modulePath })
   return sandbox.module.exports
 }
 
@@ -125,6 +130,7 @@ function main() {
   assert(personalFormFromDefaults.certificate_no === '110101199001010011', 'personal defaults should restore clear-text certificate number')
   assert(personalFormFromDefaults.bank_account_no === '6222020202020202', 'personal defaults should restore clear-text bank account')
   assert(personalFormFromDefaults.bank_mobile === '13800138000', 'personal defaults should trim bank mobile')
+  assert(validateBaofuPersonalProfileForm(personalFormFromDefaults) === '', 'personal clear-text defaults should satisfy local validation without retyping')
 
   const merchantPersonalFormFromBusinessDefaults = buildBaofuPersonalFormFromDefaults(empty, {
     legal_name: ' 张三演示测试商户 ',
@@ -138,6 +144,28 @@ function main() {
   })
   assert(personalMaskOnlyDefaults.certificate_no === '', 'personal defaults must not backfill certificate mask as clear text')
   assert(personalMaskOnlyDefaults.bank_account_no === '', 'personal defaults must not backfill bank account mask as clear text')
+  assert(validateBaofuPersonalProfileForm(personalMaskOnlyDefaults) === '请输入姓名', 'personal mask-only defaults must still require clear-text confirmation fields')
+
+  for (const [role, modulePath] of personalServiceModulePaths) {
+    const personalModule = loadModule(modulePath)
+    const roleEmpty = personalModule.emptyBaofuPersonalProfileForm()
+    const roleFormFromDefaults = personalModule.buildBaofuPersonalFormFromDefaults(roleEmpty, {
+      legal_name: ' 张三 ',
+      certificate_no: ' 110101199001010011 ',
+      bank_account_no: ' 6222020202020202 ',
+      bank_mobile: ' 13800138000 '
+    })
+    assert(roleFormFromDefaults.certificate_no === '110101199001010011', `${role} personal service should backfill clear-text certificate number`)
+    assert(personalModule.validateBaofuPersonalProfileForm(roleFormFromDefaults) === '', `${role} personal clear-text defaults should pass validation without retyping`)
+
+    const roleMaskOnlyDefaults = personalModule.buildBaofuPersonalFormFromDefaults(roleEmpty, {
+      certificate_no_mask: '110************011',
+      bank_account_no_mask: '6222********0202'
+    })
+    assert(roleMaskOnlyDefaults.certificate_no === '', `${role} personal service must not treat certificate mask as clear text`)
+    assert(roleMaskOnlyDefaults.bank_account_no === '', `${role} personal service must not treat bank account mask as clear text`)
+    assert(personalModule.validateBaofuPersonalProfileForm(roleMaskOnlyDefaults) === '请输入姓名', `${role} personal mask-only defaults should still block local submit`)
+  }
 
   const trimmedOperatorPayload = buildBaofuPersonalProfilePayload('operator', {
     name: ' 李四 ',

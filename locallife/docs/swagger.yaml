@@ -24641,7 +24641,7 @@ paths:
       - 运营商-规则管理
   /v1/operators/me/settlement-account:
     get:
-      description: 运营商查询个人宝付二级户开户状态、核验费支付状态和下一步指引；运营商不做微信商户报备或授权目录绑定
+      description: 运营商查询个人宝付二级户开户状态、核验费支付状态和下一步指引；资料待补充时返回本人可确认和修改的认证信息；运营商不做微信商户报备或授权目录绑定
       produces:
       - application/json
       responses:
@@ -30075,7 +30075,7 @@ paths:
       - 骑手追偿争议管理
   /v1/rider/settlement-account:
     get:
-      description: 骑手查询个人宝付二级户开户状态、核验费支付状态和下一步指引；不返回明文身份证、银行卡或宝付上游原始字段
+      description: 骑手查询个人宝付二级户开户状态、核验费支付状态和下一步指引；资料待补充时返回本人可确认和修改的认证信息，不返回宝付上游原始字段
       produces:
       - application/json
       responses:

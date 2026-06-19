@@ -431,7 +431,7 @@ func TestBaofuSettlementAccountRiderProfileInputMergesApprovedIdentityDefaults(t
 	require.Equal(t, "招商银行", merged.BankName)
 }
 
-func TestBaofuSettlementAccountRoleDefaultsDoNotExposeSecretInputDefaults(t *testing.T) {
+func TestBaofuSettlementAccountRoleDefaultsExposeOwnerIdentityDefaultsForConfirmation(t *testing.T) {
 	server := newTestServer(t, mockdb.NewMockStore(gomock.NewController(t)))
 	resp := baofuSettlementAccountResponse{}
 
@@ -453,7 +453,7 @@ func TestBaofuSettlementAccountRoleDefaultsDoNotExposeSecretInputDefaults(t *tes
 	require.NoError(t, err)
 	require.NotNil(t, resp.ProfileDefaults)
 	require.Equal(t, "周松涛", resp.ProfileDefaults.LegalName)
-	require.Empty(t, resp.ProfileDefaults.CertificateNo)
+	require.Equal(t, "132229197706017792", resp.ProfileDefaults.CertificateNo)
 	require.Equal(t, "***7792", resp.ProfileDefaults.CertificateNoMask)
 	require.True(t, resp.ProfileDefaults.HasCertificateNo)
 }
@@ -3163,7 +3163,9 @@ func TestBaofuSettlementAccountRiderProfilePendingReturnsMissingFieldGuidance(t 
 	require.Contains(t, response.StatusDesc, "请补充开户资料")
 	require.Contains(t, response.StatusDesc, "银行卡/对公账号")
 	require.Contains(t, response.StatusDesc, "银行预留手机号")
-	require.NotContains(t, recorder.Body.String(), "110101199001010011")
+	require.NotNil(t, response.ProfileDefaults)
+	require.Equal(t, "张三", response.ProfileDefaults.LegalName)
+	require.Equal(t, "110101199001010011", response.ProfileDefaults.CertificateNo)
 }
 
 func TestBaofuSettlementAccountRiderPostCreatesVerifyFeeBeforeBaofuOpening(t *testing.T) {

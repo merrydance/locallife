@@ -60,7 +60,7 @@ func (server *Server) createMerchantBaofuSettlementAccount(ctx *gin.Context) {
 
 // getRiderBaofuSettlementAccount 查询当前骑手宝付结算账户开通状态
 // @Summary 查询当前骑手宝付结算账户
-// @Description 骑手查询个人宝付二级户开户状态、核验费支付状态和下一步指引；不返回明文身份证、银行卡或宝付上游原始字段
+// @Description 骑手查询个人宝付二级户开户状态、核验费支付状态和下一步指引；资料待补充时返回本人可确认和修改的认证信息，不返回宝付上游原始字段
 // @Tags 骑手
 // @Produce json
 // @Success 200 {object} baofuSettlementAccountResponse
@@ -119,7 +119,7 @@ func (server *Server) createRiderBaofuSettlementAccount(ctx *gin.Context) {
 
 // getOperatorBaofuSettlementAccount 查询当前运营商宝付结算账户开通状态
 // @Summary 查询当前运营商宝付结算账户
-// @Description 运营商查询个人宝付二级户开户状态、核验费支付状态和下一步指引；运营商不做微信商户报备或授权目录绑定
+// @Description 运营商查询个人宝付二级户开户状态、核验费支付状态和下一步指引；资料待补充时返回本人可确认和修改的认证信息；运营商不做微信商户报备或授权目录绑定
 // @Tags 运营商财务
 // @Produce json
 // @Success 200 {object} baofuSettlementAccountResponse

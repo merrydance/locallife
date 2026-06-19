@@ -199,6 +199,7 @@ func (server *Server) baofuSettlementAccountProfileDefaultsFromProfile(_ context
 			LegalPersonIDNumberMask:   firstNonBlank(pgTextString(profile.CorporateCertIDMask), maskSensitiveTail(legalPersonIDNumber, 4)),
 			CorporateMobile:           strings.TrimSpace(corporateMobile),
 			CorporateMobileMask:       firstNonBlank(pgTextString(profile.CorporateMobileMask), maskMobileForBaofuResponse(corporateMobile)),
+			CertificateNo:             personalCertificateNoFromBaofuProfile(accountType, certificateNo),
 			CertificateNoMask:         firstNonBlank(pgTextString(profile.CertificateNoMask), maskSensitiveTail(personalCertificateNoFromBaofuProfile(accountType, certificateNo), 4)),
 			Email:                     strings.TrimSpace(email),
 			EmailMask:                 firstNonBlank(pgTextString(profile.EmailMask), maskEmailForBaofuResponse(email)),
@@ -304,6 +305,9 @@ func baofuProfileDefaultsFromScope(scope baofuSettlementAccountScope) (baofuSett
 		defaults.contactMobile = strings.TrimSpace(scope.DefaultProfile.ContactMobile)
 		if strings.TrimSpace(defaults.defaults.LegalName) == "" {
 			defaults.defaults.LegalName = defaults.legalName
+		}
+		if strings.TrimSpace(defaults.defaults.CertificateNo) == "" {
+			defaults.defaults.CertificateNo = defaults.certificateNo
 		}
 		if strings.TrimSpace(defaults.defaults.CertificateNoMask) == "" {
 			defaults.defaults.CertificateNoMask = maskSensitiveTail(defaults.certificateNo, 4)
