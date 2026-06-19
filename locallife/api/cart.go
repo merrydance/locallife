@@ -43,15 +43,16 @@ type cartItemResponse struct {
 }
 
 type cartResponse struct {
-	ID                int64              `json:"id"`
-	MerchantID        int64              `json:"merchant_id"`
-	OrderType         string             `json:"order_type"`
-	TableID           *int64             `json:"table_id,omitempty"`
-	ReservationID     *int64             `json:"reservation_id,omitempty"`
-	Items             []cartItemResponse `json:"items"`
-	TotalCount        int                `json:"total_count"`
-	Subtotal          int64              `json:"subtotal"`
-	PackagingRequired bool               `json:"packaging_required"`
+	ID                int64                 `json:"id"`
+	MerchantID        int64                 `json:"merchant_id"`
+	OrderType         string                `json:"order_type"`
+	TableID           *int64                `json:"table_id,omitempty"`
+	ReservationID     *int64                `json:"reservation_id,omitempty"`
+	Items             []cartItemResponse    `json:"items"`
+	TotalCount        int                   `json:"total_count"`
+	Subtotal          int64                 `json:"subtotal"`
+	PackagingRequired bool                  `json:"packaging_required"`
+	Packaging         cartPackagingResponse `json:"packaging"`
 }
 
 // getCart godoc
@@ -112,6 +113,7 @@ func (server *Server) getCart(ctx *gin.Context) {
 				Items:      []cartItemResponse{},
 				TotalCount: 0,
 				Subtotal:   0,
+				Packaging:  emptyCartPackagingResponse(),
 			})
 			return
 		}
@@ -127,19 +129,22 @@ func (server *Server) getCart(ctx *gin.Context) {
 	}
 
 	logicResp := logic.BuildCartResponse(cart, items)
-	packagingRequired, err := logic.HasPackagingRequirement(ctx, server.store, logicResp.MerchantID, logicResp.OrderType)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("resolve cart packaging requirement: %w", err)))
+	if err := server.attachCartPackagingState(ctx, authPayload.UserID, &cart, &logicResp); err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("resolve cart packaging state: %w", err)))
 		return
 	}
-	resp := toCartResponse(logicResp, packagingRequired)
+	resp := toCartResponse(logicResp)
 	server.enrichCartItems(ctx, resp.Items)
 	server.enrichCartImageURLs(ctx, resp.Items)
 	server.enrichComboImages(ctx, resp.Items)
 	ctx.JSON(http.StatusOK, resp)
 }
 
-func toCartResponse(logicResp logic.CartResponse, packagingRequired bool) cartResponse {
+func toCartResponse(logicResp logic.CartResponse) cartResponse {
+	packaging := toCartPackagingResponse(logicResp.Packaging)
 	resp := cartResponse{
 		ID:                logicResp.ID,
 		MerchantID:        logicResp.MerchantID,
@@ -148,7 +153,8 @@ func toCartResponse(logicResp logic.CartResponse, packagingRequired bool) cartRe
 		ReservationID:     logicResp.ReservationID,
 		TotalCount:        logicResp.TotalCount,
 		Subtotal:          logicResp.Subtotal,
-		PackagingRequired: packagingRequired,
+		PackagingRequired: packaging.Enabled && packaging.Required && packaging.Applicable,
+		Packaging:         packaging,
 	}
 	resp.Items = make([]cartItemResponse, 0, len(logicResp.Items))
 	for _, item := range logicResp.Items {
@@ -168,6 +174,32 @@ func toCartResponse(logicResp logic.CartResponse, packagingRequired bool) cartRe
 		})
 	}
 	return resp
+}
+
+func toCartPackagingResponse(state logic.CartPackagingState) cartPackagingResponse {
+	resp := cartPackagingResponse{
+		Enabled:          state.Enabled,
+		Required:         state.Required,
+		Applicable:       state.Applicable,
+		SelectedOptionID: state.SelectedOptionID,
+		SelectionVersion: state.SelectionVersion,
+		Options:          make([]cartPackagingOptionResponse, 0, len(state.Options)),
+	}
+	for _, option := range state.Options {
+		resp.Options = append(resp.Options, cartPackagingOptionResponse{
+			ID:          option.ID,
+			Name:        option.Name,
+			Description: pgTextString(option.Description),
+			Price:       option.Price,
+			IsEnabled:   option.IsEnabled,
+			SortOrder:   option.SortOrder,
+		})
+	}
+	return resp
+}
+
+func emptyCartPackagingResponse() cartPackagingResponse {
+	return cartPackagingResponse{Options: []cartPackagingOptionResponse{}}
 }
 
 type addCartItemRequest struct {
@@ -264,12 +296,15 @@ func (server *Server) returnUpdatedCart(ctx *gin.Context, cart db.Cart, statusCo
 		return
 	}
 	logicResp := logic.BuildCartResponse(cart, items)
-	packagingRequired, err := logic.HasPackagingRequirement(ctx, server.store, logicResp.MerchantID, logicResp.OrderType)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("resolve cart packaging requirement: %w", err)))
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	if err := server.attachCartPackagingState(ctx, authPayload.UserID, &cart, &logicResp); err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("resolve cart packaging state: %w", err)))
 		return
 	}
-	response := toCartResponse(logicResp, packagingRequired)
+	response := toCartResponse(logicResp)
 	server.enrichCartItems(ctx, response.Items)
 	server.enrichCartImageURLs(ctx, response.Items)
 	server.enrichComboImages(ctx, response.Items)
@@ -457,6 +492,7 @@ func (server *Server) clearCart(ctx *gin.Context) {
 				Items:      []cartItemResponse{},
 				TotalCount: 0,
 				Subtotal:   0,
+				Packaging:  emptyCartPackagingResponse(),
 			})
 			return
 		}
@@ -470,6 +506,14 @@ func (server *Server) clearCart(ctx *gin.Context) {
 		return
 	}
 
+	selection, err := server.store.ClearCartPackagingSelection(ctx, cart.ID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("clear cart packaging selection: %w", err)))
+		return
+	}
+	packaging := emptyCartPackagingResponse()
+	packaging.SelectionVersion = selection.SelectionVersion
+
 	ctx.JSON(http.StatusOK, cartResponse{
 		ID:            cart.ID,
 		MerchantID:    req.MerchantID,
@@ -479,6 +523,7 @@ func (server *Server) clearCart(ctx *gin.Context) {
 		Items:         []cartItemResponse{},
 		TotalCount:    0,
 		Subtotal:      0,
+		Packaging:     packaging,
 	})
 }
 

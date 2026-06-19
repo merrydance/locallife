@@ -1483,6 +1483,45 @@ definitions:
       unit_price:
         type: integer
     type: object
+  api.cartPackagingOptionResponse:
+    properties:
+      description:
+        type: string
+      id:
+        type: integer
+      is_enabled:
+        type: boolean
+      name:
+        type: string
+      price:
+        type: integer
+      sort_order:
+        type: integer
+    type: object
+  api.cartPackagingResponse:
+    properties:
+      applicable:
+        type: boolean
+      enabled:
+        type: boolean
+      options:
+        items:
+          $ref: '#/definitions/api.cartPackagingOptionResponse'
+        type: array
+      required:
+        type: boolean
+      selected_option_id:
+        type: integer
+      selection_version:
+        type: integer
+    type: object
+  api.cartPackagingSelectionResponse:
+    properties:
+      selected_option_id:
+        type: integer
+      selection_version:
+        type: integer
+    type: object
   api.cartResponse:
     properties:
       id:
@@ -1495,6 +1534,8 @@ definitions:
         type: integer
       order_type:
         type: string
+      packaging:
+        $ref: '#/definitions/api.cartPackagingResponse'
       packaging_required:
         type: boolean
       reservation_id:
@@ -2931,6 +2972,22 @@ definitions:
         type: integer
       total_sales:
         type: integer
+    type: object
+  api.deleteCartPackagingSelectionRequest:
+    properties:
+      merchant_id:
+        minimum: 1
+        type: integer
+      order_type:
+        type: string
+      reservation_id:
+        minimum: 1
+        type: integer
+      table_id:
+        minimum: 1
+        type: integer
+    required:
+    - merchant_id
     type: object
   api.deliveryFeeConfigResponse:
     properties:
@@ -7543,6 +7600,26 @@ definitions:
         type: integer
     required:
     - version_id
+    type: object
+  api.putCartPackagingSelectionRequest:
+    properties:
+      merchant_id:
+        minimum: 1
+        type: integer
+      order_type:
+        type: string
+      packaging_option_id:
+        minimum: 1
+        type: integer
+      reservation_id:
+        minimum: 1
+        type: integer
+      table_id:
+        minimum: 1
+        type: integer
+    required:
+    - merchant_id
+    - packaging_option_id
     type: object
   api.realtimeDashboardResponse:
     properties:
@@ -12377,6 +12454,101 @@ paths:
       security:
       - BearerAuth: []
       summary: 更新购物车商品
+      tags:
+      - 购物车
+  /v1/cart/packaging-selection:
+    delete:
+      consumes:
+      - application/json
+      description: 清除当前用户在指定商户和订单场景下的购物车包装方式；重复清除保持同一版本
+      parameters:
+      - description: 清除包装方式请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.deleteCartPackagingSelectionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 包装方式选择状态
+          schema:
+            $ref: '#/definitions/api.cartPackagingSelectionResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 购物车不属于当前用户
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 购物车不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: 购物车状态冲突
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 清除购物车包装方式
+      tags:
+      - 购物车
+    put:
+      consumes:
+      - application/json
+      description: 为当前用户在指定商户和订单场景下的购物车选择包装方式；重复选择同一包装方式不会递增版本
+      parameters:
+      - description: 包装方式选择请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.putCartPackagingSelectionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 包装方式选择状态
+          schema:
+            $ref: '#/definitions/api.cartPackagingSelectionResponse'
+        "400":
+          description: 请求参数错误/包装方式不可用
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 购物车不属于当前用户
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 购物车不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: 购物车状态冲突
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 选择购物车包装方式
       tags:
       - 购物车
   /v1/cart/summary:

@@ -509,6 +509,117 @@ func TestBuildOrderPackagingSnapshot(t *testing.T) {
 	require.Equal(t, int64(100), snapshot.Subtotal)
 }
 
+func TestResolveCartPackagingStateIncludesOptionsSelectedOptionAndVersion(t *testing.T) {
+	const userID int64 = 7
+	const merchantID int64 = 41
+	const cartID int64 = 77
+	const optionID int64 = 1001
+
+	cart := db.Cart{
+		ID:         cartID,
+		UserID:     userID,
+		MerchantID: merchantID,
+		OrderType:  db.OrderTypeTakeout,
+	}
+	option := enabledPackagingOption(optionID, merchantID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetMerchantPackagingSettings(gomock.Any(), merchantID).
+		Times(1).
+		Return(db.MerchantPackagingSetting{
+			MerchantID:           merchantID,
+			Enabled:              true,
+			Required:             true,
+			ApplicableOrderTypes: []string{db.OrderTypeTakeout},
+		}, nil)
+	store.EXPECT().
+		ListEnabledMerchantPackagingOptions(gomock.Any(), merchantID).
+		Times(1).
+		Return([]db.MerchantPackagingOption{option}, nil)
+	store.EXPECT().
+		GetCartPackagingSelection(gomock.Any(), cartID).
+		Times(1).
+		Return(db.CartPackagingSelection{
+			CartID:            cartID,
+			PackagingOptionID: pgtype.Int8{Int64: optionID, Valid: true},
+			SelectionVersion:  3,
+		}, nil)
+
+	service := NewPackagingService(store)
+	state, err := service.ResolveCartPackagingState(context.Background(), ResolveCartPackagingStateInput{
+		UserID:     userID,
+		MerchantID: merchantID,
+		OrderType:  db.OrderTypeTakeout,
+		Cart:       &cart,
+	})
+
+	require.NoError(t, err)
+	require.True(t, state.Enabled)
+	require.True(t, state.Required)
+	require.True(t, state.Applicable)
+	require.NotNil(t, state.SelectedOptionID)
+	require.Equal(t, optionID, *state.SelectedOptionID)
+	require.Equal(t, int64(3), state.SelectionVersion)
+	require.Len(t, state.Options, 1)
+	require.Equal(t, optionID, state.Options[0].ID)
+}
+
+func TestResolveCartPackagingStateMissingSelectionReportsVersionZero(t *testing.T) {
+	const userID int64 = 7
+	const merchantID int64 = 41
+	const cartID int64 = 77
+	const optionID int64 = 1001
+
+	cart := db.Cart{
+		ID:         cartID,
+		UserID:     userID,
+		MerchantID: merchantID,
+		OrderType:  db.OrderTypeTakeout,
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetMerchantPackagingSettings(gomock.Any(), merchantID).
+		Times(1).
+		Return(db.MerchantPackagingSetting{
+			MerchantID:           merchantID,
+			Enabled:              true,
+			Required:             false,
+			ApplicableOrderTypes: []string{db.OrderTypeTakeout},
+		}, nil)
+	store.EXPECT().
+		ListEnabledMerchantPackagingOptions(gomock.Any(), merchantID).
+		Times(1).
+		Return([]db.MerchantPackagingOption{enabledPackagingOption(optionID, merchantID)}, nil)
+	store.EXPECT().
+		GetCartPackagingSelection(gomock.Any(), cartID).
+		Times(1).
+		Return(db.CartPackagingSelection{}, db.ErrRecordNotFound)
+
+	service := NewPackagingService(store)
+	state, err := service.ResolveCartPackagingState(context.Background(), ResolveCartPackagingStateInput{
+		UserID:     userID,
+		MerchantID: merchantID,
+		OrderType:  db.OrderTypeTakeout,
+		Cart:       &cart,
+	})
+
+	require.NoError(t, err)
+	require.True(t, state.Enabled)
+	require.False(t, state.Required)
+	require.True(t, state.Applicable)
+	require.Nil(t, state.SelectedOptionID)
+	require.Equal(t, int64(0), state.SelectionVersion)
+	require.Len(t, state.Options, 1)
+}
+
 func enabledPackagingOption(id, merchantID int64) db.MerchantPackagingOption {
 	return db.MerchantPackagingOption{
 		ID:          id,

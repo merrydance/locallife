@@ -1561,6 +1561,8 @@ func (server *Server) setupRouter() {
 		cartGroup.POST("/items", server.addCartItem)
 		cartGroup.PATCH("/items/:id", server.updateCartItem)
 		cartGroup.DELETE("/items/:id", server.deleteCartItem)
+		cartGroup.PUT("/packaging-selection", server.putCartPackagingSelection)
+		cartGroup.DELETE("/packaging-selection", server.deleteCartPackagingSelection)
 		cartGroup.POST("/clear", server.clearCart)
 		cartGroup.POST("/calculate", server.calculateCart)
 	}

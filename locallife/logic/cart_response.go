@@ -23,6 +23,16 @@ type CartItemResponse struct {
 	Subtotal       int64                  `json:"subtotal"`
 }
 
+// CartPackagingState describes the merchant packaging choices visible for a cart.
+type CartPackagingState struct {
+	Enabled          bool
+	Required         bool
+	Applicable       bool
+	SelectedOptionID *int64
+	SelectionVersion int64
+	Options          []db.MerchantPackagingOption
+}
+
 // CartResponse summarizes cart items for API responses.
 type CartResponse struct {
 	ID            int64              `json:"id"`
@@ -33,6 +43,7 @@ type CartResponse struct {
 	Items         []CartItemResponse `json:"items"`
 	TotalCount    int                `json:"total_count"`
 	Subtotal      int64              `json:"subtotal"`
+	Packaging     CartPackagingState `json:"packaging"`
 }
 
 // BuildCartResponse converts cart + item rows into response-friendly structures.

@@ -2024,6 +2024,154 @@
                 }
             }
         },
+        "/v1/cart/packaging-selection": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "为当前用户在指定商户和订单场景下的购物车选择包装方式；重复选择同一包装方式不会递增版本",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "购物车"
+                ],
+                "summary": "选择购物车包装方式",
+                "parameters": [
+                    {
+                        "description": "包装方式选择请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.putCartPackagingSelectionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "包装方式选择状态",
+                        "schema": {
+                            "$ref": "#/definitions/api.cartPackagingSelectionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误/包装方式不可用",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "购物车不属于当前用户",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "购物车不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "购物车状态冲突",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "清除当前用户在指定商户和订单场景下的购物车包装方式；重复清除保持同一版本",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "购物车"
+                ],
+                "summary": "清除购物车包装方式",
+                "parameters": [
+                    {
+                        "description": "清除包装方式请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.deleteCartPackagingSelectionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "包装方式选择状态",
+                        "schema": {
+                            "$ref": "#/definitions/api.cartPackagingSelectionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "购物车不属于当前用户",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "购物车不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "购物车状态冲突",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/cart/summary": {
             "get": {
                 "security": [
@@ -34675,6 +34823,66 @@
                 }
             }
         },
+        "api.cartPackagingOptionResponse": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "is_enabled": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "price": {
+                    "type": "integer"
+                },
+                "sort_order": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.cartPackagingResponse": {
+            "type": "object",
+            "properties": {
+                "applicable": {
+                    "type": "boolean"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "options": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.cartPackagingOptionResponse"
+                    }
+                },
+                "required": {
+                    "type": "boolean"
+                },
+                "selected_option_id": {
+                    "type": "integer"
+                },
+                "selection_version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.cartPackagingSelectionResponse": {
+            "type": "object",
+            "properties": {
+                "selected_option_id": {
+                    "type": "integer"
+                },
+                "selection_version": {
+                    "type": "integer"
+                }
+            }
+        },
         "api.cartResponse": {
             "type": "object",
             "properties": {
@@ -34692,6 +34900,9 @@
                 },
                 "order_type": {
                     "type": "string"
+                },
+                "packaging": {
+                    "$ref": "#/definitions/api.cartPackagingResponse"
                 },
                 "packaging_required": {
                     "type": "boolean"
@@ -36726,6 +36937,29 @@
                 },
                 "total_sales": {
                     "type": "integer"
+                }
+            }
+        },
+        "api.deleteCartPackagingSelectionRequest": {
+            "type": "object",
+            "required": [
+                "merchant_id"
+            ],
+            "properties": {
+                "merchant_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "order_type": {
+                    "type": "string"
+                },
+                "reservation_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "table_id": {
+                    "type": "integer",
+                    "minimum": 1
                 }
             }
         },
@@ -43559,6 +43793,34 @@
             ],
             "properties": {
                 "version_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            }
+        },
+        "api.putCartPackagingSelectionRequest": {
+            "type": "object",
+            "required": [
+                "merchant_id",
+                "packaging_option_id"
+            ],
+            "properties": {
+                "merchant_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "order_type": {
+                    "type": "string"
+                },
+                "packaging_option_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "reservation_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "table_id": {
                     "type": "integer",
                     "minimum": 1
                 }
