@@ -46,16 +46,16 @@ type DirectCreatePrinterType = 'feieyun' | 'shangpeng' | 'self_cloud'
 const PRINTER_TYPE_LABELS: Record<PrinterType, string> = {
   feieyun: '飞鹅云',
   shangpeng: '商鹏云',
-  self_cloud: '乐客来福云打印机',
+  self_cloud: '东为打印机',
   yilianyun: '易联云',
   other: '其他设备'
 }
 
 const PRINTER_TYPE_OPTIONS: Array<PrinterOption<PrinterType>> = [
   {
-    label: '乐客来福打印机',
+    label: '东为打印机',
     value: 'self_cloud',
-    desc: '输入打印机 SN 和绑定码，绑定到乐客来福云打印服务。'
+    desc: '输入设备 SN 和绑定码，系统会绑定到乐客来福自有云打印服务。'
   },
   {
     label: '飞鹅云',
@@ -112,15 +112,15 @@ function buildFormViewState(formData: PrinterFormData, isEdit: boolean) {
     selectedPrinterTypeLabel: PRINTER_TYPE_LABELS[printerType] || '其他设备',
     bindingSectionCaption: isYilianyunAuthorization
       ? '填写机器码和终端密钥，系统会完成易联云开放应用授权。'
-      : (isSelfCloud ? '填写打印机 SN 和绑定码，系统会绑定乐客来福云打印机。' : '名称、序列号和密钥与云打印机平台保持一致。'),
-    printerSnLabel: isYilianyunAuthorization ? '机器码' : (isSelfCloud ? '打印机 SN' : '序列号'),
+      : (isSelfCloud ? '填写设备 SN 和绑定码，系统会绑定到乐客来福自有云打印服务。' : '名称、序列号和密钥与云打印机平台保持一致。'),
+    printerSnLabel: isYilianyunAuthorization ? '机器码' : (isSelfCloud ? 'SN' : '序列号'),
     printerSnPlaceholder: isYilianyunAuthorization
       ? '机身或自检页上的终端号'
-      : (isSelfCloud ? '请输入机身标签上的 SN' : '请输入打印机序列号'),
+      : (isSelfCloud ? '设备贴纸上的 SN' : '请输入打印机序列号'),
     printerKeyLabel: isYilianyunAuthorization ? '终端密钥' : (isSelfCloud ? '绑定码' : '打印机密钥'),
     printerKeyPlaceholder: isEdit
       ? '编辑时留空则不修改'
-      : (isYilianyunAuthorization ? '机身或自检页上的终端密钥' : (isSelfCloud ? '请输入打印机绑定码' : '请输入打印机密钥')),
+      : (isYilianyunAuthorization ? '机身或自检页上的终端密钥' : (isSelfCloud ? '设备贴纸上的短码' : '请输入打印机密钥')),
     submitButtonText: isEdit ? '保存打印机' : (isYilianyunAuthorization ? '授权绑定' : (isSelfCloud ? '绑定打印机' : '新增打印机'))
   }
 }
