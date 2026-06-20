@@ -963,6 +963,22 @@ SQL 证据：
 | 非目标 | 明确没有处理的相邻问题，避免 review 误以为已覆盖 |
 | 剩余风险 | 只写具体风险，不写泛泛“需继续观察” |
 
+### 已完成复核记录
+
+#### OPA-005 完成复核：峰时时段列表跨区域读取权限
+
+| 字段 | 记录 |
+| --- | --- |
+| 完成范围 | `OPA-005-A/B/C`；业务提交 `36c91afa fix: enforce operator region auth for peak hour list`；涉及 `locallife/api/delivery_fee.go`、`locallife/api/delivery_fee_test.go`、`locallife/docs/docs.go`、`locallife/docs/swagger.json`、`locallife/docs/swagger.yaml` |
+| 设计目标 | 已达成：`GET /v1/operator/regions/:region_id/peak-hours` 在读取 `ListPeakHourConfigsByRegion` 前调用 `checkOperatorManagesRegion`；合法区域继续返回列表/空列表；非管理区域返回 403 |
+| 时序 | 读路径无写入时序；关键顺序已通过 mock 约束：非管理区域不会触发 `ListPeakHourConfigsByRegion`，避免先读后拒绝 |
+| 幂等 | 读路径无写入幂等问题；create/delete 原有写路径未改动，仍由既有 handler 内授权和审计日志负责 |
+| 越权 | 已在 handler 层用当前登录 operator 身份重建 `operator_id + region_id` 授权；页面 path `region_id` 只作为待校验目标，不作为权限事实 |
+| 同类审查 | 已复核当前 operator route group 中 path-region GET：`/regions/:region_id/stats`、`/regions/:region_id/delivery-pool/summary`、`/regions/:region_id/delivery-pool` 均已有 `checkOperatorManagesRegion`；排行/趋势/列表/汇总类 query `region_id` 走 `resolveOperatorRegionSelection` 或专用 resolver；本次未发现新的 path-region GET 同类缺口 |
+| 回归 | 红灯：`PATH=/usr/local/go/bin:$PATH go test ./api -run TestListPeakHourConfigsAPI -count=1` 曾因缺少 `CheckOperatorManagesRegion` 调用失败；绿灯：同命令通过；扩展回归：`PATH=/usr/local/go/bin:$PATH go test ./api -run 'Test(Create\|List\|Delete)PeakHourConfigAPI' -count=1` 通过；生成检查：`PATH=/usr/local/go/bin:$PATH make swagger`、`PATH=/usr/local/go/bin:$PATH make check-generated` 通过 |
+| 非目标 | 未重构全局 operator 区域授权中间件；未改代取费配置 POST/PATCH 的错误语义；未处理食安、追偿等 resource-id 型授权深挖 |
+| 剩余风险 | `swag` 生成时仍输出 Go runtime const evaluation warning，但命令退出 0 且 `make check-generated` 报告 generated artifacts are in sync；resource-id 型 operator GET 仍按后续全量审计继续深挖 |
+
 ## 后续审计工作记录
 
 后续继续在本节追加全量盘点结果。每个能力或页面至少记录：
