@@ -164,7 +164,7 @@
 | --- | --- | --- | --- |
 | OPA-001 | 前后端契约漂移 | 区域列表状态 | 已修复：`5b642fef` |
 | OPA-002 | 小程序承诺但后端不支持 | 商户搜索 keyword | 已修复：`369b33e3` |
-| OPA-003 | 小程序承诺但后端不支持 | 骑手搜索 keyword、API 类型 online_status | 已确认 |
+| OPA-003 | 小程序承诺但后端不支持 | 骑手搜索 keyword、API 类型 online_status | 已修复：`90e87ac7` |
 | OPA-004 | 前后端响应 DTO 漂移 | 分析页区域体检 | 已修复：本次专项修复 |
 | OPA-005 | 后端权限边界缺口 | 峰时时段列表跨区域读取 | 已修复：`36c91afa` |
 | OPA-006 | 后端状态模型漂移 | 实时统计与骑手生命周期 | 已修复：`35df01de` |
@@ -375,7 +375,7 @@ SQL 证据：
 
 ### OPA-003: 骑手列表搜索与在线筛选类型没有后端支持
 
-- 状态：已确认
+- 状态：已修复：`90e87ac7`
 - 风险级别：G1
 - 类型：小程序能力承诺漂移、状态语义混用
 - 影响页面：`weapp/miniprogram/pages/operator/riders/index`
@@ -415,6 +415,19 @@ SQL 证据：
 
 - 后端：补 `GET /v1/operator/riders?keyword=...`、`online_status=online/offline`、非法 status 的测试。
 - 小程序：搜索姓名/手机号、切状态 tab、返回重入后验证筛选状态和列表结果一致。
+
+#### 本 finding 已验证与未验证
+
+已验证：
+- 后端新增 `keyword` 查询契约，trim 后最长 50 字符，匹配骑手姓名和手机号。
+- 后端新增 `online_status=online/offline` 查询契约，明确映射 `riders.is_online` 当前存储值；没有把 `offline` 重新混入生命周期 status。
+- SQL/sqlc 新增 `ListOperatorRiders` / `CountOperatorRiders`，由数据库按 `region_ids + statuses + keyword + online_status` 同一条件完成列表与 count。
+- `GET /v1/operator/riders` 不传 `region_id` 时改为聚合当前运营商全部可管区域；指定 `region_id` 时仍先校验 operator 管辖权。
+- 小程序 service 发送 trim 后 keyword，并移除后端不支持的 `sort_by/sort_order` 参数；`RiderOnlineStatus` 类型收敛为 `online/offline`。
+- 小程序页面新增 `riderListRequestSeq`，弱网或快速切换搜索条件时旧响应/旧错误不会覆盖新结果。
+
+未验证：
+- 未在微信开发者工具或真机手工模拟慢网输入、清空和翻页；自动化已覆盖契约、编译与 lint。
 
 ### OPA-004: 分析页把扁平 `regionStatsResponse` 当成嵌套统计 DTO 使用
 
@@ -1086,6 +1099,21 @@ SQL 证据：
 | 非目标 | 未支持 `sort_by/sort_order/start_date/end_date`；未引入全文检索或索引迁移；未改变商户审核状态流；未改普通消费者搜索；未处理 OPA-003 骑手 keyword/online_status 漂移 |
 | 剩余风险 | 默认本地 `locallife_test` 测试库当前停在不存在于本 worktree 的 migration version 276，直接跑 `go test ./db/sqlc` 会被 `no migration found for version 276: read down for version 276 .: file does not exist` 阻断；本项已用全新临时库跑通 SQLC focused。未做微信开发者工具手工慢网回归，后续可在 OPA-003 后统一做运营商列表页真机回归 |
 
+#### OPA-003 完成复核：骑手列表搜索与在线状态契约闭环
+
+| 字段 | 记录 |
+| --- | --- |
+| 完成范围 | `OPA-003-A/B/C/D`；业务提交 `90e87ac7 fix: support operator rider search filters`；涉及 `locallife/api/operator_merchant_rider.go`、`locallife/api/operator_merchant_rider_test.go`、`locallife/db/query/rider.sql`、`locallife/db/sqlc/rider.sql.go`、`locallife/db/sqlc/rider_test.go`、`locallife/db/sqlc/querier.go`、`locallife/db/mock/store.go`、Swagger 生成物、`weapp/miniprogram/pages/operator/_api/operator-rider-management.ts`、`weapp/miniprogram/pages/operator/_services/operator-rider-management.ts`、`weapp/miniprogram/pages/operator/riders/index.ts`、`weapp/scripts/check-operator-rider-search-contract.test.js`、`weapp/package.json` |
+| 设计目标 | 已达成：`GET /v1/operator/riders` 明确支持 `keyword` 和 `online_status=online/offline`；生命周期状态继续限定为 `approved/active/suspended`；搜索字段限定为骑手姓名和手机号；keyword 前后空白会被后端和小程序 service trim；列表与 total 使用同一组 `region_ids/statuses/keyword/online_status` 条件；小程序不再声明后端不支持的 `busy/break` 在线状态或排序参数 |
+| 设计修正 | 新增 `ListOperatorRiders` / `CountOperatorRiders` 统一 SQLC 查询，替代 handler 中“按单一区域、是否有 status 分两套查询”的旧路径。这样数据库负责多区域排序、分页和 count，避免 list/count 或 region/status/keyword/online_status 条件漂移；不传 `region_id` 时与商户列表和骑手汇总保持一致，聚合全部可管区域 |
+| 时序 | 小程序页面新增 `riderListRequestSeq`；刷新搜索允许启动新请求，不再被旧 `loading=true` 阻塞；旧搜索响应或旧错误返回时若序号过期则丢弃，避免慢网下旧关键词或旧状态覆盖新筛选结果 |
+| 幂等 | 本项为读路径，不新增写入和自动重试；重复搜索只重新读取同一后端真值，不产生副作用；分页请求保持 keyword/status/region 条件一致。`online_status` 只读取 `riders.is_online` 当前存储值，不改变骑手上下线状态 |
+| 越权 | 后端仍先通过当前登录 operator 解析可管理区域或校验指定 `region_id`，再把授权后的 `RegionIDs` 传入 SQL；keyword 和 online_status 只在已授权区域集合内过滤，不能扩大可见骑手范围；跨区域不可见由 SQLC 临时库测试和 API mock 参数共同覆盖 |
+| 小程序复核 | `loadOperatorRiderListPageData()` 发送 trim 后 keyword；移除后端不支持的 `sort_by/sort_order`；`RiderOnlineStatus` 收敛为 `online/offline`；页面搜索、清空、状态切换和刷新共用 `loadRiders()`，请求序号统一收住弱网乱序；新增 `weapp/scripts/check-operator-rider-search-contract.test.js` 锁定 service trim、类型收敛和 stale response guard |
+| 回归 | 红灯：`PATH=/usr/local/go/bin:$PATH go test ./db/sqlc -run TestListOperatorRiders_SearchesByKeywordAndOnlineStatusWithinManagedRegions -count=1` 修复前因查询方法不存在失败；`PATH=/usr/local/go/bin:$PATH go test ./api -run TestListOperatorRidersAPI -count=1` 修复前因 handler 仍调用 `ListRidersByRegion/ListRidersByRegionWithStatus` 失败；`PATH="$HOME/.local/bin:$PATH" npm run check:operator-rider-search-contract` 修复前因 service 未 trim keyword 失败。绿灯：临时库 `TEST_DB_SOURCE="postgresql:///<tmp>?sslmode=disable&host=/var/run/postgresql" PATH=/usr/local/go/bin:$PATH go test ./db/sqlc -run TestListOperatorRiders_SearchesByKeywordAndOnlineStatusWithinManagedRegions -count=1` 通过；`PATH=/usr/local/go/bin:$PATH go test ./api -run 'TestListOperatorRidersAPI\|TestGetOperatorRiderAPI\|TestGetOperatorRiderSummaryAPI\|TestGetOperatorRiderStatsAPI\|TestListOperatorMerchantsAPI\|TestGetOperatorMerchantSummaryAPI' -count=1` 通过；`PATH="$HOME/.local/bin:$PATH" npm run check:operator-rider-search-contract` 通过；`PATH="$HOME/.local/bin:$PATH" npm run check:operator-merchant-search-contract` 通过；`PATH="$HOME/.local/bin:$PATH" npm run compile` 通过；`PATH="$HOME/.local/bin:$PATH" npm run lint` 通过；`PATH=/usr/local/go/bin:$PATH make swagger && PATH=/usr/local/go/bin:$PATH make check-generated` 通过；`git diff --check` 通过 |
+| 非目标 | 未改变骑手上下线机制、在线心跳或位置更新；未新增在线状态筛选 UI；未把 `pending_approval/rejected/offline` 重新放入生命周期 status；未实现 `start_date/end_date/sort_by/sort_order`；未新增全文检索或索引迁移；未新增骑手申请审核入口 |
+| 剩余风险 | 默认本地 `locallife_test` 测试库当前停在不存在于本 worktree 的 migration version 276，直接跑 `go test ./db/sqlc` 会被 `no migration found for version 276: read down for version 276 .: file does not exist` 阻断；本项已用全新临时库跑通 SQLC focused。未做微信开发者工具手工慢网回归，`online_status` 语义为 `riders.is_online` 当前存储值，不承诺强实时心跳状态 |
+
 ## 后续审计工作记录
 
 后续继续在本节追加全量盘点结果。每个能力或页面至少记录：
@@ -1097,3 +1125,4 @@ SQL 证据：
 | OPA-006 | 骑手管理/实时统计 | `/v1/operator/stats/realtime`、`/v1/operator/riders` 生命周期口径 | `operator_realtime.go`, `operator_merchant_rider.go`, `operator_realtime_test.go`, `operator_merchant_rider_test.go` | `operator/riders/index`, `operator-rider-management.ts`, `operator-analytics-dashboard.ts` | 已修复：`35df01de` | 已完成复核 |
 | OPA-007 | 代取费配置 | `/v1/delivery-fee/regions/:region_id/config` PATCH/POST 保存语义 | `delivery_fee.go`, `delivery_fee_test.go`, Swagger 生成物 | `operator/delivery-fee/index`, `delivery-fee.ts`, `operator-region-config.ts` | 已修复：`e50b8503`、`6bf2fef9` | 已完成复核 |
 | OPA-002 | 商户管理 | `/v1/operator/merchants` keyword 搜索 | `operator_merchant_rider.go`, `merchant.sql`, `merchant_test.go`, Swagger 生成物 | `operator/merchants/index`, `operator-merchant-management.ts`, `check-operator-merchant-search-contract.test.js` | 已修复：`369b33e3` | 已完成复核 |
+| OPA-003 | 骑手管理 | `/v1/operator/riders` keyword/online_status 搜索筛选 | `operator_merchant_rider.go`, `rider.sql`, `rider_test.go`, Swagger 生成物 | `operator/riders/index`, `operator-rider-management.ts`, `check-operator-rider-search-contract.test.js` | 已修复：`90e87ac7` | 已完成复核 |
