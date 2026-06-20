@@ -979,6 +979,15 @@ SQL 证据：
 - 没有因为补 UI 而扩大运营商权限。
 - 高风险写操作具备幂等、审计、重复提交和未知结果恢复策略。
 
+#### OP-NOUI 能力归属裁决表（2026-06-21）
+
+| 能力 | 当前后端入口 | 目标角色 | 移动端裁决 | 后端安全裁决 | 风险等级 | 上线条件 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 追偿争议/追偿单 | `GET /v1/operator/recovery-disputes`、`/summary`、`/:id`、`GET /v1/operator/recoveries/:id` | 运营商异常处理/风控观察 | 暂不新增小程序入口；后续如产品需要，按“异常处理队列”另开 IA 和只读列表/详情任务 | 保留 read-only API；列表走 `resolveOperatorRegionSelection`，详情/追偿单按 operator 管理区域校验 | G2/G3 | 明确运营商是否需要移动端处理追偿异常；若新增入口，先只读观察，再单独评估任何处理动作 |
+| 分润配置可见性 | `GET /v1/operators/me/profit-sharing/configs` | 运营商财务确认/配置观察 | 暂不新增小程序入口；可在财务页后续增加只读“分润配置确认” | 保留 read-only API；已修复 merchant-scoped 全局配置跨区域泄漏，商户专属配置必须归属当前 operator region | G3 | 需要产品确认展示字段、解释文案和是否放入财务；不得提供移动端写配置 |
+| 规则引擎代理只读 | `GET /v1/operators/me/rules`、`/:id`、`/hits` | 运营商只读观察/诊断 | 不新增复杂规则引擎页面；现有小程序规则配置继续使用 `/v1/operator/rules` 简化区域规则入口 | 保留只读代理；按 rule version scope/gray_config 或 hit region 过滤 | G3 | 若需要运营商规则命中观察页，先定义只读任务和字段裁剪，不暴露编辑/发布能力 |
+| 规则引擎代理写入 | `POST /v1/operators/me/rules`、`/:id/versions`、`/:id/publish`、`/:id/rollback`、`/:id/disable` | 平台规则治理 | 明确不适合运营商小程序 | 已关闭，统一返回 403；规则创建、版本、发布、回滚、禁用必须走平台治理入口 | G3 | 若未来重新开放，必须先设计区域独占/共享规则所有权、幂等键、审计失败处理、重复提交语义和跨区域回归测试 |
+
 ### 修复批次建议
 
 | 批次 | 范围 | 目标 | 合并前门槛 |
@@ -1114,6 +1123,20 @@ SQL 证据：
 | 非目标 | 未改变骑手上下线机制、在线心跳或位置更新；未新增在线状态筛选 UI；未把 `pending_approval/rejected/offline` 重新放入生命周期 status；未实现 `start_date/end_date/sort_by/sort_order`；未新增全文检索或索引迁移；未新增骑手申请审核入口 |
 | 剩余风险 | 默认本地 `locallife_test` 测试库当前停在不存在于本 worktree 的 migration version 276，直接跑 `go test ./db/sqlc` 会被 `no migration found for version 276: read down for version 276 .: file does not exist` 阻断；本项已用全新临时库跑通 SQLC focused。未做微信开发者工具手工慢网回归，`online_status` 语义为 `riders.is_online` 当前存储值，不承诺强实时心跳状态 |
 
+#### OP-NOUI 完成复核：后端-only 能力归属裁决与权限硬化
+
+| 字段 | 记录 |
+| --- | --- |
+| 完成范围 | `OP-NOUI-A/B`；业务提交 `ae280503 fix: harden operator backend-only capabilities`；涉及 `locallife/api/rules_operator_proxy.go`、`locallife/api/rules_operator_proxy_test.go`、`locallife/db/query/profit_sharing_config.sql`、`locallife/db/sqlc/profit_sharing_config.sql.go`、`locallife/db/sqlc/profit_sharing_config_test.go`、Swagger 生成物 |
+| 设计目标 | 已达成：没有因为后端存在接口就反推小程序页面；追偿争议/追偿单裁决为 read-only API-only，待产品确认异常队列任务后再做移动端 IA；分润配置裁决为 read-only 财务观察能力，暂不新增小程序入口；规则引擎代理写路径关闭，保留只读观察入口，复杂规则治理归平台端 |
+| 设计修正 | 原计划把 `operators/me/rules/**` 视为“后端已有但小程序无入口”的页面缺口；复核后确认它首先是生产权限缺口：运营商 token 能触达 create/version/publish/rollback/disable，而规则主体没有区域独占所有权模型。修复选择 fail-closed，而不是补移动端页面或继续在 handler 内做局部区域注入 |
+| 时序 | 规则写代理关闭后没有发布/回滚/禁用时序；运营商端重复 POST 均稳定返回 403，不会进入规则版本查询或状态更新。分润配置为读路径；SQL 查询在数据库层一次性限定 region 与 merchant 归属，避免先读后过滤造成分页/count 漂移 |
+| 幂等 | 规则代理写路径不再执行副作用，因此重复提交、超时重试不会改变规则状态；真正的规则写入仍由平台治理入口承担后续幂等和审计要求。分润配置、追偿争议本轮只读，不新增写幂等问题 |
+| 越权 | 规则代理写路径在 handler 前置 403，测试锁定不会调用 `CreateRule`、`CreateRuleVersion`、`GetRuleVersion`、`GetRule`、`ListRuleVersionsByRule` 或 `UpdateRuleStatus`。分润配置 `ListProfitSharingConfigsForRegion` 改为 LEFT JOIN `merchants`，`merchant_id IS NOT NULL` 时必须满足 `merchants.region_id = operator region`，阻断跨区域 merchant-scoped 全局配置泄漏。追偿争议列表/汇总继续走 `resolveOperatorRegionSelection`，详情和追偿单由现有测试覆盖区域授权 |
+| 回归 | 红灯：`PATH=/usr/local/go/bin:$PATH go test ./api -run TestOperatorRulesProxyWriteAPIsAreDisabled -count=1` 修复前因写路径继续访问 `CreateRule/CreateRuleVersion/GetRuleVersion/GetRule/ListRuleVersionsByRule` 失败；临时库 `go test ./db/sqlc -run TestListProfitSharingConfigsForRegionExcludesMerchantOverridesOutsideRegion -count=1` 修复前因其他区域商户专属配置可见失败。绿灯：临时库 `TEST_DB_SOURCE="postgresql:///<tmp>?sslmode=disable&host=/var/run/postgresql" PATH=/usr/local/go/bin:$PATH go test ./db/sqlc -run TestListProfitSharingConfigsForRegionExcludesMerchantOverridesOutsideRegion -count=1` 通过；`PATH=/usr/local/go/bin:$PATH go test ./api -run 'TestOperatorRulesProxyWriteAPIsAreDisabled\|TestListOperatorRulesProxyAPI\|TestListOperatorRuleHitsProxyAPI\|TestListOperatorProfitSharingConfigsAPI\|TestListOperatorRecoveryDisputesAPI\|TestListOperatorRecoveryDisputesSummaryAPI\|TestGetOperatorRecoveryDisputeDetailAPI\|TestGetOperatorClaimRecoveryAPI' -count=1` 通过；`PATH=/usr/local/go/bin:$PATH make sqlc`、`PATH=/usr/local/go/bin:$PATH make swagger`、`PATH=/usr/local/go/bin:$PATH make check-generated`、`git diff --check` 通过 |
+| 非目标 | 未新增运营商小程序追偿争议、分润配置或规则代理页面；未移除平台规则治理入口；未重新设计规则引擎的区域独占/共享所有权模型；未改变 `/v1/operator/rules` 现有区域规则配置入口；未新增追偿争议处理写操作 |
+| 剩余风险 | `GET /v1/operators/me/rules` 只读代理仍用 rule version JSON 中的 `scope.region_id` / `gray_config.region_id` 判断可见性，适合诊断观察，不适合作为规则编辑所有权模型；如果未来要开放运营商规则命中或规则详情页面，需要先做字段裁剪和移动端 IA review。分润配置列表现在阻断跨区域商户配置，但若未来支持多区域 operator 一次聚合分润配置，需要新增 region 集合查询而不是复用单 region API |
+
 ## 后续审计工作记录
 
 后续继续在本节追加全量盘点结果。每个能力或页面至少记录：
@@ -1126,3 +1149,4 @@ SQL 证据：
 | OPA-007 | 代取费配置 | `/v1/delivery-fee/regions/:region_id/config` PATCH/POST 保存语义 | `delivery_fee.go`, `delivery_fee_test.go`, Swagger 生成物 | `operator/delivery-fee/index`, `delivery-fee.ts`, `operator-region-config.ts` | 已修复：`e50b8503`、`6bf2fef9` | 已完成复核 |
 | OPA-002 | 商户管理 | `/v1/operator/merchants` keyword 搜索 | `operator_merchant_rider.go`, `merchant.sql`, `merchant_test.go`, Swagger 生成物 | `operator/merchants/index`, `operator-merchant-management.ts`, `check-operator-merchant-search-contract.test.js` | 已修复：`369b33e3` | 已完成复核 |
 | OPA-003 | 骑手管理 | `/v1/operator/riders` keyword/online_status 搜索筛选 | `operator_merchant_rider.go`, `rider.sql`, `rider_test.go`, Swagger 生成物 | `operator/riders/index`, `operator-rider-management.ts`, `check-operator-rider-search-contract.test.js` | 已修复：`90e87ac7` | 已完成复核 |
+| OP-NOUI | 后端-only 能力 | 追偿争议/追偿单、分润配置、`/v1/operators/me/rules/**` | `recovery_dispute.go`, `claim_recovery.go`, `operator_profit_sharing_config.go`, `rules_operator_proxy.go`, `profit_sharing_config.sql` | 当前运营商小程序无 backend-only 入口；现有规则配置使用 `/v1/operator/rules` | 已修复/裁决：`ae280503` | 已完成复核 |
