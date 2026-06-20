@@ -228,6 +228,7 @@ type createDeliveryFeeConfigRequest struct {
 	ValueRatio    *float64 `json:"value_ratio" binding:"omitempty,gte=0,lte=1"`
 	MaxFee        *int64   `json:"max_fee"`
 	MinFee        int64    `json:"min_fee" binding:"gte=0"`
+	IsActive      *bool    `json:"is_active"`
 }
 
 type deliveryFeeConfigResponse struct {
@@ -343,6 +344,9 @@ func (server *Server) createDeliveryFeeConfig(ctx *gin.Context) {
 		MinFee:        req.MinFee,
 		IsActive:      true,
 	}
+	if req.IsActive != nil {
+		arg.IsActive = *req.IsActive
+	}
 
 	valueRatio := 0.01
 	if req.ValueRatio != nil {
@@ -379,7 +383,7 @@ func (server *Server) createDeliveryFeeConfig(ctx *gin.Context) {
 			"value_ratio":      valueRatio,
 			"max_fee":          req.MaxFee,
 			"min_fee":          req.MinFee,
-			"is_active":        true,
+			"is_active":        arg.IsActive,
 		},
 	})
 

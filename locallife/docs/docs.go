@@ -35074,6 +35074,9 @@ const docTemplate = `{
                     "type": "integer",
                     "minimum": 0
                 },
+                "is_active": {
+                    "type": "boolean"
+                },
                 "max_fee": {
                     "type": "integer"
                 },

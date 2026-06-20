@@ -1993,6 +1993,8 @@ definitions:
       extra_fee_per_km:
         minimum: 0
         type: integer
+      is_active:
+        type: boolean
       max_fee:
         type: integer
       min_fee:

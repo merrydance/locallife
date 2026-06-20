@@ -528,6 +528,68 @@ func TestCreateDeliveryFeeConfigAPI_AllowsZeroValueRatio(t *testing.T) {
 	require.InDelta(t, 0, response.ValueRatio, 0.000001)
 }
 
+func TestCreateDeliveryFeeConfigAPI_AllowsInactiveConfig(t *testing.T) {
+	user, _ := randomUser(t)
+	regionID := util.RandomInt(1, 100)
+	config := randomDeliveryFeeConfig(regionID)
+	inactiveConfig := config
+	inactiveConfig.IsActive = false
+	operator := randomOperator(user.ID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		ListUserRoles(gomock.Any(), user.ID).
+		Times(1).
+		Return([]db.UserRole{{UserID: user.ID, Role: "operator", Status: "active"}}, nil)
+	store.EXPECT().
+		GetOperatorByUser(gomock.Any(), user.ID).
+		Times(1).
+		Return(operator, nil)
+	store.EXPECT().
+		CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
+			OperatorID: operator.ID,
+			RegionID:   regionID,
+		}).
+		Times(1).
+		Return(true, nil)
+	store.EXPECT().
+		CreateDeliveryFeeConfig(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ any, arg db.CreateDeliveryFeeConfigParams) (db.DeliveryFeeConfig, error) {
+			require.False(t, arg.IsActive)
+			return inactiveConfig, nil
+		})
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	body := gin.H{
+		"region_id":        regionID,
+		"base_fee":         config.BaseFee,
+		"base_distance":    config.BaseDistance,
+		"extra_fee_per_km": config.ExtraFeePerKm,
+		"value_ratio":      0.01,
+		"max_fee":          config.MaxFee.Int64,
+		"min_fee":          config.MinFee,
+		"is_active":        false,
+	}
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, fmt.Sprintf("/v1/delivery-fee/regions/%d/config", regionID), bytes.NewReader(data))
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusCreated, recorder.Code)
+
+	var response deliveryFeeConfigResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.False(t, response.IsActive)
+}
+
 // ==================== 获取运费配置测试 ====================
 
 func TestGetDeliveryFeeConfigAPI(t *testing.T) {
