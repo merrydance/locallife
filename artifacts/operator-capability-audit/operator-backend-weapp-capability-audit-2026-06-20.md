@@ -165,7 +165,7 @@
 | OPA-001 | 前后端契约漂移 | 区域列表状态 | 已修复：`5b642fef` |
 | OPA-002 | 小程序承诺但后端不支持 | 商户搜索 keyword | 已确认 |
 | OPA-003 | 小程序承诺但后端不支持 | 骑手搜索 keyword、API 类型 online_status | 已确认 |
-| OPA-004 | 前后端响应 DTO 漂移 | 分析页区域体检 | 已确认 |
+| OPA-004 | 前后端响应 DTO 漂移 | 分析页区域体检 | 已修复：本次专项修复 |
 | OPA-005 | 后端权限边界缺口 | 峰时时段列表跨区域读取 | 已修复：`36c91afa` |
 | OPA-006 | 后端状态模型漂移 | 实时统计与骑手生命周期 | 已修复：`35df01de` |
 | OPA-007 | 错误路径漂移 | 代取费配置 PATCH 失败无差别 POST | 已修复：`e50b8503`、`6bf2fef9` |
@@ -407,7 +407,7 @@ SQL 证据：
 
 ### OPA-004: 分析页把扁平 `regionStatsResponse` 当成嵌套统计 DTO 使用
 
-- 状态：已确认
+- 状态：已修复：本次专项修复
 - 风险级别：G2
 - 类型：前后端响应 DTO 漂移、页面运行时风险
 - 影响页面：`weapp/miniprogram/pages/operator/analytics/index`
@@ -427,24 +427,25 @@ SQL 证据：
 
 #### 根因
 
-小程序分析模块使用了一个比后端更丰富的虚构 DTO。当前 service 只对整个 `getRegionStats()` 调用做 `.catch(() => null)`，没有保护成功响应中的嵌套字段缺失；因此后端正常返回 200 时，页面仍可能因读取 `undefined.active_merchants` 抛错。
+小程序分析模块曾使用一个比后端更丰富的虚构 DTO。`getRegionStats()` 正常返回 200 时，页面却按嵌套 `merchant_stats/rider_stats/order_stats/financial_stats` 读取字段，因此成功响应也会因 `undefined` 解引用而崩溃。
 
 #### 用户影响
 
 - 选择具体区域后，分析页“区域体检”可能无法渲染，或者整个页面加载失败。
 - 如果运行时错误被页面 catch 为通用加载失败，用户会误以为后端不可用，而真实原因是 DTO 漂移。
 
-#### 修复方向
+#### 修复方式
 
-- 二选一收口契约：
-  - 后端扩展 `/regions/:id/stats`，按小程序需要返回嵌套 DTO，并更新 Swagger/测试。
-  - 或前端改用后端现有扁平字段，只展示真实可得指标；缺失的活跃商户、在线骑手、履约率等从其他已实现接口组合获取。
-- 短期前端至少要用安全 adapter，避免对可选嵌套字段直接解引用。
+- 前端收口到后端真实契约，不再扩展虚构的嵌套分析 DTO。
+- `OperatorRegionStatsResponse` 仅保留 `region_id/region_name/merchant_count/total_orders/total_gmv/total_commission`。
+- `loadOperatorAnalyticsPageData()` 新增 `buildOperatorAnalyticsRegionSummary()`，把 `regionStats`、实时统计和页面 ViewModel 做显式 adapter。
+- 页面“区域体检”改为展示后端已返回的活跃商户、活跃骑手、订单数和区域佣金。
+- `analytics/index.ts` 增加 `analyticsRequestSeq`，连续切区或切时间维度时只接收最后一次请求结果，避免旧响应覆盖新选择。
 
 #### 建议验证
 
 - 小程序：在有区域的运营账号进入 `analytics/index`，切换区域，确认“区域体检”不崩溃且字段来自真实后端响应。
-- 后端：如果扩 DTO，补 handler/schema 测试并运行 `make swagger`。
+- 后端：本次未扩 DTO，不需要补 Swagger 或 handler 变更。
 
 ### OPA-005: 峰时时段列表读取没有校验运营商是否管理该区域
 
@@ -1043,6 +1044,21 @@ SQL 证据：
 | 扩展验证 | `PATH="$HOME/.local/bin:$PATH" npm run quality:check` 已执行，前置大量 check、lint、compile 通过；最后在既有 full-scan `gate:page-complexity` 阻断，超限文件为 `weapp/miniprogram/pages/merchant/group/application/index.ts`、`weapp/miniprogram/pages/register/merchant/group`、`weapp/miniprogram/pages/rider/deposit/index.ts`，均非本次变更路径 |
 | 非目标 | 未新增 `PUT /v1/delivery-fee/regions/:region_id/config` upsert；未重做代取费页面视觉；未改变计费模型、唯一约束或 409 冲突语义；未处理峰时时段编辑能力 |
 | 剩余风险 | 未在开发者工具里手工模拟网络超时和连续点击；当前自动化覆盖代码契约、编译和 lint。后续若要把创建/更新收敛为单一幂等 upsert，需要另开后端设计任务，补条件更新、审计日志、重复提交和冲突测试 |
+
+#### OPA-004 完成复核：区域体检统计 DTO 重构
+
+| 字段 | 记录 |
+| --- | --- |
+| 完成范围 | `OPA-004-C/D`；业务提交 `ef9f363f fix: align operator analytics region stats contract`；涉及 `weapp/miniprogram/pages/operator/_api/operator-analytics.ts`、`weapp/miniprogram/pages/operator/_services/operator-analytics-dashboard.ts`、`weapp/miniprogram/pages/operator/analytics/index.ts`、`weapp/miniprogram/pages/operator/analytics/index.wxml`、`weapp/scripts/check-operator-analytics-region-stats-contract.test.js`、`weapp/package.json` |
+| 设计目标 | 已达成：`GET /v1/operator/regions/:region_id/stats` 只作为扁平统计真值源，不再把虚构嵌套 DTO 补进页面；区域体检改为展示后端真实返回的 `merchant_count/total_orders/total_gmv/total_commission` 并结合实时统计得到可解释摘要；切区/切时间的旧响应不会覆盖新请求 |
+| 设计修正 | 不扩后端虚构分析 DTO，不新增 BI 式深度统计；页面 “区域体检” 只承接真实可解释字段，`merchantText/riderText/orderText/commission` 由显式 adapter 组装，避免页面或 service 直接解引用不存在的 `.merchant_stats/.rider_stats/.order_stats/.financial_stats` |
+| 时序 | `analyticsRequestSeq` 作为页面级请求序号，切区或切时间时仅接收最后一次请求结果；旧请求完成后若序号不匹配则丢弃，不把旧区域统计回写到新选区。页面首屏仍按地区加载 regions -> analytics data 的既有顺序执行 |
+| 幂等 | 读路径不新增写入；重复进入、重复切区只会重新读取同一后端真值，不会产生副作用。测试脚本与页面逻辑只负责展示和丢弃过期响应 |
+| 越权 | 不引入新的区域查询参数或跨区域读取入口；区域统计仍受后端 `checkOperatorManagesRegion` 和现有 `getRegionStats` 契约约束，小程序只消费已授权返回值 |
+| 小程序复核 | `OperatorRegionStatsResponse` 收敛为 backend truth；`buildOperatorAnalyticsRegionSummary()` 成为唯一页面适配入口；页面文案从“在线骑手 / 活跃骑手”“履约完成率”收口为“活跃骑手”“订单数”；新增 `weapp/scripts/check-operator-analytics-region-stats-contract.test.js` 锁定契约、渲染和时序保护 |
+| 回归 | 红灯：`PATH=\"$HOME/.local/bin:$PATH\" npm run check:operator-analytics-region-stats-contract` 在修复前按预期失败；绿灯：该脚本通过；`PATH=\"$HOME/.local/bin:$PATH\" npm run compile` 通过；`PATH=\"$HOME/.local/bin:$PATH\" npm run lint` 通过；`PATH=/usr/local/go/bin:$PATH go test ./api -run TestGetRegionStatsAPI -count=1` 通过；`PATH=\"$HOME/.local/bin:$PATH\" npm run gate:weapp` 运行到 `gate:page-complexity` 处因仓库既有超限页面失败，失败文件为 `weapp/miniprogram/pages/merchant/group/application/index.ts`、`weapp/miniprogram/pages/register/merchant/group`、`weapp/miniprogram/pages/rider/deposit/index.ts`，与本次变更无关；`git diff --check` 通过 |
+| 非目标 | 未扩展后端区域统计 DTO；未新增趋势/绩效/健康度分析；未重构排行榜或实时统计接口；未处理其它 operator 页面中的搜索/筛选漂移 |
+| 剩余风险 | 区域体检仍由实时统计 + region stats 组合得出，两个读接口不是同一时刻快照；如果未来要展示强一致 BI 指标，需另行设计统一统计口径或后端聚合接口。当前页面已通过请求序号控制避免旧响应覆盖新选区，但仍属于近实时而非事务一致视图 |
 
 ## 后续审计工作记录
 
