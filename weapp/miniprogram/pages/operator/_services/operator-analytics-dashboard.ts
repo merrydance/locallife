@@ -164,7 +164,7 @@ export async function loadOperatorAnalyticsPageData(params: {
     {
       label: '活跃骑手',
       value: String(realtime.active_rider_count ?? 0),
-      change: `待审 ${realtime.pending_rider_count ?? 0}`,
+      change: '已激活',
       trend: 'up'
     },
     {

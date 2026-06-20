@@ -73,7 +73,7 @@ function adaptOperatorRider(item: Partial<OperatorRiderItem> & Record<string, un
   const onlineStatus = String(item.online_status || ((item.is_online as boolean) ? 'online' : 'offline'))
   const isOnline = onlineStatus === 'online' || Boolean(item.is_online)
   const deliveryCount = Number(item.total_orders || 0)
-  const statusDisplay = getRiderStatusDisplay(String(item.status || 'pending') as RiderStatus)
+  const statusDisplay = getRiderStatusDisplay(String(item.status || ''))
 
   return {
     id: Number(item.id || 0),
@@ -139,7 +139,7 @@ export async function loadOperatorRiderStatsView(id: number, days = 30): Promise
 }
 
 function adaptOperatorRiderDetail(detail: OperatorRiderDetailResponse & Record<string, unknown>): OperatorRiderDetailView {
-  const status = String(detail.status || 'pending') as RiderStatus | string
+  const status = String(detail.status || '') as RiderStatus | string
   const onlineStatus = detail.is_online ? 'online' : 'offline'
   const statusDisplay = getRiderStatusDisplay(status as RiderStatus)
   const totalOrders = Number(detail.total_orders || 0)

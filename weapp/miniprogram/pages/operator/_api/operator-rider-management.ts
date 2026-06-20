@@ -9,7 +9,7 @@ import { request } from '../../../utils/request'
 // ==================== 数据类型定义 ====================
 
 /** 骑手状态枚举 */
-export type RiderStatus = 'pending' | 'active' | 'suspended' | 'pending_approval' | 'rejected' | 'offline'
+export type RiderStatus = 'approved' | 'active' | 'suspended'
 
 /** 骑手在线状态枚举 */
 export type RiderOnlineStatus = 'online' | 'offline' | 'busy' | 'break'
@@ -27,9 +27,8 @@ export interface ListOperatorRidersResponse {
 
 export interface OperatorRiderSummaryResponse {
     total: number
-    pending_approval: number
+    approved: number
     active: number
-    rejected: number
     suspended: number
     online: number
 }
@@ -113,7 +112,7 @@ function normalizeRiderStatus(status?: RiderStatus): RiderStatus | undefined {
         return undefined
     }
 
-    return status === 'pending' ? 'pending_approval' : status
+    return status
 }
 
 function normalizeRiderQueryParams(params: RiderQueryParams): RiderQueryParams {
@@ -128,7 +127,8 @@ export function parseRiderStatusFilter(status?: string): RiderStatus | '' {
         return ''
     }
 
-    return normalizeRiderStatus(status as RiderStatus) || ''
+    const validStatuses = new Set<RiderStatus>(['approved', 'active', 'suspended'])
+    return validStatuses.has(status as RiderStatus) ? (status as RiderStatus) : ''
 }
 
 /** 骑手排行查询参数 */
@@ -280,35 +280,29 @@ export const operatorRiderManagementService = new OperatorRiderManagementService
  * 格式化骑手状态显示
  * @param status 骑手状态
  */
-export function formatRiderStatus(status: RiderStatus): string {
+export function formatRiderStatus(status: RiderStatus | string): string {
     const statusMap: Record<RiderStatus, string> = {
+        approved: '待激活',
         active: '正常',
-        pending: '待入驻',
-        suspended: '暂停',
-        pending_approval: '待入驻',
-        rejected: '未通过',
-        offline: '离线'
+        suspended: '暂停'
     }
-    return statusMap[status] || status
+    return statusMap[status as RiderStatus] || '状态未知'
 }
 
 export type RiderStatusTheme = 'success' | 'warning' | 'danger' | 'default'
 
-export function getRiderStatusDisplay(status: RiderStatus) {
-    const normalizedStatus = status === 'pending' ? 'pending_approval' : status
+export function getRiderStatusDisplay(status: RiderStatus | string) {
+    const normalizedStatus = status
     const themeMap: Record<RiderStatus, RiderStatusTheme> = {
+        approved: 'warning',
         active: 'success',
-        pending: 'warning',
-        pending_approval: 'warning',
-        suspended: 'danger',
-        rejected: 'danger',
-        offline: 'default'
+        suspended: 'danger'
     }
 
     return {
         normalizedStatus,
         label: formatRiderStatus(normalizedStatus),
-        theme: themeMap[normalizedStatus] || 'default'
+        theme: themeMap[normalizedStatus as RiderStatus] || 'default'
     }
 }
 

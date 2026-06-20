@@ -613,6 +613,19 @@ func TestListOperatorRidersAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 			},
 		},
+		{
+			name:  "InvalidApplicationStatusFilter",
+			query: "?status=pending_approval",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectActiveOperatorAuth(store, user.ID, operator)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -753,12 +766,10 @@ func TestGetOperatorRiderSummaryAPI(t *testing.T) {
 
 	store.EXPECT().CountRidersByRegion(gomock.Any(), pgtype.Int8{Int64: regionA, Valid: true}).Return(int64(4), nil)
 	store.EXPECT().CountRidersByRegion(gomock.Any(), pgtype.Int8{Int64: regionB, Valid: true}).Return(int64(5), nil)
-	store.EXPECT().CountRidersByRegionWithStatus(gomock.Any(), db.CountRidersByRegionWithStatusParams{RegionID: pgtype.Int8{Int64: regionA, Valid: true}, Status: "pending_approval"}).Return(int64(1), nil)
-	store.EXPECT().CountRidersByRegionWithStatus(gomock.Any(), db.CountRidersByRegionWithStatusParams{RegionID: pgtype.Int8{Int64: regionB, Valid: true}, Status: "pending_approval"}).Return(int64(2), nil)
+	store.EXPECT().CountRidersByRegionWithStatus(gomock.Any(), db.CountRidersByRegionWithStatusParams{RegionID: pgtype.Int8{Int64: regionA, Valid: true}, Status: db.RiderStatusApproved}).Return(int64(1), nil)
+	store.EXPECT().CountRidersByRegionWithStatus(gomock.Any(), db.CountRidersByRegionWithStatusParams{RegionID: pgtype.Int8{Int64: regionB, Valid: true}, Status: db.RiderStatusApproved}).Return(int64(2), nil)
 	store.EXPECT().CountRidersByRegionWithStatus(gomock.Any(), db.CountRidersByRegionWithStatusParams{RegionID: pgtype.Int8{Int64: regionA, Valid: true}, Status: "active"}).Return(int64(2), nil)
 	store.EXPECT().CountRidersByRegionWithStatus(gomock.Any(), db.CountRidersByRegionWithStatusParams{RegionID: pgtype.Int8{Int64: regionB, Valid: true}, Status: "active"}).Return(int64(2), nil)
-	store.EXPECT().CountRidersByRegionWithStatus(gomock.Any(), db.CountRidersByRegionWithStatusParams{RegionID: pgtype.Int8{Int64: regionA, Valid: true}, Status: "rejected"}).Return(int64(1), nil)
-	store.EXPECT().CountRidersByRegionWithStatus(gomock.Any(), db.CountRidersByRegionWithStatusParams{RegionID: pgtype.Int8{Int64: regionB, Valid: true}, Status: "rejected"}).Return(int64(0), nil)
 	store.EXPECT().CountRidersByRegionWithStatus(gomock.Any(), db.CountRidersByRegionWithStatusParams{RegionID: pgtype.Int8{Int64: regionA, Valid: true}, Status: "suspended"}).Return(int64(0), nil)
 	store.EXPECT().CountRidersByRegionWithStatus(gomock.Any(), db.CountRidersByRegionWithStatusParams{RegionID: pgtype.Int8{Int64: regionB, Valid: true}, Status: "suspended"}).Return(int64(1), nil)
 	store.EXPECT().CountOnlineRidersByRegion(gomock.Any(), pgtype.Int8{Int64: regionA, Valid: true}).Return(int64(1), nil)
@@ -776,8 +787,9 @@ func TestGetOperatorRiderSummaryAPI(t *testing.T) {
 	var resp operatorRiderSummaryResponse
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 	require.Equal(t, int64(9), resp.Total)
-	require.Equal(t, int64(3), resp.PendingApproval)
+	require.Equal(t, int64(3), resp.Approved)
 	require.Equal(t, int64(4), resp.Active)
+	require.Equal(t, int64(1), resp.Suspended)
 	require.Equal(t, int64(4), resp.Online)
 }
 

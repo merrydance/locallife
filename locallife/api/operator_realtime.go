@@ -15,12 +15,14 @@ type operatorRealtimeStatsResponse struct {
 	ActiveMerchantCount  int32 `json:"active_merchant_count"`
 	ActiveRiderCount     int32 `json:"active_rider_count"`
 	PendingMerchantCount int32 `json:"pending_merchant_count"`
-	PendingRiderCount    int32 `json:"pending_rider_count"`
+	// pending_rider_count is kept for response compatibility. Rider applications
+	// are not region-scoped today, so operator region stats return 0 here.
+	PendingRiderCount int32 `json:"pending_rider_count"`
 }
 
 // getOperatorRealtimeStats 获取运营商实时统计数据
 // @Summary 获取实时统计
-// @Description 获取当前活跃的商户数、骑手数以及待审核数量
+// @Description 获取当前活跃的商户数、骑手数以及待审核商户数量；pending_rider_count 为兼容字段，骑手申请当前无区域归属时返回 0
 // @Tags 运营商数据统计
 // @Accept json
 // @Produce json
@@ -62,13 +64,12 @@ func (server *Server) getOperatorRealtimeStats(ctx *gin.Context) {
 	activeMerchantsChan := make(chan result)
 	activeRidersChan := make(chan result)
 	pendingMerchantsChan := make(chan result)
-	pendingRidersChan := make(chan result)
 
 	// 1. 活跃商户数 (状态为 approved)
 	go func() {
 		count, err := server.store.CountMerchantsByRegionWithStatus(ctx, db.CountMerchantsByRegionWithStatusParams{
 			RegionID: regionID,
-			Column2:  "approved",
+			Column2:  db.MerchantStatusApproved,
 		})
 		activeMerchantsChan <- result{count: int32(count), err: err}
 	}()
@@ -77,7 +78,7 @@ func (server *Server) getOperatorRealtimeStats(ctx *gin.Context) {
 	go func() {
 		count, err := server.store.CountRidersByRegionWithStatus(ctx, db.CountRidersByRegionWithStatusParams{
 			RegionID: pgtype.Int8{Int64: regionID, Valid: true},
-			Status:   "active",
+			Status:   db.RiderStatusActive,
 		})
 		activeRidersChan <- result{count: int32(count), err: err}
 	}()
@@ -91,20 +92,14 @@ func (server *Server) getOperatorRealtimeStats(ctx *gin.Context) {
 		pendingMerchantsChan <- result{count: int32(count), err: err}
 	}()
 
-	// 4. 待审核骑手数
-	go func() {
-		count, err := server.store.CountRidersByRegionWithStatus(ctx, db.CountRidersByRegionWithStatusParams{
-			RegionID: pgtype.Int8{Int64: regionID, Valid: true},
-			Status:   "pending",
-		})
-		pendingRidersChan <- result{count: int32(count), err: err}
-	}()
+	// rider_applications.submitted has no region ownership yet, so operator
+	// region stats must not expose a global pending rider application count.
+	pendingRidersRes := result{}
 
 	// 收集结果
 	activeMerchantsRes := <-activeMerchantsChan
 	activeRidersRes := <-activeRidersChan
 	pendingMerchantsRes := <-pendingMerchantsChan
-	pendingRidersRes := <-pendingRidersChan
 
 	// 任一子查询失败则记录日志并返回错误，避免静默返回不可信 0 值
 	for _, r := range []struct {
@@ -114,7 +109,6 @@ func (server *Server) getOperatorRealtimeStats(ctx *gin.Context) {
 		{"active_merchants", activeMerchantsRes},
 		{"active_riders", activeRidersRes},
 		{"pending_merchants", pendingMerchantsRes},
-		{"pending_riders", pendingRidersRes},
 	} {
 		if r.res.err != nil {
 			log.Error().Err(r.res.err).Str("query", r.label).Msg("realtime stats query failed")

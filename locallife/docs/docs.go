@@ -19429,9 +19429,7 @@ const docTemplate = `{
                         "enum": [
                             "approved",
                             "active",
-                            "suspended",
-                            "pending_approval",
-                            "rejected"
+                            "suspended"
                         ],
                         "type": "string",
                         "description": "骑手状态",
@@ -19888,7 +19886,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "获取当前活跃的商户数、骑手数以及待审核数量",
+                "description": "获取当前活跃的商户数、骑手数以及待审核商户数量；pending_rider_count 为兼容字段，骑手申请当前无区域归属时返回 0",
                 "consumes": [
                     "application/json"
                 ],
@@ -41026,6 +41024,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "pending_rider_count": {
+                    "description": "pending_rider_count is kept for response compatibility. Rider applications\nare not region-scoped today, so operator region stats return 0 here.",
                     "type": "integer"
                 }
             }
@@ -41123,13 +41122,10 @@ const docTemplate = `{
                 "active": {
                     "type": "integer"
                 },
+                "approved": {
+                    "type": "integer"
+                },
                 "online": {
-                    "type": "integer"
-                },
-                "pending_approval": {
-                    "type": "integer"
-                },
-                "rejected": {
                     "type": "integer"
                 },
                 "suspended": {

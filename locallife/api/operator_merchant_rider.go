@@ -740,7 +740,7 @@ func (server *Server) getOperatorMerchantStats(ctx *gin.Context) {
 // ==================== 骑手列表查询 ====================
 
 type listOperatorRidersRequest struct {
-	Status   string `form:"status" binding:"omitempty,oneof=approved active suspended pending_approval rejected"`
+	Status   string `form:"status" binding:"omitempty,oneof=approved active suspended"`
 	RegionID int64  `form:"region_id" binding:"omitempty,min=1"`
 	Page     int32  `form:"page" binding:"omitempty,min=1"`
 	Limit    int32  `form:"limit" binding:"omitempty,min=1,max=100"`
@@ -770,12 +770,11 @@ type listOperatorRidersResponse struct {
 }
 
 type operatorRiderSummaryResponse struct {
-	Total           int64 `json:"total"`
-	PendingApproval int64 `json:"pending_approval"`
-	Active          int64 `json:"active"`
-	Rejected        int64 `json:"rejected"`
-	Suspended       int64 `json:"suspended"`
-	Online          int64 `json:"online"`
+	Total     int64 `json:"total"`
+	Approved  int64 `json:"approved"`
+	Active    int64 `json:"active"`
+	Suspended int64 `json:"suspended"`
+	Online    int64 `json:"online"`
 }
 
 // listOperatorRiders 获取运营商管辖区域内的骑手列表
@@ -784,7 +783,7 @@ type operatorRiderSummaryResponse struct {
 // @Tags 运营商-商户骑手管理
 // @Accept json
 // @Produce json
-// @Param status query string false "骑手状态" Enums(approved, active, suspended, pending_approval, rejected)
+// @Param status query string false "骑手状态" Enums(approved, active, suspended)
 // @Param page query int false "页码" default(1)
 // @Param limit query int false "每页数量" default(20) maximum(100)
 // @Success 200 {object} listOperatorRidersResponse
@@ -966,22 +965,17 @@ func (server *Server) getOperatorRiderSummary(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	pendingApproval, err := countStatus("pending_approval")
+	approved, err := countStatus(db.RiderStatusApproved)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	active, err := countStatus("active")
+	active, err := countStatus(db.RiderStatusActive)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	rejected, err := countStatus("rejected")
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-	suspended, err := countStatus("suspended")
+	suspended, err := countStatus(db.RiderStatusSuspended)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
@@ -997,12 +991,11 @@ func (server *Server) getOperatorRiderSummary(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, operatorRiderSummaryResponse{
-		Total:           total,
-		PendingApproval: pendingApproval,
-		Active:          active,
-		Rejected:        rejected,
-		Suspended:       suspended,
-		Online:          online,
+		Total:     total,
+		Approved:  approved,
+		Active:    active,
+		Suspended: suspended,
+		Online:    online,
 	})
 }
 

@@ -17,9 +17,9 @@
     <view class="filter-tabs">
       <t-tabs value="{{statusFilter}}" bind:change="onStatusFilterChange" t-class="tabs-container">
         <t-tab-panel label="全部" value="" />
+        <t-tab-panel label="待激活" value="approved" />
         <t-tab-panel label="正常" value="active" />
         <t-tab-panel label="暂停" value="suspended" />
-        <t-tab-panel label="待入驻" value="pending" />
       </t-tabs>
     </view>
   </view>
