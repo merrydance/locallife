@@ -183,9 +183,11 @@ const (
 	BehaviorSnapshotScopeNet     = "net_effective"
 	BehaviorSnapshotVersionV2    = "v2"
 
-	RiderStatusApproved  = "approved"
-	RiderStatusActive    = "active"
-	RiderStatusSuspended = "suspended"
+	RiderStatusApproved        = "approved"
+	RiderStatusActive          = "active"
+	RiderStatusSuspended       = "suspended"
+	RiderStatusPendingApproval = "pending_approval"
+	RiderStatusRejected        = "rejected"
 
 	OperatorRegionStatusActive    = "active"
 	OperatorRegionStatusSuspended = "suspended"
