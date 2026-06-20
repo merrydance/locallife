@@ -22,6 +22,7 @@ Page({
         regionId: 0,
         initialLoading: true,
         loading: false,
+        saving: false,
         error: '',
         navBarHeight: 0
     },
@@ -86,19 +87,25 @@ Page({
     async onSave() {
         const { config, regionId } = this.data
 
+        if (this.data.saving) {
+            return
+        }
+
         if (!regionId) {
             wx.showToast({ title: '请先选择区域', icon: 'none' })
             return
         }
 
         try {
-            wx.showLoading({ title: '保存中' })
-            await saveOperatorDeliveryFeeConfig(regionId, config)
+            this.setData({ saving: true })
+            const savedConfig = await saveOperatorDeliveryFeeConfig(regionId, config)
+            this.setData({ config: savedConfig })
+            wx.showToast({ title: '已保存', icon: 'success' })
         } catch (error: unknown) {
             const message = getErrorUserMessage(error, '保存失败，请稍后重试')
             wx.showToast({ title: message, icon: 'none' })
         } finally {
-            wx.hideLoading()
+            this.setData({ saving: false })
         }
     }
 })

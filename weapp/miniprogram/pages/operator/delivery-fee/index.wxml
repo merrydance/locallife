@@ -23,35 +23,34 @@
         <view class="section">
           <view class="section-title">基础计费</view>
           <t-cell-group theme="card">
-            <t-input label="基础代取费" suffix="元" type="digit" value="{{config.base_fee}}" bind:change="onInput" data-field="base_fee" align="right" />
-            <t-input label="基础距离" suffix="米" type="number" value="{{config.base_distance}}" bind:change="onInput" data-field="base_distance" align="right" />
+            <t-input label="基础代取费" suffix="元" type="digit" value="{{config.base_fee}}" bind:change="onInput" data-field="base_fee" align="right" disabled="{{saving}}" />
+            <t-input label="基础距离" suffix="米" type="number" value="{{config.base_distance}}" bind:change="onInput" data-field="base_distance" align="right" disabled="{{saving}}" />
           </t-cell-group>
         </view>
 
         <view class="section">
           <view class="section-title">距离与货值规则</view>
           <t-cell-group theme="card">
-            <t-input label="超距加价" suffix="元/公里" type="digit" value="{{config.extra_fee_per_km}}" bind:change="onInput" data-field="extra_fee_per_km" align="right" />
-            <t-input label="货值费率" suffix="倍率" type="digit" value="{{config.value_ratio}}" bind:change="onInput" data-field="value_ratio" align="right" />
+            <t-input label="超距加价" suffix="元/公里" type="digit" value="{{config.extra_fee_per_km}}" bind:change="onInput" data-field="extra_fee_per_km" align="right" disabled="{{saving}}" />
+            <t-input label="货值费率" suffix="倍率" type="digit" value="{{config.value_ratio}}" bind:change="onInput" data-field="value_ratio" align="right" disabled="{{saving}}" />
           </t-cell-group>
         </view>
 
         <view class="section">
           <view class="section-title">费用边界</view>
           <t-cell-group theme="card">
-            <t-input label="最低运费" suffix="元" type="digit" value="{{config.min_fee}}" bind:change="onInput" data-field="min_fee" align="right" />
-            <t-input label="最高运费" suffix="元" type="digit" placeholder="留空表示不限" value="{{config.max_fee}}" bind:change="onInput" data-field="max_fee" align="right" />
+            <t-input label="最低运费" suffix="元" type="digit" value="{{config.min_fee}}" bind:change="onInput" data-field="min_fee" align="right" disabled="{{saving}}" />
+            <t-input label="最高运费" suffix="元" type="digit" placeholder="留空表示不限" value="{{config.max_fee}}" bind:change="onInput" data-field="max_fee" align="right" disabled="{{saving}}" />
             <t-cell title="启用状态">
-                <t-switch slot="note" value="{{config.is_active}}" bind:change="onActiveChange" />
+                <t-switch slot="note" value="{{config.is_active}}" bind:change="onActiveChange" disabled="{{saving}}" />
             </t-cell>
           </t-cell-group>
         </view>
 
         <view class="footer-btn-wrapper">
-          <t-button theme="primary" size="large" block bind:tap="onSave">保存配置</t-button>
+          <t-button theme="primary" size="large" block bind:tap="onSave" disabled="{{saving}}" loading="{{saving}}">保存配置</t-button>
         </view>
       </view>
     </block>
   </view>
 </view>
-

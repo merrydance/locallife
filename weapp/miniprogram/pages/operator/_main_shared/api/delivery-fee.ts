@@ -53,6 +53,7 @@ export interface CreateDeliveryFeeConfigRequest {
     value_ratio: number
     min_fee: number
     max_fee?: number | null
+    is_active?: boolean
 }
 
 /** 峰时配置响应 */
@@ -118,6 +119,21 @@ export interface DeliveryPromotionStatusView {
     label: string
     theme: DeliveryPromotionStatusTheme
     code: 'inactive' | 'expired' | 'scheduled' | 'active'
+}
+
+function readNumericStatusCode(error: unknown): number | undefined {
+    if (!error || typeof error !== 'object') {
+        return undefined
+    }
+
+    const statusCode = (error as { statusCode?: unknown }).statusCode
+    const numericStatusCode = typeof statusCode === 'number' ? statusCode : Number(statusCode)
+    return Number.isFinite(numericStatusCode) ? numericStatusCode : undefined
+}
+
+function isDeliveryFeeConfigNotFoundError(error: unknown): boolean {
+    const statusCode = readNumericStatusCode(error)
+    return statusCode === 404
 }
 
 export function buildDeliveryPromotionStatusView(
@@ -206,12 +222,16 @@ export class DeliveryFeeService {
                 method: 'PATCH',
                 data: payload
             })
-        } catch (_e) {
-            return request({
-                url: `/v1/delivery-fee/regions/${regionId}/config`,
-                method: 'POST',
-                data: payload
-            })
+        } catch (error: unknown) {
+            if (isDeliveryFeeConfigNotFoundError(error)) {
+                return request({
+                    url: `/v1/delivery-fee/regions/${regionId}/config`,
+                    method: 'POST',
+                    data: payload
+                })
+            }
+
+            throw error
         }
     }
     

@@ -74,6 +74,18 @@ export function createEmptyOperatorDeliveryFeeConfigView(): OperatorDeliveryFeeC
   }
 }
 
+function adaptDeliveryFeeConfigToView(config: DeliveryFeeConfigResponse): OperatorDeliveryFeeConfigView {
+  return {
+    base_fee: (config.base_fee / 100).toFixed(2),
+    base_distance: String(config.base_distance),
+    extra_fee_per_km: (config.extra_fee_per_km / 100).toFixed(2),
+    value_ratio: String(config.value_ratio),
+    min_fee: (config.min_fee / 100).toFixed(2),
+    max_fee: typeof config.max_fee === 'number' ? (config.max_fee / 100).toFixed(2) : '',
+    is_active: config.is_active
+  }
+}
+
 function formatFen(amount?: number): string {
   if (typeof amount !== 'number') {
     return '未配置'
@@ -108,27 +120,21 @@ export function hasOperatorPeakConflict(items: OperatorPeakHourViewItem[], start
 
 export async function loadOperatorDeliveryFeeConfigView(regionId: number): Promise<OperatorDeliveryFeeConfigView> {
   const config = await deliveryFeeService.getRegionConfig(regionId)
-  return {
-    base_fee: (config.base_fee / 100).toFixed(2),
-    base_distance: String(config.base_distance),
-    extra_fee_per_km: (config.extra_fee_per_km / 100).toFixed(2),
-    value_ratio: String(config.value_ratio),
-    min_fee: (config.min_fee / 100).toFixed(2),
-    max_fee: typeof config.max_fee === 'number' ? (config.max_fee / 100).toFixed(2) : '',
-    is_active: config.is_active
-  }
+  return adaptDeliveryFeeConfigToView(config)
 }
 
-export async function saveOperatorDeliveryFeeConfig(regionId: number, config: OperatorDeliveryFeeConfigView): Promise<void> {
-  await deliveryFeeService.updateRegionConfig(regionId, {
+export async function saveOperatorDeliveryFeeConfig(regionId: number, config: OperatorDeliveryFeeConfigView): Promise<OperatorDeliveryFeeConfigView> {
+  const savedConfig = await deliveryFeeService.updateRegionConfig(regionId, {
     region_id: regionId,
     base_fee: Math.round(Number(config.base_fee) * 100),
     base_distance: Number(config.base_distance),
     extra_fee_per_km: Math.round(Number(config.extra_fee_per_km) * 100),
     value_ratio: Number(config.value_ratio),
     min_fee: Math.round(Number(config.min_fee) * 100),
-    max_fee: config.max_fee ? Math.round(Number(config.max_fee) * 100) : null
+    max_fee: config.max_fee ? Math.round(Number(config.max_fee) * 100) : null,
+    is_active: config.is_active
   })
+  return adaptDeliveryFeeConfigToView(savedConfig)
 }
 
 export async function loadOperatorPeakHourViews(regionId: number): Promise<OperatorPeakHourViewItem[]> {
