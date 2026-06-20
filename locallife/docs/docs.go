@@ -19250,7 +19250,7 @@ const docTemplate = `{
                         }
                     },
                     "403": {
-                        "description": "Operator role required",
+                        "description": "Operator role required or not authorized for this region",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }

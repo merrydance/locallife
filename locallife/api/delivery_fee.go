@@ -777,7 +777,7 @@ type listPeakHourConfigsURI struct {
 // @Success 200 {array} peakHourConfigResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 401 {object} ErrorResponse
-// @Failure 403 {object} ErrorResponse "Operator role required"
+// @Failure 403 {object} ErrorResponse "Operator role required or not authorized for this region"
 // @Failure 500 {object} ErrorResponse
 // @Router /v1/operator/regions/{region_id}/peak-hours [get]
 // @Security BearerAuth
@@ -785,6 +785,11 @@ func (server *Server) listPeakHourConfigs(ctx *gin.Context) {
 	var uri listPeakHourConfigsURI
 	if err := ctx.ShouldBindUri(&uri); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	if _, err := server.checkOperatorManagesRegion(ctx, uri.RegionID); err != nil {
+		ctx.JSON(http.StatusForbidden, errorResponse(err))
 		return
 	}
 

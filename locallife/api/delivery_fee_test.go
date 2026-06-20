@@ -1392,6 +1392,15 @@ func TestListPeakHourConfigsAPI(t *testing.T) {
 					Times(1).
 					Return(operator, nil)
 
+				// handler 中的 checkOperatorManagesRegion 调用
+				store.EXPECT().
+					CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
+						OperatorID: operator.ID,
+						RegionID:   regionID,
+					}).
+					Times(1).
+					Return(true, nil)
+
 				store.EXPECT().
 					ListPeakHourConfigsByRegion(gomock.Any(), regionID).
 					Times(1).
@@ -1424,6 +1433,15 @@ func TestListPeakHourConfigsAPI(t *testing.T) {
 					Times(1).
 					Return(operator, nil)
 
+				// handler 中的 checkOperatorManagesRegion 调用
+				store.EXPECT().
+					CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
+						OperatorID: operator.ID,
+						RegionID:   regionID,
+					}).
+					Times(1).
+					Return(true, nil)
+
 				store.EXPECT().
 					ListPeakHourConfigsByRegion(gomock.Any(), regionID).
 					Times(1).
@@ -1435,6 +1453,38 @@ func TestListPeakHourConfigsAPI(t *testing.T) {
 				var response []peakHourConfigResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Len(t, response, 0)
+			},
+		},
+		{
+			name:     "ForbiddenRegion",
+			regionID: regionID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				// CasbinRoleMiddleware 调用
+				store.EXPECT().
+					ListUserRoles(gomock.Any(), user.ID).
+					Times(1).
+					Return([]db.UserRole{{UserID: user.ID, Role: "operator", Status: "active"}}, nil)
+
+				// LoadOperatorMiddleware 调用
+				store.EXPECT().
+					GetOperatorByUser(gomock.Any(), user.ID).
+					Times(1).
+					Return(operator, nil)
+
+				// 非管理区域必须在读取配置前被拒绝
+				store.EXPECT().
+					CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
+						OperatorID: operator.ID,
+						RegionID:   regionID,
+					}).
+					Times(1).
+					Return(false, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusForbidden, recorder.Code)
 			},
 		},
 	}
