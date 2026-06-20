@@ -127,6 +127,14 @@ func TestOrderServiceCreateOrder_PassesIdempotencyMetadataAndSkipsTimeoutOnRepla
 	}
 
 	store.EXPECT().
+		GetOrderRequestIdempotency(gomock.Any(), db.GetOrderRequestIdempotencyParams{
+			OperationScope: orderCreateIdempotencyScope,
+			ActorUserID:    userID,
+			IdempotencyKey: "order-create-key-1",
+		}).
+		Times(1).
+		Return(db.OrderCreateRequestIdempotency{}, db.ErrRecordNotFound)
+	store.EXPECT().
 		GetMerchant(gomock.Any(), merchantID).
 		Times(1).
 		Return(db.Merchant{ID: merchantID, Status: "active", IsOpen: true}, nil)
@@ -134,10 +142,7 @@ func TestOrderServiceCreateOrder_PassesIdempotencyMetadataAndSkipsTimeoutOnRepla
 		GetDish(gomock.Any(), dishID).
 		Times(1).
 		Return(db.Dish{ID: dishID, MerchantID: merchantID, Name: "菜品", Price: 2000, IsOnline: true, IsAvailable: true}, nil)
-	store.EXPECT().
-		CountActivePackagingDishesByMerchant(gomock.Any(), merchantID).
-		Times(1).
-		Return(int64(0), nil)
+	expectPackagingNotConfigured(store, merchantID)
 	store.EXPECT().
 		ListActiveDiscountRules(gomock.Any(), merchantID).
 		Times(1).
@@ -193,6 +198,14 @@ func TestOrderServiceCreateOrder_MapsIdempotencyConflict(t *testing.T) {
 	}
 
 	store.EXPECT().
+		GetOrderRequestIdempotency(gomock.Any(), db.GetOrderRequestIdempotencyParams{
+			OperationScope: orderCreateIdempotencyScope,
+			ActorUserID:    userID,
+			IdempotencyKey: "order-create-conflict-1",
+		}).
+		Times(1).
+		Return(db.OrderCreateRequestIdempotency{}, db.ErrRecordNotFound)
+	store.EXPECT().
 		GetMerchant(gomock.Any(), merchantID).
 		Times(1).
 		Return(db.Merchant{ID: merchantID, Status: "active", IsOpen: true}, nil)
@@ -200,10 +213,7 @@ func TestOrderServiceCreateOrder_MapsIdempotencyConflict(t *testing.T) {
 		GetDish(gomock.Any(), dishID).
 		Times(1).
 		Return(db.Dish{ID: dishID, MerchantID: merchantID, Name: "菜品", Price: 2000, IsOnline: true, IsAvailable: true}, nil)
-	store.EXPECT().
-		CountActivePackagingDishesByMerchant(gomock.Any(), merchantID).
-		Times(1).
-		Return(int64(0), nil)
+	expectPackagingNotConfigured(store, merchantID)
 	store.EXPECT().
 		ListActiveDiscountRules(gomock.Any(), merchantID).
 		Times(1).
@@ -240,10 +250,7 @@ func TestOrderServiceCreateOrder_RejectsVoucherWhenMerchantDiscountCannotStack(t
 		GetDish(gomock.Any(), dishID).
 		Times(1).
 		Return(db.Dish{ID: dishID, MerchantID: merchantID, Name: "套餐", Price: 2000, IsOnline: true, IsAvailable: true}, nil)
-	store.EXPECT().
-		CountActivePackagingDishesByMerchant(gomock.Any(), merchantID).
-		Times(1).
-		Return(int64(0), nil)
+	expectPackagingNotConfigured(store, merchantID)
 	store.EXPECT().
 		ListActiveDiscountRules(gomock.Any(), merchantID).
 		Times(1).
@@ -319,10 +326,7 @@ func TestOrderServiceCreateOrderMapsVoucherTemplateUnavailable(t *testing.T) {
 		GetDish(gomock.Any(), dishID).
 		Times(1).
 		Return(db.Dish{ID: dishID, MerchantID: merchantID, Name: "菜品", Price: 2000, IsOnline: true, IsAvailable: true}, nil)
-	store.EXPECT().
-		CountActivePackagingDishesByMerchant(gomock.Any(), merchantID).
-		Times(1).
-		Return(int64(0), nil)
+	expectPackagingNotConfigured(store, merchantID)
 	store.EXPECT().
 		ListActiveDiscountRules(gomock.Any(), merchantID).
 		Times(1).
@@ -360,6 +364,682 @@ func TestOrderServiceCreateOrderMapsVoucherTemplateUnavailable(t *testing.T) {
 	require.Equal(t, 400, reqErr.Status)
 	require.Equal(t, "优惠券已停用或已失效", reqErr.Err.Error())
 	require.ErrorIs(t, err, db.ErrVoucherTemplateUnavailable)
+}
+
+func TestOrderServiceCreateOrder_SelectedPackagingAddsFeeAndSnapshot(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	service := NewOrderService(
+		store,
+		nil,
+		nil,
+		nil,
+		nil,
+		createOrderNormalizerStub{},
+		nil,
+		nil,
+		createOrderClockStub{now: time.Date(2026, 6, 19, 10, 0, 0, 0, time.UTC)},
+		createOrderIDGeneratorStub{orderNo: "ORDER-PACKAGING-CREATE"},
+		nil,
+	)
+
+	userID := int64(20)
+	merchantID := int64(10)
+	dishID := int64(30)
+	cartID := int64(40)
+	optionID := int64(50)
+	selectionVersion := int64(7)
+	option := enabledPackagingOption(optionID, merchantID)
+	option.Name = "环保餐盒"
+	option.Price = 150
+
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchantID).
+		Times(1).
+		Return(db.Merchant{ID: merchantID, Status: "active", IsOpen: true}, nil)
+	store.EXPECT().
+		GetDish(gomock.Any(), dishID).
+		Times(1).
+		Return(db.Dish{ID: dishID, MerchantID: merchantID, Name: "菜品", Price: 2000, IsOnline: true, IsAvailable: true}, nil)
+	store.EXPECT().
+		GetMerchantPackagingSettings(gomock.Any(), merchantID).
+		Times(1).
+		Return(db.MerchantPackagingSetting{
+			MerchantID:           merchantID,
+			Enabled:              true,
+			Required:             true,
+			ApplicableOrderTypes: []string{db.OrderTypeTakeaway},
+		}, nil)
+	store.EXPECT().
+		GetCartByUserAndMerchant(gomock.Any(), db.GetCartByUserAndMerchantParams{
+			UserID:     userID,
+			MerchantID: merchantID,
+			OrderType:  db.OrderTypeTakeaway,
+		}).
+		Times(1).
+		Return(db.Cart{ID: cartID, UserID: userID, MerchantID: merchantID, OrderType: db.OrderTypeTakeaway}, nil)
+	store.EXPECT().
+		GetCartPackagingSelection(gomock.Any(), cartID).
+		Times(1).
+		Return(db.CartPackagingSelection{
+			CartID:            cartID,
+			PackagingOptionID: pgtype.Int8{Int64: optionID, Valid: true},
+			SelectionVersion:  selectionVersion,
+		}, nil)
+	store.EXPECT().
+		GetMerchantPackagingOption(gomock.Any(), db.GetMerchantPackagingOptionParams{
+			ID:         optionID,
+			MerchantID: merchantID,
+		}).
+		Times(1).
+		Return(option, nil)
+	store.EXPECT().
+		ListActiveDiscountRules(gomock.Any(), merchantID).
+		Times(1).
+		Return([]db.DiscountRule{}, nil)
+	store.EXPECT().
+		CreateOrderTx(gomock.Any(), gomock.Any()).
+		Times(1).
+		DoAndReturn(func(_ context.Context, arg db.CreateOrderTxParams) (db.CreateOrderTxResult, error) {
+			require.Equal(t, int64(150), arg.CreateOrderParams.PackagingFee)
+			require.Equal(t, int64(2150), arg.CreateOrderParams.TotalAmount)
+			require.Len(t, arg.PackagingItems, 1)
+			require.Equal(t, optionID, arg.PackagingItems[0].PackagingOptionID.Int64)
+			require.Equal(t, "环保餐盒", arg.PackagingItems[0].Name)
+			require.Equal(t, int64(150), arg.PackagingItems[0].Subtotal)
+			return db.CreateOrderTxResult{
+				Order: db.Order{
+					ID:           90,
+					OrderNo:      arg.CreateOrderParams.OrderNo,
+					UserID:       userID,
+					MerchantID:   merchantID,
+					OrderType:    db.OrderTypeTakeaway,
+					Subtotal:     arg.CreateOrderParams.Subtotal,
+					PackagingFee: arg.CreateOrderParams.PackagingFee,
+					TotalAmount:  arg.CreateOrderParams.TotalAmount,
+					Status:       arg.CreateOrderParams.Status,
+				},
+				PackagingItems: []db.OrderPackagingItem{{
+					OrderID:           90,
+					PackagingOptionID: pgtype.Int8{Int64: optionID, Valid: true},
+					Name:              "环保餐盒",
+					UnitPrice:         150,
+					Quantity:          1,
+					Subtotal:          150,
+				}},
+			}, nil
+		})
+
+	result, err := service.CreateOrder(context.Background(), CreateOrderCommandInput{
+		UserID:                    userID,
+		MerchantID:                merchantID,
+		OrderType:                 db.OrderTypeTakeaway,
+		PackagingOptionID:         packagingInt64Ptr(optionID),
+		PackagingSelectionVersion: packagingInt64Ptr(selectionVersion),
+		Items: []OrderItemInput{{
+			DishID:   &dishID,
+			Quantity: 1,
+		}},
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(150), result.Order.PackagingFee)
+	require.Equal(t, int64(2150), result.Order.TotalAmount)
+	require.Len(t, result.PackagingItems, 1)
+}
+
+func TestOrderServiceCreateOrder_SelectedPackagingMatchesOrderPreviewTotal(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	service := NewOrderService(
+		store,
+		nil,
+		nil,
+		nil,
+		nil,
+		createOrderNormalizerStub{},
+		nil,
+		nil,
+		createOrderClockStub{now: time.Date(2026, 6, 19, 10, 0, 0, 0, time.UTC)},
+		createOrderIDGeneratorStub{orderNo: "ORDER-PACKAGING-PARITY"},
+		nil,
+	)
+
+	ctx := context.Background()
+	userID := int64(20)
+	merchantID := int64(10)
+	dishID := int64(30)
+	cartID := int64(40)
+	optionID := int64(50)
+	selectionVersion := int64(7)
+	option := enabledPackagingOption(optionID, merchantID)
+	option.Name = "保温袋"
+	option.Price = 200
+	cartItem := db.ListCartItemsRow{
+		DishID:    pgtype.Int8{Int64: dishID, Valid: true},
+		DishName:  pgtype.Text{String: "菜品", Valid: true},
+		DishPrice: pgtype.Int8{Int64: 2000, Valid: true},
+		Quantity:  1,
+	}
+
+	store.EXPECT().
+		GetCartByUserAndMerchant(gomock.Any(), db.GetCartByUserAndMerchantParams{
+			UserID:     userID,
+			MerchantID: merchantID,
+			OrderType:  db.OrderTypeTakeaway,
+		}).
+		Times(1).
+		Return(db.Cart{ID: cartID, UserID: userID, MerchantID: merchantID, OrderType: db.OrderTypeTakeaway}, nil)
+	store.EXPECT().
+		ListCartItems(gomock.Any(), cartID).
+		Times(1).
+		Return([]db.ListCartItemsRow{cartItem}, nil)
+	store.EXPECT().
+		GetMerchantPackagingSettings(gomock.Any(), merchantID).
+		Times(1).
+		Return(db.MerchantPackagingSetting{
+			MerchantID:           merchantID,
+			Enabled:              true,
+			Required:             true,
+			ApplicableOrderTypes: []string{db.OrderTypeTakeaway},
+		}, nil)
+	store.EXPECT().
+		GetCart(gomock.Any(), cartID).
+		Times(1).
+		Return(db.Cart{ID: cartID, UserID: userID, MerchantID: merchantID, OrderType: db.OrderTypeTakeaway}, nil)
+	store.EXPECT().
+		GetCartPackagingSelection(gomock.Any(), cartID).
+		Times(1).
+		Return(db.CartPackagingSelection{
+			CartID:            cartID,
+			PackagingOptionID: pgtype.Int8{Int64: optionID, Valid: true},
+			SelectionVersion:  selectionVersion,
+		}, nil)
+	store.EXPECT().
+		ListEnabledMerchantPackagingOptions(gomock.Any(), merchantID).
+		Times(1).
+		Return([]db.MerchantPackagingOption{option}, nil)
+	store.EXPECT().
+		GetMerchantPackagingOption(gomock.Any(), db.GetMerchantPackagingOptionParams{
+			ID:         optionID,
+			MerchantID: merchantID,
+		}).
+		Times(1).
+		Return(option, nil)
+	store.EXPECT().
+		ListActiveDiscountRules(gomock.Any(), merchantID).
+		Times(1).
+		Return([]db.DiscountRule{}, nil)
+	store.EXPECT().
+		ListUserAvailableVouchersForMerchant(gomock.Any(), db.ListUserAvailableVouchersForMerchantParams{
+			UserID:         userID,
+			MerchantID:     merchantID,
+			MinOrderAmount: 2000,
+		}).
+		Times(1).
+		Return([]db.ListUserAvailableVouchersForMerchantRow{}, nil)
+	store.EXPECT().
+		GetMembershipByMerchantAndUser(gomock.Any(), db.GetMembershipByMerchantAndUserParams{
+			MerchantID: merchantID,
+			UserID:     userID,
+		}).
+		Times(1).
+		Return(db.MerchantMembership{}, db.ErrRecordNotFound)
+
+	preview, err := CalculateOrderPreview(
+		ctx,
+		store,
+		nil,
+		OrderCalculationInput{
+			UserID:     userID,
+			MerchantID: merchantID,
+			OrderType:  db.OrderTypeTakeaway,
+		},
+		func(context.Context, int64, map[string]interface{}) ([]byte, int64, error) {
+			return nil, 0, nil
+		},
+		nil,
+	)
+	require.NoError(t, err)
+	require.Equal(t, int64(200), preview.PackagingFee)
+	require.Equal(t, int64(2200), preview.TotalAmount)
+
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchantID).
+		Times(1).
+		Return(db.Merchant{ID: merchantID, Status: "active", IsOpen: true}, nil)
+	store.EXPECT().
+		GetDish(gomock.Any(), dishID).
+		Times(1).
+		Return(db.Dish{ID: dishID, MerchantID: merchantID, Name: "菜品", Price: 2000, IsOnline: true, IsAvailable: true}, nil)
+	store.EXPECT().
+		GetMerchantPackagingSettings(gomock.Any(), merchantID).
+		Times(1).
+		Return(db.MerchantPackagingSetting{
+			MerchantID:           merchantID,
+			Enabled:              true,
+			Required:             true,
+			ApplicableOrderTypes: []string{db.OrderTypeTakeaway},
+		}, nil)
+	store.EXPECT().
+		GetCartByUserAndMerchant(gomock.Any(), db.GetCartByUserAndMerchantParams{
+			UserID:     userID,
+			MerchantID: merchantID,
+			OrderType:  db.OrderTypeTakeaway,
+		}).
+		Times(1).
+		Return(db.Cart{ID: cartID, UserID: userID, MerchantID: merchantID, OrderType: db.OrderTypeTakeaway}, nil)
+	store.EXPECT().
+		GetCartPackagingSelection(gomock.Any(), cartID).
+		Times(1).
+		Return(db.CartPackagingSelection{
+			CartID:            cartID,
+			PackagingOptionID: pgtype.Int8{Int64: optionID, Valid: true},
+			SelectionVersion:  selectionVersion,
+		}, nil)
+	store.EXPECT().
+		GetMerchantPackagingOption(gomock.Any(), db.GetMerchantPackagingOptionParams{
+			ID:         optionID,
+			MerchantID: merchantID,
+		}).
+		Times(1).
+		Return(option, nil)
+	store.EXPECT().
+		ListActiveDiscountRules(gomock.Any(), merchantID).
+		Times(1).
+		Return([]db.DiscountRule{}, nil)
+	store.EXPECT().
+		CreateOrderTx(gomock.Any(), gomock.Any()).
+		Times(1).
+		DoAndReturn(func(_ context.Context, arg db.CreateOrderTxParams) (db.CreateOrderTxResult, error) {
+			require.Equal(t, preview.TotalAmount, arg.CreateOrderParams.TotalAmount)
+			require.Equal(t, preview.PackagingFee, arg.CreateOrderParams.PackagingFee)
+			return db.CreateOrderTxResult{Order: db.Order{
+				ID:           90,
+				OrderNo:      arg.CreateOrderParams.OrderNo,
+				UserID:       userID,
+				MerchantID:   merchantID,
+				OrderType:    db.OrderTypeTakeaway,
+				Subtotal:     arg.CreateOrderParams.Subtotal,
+				PackagingFee: arg.CreateOrderParams.PackagingFee,
+				TotalAmount:  arg.CreateOrderParams.TotalAmount,
+				Status:       arg.CreateOrderParams.Status,
+			}}, nil
+		})
+
+	result, err := service.CreateOrder(ctx, CreateOrderCommandInput{
+		UserID:                    userID,
+		MerchantID:                merchantID,
+		OrderType:                 db.OrderTypeTakeaway,
+		PackagingOptionID:         packagingInt64Ptr(optionID),
+		PackagingSelectionVersion: packagingInt64Ptr(selectionVersion),
+		Items: []OrderItemInput{{
+			DishID:   &dishID,
+			Quantity: 1,
+		}},
+	})
+	require.NoError(t, err)
+	require.Equal(t, preview.TotalAmount, result.Order.TotalAmount)
+}
+
+func TestOrderServiceCreateOrder_StalePackagingSelectionVersionConflicts(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	service := NewOrderService(store, nil, nil, nil, nil, createOrderNormalizerStub{}, nil, nil, nil, nil, nil)
+
+	userID := int64(20)
+	merchantID := int64(10)
+	dishID := int64(30)
+	cartID := int64(40)
+	optionID := int64(50)
+
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchantID).
+		Times(1).
+		Return(db.Merchant{ID: merchantID, Status: "active", IsOpen: true}, nil)
+	store.EXPECT().
+		GetDish(gomock.Any(), dishID).
+		Times(1).
+		Return(db.Dish{ID: dishID, MerchantID: merchantID, Name: "菜品", Price: 2000, IsOnline: true, IsAvailable: true}, nil)
+	store.EXPECT().
+		GetMerchantPackagingSettings(gomock.Any(), merchantID).
+		Times(1).
+		Return(db.MerchantPackagingSetting{
+			MerchantID:           merchantID,
+			Enabled:              true,
+			Required:             true,
+			ApplicableOrderTypes: []string{db.OrderTypeTakeaway},
+		}, nil)
+	store.EXPECT().
+		GetCartByUserAndMerchant(gomock.Any(), db.GetCartByUserAndMerchantParams{
+			UserID:     userID,
+			MerchantID: merchantID,
+			OrderType:  db.OrderTypeTakeaway,
+		}).
+		Times(1).
+		Return(db.Cart{ID: cartID, UserID: userID, MerchantID: merchantID, OrderType: db.OrderTypeTakeaway}, nil)
+	store.EXPECT().
+		GetCartPackagingSelection(gomock.Any(), cartID).
+		Times(1).
+		Return(db.CartPackagingSelection{
+			CartID:            cartID,
+			PackagingOptionID: pgtype.Int8{Int64: optionID, Valid: true},
+			SelectionVersion:  8,
+		}, nil)
+
+	_, err := service.CreateOrder(context.Background(), CreateOrderCommandInput{
+		UserID:                    userID,
+		MerchantID:                merchantID,
+		OrderType:                 db.OrderTypeTakeaway,
+		PackagingOptionID:         packagingInt64Ptr(optionID),
+		PackagingSelectionVersion: packagingInt64Ptr(7),
+		Items: []OrderItemInput{{
+			DishID:   &dishID,
+			Quantity: 1,
+		}},
+	})
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, http.StatusConflict, reqErr.Status)
+	require.Equal(t, "订单请求状态已变化，请刷新后重试", reqErr.Err.Error())
+}
+
+func TestOrderServiceCreateOrder_ClearedPackagingSelectionAfterPreviewConflicts(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	service := NewOrderService(store, nil, nil, nil, nil, createOrderNormalizerStub{}, nil, nil, nil, nil, nil)
+
+	userID := int64(20)
+	merchantID := int64(10)
+	dishID := int64(30)
+	cartID := int64(40)
+	optionID := int64(50)
+
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchantID).
+		Times(1).
+		Return(db.Merchant{ID: merchantID, Status: "active", IsOpen: true}, nil)
+	store.EXPECT().
+		GetDish(gomock.Any(), dishID).
+		Times(1).
+		Return(db.Dish{ID: dishID, MerchantID: merchantID, Name: "菜品", Price: 2000, IsOnline: true, IsAvailable: true}, nil)
+	store.EXPECT().
+		GetMerchantPackagingSettings(gomock.Any(), merchantID).
+		Times(1).
+		Return(db.MerchantPackagingSetting{
+			MerchantID:           merchantID,
+			Enabled:              true,
+			Required:             true,
+			ApplicableOrderTypes: []string{db.OrderTypeTakeaway},
+		}, nil)
+	store.EXPECT().
+		GetCartByUserAndMerchant(gomock.Any(), db.GetCartByUserAndMerchantParams{
+			UserID:     userID,
+			MerchantID: merchantID,
+			OrderType:  db.OrderTypeTakeaway,
+		}).
+		Times(1).
+		Return(db.Cart{ID: cartID, UserID: userID, MerchantID: merchantID, OrderType: db.OrderTypeTakeaway}, nil)
+	store.EXPECT().
+		GetCartPackagingSelection(gomock.Any(), cartID).
+		Times(1).
+		Return(db.CartPackagingSelection{
+			CartID:           cartID,
+			SelectionVersion: 8,
+		}, nil)
+
+	_, err := service.CreateOrder(context.Background(), CreateOrderCommandInput{
+		UserID:                    userID,
+		MerchantID:                merchantID,
+		OrderType:                 db.OrderTypeTakeaway,
+		PackagingOptionID:         packagingInt64Ptr(optionID),
+		PackagingSelectionVersion: packagingInt64Ptr(7),
+		Items: []OrderItemInput{{
+			DishID:   &dishID,
+			Quantity: 1,
+		}},
+	})
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, http.StatusConflict, reqErr.Status)
+	require.Equal(t, "订单请求状态已变化，请刷新后重试", reqErr.Err.Error())
+}
+
+func TestOrderServiceCreateOrder_RequiredMissingPackagingRejectsOrder(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	service := NewOrderService(store, nil, nil, nil, nil, createOrderNormalizerStub{}, nil, nil, nil, nil, nil)
+
+	userID := int64(20)
+	merchantID := int64(10)
+	dishID := int64(30)
+	cartID := int64(40)
+
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchantID).
+		Times(1).
+		Return(db.Merchant{ID: merchantID, Status: "active", IsOpen: true}, nil)
+	store.EXPECT().
+		GetDish(gomock.Any(), dishID).
+		Times(1).
+		Return(db.Dish{ID: dishID, MerchantID: merchantID, Name: "菜品", Price: 2000, IsOnline: true, IsAvailable: true}, nil)
+	store.EXPECT().
+		GetMerchantPackagingSettings(gomock.Any(), merchantID).
+		Times(1).
+		Return(db.MerchantPackagingSetting{
+			MerchantID:           merchantID,
+			Enabled:              true,
+			Required:             true,
+			ApplicableOrderTypes: []string{db.OrderTypeTakeaway},
+		}, nil)
+	store.EXPECT().
+		GetCartByUserAndMerchant(gomock.Any(), db.GetCartByUserAndMerchantParams{
+			UserID:     userID,
+			MerchantID: merchantID,
+			OrderType:  db.OrderTypeTakeaway,
+		}).
+		Times(1).
+		Return(db.Cart{ID: cartID, UserID: userID, MerchantID: merchantID, OrderType: db.OrderTypeTakeaway}, nil)
+	store.EXPECT().
+		GetCartPackagingSelection(gomock.Any(), cartID).
+		Times(1).
+		Return(db.CartPackagingSelection{}, db.ErrRecordNotFound)
+
+	_, err := service.CreateOrder(context.Background(), CreateOrderCommandInput{
+		UserID:                    userID,
+		MerchantID:                merchantID,
+		OrderType:                 db.OrderTypeTakeaway,
+		PackagingSelectionVersion: packagingInt64Ptr(0),
+		Items: []OrderItemInput{{
+			DishID:   &dishID,
+			Quantity: 1,
+		}},
+	})
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, http.StatusBadRequest, reqErr.Status)
+	require.Equal(t, "请先选择包装方式", reqErr.Err.Error())
+}
+
+func TestOrderServiceCreateOrder_IdempotentReplayReturnsPackagingSnapshotWithoutReadingCurrentPackaging(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	scheduler := &createOrderTaskSchedulerStub{}
+	service := NewOrderService(
+		store,
+		nil,
+		nil,
+		nil,
+		scheduler,
+		createOrderNormalizerStub{},
+		nil,
+		nil,
+		createOrderClockStub{now: time.Date(2026, 6, 19, 10, 0, 0, 0, time.UTC)},
+		createOrderIDGeneratorStub{orderNo: "ORDER-REPLAY-SHOULD-NOT-PERSIST"},
+		nil,
+	)
+
+	userID := int64(20)
+	merchantID := int64(10)
+	dishID := int64(30)
+	optionID := int64(50)
+	selectionVersion := int64(7)
+	input := CreateOrderCommandInput{
+		UserID:                    userID,
+		MerchantID:                merchantID,
+		OrderType:                 db.OrderTypeTakeaway,
+		IdempotencyKey:            " order-create-packaging-replay ",
+		PackagingOptionID:         packagingInt64Ptr(optionID),
+		PackagingSelectionVersion: packagingInt64Ptr(selectionVersion),
+		Items: []OrderItemInput{{
+			DishID:   &dishID,
+			Quantity: 1,
+		}},
+	}
+	existingOrder := db.Order{
+		ID:           90,
+		OrderNo:      "ORDER-PACKAGING-EXISTING",
+		UserID:       userID,
+		MerchantID:   merchantID,
+		OrderType:    db.OrderTypeTakeaway,
+		Subtotal:     2000,
+		PackagingFee: 150,
+		TotalAmount:  2150,
+		Status:       db.OrderStatusPending,
+	}
+	existingSnapshot := db.OrderPackagingItem{
+		ID:                91,
+		OrderID:           existingOrder.ID,
+		PackagingOptionID: pgtype.Int8{Int64: optionID, Valid: true},
+		Name:              "历史餐盒",
+		UnitPrice:         150,
+		Quantity:          1,
+		Subtotal:          150,
+	}
+
+	store.EXPECT().
+		GetOrderRequestIdempotency(gomock.Any(), db.GetOrderRequestIdempotencyParams{
+			OperationScope: orderCreateIdempotencyScope,
+			ActorUserID:    userID,
+			IdempotencyKey: "order-create-packaging-replay",
+		}).
+		Times(1).
+		Return(db.OrderCreateRequestIdempotency{
+			OperationScope: orderCreateIdempotencyScope,
+			ActorUserID:    userID,
+			IdempotencyKey: "order-create-packaging-replay",
+			RequestHash:    "sha256:historical-request-hash",
+			OrderID:        pgtype.Int8{Int64: existingOrder.ID, Valid: true},
+		}, nil)
+	store.EXPECT().
+		GetOrder(gomock.Any(), existingOrder.ID).
+		Times(1).
+		Return(existingOrder, nil)
+	store.EXPECT().
+		ListOrderPackagingItems(gomock.Any(), existingOrder.ID).
+		Times(1).
+		Return([]db.OrderPackagingItem{existingSnapshot}, nil)
+
+	result, err := service.CreateOrder(context.Background(), input)
+	require.NoError(t, err)
+	require.Equal(t, existingOrder.ID, result.Order.ID)
+	require.Len(t, result.PackagingItems, 1)
+	require.Equal(t, "历史餐盒", result.PackagingItems[0].Name)
+	require.Empty(t, scheduler.orderPaymentTimeouts)
+}
+
+func TestOrderServiceCreateOrder_IdempotentReplayReturnsBoundOrderWhenRetryOmitsPackagingIdentity(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	scheduler := &createOrderTaskSchedulerStub{}
+	service := NewOrderService(
+		store,
+		nil,
+		nil,
+		nil,
+		scheduler,
+		createOrderNormalizerStub{},
+		nil,
+		nil,
+		createOrderClockStub{now: time.Date(2026, 6, 19, 10, 0, 0, 0, time.UTC)},
+		createOrderIDGeneratorStub{orderNo: "ORDER-REPLAY-OMIT-PACKAGING"},
+		nil,
+	)
+
+	userID := int64(20)
+	merchantID := int64(10)
+	dishID := int64(30)
+	optionID := int64(50)
+	input := CreateOrderCommandInput{
+		UserID:         userID,
+		MerchantID:     merchantID,
+		OrderType:      db.OrderTypeTakeaway,
+		IdempotencyKey: " order-create-packaging-replay ",
+		Items: []OrderItemInput{{
+			DishID:   &dishID,
+			Quantity: 1,
+		}},
+	}
+	existingOrder := db.Order{
+		ID:           90,
+		OrderNo:      "ORDER-PACKAGING-EXISTING",
+		UserID:       userID,
+		MerchantID:   merchantID,
+		OrderType:    db.OrderTypeTakeaway,
+		Subtotal:     2000,
+		PackagingFee: 150,
+		TotalAmount:  2150,
+		Status:       db.OrderStatusPending,
+	}
+	existingSnapshot := db.OrderPackagingItem{
+		ID:                91,
+		OrderID:           existingOrder.ID,
+		PackagingOptionID: pgtype.Int8{Int64: optionID, Valid: true},
+		Name:              "历史餐盒",
+		UnitPrice:         150,
+		Quantity:          1,
+		Subtotal:          150,
+	}
+
+	store.EXPECT().
+		GetOrderRequestIdempotency(gomock.Any(), db.GetOrderRequestIdempotencyParams{
+			OperationScope: orderCreateIdempotencyScope,
+			ActorUserID:    userID,
+			IdempotencyKey: "order-create-packaging-replay",
+		}).
+		Times(1).
+		Return(db.OrderCreateRequestIdempotency{
+			OperationScope: orderCreateIdempotencyScope,
+			ActorUserID:    userID,
+			IdempotencyKey: "order-create-packaging-replay",
+			RequestHash:    "sha256:historical-request-hash",
+			OrderID:        pgtype.Int8{Int64: existingOrder.ID, Valid: true},
+		}, nil)
+	store.EXPECT().
+		GetOrder(gomock.Any(), existingOrder.ID).
+		Times(1).
+		Return(existingOrder, nil)
+	store.EXPECT().
+		ListOrderPackagingItems(gomock.Any(), existingOrder.ID).
+		Times(1).
+		Return([]db.OrderPackagingItem{existingSnapshot}, nil)
+
+	result, err := service.CreateOrder(context.Background(), input)
+	require.NoError(t, err)
+	require.Equal(t, existingOrder.ID, result.Order.ID)
+	require.Len(t, result.PackagingItems, 1)
+	require.Equal(t, "历史餐盒", result.PackagingItems[0].Name)
+	require.Empty(t, scheduler.orderPaymentTimeouts)
 }
 
 func TestOrderServiceCreateOrder_MarketingTotalsMatchCartAndOrderPreview(t *testing.T) {
@@ -588,10 +1268,7 @@ func TestOrderServiceCreateOrder_MarketingTotalsMatchCartAndOrderPreview(t *test
 		GetDish(gomock.Any(), dishID).
 		Times(1).
 		Return(db.Dish{ID: dishID, MerchantID: merchantID, Name: "菜品", Price: 2000, IsOnline: true, IsAvailable: true}, nil)
-	store.EXPECT().
-		CountActivePackagingDishesByMerchant(gomock.Any(), merchantID).
-		Times(1).
-		Return(int64(0), nil)
+	expectPackagingNotConfigured(store, merchantID)
 	store.EXPECT().
 		GetUserAddress(gomock.Any(), addressID).
 		Times(1).

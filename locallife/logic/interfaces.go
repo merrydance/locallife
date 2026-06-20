@@ -173,18 +173,20 @@ type OrderPolicy interface {
 }
 
 type CreateOrderCommandInput struct {
-	UserID         int64
-	MerchantID     int64
-	OrderType      string
-	AddressID      *int64
-	TableID        *int64
-	ReservationID  *int64
-	BillingGroupID *int64
-	Items          []OrderItemInput
-	Notes          string
-	UserVoucherID  *int64
-	UseBalance     bool
-	IdempotencyKey string
+	UserID                    int64
+	MerchantID                int64
+	OrderType                 string
+	AddressID                 *int64
+	TableID                   *int64
+	ReservationID             *int64
+	BillingGroupID            *int64
+	Items                     []OrderItemInput
+	Notes                     string
+	UserVoucherID             *int64
+	UseBalance                bool
+	IdempotencyKey            string
+	PackagingOptionID         *int64
+	PackagingSelectionVersion *int64
 
 	RulesEngine        rules.Engine
 	RulesEngineEnabled bool
@@ -199,9 +201,10 @@ type CreateOrderCommandInput struct {
 }
 
 type CreateOrderCommandResult struct {
-	Order        db.Order
-	RuleDecision rules.Decision
-	HasRule      bool
+	Order          db.Order
+	PackagingItems []db.OrderPackagingItem
+	RuleDecision   rules.Decision
+	HasRule        bool
 }
 
 type CreateRefundOrderInput struct {

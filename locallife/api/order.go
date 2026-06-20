@@ -125,6 +125,12 @@ type createOrderRequest struct {
 	// 用户优惠券ID (选填，使用已领取的优惠券抵扣)
 	UserVoucherID *int64 `json:"user_voucher_id,omitempty" binding:"omitempty,min=1" example:"9001"`
 
+	// 包装选项ID（来自最近一次预览；不选择包装时显式传null或省略）
+	PackagingOptionID *int64 `json:"packaging_option_id,omitempty" binding:"omitempty,min=1" example:"3001"`
+
+	// 包装选择版本（来自最近一次预览；包装启用时必需，防止结算状态漂移）
+	PackagingSelectionVersion *int64 `json:"packaging_selection_version,omitempty" binding:"omitempty,min=0" example:"7"`
+
 	// 前端已计算的代取费（分），用于直落且供服务端校验
 	DeliveryFee int64 `json:"delivery_fee,omitempty" example:"500"`
 	// 前端已计算的代取费优惠（分）
@@ -546,7 +552,7 @@ func newOrderWithMerchantFromFilterResponse(o db.ListOrdersByUserWithFiltersRow)
 // @Produce json
 // @Param Idempotency-Key header string false "可选幂等键，同一次创建订单重试建议复用同一个值"
 // @Param request body createOrderRequest true "订单创建参数"
-// @Success 201 {object} orderResponse "创建成功"
+// @Success 201 {object} createOrderResponse "创建成功"
 // @Failure 400 {object} ErrorResponse "请求参数错误 / 商户未激活 / 菜品下线 / 桌台不属于该商户"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "地址不属于当前用户"
@@ -575,20 +581,22 @@ func (server *Server) createOrder(ctx *gin.Context) {
 	}
 
 	result, err := service.CreateOrder(ctx, logic.CreateOrderCommandInput{
-		UserID:             authPayload.UserID,
-		MerchantID:         req.MerchantID,
-		OrderType:          req.OrderType,
-		AddressID:          req.AddressID,
-		TableID:            req.TableID,
-		ReservationID:      req.ReservationID,
-		BillingGroupID:     req.BillingGroupID,
-		Items:              toOrderItemInputs(req.Items),
-		Notes:              req.Notes,
-		UserVoucherID:      req.UserVoucherID,
-		UseBalance:         req.UseBalance,
-		IdempotencyKey:     strings.TrimSpace(ctx.GetHeader(orderCreateIdempotencyHeader)),
-		RulesEngine:        server.rulesEngine,
-		RulesEngineEnabled: server.config.RulesEngineEnabled,
+		UserID:                    authPayload.UserID,
+		MerchantID:                req.MerchantID,
+		OrderType:                 req.OrderType,
+		AddressID:                 req.AddressID,
+		TableID:                   req.TableID,
+		ReservationID:             req.ReservationID,
+		BillingGroupID:            req.BillingGroupID,
+		Items:                     toOrderItemInputs(req.Items),
+		Notes:                     req.Notes,
+		UserVoucherID:             req.UserVoucherID,
+		UseBalance:                req.UseBalance,
+		IdempotencyKey:            strings.TrimSpace(ctx.GetHeader(orderCreateIdempotencyHeader)),
+		PackagingOptionID:         req.PackagingOptionID,
+		PackagingSelectionVersion: req.PackagingSelectionVersion,
+		RulesEngine:               server.rulesEngine,
+		RulesEngineEnabled:        server.config.RulesEngineEnabled,
 		OnRuleDecision: func(input rules.Context, decision rules.Decision, actorRole string) {
 			server.recordRuleHit(ctx, input, decision, actorRole)
 		},
@@ -616,7 +624,7 @@ func (server *Server) createOrder(ctx *gin.Context) {
 		return
 	}
 
-	resp, err := newOrderResponse(result.Order)
+	resp, err := newCreateOrderResponse(result)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return

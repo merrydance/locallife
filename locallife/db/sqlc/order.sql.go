@@ -373,6 +373,7 @@ INSERT INTO orders (
     subtotal,
     discount_amount,
     delivery_fee_discount,
+    packaging_fee,
     total_amount,
     status,
     fulfillment_status,
@@ -384,7 +385,7 @@ INSERT INTO orders (
     replaced_by_order_id,
     pickup_code
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29
 ) RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot, packaging_fee
 `
 
@@ -407,6 +408,7 @@ type CreateOrderParams struct {
 	Subtotal                     int64          `json:"subtotal"`
 	DiscountAmount               int64          `json:"discount_amount"`
 	DeliveryFeeDiscount          int64          `json:"delivery_fee_discount"`
+	PackagingFee                 int64          `json:"packaging_fee"`
 	TotalAmount                  int64          `json:"total_amount"`
 	Status                       string         `json:"status"`
 	FulfillmentStatus            string         `json:"fulfillment_status"`
@@ -439,6 +441,7 @@ func (q *Queries) CreateOrder(ctx context.Context, arg CreateOrderParams) (Order
 		arg.Subtotal,
 		arg.DiscountAmount,
 		arg.DeliveryFeeDiscount,
+		arg.PackagingFee,
 		arg.TotalAmount,
 		arg.Status,
 		arg.FulfillmentStatus,
@@ -926,6 +929,37 @@ func (q *Queries) GetOrderForUpdate(ctx context.Context, id int64) (Order, error
 		&i.DeliveryLongitudeSnapshot,
 		&i.DeliveryLatitudeSnapshot,
 		&i.PackagingFee,
+	)
+	return i, err
+}
+
+const getOrderRequestIdempotency = `-- name: GetOrderRequestIdempotency :one
+SELECT id, operation_scope, actor_user_id, idempotency_key, request_hash, order_id, created_at, updated_at
+FROM order_create_request_idempotency
+WHERE operation_scope = $1
+  AND actor_user_id = $2
+  AND idempotency_key = $3
+LIMIT 1
+`
+
+type GetOrderRequestIdempotencyParams struct {
+	OperationScope string `json:"operation_scope"`
+	ActorUserID    int64  `json:"actor_user_id"`
+	IdempotencyKey string `json:"idempotency_key"`
+}
+
+func (q *Queries) GetOrderRequestIdempotency(ctx context.Context, arg GetOrderRequestIdempotencyParams) (OrderCreateRequestIdempotency, error) {
+	row := q.db.QueryRow(ctx, getOrderRequestIdempotency, arg.OperationScope, arg.ActorUserID, arg.IdempotencyKey)
+	var i OrderCreateRequestIdempotency
+	err := row.Scan(
+		&i.ID,
+		&i.OperationScope,
+		&i.ActorUserID,
+		&i.IdempotencyKey,
+		&i.RequestHash,
+		&i.OrderID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }

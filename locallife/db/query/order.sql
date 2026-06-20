@@ -18,6 +18,7 @@ INSERT INTO orders (
     subtotal,
     discount_amount,
     delivery_fee_discount,
+    packaging_fee,
     total_amount,
     status,
     fulfillment_status,
@@ -29,7 +30,7 @@ INSERT INTO orders (
     replaced_by_order_id,
     pickup_code
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29
 ) RETURNING *;
 
 -- name: GetOrder :one
@@ -68,6 +69,14 @@ WHERE operation_scope = sqlc.arg(operation_scope)
   AND idempotency_key = sqlc.arg(idempotency_key)
 LIMIT 1
 FOR UPDATE;
+
+-- name: GetOrderRequestIdempotency :one
+SELECT id, operation_scope, actor_user_id, idempotency_key, request_hash, order_id, created_at, updated_at
+FROM order_create_request_idempotency
+WHERE operation_scope = sqlc.arg(operation_scope)
+  AND actor_user_id = sqlc.arg(actor_user_id)
+  AND idempotency_key = sqlc.arg(idempotency_key)
+LIMIT 1;
 
 -- name: BindOrderRequestIdempotencyOrder :one
 UPDATE order_create_request_idempotency

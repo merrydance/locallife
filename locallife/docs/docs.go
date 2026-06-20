@@ -21772,7 +21772,7 @@ const docTemplate = `{
                     "201": {
                         "description": "创建成功",
                         "schema": {
-                            "$ref": "#/definitions/api.orderResponse"
+                            "$ref": "#/definitions/api.createOrderResponse"
                         }
                     },
                     "400": {
@@ -36059,6 +36059,18 @@ const docTemplate = `{
                     ],
                     "example": "takeout"
                 },
+                "packaging_option_id": {
+                    "description": "包装选项ID（来自最近一次预览；不选择包装时显式传null或省略）",
+                    "type": "integer",
+                    "minimum": 1,
+                    "example": 3001
+                },
+                "packaging_selection_version": {
+                    "description": "包装选择版本（来自最近一次预览；包装启用时必需，防止结算状态漂移）",
+                    "type": "integer",
+                    "minimum": 0,
+                    "example": 7
+                },
                 "reservation_id": {
                     "description": "预订ID (预定点菜时必填)",
                     "type": "integer",
@@ -36081,6 +36093,253 @@ const docTemplate = `{
                     "type": "integer",
                     "minimum": 1,
                     "example": 9001
+                }
+            }
+        },
+        "api.createOrderResponse": {
+            "type": "object",
+            "properties": {
+                "actions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "address_id": {
+                    "type": "integer",
+                    "example": 5001
+                },
+                "auto_user_delivered_at": {
+                    "type": "string"
+                },
+                "badges": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.orderBadge"
+                    }
+                },
+                "cancel_reason": {
+                    "type": "string",
+                    "example": "商品缺货"
+                },
+                "cancelled_at": {
+                    "type": "string",
+                    "example": "2025-12-01T12:25:00Z"
+                },
+                "claim_channel": {
+                    "type": "string"
+                },
+                "completed_at": {
+                    "type": "string",
+                    "example": "2025-12-01T13:15:00Z"
+                },
+                "courier_accept_at": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string",
+                    "example": "2025-12-01T12:20:00Z"
+                },
+                "delivery_address": {
+                    "type": "string",
+                    "example": "北京市朝阳区某小区1号楼"
+                },
+                "delivery_contact_name": {
+                    "type": "string",
+                    "example": "张三"
+                },
+                "delivery_contact_phone": {
+                    "type": "string",
+                    "example": "13800138000"
+                },
+                "delivery_distance": {
+                    "type": "integer",
+                    "example": 2500
+                },
+                "delivery_eta_minutes": {
+                    "type": "integer",
+                    "example": 38
+                },
+                "delivery_fee": {
+                    "type": "integer",
+                    "example": 500
+                },
+                "delivery_fee_discount": {
+                    "type": "integer",
+                    "example": 200
+                },
+                "discount_amount": {
+                    "type": "integer",
+                    "example": 500
+                },
+                "dispatch_order_id": {
+                    "type": "integer"
+                },
+                "estimated_delivery_at": {
+                    "type": "string",
+                    "example": "2025-12-01T12:30:00Z"
+                },
+                "exception_state": {
+                    "type": "string"
+                },
+                "fee_breakdown": {
+                    "$ref": "#/definitions/api.merchantOrderFeeBreakdownResponse"
+                },
+                "flow_id": {
+                    "type": "integer"
+                },
+                "fulfillment_status": {
+                    "type": "string",
+                    "enum": [
+                        "scheduled",
+                        "pending_kitchen",
+                        "preparing",
+                        "ready",
+                        "completed",
+                        "cancelled"
+                    ],
+                    "example": "pending_kitchen"
+                },
+                "id": {
+                    "type": "integer",
+                    "example": 100001
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.orderItemResponse"
+                    }
+                },
+                "merchant_id": {
+                    "type": "integer",
+                    "example": 20001
+                },
+                "merchant_name": {
+                    "type": "string",
+                    "example": "张三餐厅"
+                },
+                "merchant_phone": {
+                    "type": "string",
+                    "example": "13800138000"
+                },
+                "notes": {
+                    "type": "string",
+                    "example": "不要香菜"
+                },
+                "order_no": {
+                    "type": "string",
+                    "example": "ORD20251201123456"
+                },
+                "order_type": {
+                    "type": "string",
+                    "enum": [
+                        "takeout",
+                        "dine_in",
+                        "takeaway",
+                        "reservation"
+                    ],
+                    "example": "takeout"
+                },
+                "overtime": {
+                    "type": "boolean"
+                },
+                "packaging_fee": {
+                    "type": "integer",
+                    "example": 150
+                },
+                "packaging_items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.orderPackagingItemResponse"
+                    }
+                },
+                "paid_at": {
+                    "type": "string",
+                    "example": "2025-12-01T12:30:00Z"
+                },
+                "payment_context": {
+                    "$ref": "#/definitions/api.orderPaymentContextResponse"
+                },
+                "payment_method": {
+                    "type": "string",
+                    "enum": [
+                        "wechat",
+                        "balance"
+                    ],
+                    "example": "wechat"
+                },
+                "picked_at": {
+                    "type": "string"
+                },
+                "pickup_code": {
+                    "type": "string"
+                },
+                "pickup_code_masked": {
+                    "type": "string"
+                },
+                "prep_start_at": {
+                    "type": "string"
+                },
+                "ready_at": {
+                    "type": "string"
+                },
+                "replaced_by_order_id": {
+                    "type": "integer",
+                    "example": 100009
+                },
+                "reservation_id": {
+                    "type": "integer",
+                    "example": 8001
+                },
+                "rider_delivered_at": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "pending",
+                        "paid",
+                        "preparing",
+                        "ready",
+                        "courier_accepted",
+                        "picked",
+                        "delivering",
+                        "rider_delivered",
+                        "user_delivered",
+                        "completed",
+                        "cancelled"
+                    ],
+                    "example": "paid"
+                },
+                "status_hint": {
+                    "type": "string"
+                },
+                "subtotal": {
+                    "type": "integer",
+                    "example": 5760
+                },
+                "table_id": {
+                    "type": "integer",
+                    "example": 301
+                },
+                "total_amount": {
+                    "type": "integer",
+                    "example": 5760
+                },
+                "updated_at": {
+                    "type": "string",
+                    "example": "2025-12-01T12:30:00Z"
+                },
+                "user_delivered_at": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "integer",
+                    "example": 10001
+                },
+                "wechat_transaction_id": {
+                    "description": "微信或上游支付交易号，用于支付查询与历史兼容展示",
+                    "type": "string"
                 }
             }
         },
@@ -42010,6 +42269,35 @@ const docTemplate = `{
                     "description": "单价 (单位：分)",
                     "type": "integer",
                     "example": 2880
+                }
+            }
+        },
+        "api.orderPackagingItemResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer",
+                    "example": 30001
+                },
+                "name": {
+                    "type": "string",
+                    "example": "环保餐盒"
+                },
+                "packaging_option_id": {
+                    "type": "integer",
+                    "example": 1001
+                },
+                "quantity": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "subtotal": {
+                    "type": "integer",
+                    "example": 150
+                },
+                "unit_price": {
+                    "type": "integer",
+                    "example": 150
                 }
             }
         },

@@ -10886,6 +10886,21 @@ func (mr *MockStoreMockRecorder) GetOrderItem(ctx, id any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrderItem", reflect.TypeOf((*MockStore)(nil).GetOrderItem), ctx, id)
 }
 
+// GetOrderRequestIdempotency mocks base method.
+func (m *MockStore) GetOrderRequestIdempotency(ctx context.Context, arg db.GetOrderRequestIdempotencyParams) (db.OrderCreateRequestIdempotency, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetOrderRequestIdempotency", ctx, arg)
+	ret0, _ := ret[0].(db.OrderCreateRequestIdempotency)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetOrderRequestIdempotency indicates an expected call of GetOrderRequestIdempotency.
+func (mr *MockStoreMockRecorder) GetOrderRequestIdempotency(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrderRequestIdempotency", reflect.TypeOf((*MockStore)(nil).GetOrderRequestIdempotency), ctx, arg)
+}
+
 // GetOrderRequestIdempotencyForUpdate mocks base method.
 func (m *MockStore) GetOrderRequestIdempotencyForUpdate(ctx context.Context, arg db.GetOrderRequestIdempotencyForUpdateParams) (db.OrderCreateRequestIdempotency, error) {
 	m.ctrl.T.Helper()

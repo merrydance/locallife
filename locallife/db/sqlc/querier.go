@@ -986,6 +986,7 @@ type Querier interface {
 	GetOrderDisplayConfigByMerchant(ctx context.Context, merchantID int64) (OrderDisplayConfig, error)
 	GetOrderForUpdate(ctx context.Context, id int64) (Order, error)
 	GetOrderItem(ctx context.Context, id int64) (OrderItem, error)
+	GetOrderRequestIdempotency(ctx context.Context, arg GetOrderRequestIdempotencyParams) (OrderCreateRequestIdempotency, error)
 	GetOrderRequestIdempotencyForUpdate(ctx context.Context, arg GetOrderRequestIdempotencyForUpdateParams) (OrderCreateRequestIdempotency, error)
 	GetOrderStats(ctx context.Context, arg GetOrderStatsParams) (GetOrderStatsRow, error)
 	GetOrderWithDetails(ctx context.Context, id int64) (GetOrderWithDetailsRow, error)

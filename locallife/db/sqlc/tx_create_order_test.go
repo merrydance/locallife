@@ -242,7 +242,169 @@ func TestCreateOrderTxTakeoutOrder(t *testing.T) {
 	require.Equal(t, int64(5500), result.Order.TotalAmount)
 }
 
-func TestCreateOrderTx_RequestIdempotencyReplayAndConflict(t *testing.T) {
+func TestCreateOrderTxPackagingSnapshotPersistsFeeAndItems(t *testing.T) {
+	ctx := context.Background()
+	user := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	option, err := testStore.CreateMerchantPackagingOption(ctx, CreateMerchantPackagingOptionParams{
+		MerchantID: merchant.ID,
+		Name:       "环保餐盒",
+		Price:      150,
+		IsEnabled:  true,
+	})
+	require.NoError(t, err)
+
+	result, err := testStore.CreateOrderTx(ctx, CreateOrderTxParams{
+		CreateOrderParams: CreateOrderParams{
+			OrderNo:           util.RandomString(20),
+			UserID:            user.ID,
+			MerchantID:        merchant.ID,
+			OrderType:         OrderTypeTakeaway,
+			Subtotal:          5000,
+			PackagingFee:      150,
+			TotalAmount:       5150,
+			Status:            OrderStatusPending,
+			FulfillmentStatus: FulfillmentStatusScheduled,
+		},
+		Items: []CreateOrderItemParams{{
+			DishID:    pgtype.Int8{Int64: 1, Valid: true},
+			Name:      "打包菜品",
+			UnitPrice: 5000,
+			Quantity:  1,
+			Subtotal:  5000,
+		}},
+		PackagingItems: []CreateOrderPackagingItemParams{{
+			PackagingOptionID: pgtype.Int8{Int64: option.ID, Valid: true},
+			Name:              option.Name,
+			UnitPrice:         option.Price,
+			Quantity:          1,
+			Subtotal:          option.Price,
+		}},
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(150), result.Order.PackagingFee)
+	require.Len(t, result.PackagingItems, 1)
+	require.Equal(t, result.Order.ID, result.PackagingItems[0].OrderID)
+	require.Equal(t, option.ID, result.PackagingItems[0].PackagingOptionID.Int64)
+	require.Equal(t, "环保餐盒", result.PackagingItems[0].Name)
+	require.Equal(t, int64(150), result.PackagingItems[0].Subtotal)
+
+	persisted, err := testStore.GetOrder(ctx, result.Order.ID)
+	require.NoError(t, err)
+	require.Equal(t, int64(150), persisted.PackagingFee)
+	snapshots, err := testStore.ListOrderPackagingItems(ctx, result.Order.ID)
+	require.NoError(t, err)
+	require.Len(t, snapshots, 1)
+	require.Equal(t, result.PackagingItems[0].ID, snapshots[0].ID)
+}
+
+func TestCreateOrderTxPackagingSnapshotRollbackOnError(t *testing.T) {
+	ctx := context.Background()
+	user := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	orderNo := util.RandomString(20)
+
+	_, err := testStore.CreateOrderTx(ctx, CreateOrderTxParams{
+		CreateOrderParams: CreateOrderParams{
+			OrderNo:           orderNo,
+			UserID:            user.ID,
+			MerchantID:        merchant.ID,
+			OrderType:         OrderTypeTakeaway,
+			Subtotal:          5000,
+			PackagingFee:      150,
+			TotalAmount:       5150,
+			Status:            OrderStatusPending,
+			FulfillmentStatus: FulfillmentStatusScheduled,
+		},
+		Items: []CreateOrderItemParams{{
+			DishID:    pgtype.Int8{Int64: 1, Valid: true},
+			Name:      "打包菜品",
+			UnitPrice: 5000,
+			Quantity:  1,
+			Subtotal:  5000,
+		}},
+		PackagingItems: []CreateOrderPackagingItemParams{{
+			Name:      "",
+			UnitPrice: 150,
+			Quantity:  1,
+			Subtotal:  150,
+		}},
+	})
+	require.Error(t, err)
+
+	_, getErr := testStore.GetOrderByOrderNo(ctx, orderNo)
+	require.ErrorIs(t, getErr, ErrRecordNotFound)
+}
+
+func TestCreateOrderTxPackagingIdempotencyReplayReturnsSnapshot(t *testing.T) {
+	ctx := context.Background()
+	user := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	option, err := testStore.CreateMerchantPackagingOption(ctx, CreateMerchantPackagingOptionParams{
+		MerchantID: merchant.ID,
+		Name:       "保温袋",
+		Price:      200,
+		IsEnabled:  true,
+	})
+	require.NoError(t, err)
+	idempotencyKey := "packaging-order-" + util.RandomString(12)
+	requestHash := "sha256:" + util.RandomString(64)
+
+	createParams := func(name string, price int64, hash string) CreateOrderTxParams {
+		return CreateOrderTxParams{
+			CreateOrderParams: CreateOrderParams{
+				OrderNo:           util.RandomString(20),
+				UserID:            user.ID,
+				MerchantID:        merchant.ID,
+				OrderType:         OrderTypeTakeaway,
+				Subtotal:          5000,
+				PackagingFee:      price,
+				TotalAmount:       5000 + price,
+				Status:            OrderStatusPending,
+				FulfillmentStatus: FulfillmentStatusScheduled,
+			},
+			Items: []CreateOrderItemParams{{
+				DishID:    pgtype.Int8{Int64: 1, Valid: true},
+				Name:      "自提菜品",
+				UnitPrice: 5000,
+				Quantity:  1,
+				Subtotal:  5000,
+			}},
+			PackagingItems: []CreateOrderPackagingItemParams{{
+				PackagingOptionID: pgtype.Int8{Int64: option.ID, Valid: true},
+				Name:              name,
+				UnitPrice:         price,
+				Quantity:          1,
+				Subtotal:          price,
+			}},
+			IdempotencyOperationScope: "customer_order_create",
+			IdempotencyActorUserID:    user.ID,
+			IdempotencyKey:            idempotencyKey,
+			IdempotencyRequestHash:    hash,
+		}
+	}
+
+	first, err := testStore.CreateOrderTx(ctx, createParams("保温袋", 200, requestHash))
+	require.NoError(t, err)
+	require.False(t, first.IdempotencyReplayed)
+	require.Len(t, first.PackagingItems, 1)
+
+	replayed, err := testStore.CreateOrderTx(ctx, createParams("当前已改名", 999, "sha256:"+util.RandomString(64)))
+	require.NoError(t, err)
+	require.True(t, replayed.IdempotencyReplayed)
+	require.Equal(t, first.Order.ID, replayed.Order.ID)
+	require.Equal(t, int64(200), replayed.Order.PackagingFee)
+	require.Len(t, replayed.PackagingItems, 1)
+	require.Equal(t, first.PackagingItems[0].ID, replayed.PackagingItems[0].ID)
+	require.Equal(t, "保温袋", replayed.PackagingItems[0].Name)
+	require.Equal(t, int64(200), replayed.PackagingItems[0].Subtotal)
+
+	snapshots, err := testStore.ListOrderPackagingItems(ctx, first.Order.ID)
+	require.NoError(t, err)
+	require.Len(t, snapshots, 1)
+}
+
+func TestCreateOrderTx_RequestIdempotencyReplayBoundOrderAndConflictBeforeBinding(t *testing.T) {
 	ctx := context.Background()
 	user := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
@@ -294,7 +456,24 @@ func TestCreateOrderTx_RequestIdempotencyReplayAndConflict(t *testing.T) {
 	require.Len(t, replayed.Items, 1)
 	require.Equal(t, first.Items[0].ID, replayed.Items[0].ID)
 
-	_, err = testStore.CreateOrderTx(ctx, createParams(util.RandomString(20), 6500, "sha256:"+util.RandomString(64)))
+	boundDifferentHashReplay, err := testStore.CreateOrderTx(ctx, createParams(util.RandomString(20), 6500, "sha256:"+util.RandomString(64)))
+	require.NoError(t, err)
+	require.True(t, boundDifferentHashReplay.IdempotencyReplayed)
+	require.Equal(t, first.Order.ID, boundDifferentHashReplay.Order.ID)
+
+	unboundKey := "takeout-order-unbound-" + util.RandomString(12)
+	unboundHash := "sha256:" + util.RandomString(64)
+	_, err = testStore.CreateOrderRequestIdempotency(ctx, CreateOrderRequestIdempotencyParams{
+		OperationScope: "customer_order_create",
+		ActorUserID:    user.ID,
+		IdempotencyKey: unboundKey,
+		RequestHash:    unboundHash,
+	})
+	require.NoError(t, err)
+
+	conflictParams := createParams(util.RandomString(20), 6500, "sha256:"+util.RandomString(64))
+	conflictParams.IdempotencyKey = unboundKey
+	_, err = testStore.CreateOrderTx(ctx, conflictParams)
 	require.Error(t, err)
 	statusCode, ok := IsTxRequestError(err)
 	require.True(t, ok)

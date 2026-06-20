@@ -65,6 +65,21 @@ type merchantOrderFeeBreakdownResponse struct {
 	RiderNetEarningsAmount    int64 `json:"rider_net_earnings_amount" example:"795"`
 }
 
+type orderPackagingItemResponse struct {
+	ID                int64  `json:"id" example:"30001"`
+	PackagingOptionID *int64 `json:"packaging_option_id,omitempty" example:"1001"`
+	Name              string `json:"name" example:"环保餐盒"`
+	UnitPrice         int64  `json:"unit_price" example:"150"`
+	Quantity          int16  `json:"quantity" example:"1"`
+	Subtotal          int64  `json:"subtotal" example:"150"`
+}
+
+type createOrderResponse struct {
+	orderResponse
+	PackagingFee   int64                        `json:"packaging_fee" example:"150"`
+	PackagingItems []orderPackagingItemResponse `json:"packaging_items,omitempty"`
+}
+
 func newMerchantOrderFeeBreakdownResponse(b logic.MerchantOrderFeeBreakdown) *merchantOrderFeeBreakdownResponse {
 	return &merchantOrderFeeBreakdownResponse{
 		FoodAmount:                b.FoodAmount,
@@ -82,6 +97,41 @@ func newMerchantOrderFeeBreakdownResponse(b logic.MerchantOrderFeeBreakdown) *me
 		RiderPaymentFeeAmount:     b.RiderPaymentFeeAmount,
 		RiderNetEarningsAmount:    b.RiderNetEarningsAmount,
 	}
+}
+
+func newCreateOrderResponse(result logic.CreateOrderCommandResult) (createOrderResponse, error) {
+	orderResp, err := newOrderResponse(result.Order)
+	if err != nil {
+		return createOrderResponse{}, err
+	}
+	return createOrderResponse{
+		orderResponse:  orderResp,
+		PackagingFee:   result.Order.PackagingFee,
+		PackagingItems: newOrderPackagingItemResponses(result.PackagingItems),
+	}, nil
+}
+
+func newOrderPackagingItemResponses(items []db.OrderPackagingItem) []orderPackagingItemResponse {
+	if len(items) == 0 {
+		return nil
+	}
+	resp := make([]orderPackagingItemResponse, 0, len(items))
+	for _, item := range items {
+		var packagingOptionID *int64
+		if item.PackagingOptionID.Valid {
+			value := item.PackagingOptionID.Int64
+			packagingOptionID = &value
+		}
+		resp = append(resp, orderPackagingItemResponse{
+			ID:                item.ID,
+			PackagingOptionID: packagingOptionID,
+			Name:              item.Name,
+			UnitPrice:         item.UnitPrice,
+			Quantity:          item.Quantity,
+			Subtotal:          item.Subtotal,
+		})
+	}
+	return resp
 }
 
 func (server *Server) loadMerchantOrderFeeBreakdowns(ctx context.Context, merchantID int64, orders []db.Order) (map[int64]logic.MerchantOrderFeeBreakdown, error) {

@@ -55,9 +55,9 @@ func dishWithCustomizationsFromDish(dish db.Dish) db.GetDishWithCustomizationsRo
 
 func expectNoPackagingPolicy(store *mockdb.MockStore) {
 	store.EXPECT().
-		CountActivePackagingDishesByMerchant(gomock.Any(), gomock.Any()).
+		GetMerchantPackagingSettings(gomock.Any(), gomock.Any()).
 		AnyTimes().
-		Return(int64(0), nil)
+		Return(db.MerchantPackagingSetting{}, db.ErrRecordNotFound)
 }
 
 func TestNewOrderResponseKeepsFourDigitPickupCodeVisible(t *testing.T) {
@@ -216,6 +216,42 @@ type replaceOrderCaptureCommandService struct {
 	input logic.ReplaceOrderInput
 }
 
+type createOrderCaptureCommandService struct {
+	replaceOrderErrorCommandService
+	input logic.CreateOrderCommandInput
+}
+
+func (s *createOrderCaptureCommandService) CreateOrder(_ context.Context, input logic.CreateOrderCommandInput) (logic.CreateOrderCommandResult, error) {
+	s.input = input
+	packagingOptionID := pgtype.Int8{}
+	if input.PackagingOptionID != nil {
+		packagingOptionID = pgtype.Int8{Int64: *input.PackagingOptionID, Valid: true}
+	}
+	return logic.CreateOrderCommandResult{
+		Order: db.Order{
+			ID:                123,
+			OrderNo:           "ORD-CREATE-PACKAGING",
+			UserID:            input.UserID,
+			MerchantID:        input.MerchantID,
+			OrderType:         input.OrderType,
+			PackagingFee:      150,
+			TotalAmount:       2150,
+			Status:            db.OrderStatusPending,
+			FulfillmentStatus: db.FulfillmentStatusScheduled,
+			CreatedAt:         time.Now(),
+		},
+		PackagingItems: []db.OrderPackagingItem{{
+			ID:                321,
+			OrderID:           123,
+			PackagingOptionID: packagingOptionID,
+			Name:              "环保餐盒",
+			UnitPrice:         150,
+			Quantity:          1,
+			Subtotal:          150,
+		}},
+	}, nil
+}
+
 func (s *replaceOrderCaptureCommandService) ReplaceOrder(_ context.Context, input logic.ReplaceOrderInput) (logic.ReplaceOrderResult, error) {
 	s.input = input
 	return logic.ReplaceOrderResult{
@@ -279,6 +315,50 @@ func TestReplaceOrderPassesClientIPToLogic(t *testing.T) {
 	require.Equal(t, "203.0.113.77", captureSvc.input.ClientIP)
 	require.Equal(t, user.ID, captureSvc.input.UserID)
 	require.Equal(t, int64(123), captureSvc.input.OrderID)
+}
+
+func TestCreateOrderAPIPassesPackagingIdentityToLogic(t *testing.T) {
+	user, _ := randomUser(t)
+	server := newTestServer(t, nil)
+	captureSvc := &createOrderCaptureCommandService{}
+	server.orderCommandSvc = captureSvc
+
+	body := `{"merchant_id":456,"order_type":"takeaway","packaging_option_id":789,"packaging_selection_version":12,"items":[{"dish_id":1001,"quantity":1}]}`
+	req, err := http.NewRequest(http.MethodPost, "/v1/orders", strings.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Idempotency-Key", " create-packaging-api ")
+	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusCreated, recorder.Code)
+	require.Equal(t, user.ID, captureSvc.input.UserID)
+	require.Equal(t, int64(456), captureSvc.input.MerchantID)
+	require.NotNil(t, captureSvc.input.PackagingOptionID)
+	require.Equal(t, int64(789), *captureSvc.input.PackagingOptionID)
+	require.NotNil(t, captureSvc.input.PackagingSelectionVersion)
+	require.Equal(t, int64(12), *captureSvc.input.PackagingSelectionVersion)
+	require.Equal(t, "create-packaging-api", captureSvc.input.IdempotencyKey)
+
+	var resp struct {
+		PackagingFee   int64 `json:"packaging_fee"`
+		PackagingItems []struct {
+			ID                int64  `json:"id"`
+			PackagingOptionID int64  `json:"packaging_option_id"`
+			Name              string `json:"name"`
+			UnitPrice         int64  `json:"unit_price"`
+			Quantity          int16  `json:"quantity"`
+			Subtotal          int64  `json:"subtotal"`
+		} `json:"packaging_items"`
+	}
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, int64(150), resp.PackagingFee)
+	require.Len(t, resp.PackagingItems, 1)
+	require.Equal(t, int64(789), resp.PackagingItems[0].PackagingOptionID)
+	require.Equal(t, "环保餐盒", resp.PackagingItems[0].Name)
+	require.Equal(t, int64(150), resp.PackagingItems[0].Subtotal)
 }
 
 func TestReplaceOrderInvalidRequestReturnsActionableChinese(t *testing.T) {
@@ -442,6 +522,14 @@ func TestCreateOrderAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetOrderRequestIdempotency(gomock.Any(), db.GetOrderRequestIdempotencyParams{
+						OperationScope: "customer_order_create",
+						ActorUserID:    user.ID,
+						IdempotencyKey: "order-create-api-1",
+					}).
+					Times(1).
+					Return(db.OrderCreateRequestIdempotency{}, db.ErrRecordNotFound)
 				store.EXPECT().
 					GetMerchant(gomock.Any(), merchant.ID).
 					Times(1).
