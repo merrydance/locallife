@@ -293,6 +293,12 @@ Page({
       return
     }
 
+    const targetDish = this.data.loadedDishes.find((dish) => dish.id === id)
+    if (targetDish?.is_packaging) {
+      wx.navigateTo({ url: '/pages/merchant/packaging/index' })
+      return
+    }
+
     wx.navigateTo({ url: `./edit/index?id=${id}` })
   },
 
@@ -390,6 +396,10 @@ Page({
 
     const targetDish = this.data.loadedDishes.find((dish) => dish.id === id)
     if (!targetDish || targetDish.deletePending) {
+      return
+    }
+    if (targetDish.is_packaging) {
+      wx.showToast({ title: '包装菜品请在包装设置中维护', icon: 'none' })
       return
     }
 

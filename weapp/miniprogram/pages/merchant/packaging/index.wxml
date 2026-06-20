@@ -1,0 +1,177 @@
+<custom-navbar title="包装设置" showBack="{{true}}" />
+
+<view
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
+  style="--page-shell-nav-height: {{navBarHeight}}px;"
+>
+  <view wx:if="{{accessReady && accessDenied}}" class="state-block">
+    <t-empty icon="error-circle" description="当前账号无商户权限，请返回“我的”切换身份" />
+  </view>
+
+  <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
+    <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
+    <t-button theme="primary" bind:tap="onRetryAccess">重新校验</t-button>
+  </view>
+
+  <view wx:elif="{{!accessReady}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="校验商户权限中..." vertical />
+  </view>
+
+  <block wx:else>
+    <view wx:if="{{initialLoading}}" class="state-block">
+      <t-loading theme="circular" size="40rpx" text="加载包装设置中..." vertical />
+    </view>
+
+    <view wx:elif="{{initialError}}" class="state-block">
+      <t-empty icon="error-circle" description="{{initialErrorMessage || '包装设置加载失败，请重试'}}" />
+      <t-button theme="primary" bind:tap="onRetry">重试</t-button>
+    </view>
+
+    <block wx:else>
+      <view class="page-content">
+        <view wx:if="{{refreshErrorMessage}}" class="notice-banner">
+          <t-notice-bar theme="warning" visible="{{true}}" content="{{refreshErrorMessage}}">
+            <text slot="operation" class="notice-banner-operation" bind:tap="onRetryRefresh">重试</text>
+          </t-notice-bar>
+        </view>
+
+        <view wx:if="{{saveErrorMessage}}" class="notice-banner">
+          <t-notice-bar theme="error" visible="{{true}}" content="{{saveErrorMessage}}" />
+        </view>
+
+        <merchant-section-card title="规则" bodyPadding="none">
+          <t-cell-group>
+            <t-cell title="启用包装" description="{{form.enabled ? '顾客下单时会进入包装选择' : '顾客下单时不收取包装费用'}}">
+              <t-switch slot="note" value="{{form.enabled}}" disabled="{{saving}}" data-field="enabled" bind:change="onToggleSetting" />
+            </t-cell>
+            <t-cell title="必须选择" description="{{form.required ? '适用订单需选择包装方式后才能提交' : '顾客可不选择包装方式'}}">
+              <t-switch slot="note" value="{{form.required}}" disabled="{{saving || !form.enabled}}" data-field="required" bind:change="onToggleSetting" />
+            </t-cell>
+          </t-cell-group>
+        </merchant-section-card>
+
+        <merchant-section-card title="适用订单">
+          <view class="order-type-list">
+            <view
+              wx:for="{{orderTypeOptions}}"
+              wx:key="key"
+              class="order-type-row"
+            >
+              <view class="order-type-main">
+                <text class="order-type-title">{{item.label}}</text>
+                <text class="order-type-desc">{{item.desc}}</text>
+              </view>
+              <t-check-tag
+                checked="{{form.applicable_order_types.indexOf(item.key) >= 0}}"
+                content="{{form.applicable_order_types.indexOf(item.key) >= 0 ? '已适用' : '未适用'}}"
+                disabled="{{saving || !form.enabled}}"
+                data-order-type="{{item.key}}"
+                bind:change="onToggleOrderType"
+              />
+            </view>
+          </view>
+        </merchant-section-card>
+
+        <merchant-section-card title="包装方式" subtitle="当前 {{form.options.length}} 项">
+          <view class="option-list">
+            <view wx:for="{{form.options}}" wx:key="local_id" class="option-editor {{item.deleted ? 'option-editor--deleted' : ''}}">
+              <view class="option-editor__head">
+                <view class="option-editor__title-wrap">
+                  <text class="option-editor__title">{{item.name || '未命名包装'}}</text>
+                  <text class="option-editor__state">{{item.deleted ? '待删除' : (item.is_enabled ? '启用' : '停用')}}</text>
+                </view>
+                <view class="option-editor__actions">
+                  <t-button
+                    wx:if="{{item.deleted}}"
+                    size="extra-small"
+                    theme="primary"
+                    variant="text"
+                    icon="rollback"
+                    disabled="{{saving}}"
+                    data-local-id="{{item.local_id}}"
+                    bind:tap="onRestoreOption"
+                  >
+                    恢复
+                  </t-button>
+                  <t-button
+                    wx:else
+                    size="extra-small"
+                    theme="danger"
+                    variant="text"
+                    shape="circle"
+                    icon="remove"
+                    disabled="{{saving}}"
+                    data-local-id="{{item.local_id}}"
+                    bind:tap="onRemoveOption"
+                  />
+                </view>
+              </view>
+
+              <block wx:if="{{!item.deleted}}">
+                <t-input
+                  label="名称"
+                  value="{{item.name}}"
+                  maxlength="50"
+                  disabled="{{saving}}"
+                  data-local-id="{{item.local_id}}"
+                  data-field="name"
+                  bind:change="onOptionInputChange"
+                />
+                <t-input
+                  label="费用"
+                  type="digit"
+                  suffix="元"
+                  value="{{item.price_yuan}}"
+                  placeholder="0.00"
+                  disabled="{{saving}}"
+                  data-local-id="{{item.local_id}}"
+                  data-field="price_yuan"
+                  bind:change="onOptionInputChange"
+                  bind:blur="onOptionPriceBlur"
+                />
+                <t-input
+                  label="说明"
+                  value="{{item.description}}"
+                  maxlength="200"
+                  placeholder="如餐盒、袋子或环保餐具"
+                  disabled="{{saving}}"
+                  data-local-id="{{item.local_id}}"
+                  data-field="description"
+                  bind:change="onOptionInputChange"
+                />
+                <view class="option-editor__footer">
+                  <t-cell title="启用">
+                    <t-switch slot="note" value="{{item.is_enabled}}" disabled="{{saving}}" data-local-id="{{item.local_id}}" data-field="is_enabled" bind:change="onOptionSwitchChange" />
+                  </t-cell>
+                  <t-button
+                    size="small"
+                    theme="{{item.id > 0 && form.default_option_id === item.id ? 'primary' : 'default'}}"
+                    variant="{{item.id > 0 && form.default_option_id === item.id ? 'base' : 'outline'}}"
+                    icon="{{item.id > 0 && form.default_option_id === item.id ? 'check' : 'star'}}"
+                    disabled="{{saving || !item.is_enabled || item.id <= 0}}"
+                    data-local-id="{{item.local_id}}"
+                    bind:tap="onSelectDefaultOption"
+                  >
+                    {{item.id > 0 && form.default_option_id === item.id ? '默认' : '设为默认'}}
+                  </t-button>
+                </view>
+              </block>
+            </view>
+
+            <view wx:if="{{!form.options.length}}" class="empty-inline">
+              <t-empty description="暂无包装方式" />
+            </view>
+          </view>
+
+          <view class="section-action">
+            <t-button theme="primary" size="small" icon="add" disabled="{{saving}}" bind:tap="onAddOption">新增包装方式</t-button>
+          </view>
+        </merchant-section-card>
+
+        <view class="form-actions">
+          <t-button theme="primary" loading="{{saving}}" disabled="{{saving || !hasChanges}}" bind:tap="onSave">保存包装设置</t-button>
+        </view>
+      </view>
+    </block>
+  </block>
+</view>

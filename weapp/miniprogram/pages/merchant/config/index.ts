@@ -37,6 +37,7 @@ const CONFIG_SECTIONS: ConfigSection[] = [
     items: [
       { id: 'dishes', title: '菜品管理', desc: '维护菜品、规格和上下架状态', path: '/pages/merchant/dishes/index' },
       { id: 'dish-categories', title: '菜品分类', desc: '维护菜单分类、排序和展示结构', path: '/pages/merchant/dishes/categories/index' },
+      { id: 'packaging', title: '包装设置', desc: '维护包装规则、适用订单和包装费用', path: '/pages/merchant/packaging/index' },
       { id: 'combos', title: '套餐管理', desc: '维护套餐内容、价格和售卖状态', path: '/pages/merchant/combos/index' },
       { id: 'inventory', title: '库存管理', desc: '维护库存状态、余量和相关经营开关', path: '/pages/merchant/inventory/index' },
       { id: 'tables', title: '桌台管理', desc: '维护桌台信息、图片和二维码能力', path: '/pages/merchant/tables/index' }
