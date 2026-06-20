@@ -163,7 +163,7 @@
 | 编号 | 类型 | 影响面 | 状态 |
 | --- | --- | --- | --- |
 | OPA-001 | 前后端契约漂移 | 区域列表状态 | 已修复：`5b642fef` |
-| OPA-002 | 小程序承诺但后端不支持 | 商户搜索 keyword | 已确认 |
+| OPA-002 | 小程序承诺但后端不支持 | 商户搜索 keyword | 已修复：`369b33e3` |
 | OPA-003 | 小程序承诺但后端不支持 | 骑手搜索 keyword、API 类型 online_status | 已确认 |
 | OPA-004 | 前后端响应 DTO 漂移 | 分析页区域体检 | 已修复：本次专项修复 |
 | OPA-005 | 后端权限边界缺口 | 峰时时段列表跨区域读取 | 已修复：`36c91afa` |
@@ -322,7 +322,7 @@ SQL 证据：
 
 ### OPA-002: 商户列表提供“搜索商户名称、电话”，但后端不绑定 `keyword`
 
-- 状态：已确认
+- 状态：已修复：`369b33e3`
 - 风险级别：G1
 - 类型：小程序能力承诺漂移、查询参数未闭环
 - 影响页面：`weapp/miniprogram/pages/operator/merchants/index`
@@ -361,6 +361,17 @@ SQL 证据：
 
 - 后端：补 `GET /v1/operator/merchants?keyword=...` 的 handler 测试，覆盖命中、未命中、跨区域不可见、状态组合和分页 count。
 - 小程序：搜索商户名称、手机号后，确认返回列表和总数均被过滤；弱网重试不保留错误搜索结果。
+
+#### 本 finding 已验证与未验证
+
+已验证：
+- 后端新增 `keyword` 查询契约，trim 后最长 50 字符，匹配商户名称和手机号。
+- SQL/sqlc 新增 `ListOperatorMerchants` / `CountOperatorMerchants`，由数据库按 `region_ids + statuses + keyword` 同一条件完成列表与 count。
+- handler 不再按区域循环后内存合并分页，分页顺序和 total 由同一查询条件保证。
+- 小程序 service 发送 trim 后 keyword；页面新增 `merchantListRequestSeq`，弱网或快速切换搜索条件时旧响应/旧错误不会覆盖新结果。
+
+未验证：
+- 未在微信开发者工具或真机手工模拟慢网输入、清空和翻页；自动化已覆盖契约、编译与 lint。
 
 ### OPA-003: 骑手列表搜索与在线筛选类型没有后端支持
 
@@ -1060,6 +1071,21 @@ SQL 证据：
 | 非目标 | 未扩展后端区域统计 DTO；未新增趋势/绩效/健康度分析；未重构排行榜或实时统计接口；未处理其它 operator 页面中的搜索/筛选漂移 |
 | 剩余风险 | 区域体检仍由实时统计 + region stats 组合得出，两个读接口不是同一时刻快照；如果未来要展示强一致 BI 指标，需另行设计统一统计口径或后端聚合接口。当前页面已通过请求序号控制避免旧响应覆盖新选区，但仍属于近实时而非事务一致视图 |
 
+#### OPA-002 完成复核：商户列表搜索契约闭环
+
+| 字段 | 记录 |
+| --- | --- |
+| 完成范围 | `OPA-002-A/B/C/D`；业务提交 `369b33e3 fix: support operator merchant keyword search`；涉及 `locallife/api/operator_merchant_rider.go`、`locallife/api/operator_merchant_rider_test.go`、`locallife/db/query/merchant.sql`、`locallife/db/sqlc/merchant.sql.go`、`locallife/db/sqlc/merchant_test.go`、`locallife/db/sqlc/querier.go`、`locallife/db/mock/store.go`、Swagger 生成物、`weapp/miniprogram/pages/operator/_services/operator-merchant-management.ts`、`weapp/miniprogram/pages/operator/merchants/index.ts`、`weapp/scripts/check-operator-merchant-search-contract.test.js`、`weapp/package.json` |
+| 设计目标 | 已达成：`GET /v1/operator/merchants` 明确支持 `keyword`；搜索字段限定为商户名称和手机号；keyword 前后空白会被后端和小程序 service trim；列表与 total 使用同一组 `region_ids/statuses/keyword` 条件；`status=approved` 仍包含 `approved + active`；小程序不再承诺后端不存在的搜索能力 |
+| 设计修正 | 实现时没有继续沿用“按区域/状态循环查询后内存合并分页”的旧路径，而是新增 `ListOperatorMerchants` / `CountOperatorMerchants` 统一 SQLC 查询。这样数据库负责跨区域排序、分页和 count，减少多区域分页和 keyword/count 条件漂移 |
+| 时序 | 小程序页面新增 `merchantListRequestSeq`；刷新搜索允许启动新请求，不再被旧 `loading=true` 阻塞；旧搜索响应或旧错误返回时若序号过期则丢弃，避免慢网下旧关键词覆盖新关键词结果 |
+| 幂等 | 本项为读路径，不新增写入和自动重试；重复搜索只重新读取同一后端真值，不产生副作用；分页请求保持 keyword/status/region 条件一致 |
+| 越权 | 后端仍先通过当前登录 operator 解析可管理区域或校验指定 `region_id`，再把授权后的 `RegionIDs` 传入 SQL；keyword 只在已授权区域集合内过滤，不能扩大可见商户范围；跨区域不可见由 SQLC 临时库测试和 API mock 参数共同覆盖 |
+| 小程序复核 | `loadOperatorMerchantListPageData()` 发送 trim 后 keyword；页面搜索、清空、状态切换和刷新共用 `loadMerchants()`，请求序号统一收住弱网乱序；新增 `weapp/scripts/check-operator-merchant-search-contract.test.js` 锁定 service trim 和 stale response guard |
+| 回归 | 红灯：`PATH=/usr/local/go/bin:$PATH go test ./db/sqlc -run TestListOperatorMerchants_SearchesByKeywordWithinManagedRegions -count=1` 修复前因查询方法不存在失败；`PATH="$HOME/.local/bin:$PATH" node scripts/check-operator-merchant-search-contract.test.js` 修复前因 service 未 trim 失败。绿灯：临时库 `TEST_DB_SOURCE="postgresql:///<tmp>?sslmode=disable&host=/var/run/postgresql" PATH=/usr/local/go/bin:$PATH go test ./db/sqlc -run TestListOperatorMerchants_SearchesByKeywordWithinManagedRegions -count=1` 通过；`PATH=/usr/local/go/bin:$PATH go test ./api -run 'TestListOperatorMerchantsAPI\|TestGetOperatorMerchantSummaryAPI\|TestGetOperatorMerchantAPI\|TestGetOperatorMerchantCapabilitiesAPI\|TestUpdateOperatorMerchantCapabilitiesAPI' -count=1` 通过；`PATH="$HOME/.local/bin:$PATH" npm run check:operator-merchant-search-contract` 通过；`PATH="$HOME/.local/bin:$PATH" npm run compile` 通过；`PATH="$HOME/.local/bin:$PATH" npm run lint` 通过；`PATH=/usr/local/go/bin:$PATH make check-generated` 通过；`git diff --check` 通过 |
+| 非目标 | 未支持 `sort_by/sort_order/start_date/end_date`；未引入全文检索或索引迁移；未改变商户审核状态流；未改普通消费者搜索；未处理 OPA-003 骑手 keyword/online_status 漂移 |
+| 剩余风险 | 默认本地 `locallife_test` 测试库当前停在不存在于本 worktree 的 migration version 276，直接跑 `go test ./db/sqlc` 会被 `no migration found for version 276: read down for version 276 .: file does not exist` 阻断；本项已用全新临时库跑通 SQLC focused。未做微信开发者工具手工慢网回归，后续可在 OPA-003 后统一做运营商列表页真机回归 |
+
 ## 后续审计工作记录
 
 后续继续在本节追加全量盘点结果。每个能力或页面至少记录：
@@ -1070,3 +1096,4 @@ SQL 证据：
 | OPA-005 | 峰时时段 | `/v1/operator/regions/:region_id/peak-hours` 列表授权 | `delivery_fee.go`, `delivery_fee_test.go` | `operator/region/config`, `operator/timeslot/index`, `delivery-fee.ts` | 已修复：`36c91afa` | 已完成复核 |
 | OPA-006 | 骑手管理/实时统计 | `/v1/operator/stats/realtime`、`/v1/operator/riders` 生命周期口径 | `operator_realtime.go`, `operator_merchant_rider.go`, `operator_realtime_test.go`, `operator_merchant_rider_test.go` | `operator/riders/index`, `operator-rider-management.ts`, `operator-analytics-dashboard.ts` | 已修复：`35df01de` | 已完成复核 |
 | OPA-007 | 代取费配置 | `/v1/delivery-fee/regions/:region_id/config` PATCH/POST 保存语义 | `delivery_fee.go`, `delivery_fee_test.go`, Swagger 生成物 | `operator/delivery-fee/index`, `delivery-fee.ts`, `operator-region-config.ts` | 已修复：`e50b8503`、`6bf2fef9` | 已完成复核 |
+| OPA-002 | 商户管理 | `/v1/operator/merchants` keyword 搜索 | `operator_merchant_rider.go`, `merchant.sql`, `merchant_test.go`, Swagger 生成物 | `operator/merchants/index`, `operator-merchant-management.ts`, `check-operator-merchant-search-contract.test.js` | 已修复：`369b33e3` | 已完成复核 |
