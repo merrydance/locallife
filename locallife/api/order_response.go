@@ -53,6 +53,7 @@ type merchantOrderFeeBreakdownResponse struct {
 	MerchantDiscountAmount    int64 `json:"merchant_discount_amount" example:"300"`
 	VoucherDiscountAmount     int64 `json:"voucher_discount_amount" example:"200"`
 	FoodPayableAmount         int64 `json:"food_payable_amount" example:"9500"`
+	PackagingFeeAmount        int64 `json:"packaging_fee_amount" example:"150"`
 	DeliveryFeeAmount         int64 `json:"delivery_fee_amount" example:"800"`
 	DeliveryFeeDiscountAmount int64 `json:"delivery_fee_discount_amount" example:"0"`
 	DeliveryPayableAmount     int64 `json:"delivery_payable_amount" example:"800"`
@@ -76,8 +77,6 @@ type orderPackagingItemResponse struct {
 
 type createOrderResponse struct {
 	orderResponse
-	PackagingFee   int64                        `json:"packaging_fee" example:"150"`
-	PackagingItems []orderPackagingItemResponse `json:"packaging_items,omitempty"`
 }
 
 func newMerchantOrderFeeBreakdownResponse(b logic.MerchantOrderFeeBreakdown) *merchantOrderFeeBreakdownResponse {
@@ -86,6 +85,7 @@ func newMerchantOrderFeeBreakdownResponse(b logic.MerchantOrderFeeBreakdown) *me
 		MerchantDiscountAmount:    b.MerchantDiscountAmount,
 		VoucherDiscountAmount:     b.VoucherDiscountAmount,
 		FoodPayableAmount:         b.FoodPayableAmount,
+		PackagingFeeAmount:        b.PackagingFeeAmount,
 		DeliveryFeeAmount:         b.DeliveryFeeAmount,
 		DeliveryFeeDiscountAmount: b.DeliveryFeeDiscountAmount,
 		DeliveryPayableAmount:     b.DeliveryPayableAmount,
@@ -104,11 +104,9 @@ func newCreateOrderResponse(result logic.CreateOrderCommandResult) (createOrderR
 	if err != nil {
 		return createOrderResponse{}, err
 	}
-	return createOrderResponse{
-		orderResponse:  orderResp,
-		PackagingFee:   result.Order.PackagingFee,
-		PackagingItems: newOrderPackagingItemResponses(result.PackagingItems),
-	}, nil
+	orderResp.PackagingFee = result.Order.PackagingFee
+	orderResp.PackagingItems = newOrderPackagingItemResponses(result.PackagingItems)
+	return createOrderResponse{orderResponse: orderResp}, nil
 }
 
 func newOrderPackagingItemResponses(items []db.OrderPackagingItem) []orderPackagingItemResponse {

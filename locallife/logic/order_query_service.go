@@ -32,6 +32,11 @@ func (s *OrderService) GetUserOrder(ctx context.Context, input GetUserOrderQuery
 		return GetUserOrderQueryResult{}, err
 	}
 
+	packagingItems, err := s.store.ListOrderPackagingItems(ctx, order.ID)
+	if err != nil {
+		return GetUserOrderQueryResult{}, err
+	}
+
 	etaMinutes, estimatedDeliveryAt := s.buildGetUserOrderDeliveryETA(ctx, order)
 
 	var wechatTransactionID *string
@@ -51,6 +56,7 @@ func (s *OrderService) GetUserOrder(ctx context.Context, input GetUserOrderQuery
 	return GetUserOrderQueryResult{
 		Order:               order,
 		Items:               items,
+		PackagingItems:      packagingItems,
 		DeliveryEtaMinutes:  etaMinutes,
 		EstimatedDeliveryAt: estimatedDeliveryAt,
 		WechatTransactionID: wechatTransactionID,
@@ -77,6 +83,7 @@ func (s *OrderService) buildUserOrderFeeBreakdown(ctx context.Context, order db.
 			Subtotal:            order.Subtotal,
 			DiscountAmount:      order.DiscountAmount,
 			VoucherAmount:       order.VoucherAmount,
+			PackagingFee:        order.PackagingFee,
 			DeliveryFee:         order.DeliveryFee,
 			DeliveryFeeDiscount: order.DeliveryFeeDiscount,
 			TotalAmount:         order.TotalAmount,
@@ -169,7 +176,27 @@ func (s *OrderService) ListUserOrders(ctx context.Context, input ListUserOrdersQ
 		return ListUserOrdersQueryResult{}, err
 	}
 
-	return ListUserOrdersQueryResult{Orders: orders, TotalCount: total}, nil
+	packagingItemsByOrderID := map[int64][]db.OrderPackagingItem{}
+	if len(orders) > 0 {
+		orderIDs := make([]int64, len(orders))
+		for i, order := range orders {
+			orderIDs[i] = order.ID
+		}
+
+		packagingItems, err := s.store.ListOrderPackagingItemsByOrderIDs(ctx, orderIDs)
+		if err != nil {
+			return ListUserOrdersQueryResult{}, err
+		}
+		for _, item := range packagingItems {
+			packagingItemsByOrderID[item.OrderID] = append(packagingItemsByOrderID[item.OrderID], item)
+		}
+	}
+
+	return ListUserOrdersQueryResult{
+		Orders:                  orders,
+		PackagingItemsByOrderID: packagingItemsByOrderID,
+		TotalCount:              total,
+	}, nil
 }
 
 func (s *OrderService) GetMerchantOrder(ctx context.Context, input GetMerchantOrderQueryInput) (GetMerchantOrderQueryResult, error) {
@@ -199,9 +226,15 @@ func (s *OrderService) GetMerchantOrder(ctx context.Context, input GetMerchantOr
 		return GetMerchantOrderQueryResult{}, err
 	}
 
+	packagingItems, err := s.store.ListOrderPackagingItems(ctx, order.ID)
+	if err != nil {
+		return GetMerchantOrderQueryResult{}, err
+	}
+
 	return GetMerchantOrderQueryResult{
-		Order: order,
-		Items: items,
+		Order:          order,
+		Items:          items,
+		PackagingItems: packagingItems,
 	}, nil
 }
 
@@ -244,6 +277,7 @@ func (s *OrderService) ListMerchantOrders(ctx context.Context, input ListMerchan
 	}
 
 	itemsByOrderID := map[int64][]db.ListOrderItemsWithDishByOrderIDsRow{}
+	packagingItemsByOrderID := map[int64][]db.OrderPackagingItem{}
 	if len(orders) > 0 {
 		orderIDs := make([]int64, len(orders))
 		for i, order := range orders {
@@ -257,9 +291,22 @@ func (s *OrderService) ListMerchantOrders(ctx context.Context, input ListMerchan
 		for _, item := range items {
 			itemsByOrderID[item.OrderID] = append(itemsByOrderID[item.OrderID], item)
 		}
+
+		packagingItems, err := s.store.ListOrderPackagingItemsByOrderIDs(ctx, orderIDs)
+		if err != nil {
+			return ListMerchantOrdersQueryResult{}, err
+		}
+		for _, item := range packagingItems {
+			packagingItemsByOrderID[item.OrderID] = append(packagingItemsByOrderID[item.OrderID], item)
+		}
 	}
 
-	return ListMerchantOrdersQueryResult{Orders: orders, ItemsByOrderID: itemsByOrderID, TotalCount: total}, nil
+	return ListMerchantOrdersQueryResult{
+		Orders:                  orders,
+		ItemsByOrderID:          itemsByOrderID,
+		PackagingItemsByOrderID: packagingItemsByOrderID,
+		TotalCount:              total,
+	}, nil
 }
 
 func (s *OrderService) GetMerchantOrderStats(ctx context.Context, input GetMerchantOrderStatsQueryInput) (GetMerchantOrderStatsQueryResult, error) {

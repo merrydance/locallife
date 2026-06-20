@@ -40219,6 +40219,10 @@ const docTemplate = `{
                     "type": "integer",
                     "example": 8968
                 },
+                "packaging_fee_amount": {
+                    "type": "integer",
+                    "example": 150
+                },
                 "payment_channel_fee_amount": {
                     "type": "integer",
                     "example": 57
@@ -40731,6 +40735,16 @@ const docTemplate = `{
                 },
                 "overtime": {
                     "type": "boolean"
+                },
+                "packaging_fee": {
+                    "type": "integer",
+                    "example": 150
+                },
+                "packaging_items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.orderPackagingItemResponse"
+                    }
                 },
                 "paid_at": {
                     "type": "string",
@@ -42501,6 +42515,16 @@ const docTemplate = `{
                 },
                 "overtime": {
                     "type": "boolean"
+                },
+                "packaging_fee": {
+                    "type": "integer",
+                    "example": 150
+                },
+                "packaging_items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.orderPackagingItemResponse"
+                    }
                 },
                 "paid_at": {
                     "type": "string",

@@ -189,56 +189,58 @@ type orderPaymentContextResponse struct {
 const orderCreateIdempotencyHeader = "Idempotency-Key"
 
 type orderResponse struct {
-	ID                   int64               `json:"id" example:"100001"`
-	OrderNo              string              `json:"order_no" example:"ORD20251201123456"`
-	UserID               int64               `json:"user_id" example:"10001"`
-	MerchantID           int64               `json:"merchant_id" example:"20001"`
-	MerchantName         string              `json:"merchant_name,omitempty" example:"张三餐厅"`
-	OrderType            string              `json:"order_type" enums:"takeout,dine_in,takeaway,reservation" example:"takeout"`
-	AddressID            *int64              `json:"address_id,omitempty" example:"5001"`
-	DeliveryFee          int64               `json:"delivery_fee" example:"500"`
-	DeliveryDistance     *int32              `json:"delivery_distance,omitempty" example:"2500"`
-	DeliveryEtaMinutes   *int32              `json:"delivery_eta_minutes,omitempty" example:"38"`
-	EstimatedDeliveryAt  *time.Time          `json:"estimated_delivery_at,omitempty" example:"2025-12-01T12:30:00Z"`
-	DispatchOrderID      *int64              `json:"dispatch_order_id,omitempty"`
-	FlowID               *int64              `json:"flow_id,omitempty"`
-	PickupCode           *string             `json:"pickup_code,omitempty"`
-	PickupCodeMasked     *string             `json:"pickup_code_masked,omitempty"`
-	TableID              *int64              `json:"table_id,omitempty" example:"301"`
-	ReservationID        *int64              `json:"reservation_id,omitempty" example:"8001"`
-	Subtotal             int64               `json:"subtotal" example:"5760"`
-	DiscountAmount       int64               `json:"discount_amount" example:"500"`
-	DeliveryFeeDiscount  int64               `json:"delivery_fee_discount" example:"200"`
-	TotalAmount          int64               `json:"total_amount" example:"5760"`
-	Status               string              `json:"status" enums:"pending,paid,preparing,ready,courier_accepted,picked,delivering,rider_delivered,user_delivered,completed,cancelled" example:"paid"`
-	StatusHint           *string             `json:"status_hint,omitempty"`
-	Badges               []orderBadge        `json:"badges,omitempty"`
-	Actions              []string            `json:"actions,omitempty"`
-	ExceptionState       *string             `json:"exception_state,omitempty"`
-	ClaimChannel         *string             `json:"claim_channel,omitempty"`
-	Overtime             bool                `json:"overtime,omitempty"`
-	FulfillmentStatus    string              `json:"fulfillment_status" enums:"scheduled,pending_kitchen,preparing,ready,completed,cancelled" example:"pending_kitchen"`
-	PaymentMethod        *string             `json:"payment_method,omitempty" enums:"wechat,balance" example:"wechat"`
-	Notes                *string             `json:"notes,omitempty" example:"不要香菜"`
-	Items                []orderItemResponse `json:"items,omitempty"`
-	PaidAt               *time.Time          `json:"paid_at,omitempty" example:"2025-12-01T12:30:00Z"`
-	PrepStartAt          *time.Time          `json:"prep_start_at,omitempty"`
-	ReadyAt              *time.Time          `json:"ready_at,omitempty"`
-	CourierAcceptAt      *time.Time          `json:"courier_accept_at,omitempty"`
-	PickedAt             *time.Time          `json:"picked_at,omitempty"`
-	RiderDeliveredAt     *time.Time          `json:"rider_delivered_at,omitempty"`
-	UserDeliveredAt      *time.Time          `json:"user_delivered_at,omitempty"`
-	AutoUserDeliveredAt  *time.Time          `json:"auto_user_delivered_at,omitempty"`
-	CompletedAt          *time.Time          `json:"completed_at,omitempty" example:"2025-12-01T13:15:00Z"`
-	CancelledAt          *time.Time          `json:"cancelled_at,omitempty" example:"2025-12-01T12:25:00Z"`
-	CancelReason         *string             `json:"cancel_reason,omitempty" example:"商品缺货"`
-	ReplacedByOrderID    *int64              `json:"replaced_by_order_id,omitempty" example:"100009"`
-	CreatedAt            time.Time           `json:"created_at" example:"2025-12-01T12:20:00Z"`
-	UpdatedAt            *time.Time          `json:"updated_at,omitempty" example:"2025-12-01T12:30:00Z"`
-	MerchantPhone        *string             `json:"merchant_phone,omitempty" example:"13800138000"`
-	DeliveryContactName  *string             `json:"delivery_contact_name,omitempty" example:"张三"`
-	DeliveryContactPhone *string             `json:"delivery_contact_phone,omitempty" example:"13800138000"`
-	DeliveryAddress      *string             `json:"delivery_address,omitempty" example:"北京市朝阳区某小区1号楼"`
+	ID                   int64                        `json:"id" example:"100001"`
+	OrderNo              string                       `json:"order_no" example:"ORD20251201123456"`
+	UserID               int64                        `json:"user_id" example:"10001"`
+	MerchantID           int64                        `json:"merchant_id" example:"20001"`
+	MerchantName         string                       `json:"merchant_name,omitempty" example:"张三餐厅"`
+	OrderType            string                       `json:"order_type" enums:"takeout,dine_in,takeaway,reservation" example:"takeout"`
+	AddressID            *int64                       `json:"address_id,omitempty" example:"5001"`
+	DeliveryFee          int64                        `json:"delivery_fee" example:"500"`
+	DeliveryDistance     *int32                       `json:"delivery_distance,omitempty" example:"2500"`
+	DeliveryEtaMinutes   *int32                       `json:"delivery_eta_minutes,omitempty" example:"38"`
+	EstimatedDeliveryAt  *time.Time                   `json:"estimated_delivery_at,omitempty" example:"2025-12-01T12:30:00Z"`
+	DispatchOrderID      *int64                       `json:"dispatch_order_id,omitempty"`
+	FlowID               *int64                       `json:"flow_id,omitempty"`
+	PickupCode           *string                      `json:"pickup_code,omitempty"`
+	PickupCodeMasked     *string                      `json:"pickup_code_masked,omitempty"`
+	TableID              *int64                       `json:"table_id,omitempty" example:"301"`
+	ReservationID        *int64                       `json:"reservation_id,omitempty" example:"8001"`
+	Subtotal             int64                        `json:"subtotal" example:"5760"`
+	DiscountAmount       int64                        `json:"discount_amount" example:"500"`
+	DeliveryFeeDiscount  int64                        `json:"delivery_fee_discount" example:"200"`
+	PackagingFee         int64                        `json:"packaging_fee" example:"150"`
+	TotalAmount          int64                        `json:"total_amount" example:"5760"`
+	Status               string                       `json:"status" enums:"pending,paid,preparing,ready,courier_accepted,picked,delivering,rider_delivered,user_delivered,completed,cancelled" example:"paid"`
+	StatusHint           *string                      `json:"status_hint,omitempty"`
+	Badges               []orderBadge                 `json:"badges,omitempty"`
+	Actions              []string                     `json:"actions,omitempty"`
+	ExceptionState       *string                      `json:"exception_state,omitempty"`
+	ClaimChannel         *string                      `json:"claim_channel,omitempty"`
+	Overtime             bool                         `json:"overtime,omitempty"`
+	FulfillmentStatus    string                       `json:"fulfillment_status" enums:"scheduled,pending_kitchen,preparing,ready,completed,cancelled" example:"pending_kitchen"`
+	PaymentMethod        *string                      `json:"payment_method,omitempty" enums:"wechat,balance" example:"wechat"`
+	Notes                *string                      `json:"notes,omitempty" example:"不要香菜"`
+	Items                []orderItemResponse          `json:"items,omitempty"`
+	PackagingItems       []orderPackagingItemResponse `json:"packaging_items,omitempty"`
+	PaidAt               *time.Time                   `json:"paid_at,omitempty" example:"2025-12-01T12:30:00Z"`
+	PrepStartAt          *time.Time                   `json:"prep_start_at,omitempty"`
+	ReadyAt              *time.Time                   `json:"ready_at,omitempty"`
+	CourierAcceptAt      *time.Time                   `json:"courier_accept_at,omitempty"`
+	PickedAt             *time.Time                   `json:"picked_at,omitempty"`
+	RiderDeliveredAt     *time.Time                   `json:"rider_delivered_at,omitempty"`
+	UserDeliveredAt      *time.Time                   `json:"user_delivered_at,omitempty"`
+	AutoUserDeliveredAt  *time.Time                   `json:"auto_user_delivered_at,omitempty"`
+	CompletedAt          *time.Time                   `json:"completed_at,omitempty" example:"2025-12-01T13:15:00Z"`
+	CancelledAt          *time.Time                   `json:"cancelled_at,omitempty" example:"2025-12-01T12:25:00Z"`
+	CancelReason         *string                      `json:"cancel_reason,omitempty" example:"商品缺货"`
+	ReplacedByOrderID    *int64                       `json:"replaced_by_order_id,omitempty" example:"100009"`
+	CreatedAt            time.Time                    `json:"created_at" example:"2025-12-01T12:20:00Z"`
+	UpdatedAt            *time.Time                   `json:"updated_at,omitempty" example:"2025-12-01T12:30:00Z"`
+	MerchantPhone        *string                      `json:"merchant_phone,omitempty" example:"13800138000"`
+	DeliveryContactName  *string                      `json:"delivery_contact_name,omitempty" example:"张三"`
+	DeliveryContactPhone *string                      `json:"delivery_contact_phone,omitempty" example:"13800138000"`
+	DeliveryAddress      *string                      `json:"delivery_address,omitempty" example:"北京市朝阳区某小区1号楼"`
 	// 微信或上游支付交易号，用于支付查询与历史兼容展示
 	WechatTransactionID *string                            `json:"wechat_transaction_id,omitempty"`
 	PaymentContext      *orderPaymentContextResponse       `json:"payment_context,omitempty"`
@@ -296,6 +298,7 @@ func newOrderResponse(o db.Order) (orderResponse, error) {
 		Subtotal:            o.Subtotal,
 		DiscountAmount:      o.DiscountAmount,
 		DeliveryFeeDiscount: o.DeliveryFeeDiscount,
+		PackagingFee:        o.PackagingFee,
 		TotalAmount:         o.TotalAmount,
 		Status:              o.Status,
 		FulfillmentStatus:   o.FulfillmentStatus,
@@ -359,6 +362,7 @@ func newOrderWithDetailsResponse(o db.GetOrderWithDetailsRow) (orderResponse, er
 		Subtotal:            o.Subtotal,
 		DiscountAmount:      o.DiscountAmount,
 		DeliveryFeeDiscount: o.DeliveryFeeDiscount,
+		PackagingFee:        o.PackagingFee,
 		TotalAmount:         o.TotalAmount,
 		Status:              o.Status,
 		FulfillmentStatus:   o.FulfillmentStatus,
@@ -499,6 +503,7 @@ func newOrderWithMerchantFromFilterResponse(o db.ListOrdersByUserWithFiltersRow)
 		Subtotal:            o.Subtotal,
 		DiscountAmount:      o.DiscountAmount,
 		DeliveryFeeDiscount: o.DeliveryFeeDiscount,
+		PackagingFee:        o.PackagingFee,
 		TotalAmount:         o.TotalAmount,
 		Status:              o.Status,
 		FulfillmentStatus:   o.FulfillmentStatus,
@@ -746,6 +751,7 @@ func (server *Server) getOrder(ctx *gin.Context) {
 		return
 	}
 	resp.Items = server.newOrderItemResponses(ctx, itemViews, true)
+	resp.PackagingItems = newOrderPackagingItemResponses(result.PackagingItems)
 	resp.DeliveryEtaMinutes = result.DeliveryEtaMinutes
 	resp.EstimatedDeliveryAt = result.EstimatedDeliveryAt
 	resp.WechatTransactionID = result.WechatTransactionID
@@ -859,6 +865,7 @@ func (server *Server) listOrders(ctx *gin.Context) {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
+		orderResp.PackagingItems = newOrderPackagingItemResponses(result.PackagingItemsByOrderID[o.ID])
 		resp[i] = orderResp
 	}
 
@@ -1214,6 +1221,7 @@ func (server *Server) listMerchantOrders(ctx *gin.Context) {
 			return
 		}
 		orderResp.Items = server.newOrderItemResponses(ctx, itemViews, false)
+		orderResp.PackagingItems = newOrderPackagingItemResponses(result.PackagingItemsByOrderID[order.ID])
 		resp[index] = orderResp
 	}
 	feeBreakdowns, err := server.loadMerchantOrderFeeBreakdowns(ctx, merchant.ID, orders)
@@ -1317,6 +1325,7 @@ func (server *Server) getMerchantOrder(ctx *gin.Context) {
 		return
 	}
 	resp.Items = server.newOrderItemResponses(ctx, itemViews, false)
+	resp.PackagingItems = newOrderPackagingItemResponses(result.PackagingItems)
 	feeBreakdowns, err := server.loadMerchantOrderFeeBreakdowns(ctx, merchant.ID, []db.Order{order})
 	if err != nil {
 		writeMerchantOrderFeeBreakdownError(ctx, merchant.ID, []db.Order{order}, err)

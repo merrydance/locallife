@@ -316,6 +316,10 @@ func (processor *RedisTaskProcessor) buildPrintJobs(
 	if err != nil {
 		return nil, fmt.Errorf("list order items with dish: %w", err)
 	}
+	packagingItems, err := processor.store.ListOrderPackagingItems(ctx, order.ID)
+	if err != nil {
+		return nil, fmt.Errorf("list order packaging items: %w", err)
+	}
 
 	var user db.User
 	if len(frontPrinters) > 0 || (len(eligible) == 1 && len(kitchenPrinters) == 1) {
@@ -334,16 +338,16 @@ func (processor *RedisTaskProcessor) buildPrintJobs(
 	splitEnabled := config.PrintDispatchMode == printDispatchModeSplit && len(eligible) > 1 && len(frontPrinters) > 0 && len(kitchenPrinters) > 0
 	if !splitEnabled {
 		for _, printer := range eligible {
-			jobs = append(jobs, printJob{printer: printer, slip: printSlipFull, content: buildReceiptForProvider(printer.PrinterType, order, items, user, printSlipFull, settlementBill)})
+			jobs = append(jobs, printJob{printer: printer, slip: printSlipFull, content: buildReceiptForProvider(printer.PrinterType, order, items, packagingItems, user, printSlipFull, settlementBill)})
 		}
 		return jobs, nil
 	}
 
 	for _, printer := range frontPrinters {
-		jobs = append(jobs, printJob{printer: printer, slip: printSlipFull, content: buildReceiptForProvider(printer.PrinterType, order, items, user, printSlipFull, settlementBill)})
+		jobs = append(jobs, printJob{printer: printer, slip: printSlipFull, content: buildReceiptForProvider(printer.PrinterType, order, items, packagingItems, user, printSlipFull, settlementBill)})
 	}
 	for _, printer := range kitchenPrinters {
-		jobs = append(jobs, printJob{printer: printer, slip: printSlipKitchen, content: buildReceiptForProvider(printer.PrinterType, order, items, user, printSlipKitchen, nil)})
+		jobs = append(jobs, printJob{printer: printer, slip: printSlipKitchen, content: buildReceiptForProvider(printer.PrinterType, order, items, nil, user, printSlipKitchen, nil)})
 	}
 	return jobs, nil
 }
@@ -411,6 +415,7 @@ func orderDetailsRowToOrder(order db.GetOrderWithDetailsRow) db.Order {
 		Subtotal:            order.Subtotal,
 		DiscountAmount:      order.DiscountAmount,
 		DeliveryFeeDiscount: order.DeliveryFeeDiscount,
+		PackagingFee:        order.PackagingFee,
 		TotalAmount:         order.TotalAmount,
 		Status:              order.Status,
 		PaymentMethod:       order.PaymentMethod,

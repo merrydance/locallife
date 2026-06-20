@@ -257,6 +257,7 @@ type GetUserOrderQueryInput struct {
 type GetUserOrderQueryResult struct {
 	Order               db.GetOrderWithDetailsRow
 	Items               []db.ListOrderItemsWithDishByOrderRow
+	PackagingItems      []db.OrderPackagingItem
 	DeliveryEtaMinutes  *int32
 	EstimatedDeliveryAt *time.Time
 	WechatTransactionID *string
@@ -283,8 +284,9 @@ type ListUserOrdersQueryInput struct {
 }
 
 type ListUserOrdersQueryResult struct {
-	Orders     []db.ListOrdersByUserWithFiltersRow
-	TotalCount int64
+	Orders                  []db.ListOrdersByUserWithFiltersRow
+	PackagingItemsByOrderID map[int64][]db.OrderPackagingItem
+	TotalCount              int64
 }
 
 type GetMerchantOrderQueryInput struct {
@@ -293,8 +295,9 @@ type GetMerchantOrderQueryInput struct {
 }
 
 type GetMerchantOrderQueryResult struct {
-	Order db.Order
-	Items []db.ListOrderItemsWithDishByOrderRow
+	Order          db.Order
+	Items          []db.ListOrderItemsWithDishByOrderRow
+	PackagingItems []db.OrderPackagingItem
 }
 
 type ListMerchantOrdersQueryInput struct {
@@ -306,9 +309,10 @@ type ListMerchantOrdersQueryInput struct {
 }
 
 type ListMerchantOrdersQueryResult struct {
-	Orders         []db.Order
-	ItemsByOrderID map[int64][]db.ListOrderItemsWithDishByOrderIDsRow
-	TotalCount     int64
+	Orders                  []db.Order
+	ItemsByOrderID          map[int64][]db.ListOrderItemsWithDishByOrderIDsRow
+	PackagingItemsByOrderID map[int64][]db.OrderPackagingItem
+	TotalCount              int64
 }
 
 type GetMerchantOrderStatsQueryInput struct {

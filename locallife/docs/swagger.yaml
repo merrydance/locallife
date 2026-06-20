@@ -5184,6 +5184,9 @@ definitions:
       merchant_receivable_amount:
         example: 8968
         type: integer
+      packaging_fee_amount:
+        example: 150
+        type: integer
       payment_channel_fee_amount:
         example: 57
         type: integer
@@ -5538,6 +5541,13 @@ definitions:
         type: string
       overtime:
         type: boolean
+      packaging_fee:
+        example: 150
+        type: integer
+      packaging_items:
+        items:
+          $ref: '#/definitions/api.orderPackagingItemResponse'
+        type: array
       paid_at:
         example: "2025-12-01T12:30:00Z"
         type: string
@@ -6750,6 +6760,13 @@ definitions:
         type: string
       overtime:
         type: boolean
+      packaging_fee:
+        example: 150
+        type: integer
+      packaging_items:
+        items:
+          $ref: '#/definitions/api.orderPackagingItemResponse'
+        type: array
       paid_at:
         example: "2025-12-01T12:30:00Z"
         type: string

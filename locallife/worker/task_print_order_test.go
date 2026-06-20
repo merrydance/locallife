@@ -127,7 +127,7 @@ func TestBuildFeieReceipt_PreservesCurrentFullReceiptFormat(t *testing.T) {
 		{Name: "牛肉面", Quantity: 2, Subtotal: 2800},
 	}
 
-	content := buildFeieReceipt(order, items, db.User{ID: order.UserID, FullName: "张三"}, printSlipFull, nil)
+	content := buildFeieReceipt(order, items, nil, db.User{ID: order.UserID, FullName: "张三"}, printSlipFull, nil)
 
 	require.Equal(t,
 		"<CB><B>105# 乐客来福</B></CB><BR>"+
@@ -148,6 +148,38 @@ func TestBuildFeieReceipt_PreservesCurrentFullReceiptFormat(t *testing.T) {
 			"<CUT>",
 		content,
 	)
+}
+
+func TestBuildFeieReceipt_FullReceiptIncludesPackagingFeeOutsideFoodItems(t *testing.T) {
+	order := db.GetOrderWithDetailsRow{
+		ID:           101,
+		UserID:       201,
+		MerchantID:   301,
+		OrderNo:      "PKG101",
+		OrderType:    db.OrderTypeTakeaway,
+		Subtotal:     2800,
+		PackagingFee: 150,
+		TotalAmount:  2950,
+		CreatedAt:    time.Date(2026, 4, 1, 10, 0, 0, 0, time.Local),
+	}
+	items := []db.ListOrderItemsWithDishByOrderRow{{Name: "牛肉面", Quantity: 2, Subtotal: 2800}}
+	packagingItems := []db.OrderPackagingItem{{
+		ID:        7001,
+		OrderID:   order.ID,
+		Name:      "环保餐盒",
+		UnitPrice: 150,
+		Quantity:  1,
+		Subtotal:  150,
+	}}
+
+	full := buildFeieReceipt(order, items, packagingItems, db.User{ID: order.UserID}, printSlipFull, nil)
+	kitchen := buildFeieReceipt(order, items, packagingItems, db.User{ID: order.UserID}, printSlipKitchen, nil)
+
+	require.Contains(t, full, "牛肉面 x2  28.00")
+	require.Contains(t, full, "包装费：1.50")
+	require.Contains(t, full, "环保餐盒 x1  1.50")
+	require.NotContains(t, kitchen, "包装")
+	require.NotContains(t, kitchen, "环保餐盒")
 }
 
 func TestNewPrintProviderOriginID_IsProviderSafe(t *testing.T) {
@@ -475,8 +507,9 @@ func TestProcessTaskPrintOrder_SplitFrontAndKitchenReceipts(t *testing.T) {
 		OrderType:           db.OrderTypeTakeout,
 		Status:              db.OrderStatusPreparing,
 		Subtotal:            2800,
+		PackagingFee:        150,
 		DeliveryFee:         300,
-		TotalAmount:         3100,
+		TotalAmount:         3250,
 		Notes:               pgText("少辣"),
 		PickupCode:          pgText("105"),
 		CreatedAt:           time.Date(2026, 4, 1, 9, 30, 0, 0, time.Local),
@@ -495,11 +528,20 @@ func TestProcessTaskPrintOrder_SplitFrontAndKitchenReceipts(t *testing.T) {
 	frontPrinter := db.CloudPrinter{ID: 1, MerchantID: order.MerchantID, PrinterName: "前台", PrinterSn: "front-sn", PrinterType: "feieyun", PrinterRole: "front", PrintTakeout: true, IsActive: true}
 	kitchenPrinter := db.CloudPrinter{ID: 2, MerchantID: order.MerchantID, PrinterName: "后厨", PrinterSn: "kitchen-sn", PrinterType: "feieyun", PrinterRole: "kitchen", PrintTakeout: true, IsActive: true}
 	items := []db.ListOrderItemsWithDishByOrderRow{{Name: "牛肉面", Quantity: 2, Subtotal: 2800}}
+	packagingItems := []db.OrderPackagingItem{{
+		ID:        7601,
+		OrderID:   order.ID,
+		Name:      "环保餐盒",
+		UnitPrice: 150,
+		Quantity:  1,
+		Subtotal:  150,
+	}}
 
 	store.EXPECT().GetOrderWithDetails(gomock.Any(), order.ID).Return(order, nil)
 	store.EXPECT().GetOrderDisplayConfigByMerchant(gomock.Any(), order.MerchantID).Return(config, nil)
 	store.EXPECT().ListActiveCloudPrintersByMerchant(gomock.Any(), order.MerchantID).Return([]db.CloudPrinter{frontPrinter, kitchenPrinter}, nil)
 	store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Return(items, nil)
+	store.EXPECT().ListOrderPackagingItems(gomock.Any(), order.ID).Return(packagingItems, nil)
 	store.EXPECT().GetUser(gomock.Any(), order.UserID).Return(db.User{ID: order.UserID, FullName: "张三"}, nil)
 	store.EXPECT().
 		GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
@@ -527,10 +569,14 @@ func TestProcessTaskPrintOrder_SplitFrontAndKitchenReceipts(t *testing.T) {
 	require.Equal(t, "front-sn", printerClient.inputs[0].SN)
 	require.Contains(t, printerClient.inputs[0].Content, "顾客：张三")
 	require.Contains(t, printerClient.inputs[0].Content, "地址：测试路 88 号")
+	require.Contains(t, printerClient.inputs[0].Content, "包装费：1.50")
+	require.Contains(t, printerClient.inputs[0].Content, "环保餐盒 x1  1.50")
 	require.Equal(t, "kitchen-sn", printerClient.inputs[1].SN)
 	require.Contains(t, printerClient.inputs[1].Content, "后厨单")
 	require.NotContains(t, printerClient.inputs[1].Content, "顾客：")
 	require.NotContains(t, printerClient.inputs[1].Content, "地址：")
+	require.NotContains(t, printerClient.inputs[1].Content, "包装")
+	require.NotContains(t, printerClient.inputs[1].Content, "环保餐盒")
 	require.True(t, strings.Contains(printerClient.inputs[0].Content, "<QR>") || strings.Contains(printerClient.inputs[0].Content, "<BC128_A>"))
 }
 
@@ -553,8 +599,9 @@ func TestProcessTaskPrintOrder_FullReceiptIncludesBaofuProfitSharingBill(t *test
 		Subtotal:            10000,
 		DiscountAmount:      300,
 		VoucherAmount:       200,
+		PackagingFee:        150,
 		DeliveryFee:         800,
-		TotalAmount:         10300,
+		TotalAmount:         10450,
 		CreatedAt:           time.Date(2026, 4, 1, 11, 50, 0, 0, time.Local),
 		DeliveryContactName: "张三",
 		DeliveryAddress:     "测试路 88 号",
@@ -601,6 +648,14 @@ func TestProcessTaskPrintOrder_FullReceiptIncludesBaofuProfitSharingBill(t *test
 	store.EXPECT().GetOrderDisplayConfigByMerchant(gomock.Any(), order.MerchantID).Return(config, nil)
 	store.EXPECT().ListActiveCloudPrintersByMerchant(gomock.Any(), order.MerchantID).Return([]db.CloudPrinter{printer}, nil)
 	store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Return([]db.ListOrderItemsWithDishByOrderRow{{Name: "牛肉面", Quantity: 2, Subtotal: 5600}}, nil)
+	store.EXPECT().ListOrderPackagingItems(gomock.Any(), order.ID).Return([]db.OrderPackagingItem{{
+		ID:        7604,
+		OrderID:   order.ID,
+		Name:      "环保餐盒",
+		UnitPrice: 150,
+		Quantity:  1,
+		Subtotal:  150,
+	}}, nil)
 	store.EXPECT().GetUser(gomock.Any(), order.UserID).Return(db.User{ID: order.UserID, FullName: "张三"}, nil)
 	store.EXPECT().
 		GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
@@ -621,9 +676,11 @@ func TestProcessTaskPrintOrder_FullReceiptIncludesBaofuProfitSharingBill(t *test
 	require.Len(t, printerClient.inputs, 1)
 	content := printerClient.inputs[0].Content
 	require.Contains(t, content, "菜品小计：100.00")
+	require.Contains(t, content, "包装费：1.50")
+	require.Contains(t, content, "环保餐盒 x1  1.50")
 	require.NotContains(t, content, "跑腿费")
 	require.NotContains(t, content, "<BOLD>实付：")
-	require.Contains(t, content, "用户实付：103.00")
+	require.Contains(t, content, "用户实付：104.50")
 	require.Contains(t, content, "商户账单")
 	require.Contains(t, content, "菜品合计：95.00")
 	require.Contains(t, content, "- 平台服务费：-4.75")

@@ -185,6 +185,36 @@ func TestBaofuProfitSharingServiceCreatePendingOrderUsesNetAmountAfterSuccessful
 	require.JSONEq(t, `{"provider":"baofu","channel":"baofu_aggregate","calculation_version":"baofu_fee_v2","settlement_mode":"commission_share","shareable_amount":7477,"platform_receiver_amount":397,"fees":{"provider_payment_fee":23,"merchant_payment_fee":45,"rider_payment_fee":0,"provider_payment_fee_source":"estimated","provider_payment_fee_timing":"realtime_deducted_before_reserve"},"bases":{"total_amount":7500,"merchant_payment_fee_base":7500,"rider_payment_fee_base":0,"commission_base":7500},"receivers":[{"role":"merchant","sharing_mer_id":"MER_SHARE","amount":7080},{"role":"platform","sharing_mer_id":"PLATFORM_SHARE","amount":397}]}`, string(store.lastTx.ProfitSharingOrder.SharingDetailSnapshot.([]byte)))
 }
 
+func TestBaofuProfitSharingServiceCreatePendingOrderIncludesPackagingFeeInMerchantBase(t *testing.T) {
+	store := &fakeBaofuProfitSharingOrderStore{
+		fakeBaofuProfitSharingReceiverStore: fakeBaofuProfitSharingReceiverStore{bindings: map[string]db.BaofuAccountBinding{
+			"merchant:101": activeBaofuReceiverBinding(db.BaofuAccountOwnerTypeMerchant, 101, "MER_CONTRACT", "MER_SHARE"),
+			"rider:202":    activeBaofuReceiverBinding(db.BaofuAccountOwnerTypeRider, 202, "RIDER_CONTRACT", "RIDER_SHARE"),
+			"platform:0":   activeBaofuReceiverBinding(db.BaofuAccountOwnerTypePlatform, 0, "PLATFORM_CONTRACT", "PLATFORM_SHARE"),
+		}},
+	}
+	service := NewBaofuProfitSharingService(store)
+
+	_, err := service.CreatePendingOrder(context.Background(), BaofuProfitSharingOrderInput{
+		PaymentOrderID:  9003,
+		MerchantID:      101,
+		RiderID:         202,
+		OrderSource:     "takeout",
+		TotalAmountFen:  1150,
+		DeliveryFeeFen:  200,
+		PlatformRateBps: 200,
+		OperatorRateBps: 0,
+		OutOrderNo:      "BAOFU_SHARE_9003",
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1150), store.lastTx.ProfitSharingOrder.TotalAmount)
+	require.Equal(t, int64(200), store.lastTx.ProfitSharingOrder.DeliveryFee)
+	require.Equal(t, int64(950), store.lastTx.ProfitSharingOrder.DistributableAmount)
+	require.Equal(t, int64(950), store.lastTx.FeeBreakdown.MerchantPaymentFeeBaseAmount)
+	require.Equal(t, int64(950), store.lastTx.FeeBreakdown.CommissionBaseAmount)
+	require.Equal(t, int64(200), store.lastTx.FeeBreakdown.RiderGrossAmount)
+}
+
 type fakeBaofuProfitSharingOrderStore struct {
 	fakeBaofuProfitSharingReceiverStore
 	lastTx db.CreateBaofuProfitSharingOrderTxParams

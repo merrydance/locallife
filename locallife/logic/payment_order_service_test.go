@@ -57,12 +57,14 @@ func TestPaymentOrderServiceCreatePaymentOrder_UsesBaofuForMainBusiness(t *testi
 		ClientIP:     "127.0.0.1",
 	}
 	order := db.Order{
-		ID:          input.OrderID,
-		UserID:      input.UserID,
-		MerchantID:  3001,
-		OrderType:   orderTypeTakeaway,
-		Status:      "pending",
-		TotalAmount: 1000,
+		ID:           input.OrderID,
+		UserID:       input.UserID,
+		MerchantID:   3001,
+		OrderType:    orderTypeTakeaway,
+		Status:       "pending",
+		Subtotal:     1000,
+		PackagingFee: 150,
+		TotalAmount:  1150,
 	}
 	txPayment := db.PaymentOrder{
 		ID:                    4003,
@@ -72,7 +74,7 @@ func TestPaymentOrderServiceCreatePaymentOrder_UsesBaofuForMainBusiness(t *testi
 		PaymentChannel:        db.PaymentChannelBaofuAggregate,
 		RequiresProfitSharing: true,
 		BusinessType:          businessTypeOrder,
-		Amount:                1000,
+		Amount:                order.TotalAmount,
 		OutTradeNo:            "baofu-out-trade-no",
 		Attach:                pgtype.Text{String: "order_id:2001;sub_mchid:sub-baofu", Valid: true},
 	}
@@ -107,6 +109,7 @@ func TestPaymentOrderServiceCreatePaymentOrder_UsesBaofuForMainBusiness(t *testi
 	store.EXPECT().CreatePartnerPaymentTx(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreatePartnerPaymentTxParams) (db.CreatePartnerPaymentTxResult, error) {
 		require.Equal(t, db.PaymentChannelBaofuAggregate, arg.PaymentChannel)
 		require.True(t, arg.RequiresProfitSharing)
+		require.Equal(t, order.TotalAmount, arg.Amount)
 		require.Equal(t, "order_id:2001", arg.Attach)
 		return db.CreatePartnerPaymentTxResult{PaymentOrder: txPayment, SubMchID: "sub-baofu"}, nil
 	})
@@ -136,6 +139,8 @@ func TestPaymentOrderServiceCreatePaymentOrder_UsesBaofuForMainBusiness(t *testi
 	require.True(t, baofuClient.called)
 	require.Equal(t, "COLLECT_MER", baofuClient.lastRequest.MerchantID)
 	require.Equal(t, "sub-baofu", baofuClient.lastRequest.SubMchID)
+	require.Equal(t, order.TotalAmount, baofuClient.lastRequest.TransactionAmt)
+	require.Equal(t, order.TotalAmount, baofuClient.lastRequest.TotalAmt)
 	require.Equal(t, "openid-baofu", baofuClient.lastRequest.PayExtend.SubOpenID)
 	require.Equal(t, "Merchant B - Order Payment", baofuClient.lastRequest.PayExtend.Body)
 }

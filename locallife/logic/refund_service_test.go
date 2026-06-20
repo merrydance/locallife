@@ -108,7 +108,7 @@ func TestCreateRefundOrder_BaofuShareStartedReturnsSettlementBusinessError(t *te
 	merchant := db.Merchant{ID: 644, OwnerUserID: 67}
 	paymentOrder := db.PaymentOrder{
 		ID:                    622,
-		Amount:                1000,
+		Amount:                1150,
 		Status:                "paid",
 		PaymentType:           "miniprogram",
 		PaymentChannel:        db.PaymentChannelBaofuAggregate,
@@ -309,7 +309,7 @@ func TestCreateRefundOrder_BaofuPreShareRefundAcceptedRecordsCommand(t *testing.
 		OutTradeNo:            "BF202605040001",
 		TransactionID:         pgtype.Text{String: "BFPAY_UP_202605040001", Valid: true},
 	}
-	order := db.Order{ID: 634, MerchantID: merchant.ID}
+	order := db.Order{ID: 634, MerchantID: merchant.ID, Subtotal: 1000, PackagingFee: 150, TotalAmount: 1150}
 	refundOrder := db.RefundOrder{ID: 656, PaymentOrderID: paymentOrder.ID, OutRefundNo: "RF-baofu-pre-share", Status: "pending"}
 	input := CreateRefundOrderInput{
 		ActorUserID:    merchant.OwnerUserID,
@@ -360,6 +360,7 @@ func TestCreateRefundOrder_BaofuPreShareRefundAcceptedRecordsCommand(t *testing.
 	require.Empty(t, baofuClient.lastRefundRequest.OriginOutTradeNo)
 	require.Equal(t, refundOrder.OutRefundNo, baofuClient.lastRefundRequest.OutTradeNo)
 	require.Equal(t, int64(300), baofuClient.lastRefundRequest.RefundAmountFen)
+	// BaoCaiTong refund totalAmt is the current refund total, not the original payment total.
 	require.Equal(t, int64(300), baofuClient.lastRefundRequest.TotalAmountFen)
 	require.Empty(t, baofuClient.lastRefundRequest.SharingRefundInfo)
 }
