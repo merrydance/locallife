@@ -14,6 +14,8 @@ import {
 type TimeDimension = 'day' | 'week' | 'month'
 type RankingType = 'merchant' | 'rider'
 
+let analyticsRequestSeq = 0
+
 Page({
   data: {
     isLargeScreen: false,
@@ -34,7 +36,7 @@ Page({
       regionName: '',
       merchantText: '-',
       riderText: '-',
-      completionRate: '-',
+      orderText: '-',
       commission: '-'
     } as OperatorAnalyticsRegionSummary,
     topMerchants: [] as OperatorMerchantRankingView[],
@@ -64,6 +66,7 @@ Page({
   },
 
   async loadData() {
+    const requestSeq = ++analyticsRequestSeq
     this.setData({ loading: true, error: null })
     try {
       const nextView = await loadOperatorAnalyticsPageData({
@@ -72,12 +75,20 @@ Page({
         selectedRegionName: this.data.regions[this.data.selectedRegionIdx]?.name
       })
 
+      if (requestSeq !== analyticsRequestSeq) {
+        return
+      }
+
       this.setData({
         ...nextView,
         initialLoading: false,
         loading: false
       })
     } catch (error: unknown) {
+      if (requestSeq !== analyticsRequestSeq) {
+        return
+      }
+
       const errorState = getConsoleDashboardErrorState('operator', error, '分析页面暂时无法加载，请稍后重试。')
       console.error('加载分析数据失败:', error)
       this.setData({

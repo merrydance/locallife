@@ -16,7 +16,7 @@ export interface OperatorAnalyticsRegionSummary {
   regionName: string
   merchantText: string
   riderText: string
-  completionRate: string
+  orderText: string
   commission: string
 }
 
@@ -48,6 +48,14 @@ interface TrendLike {
   total_gmv?: number
   order_count?: number
   operator_income?: number
+}
+
+interface OperatorRegionStatsViewModel {
+  region_name: string
+  merchant_count: number
+  total_orders: number
+  total_gmv: number
+  total_commission: number
 }
 
 function getPeriodDays(dimension: OperatorTimeDimension): number {
@@ -108,6 +116,33 @@ function normalizeRankingRows(source: unknown): Array<Record<string, unknown>> {
   }
 
   return []
+}
+
+export function buildOperatorAnalyticsRegionSummary(
+  regionStats: OperatorRegionStatsViewModel | null,
+  realtime: {
+    active_merchant_count?: number
+    active_rider_count?: number
+  } | null,
+  regionName?: string
+): OperatorAnalyticsRegionSummary {
+  if (!regionStats) {
+    return {
+      regionName: regionName || '全部区域',
+      merchantText: '-',
+      riderText: '-',
+      orderText: '-',
+      commission: '-'
+    }
+  }
+
+  return {
+    regionName: String(regionStats.region_name || regionName || '当前区域'),
+    merchantText: String(realtime?.active_merchant_count ?? regionStats.merchant_count ?? 0),
+    riderText: String(realtime?.active_rider_count ?? 0),
+    orderText: String(regionStats.total_orders ?? 0),
+    commission: formatPrice(regionStats.total_commission || 0)
+  }
 }
 
 export async function loadOperatorAnalyticsPageData(params: {
@@ -194,21 +229,14 @@ export async function loadOperatorAnalyticsPageData(params: {
     earnings: formatPriceNoSymbol(Number(item.total_earnings || 0))
   }))
 
-  const regionSummary: OperatorAnalyticsRegionSummary = regionStats
-    ? {
-        regionName: String(regionStats.region_name || params.selectedRegionName || '当前区域'),
-        merchantText: `${regionStats.merchant_stats.active_merchants}/${regionStats.merchant_stats.total_merchants}`,
-        riderText: `${regionStats.rider_stats.online_riders}/${regionStats.rider_stats.active_riders}`,
-        completionRate: `${Number(regionStats.order_stats.completion_rate || 0).toFixed(1)}%`,
-        commission: formatPrice(regionStats.financial_stats.total_commission || 0)
-      }
-    : {
-        regionName: params.selectedRegionName || '全部区域',
-        merchantText: '-',
-        riderText: '-',
-        completionRate: '-',
-        commission: '-'
-      }
+  const regionSummary = buildOperatorAnalyticsRegionSummary(
+    regionStats as OperatorRegionStatsViewModel | null,
+    {
+      active_merchant_count: realtime.active_merchant_count,
+      active_rider_count: realtime.active_rider_count
+    },
+    params.selectedRegionName
+  )
 
   return {
     metrics,

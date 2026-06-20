@@ -53,16 +53,16 @@
           </view>
           <view class="summary-grid">
             <view class="summary-item">
-              <text class="summary-label">活跃商户 / 总商户</text>
+              <text class="summary-label">活跃商户</text>
               <text class="summary-value">{{regionSummary.merchantText}}</text>
             </view>
             <view class="summary-item">
-              <text class="summary-label">在线骑手 / 活跃骑手</text>
+              <text class="summary-label">活跃骑手</text>
               <text class="summary-value">{{regionSummary.riderText}}</text>
             </view>
             <view class="summary-item">
-              <text class="summary-label">履约完成率</text>
-              <text class="summary-value">{{regionSummary.completionRate}}</text>
+              <text class="summary-label">订单数</text>
+              <text class="summary-value">{{regionSummary.orderText}}</text>
             </view>
             <view class="summary-item">
               <text class="summary-label">区域佣金</text>
