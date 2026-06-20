@@ -136,12 +136,11 @@ func TestListOperatorRulesProxyAPI(t *testing.T) {
 	}
 }
 
-func TestCreateOperatorRuleVersionProxyAPI(t *testing.T) {
+func TestOperatorRulesProxyWriteAPIsAreDisabled(t *testing.T) {
 	user, _ := randomUser(t)
 	operator := randomOperator(user.ID)
-	ruleID := int64(101)
 
-	body := map[string]interface{}{
+	createVersionBody := map[string]interface{}{
 		"version":     1,
 		"status":      "published",
 		"priority":    10,
@@ -151,69 +150,66 @@ func TestCreateOperatorRuleVersionProxyAPI(t *testing.T) {
 		"gray_config": map[string]interface{}{},
 	}
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+	testCases := []struct {
+		name string
+		path string
+		body map[string]interface{}
+	}{
+		{
+			name: "CreateRule",
+			path: "/v1/operators/me/rules",
+			body: map[string]interface{}{"name": "operator unsafe rule", "category": "order"},
+		},
+		{
+			name: "CreateRuleVersion",
+			path: "/v1/operators/me/rules/101/versions",
+			body: createVersionBody,
+		},
+		{
+			name: "PublishRule",
+			path: "/v1/operators/me/rules/101/publish",
+			body: map[string]interface{}{"version_id": 999},
+		},
+		{
+			name: "RollbackRule",
+			path: "/v1/operators/me/rules/101/rollback",
+			body: map[string]interface{}{"version_id": 998},
+		},
+		{
+			name: "DisableRule",
+			path: "/v1/operators/me/rules/101/disable",
+			body: map[string]interface{}{"reason": "operator write proxy is not a product surface"},
+		},
+	}
 
-	store := mockdb.NewMockStore(ctrl)
-	store.EXPECT().
-		ListUserRoles(gomock.Any(), user.ID).
-		Return([]db.UserRole{{UserID: user.ID, Role: "operator", Status: "active"}}, nil)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
 
-	store.EXPECT().
-		GetOperatorByUser(gomock.Any(), user.ID).
-		Return(operator, nil)
+			store := mockdb.NewMockStore(ctrl)
+			store.EXPECT().
+				ListUserRoles(gomock.Any(), user.ID).
+				Return([]db.UserRole{{UserID: user.ID, Role: "operator", Status: "active"}}, nil)
+			store.EXPECT().
+				GetOperatorByUser(gomock.Any(), user.ID).
+				Return(operator, nil)
 
-	store.EXPECT().
-		CreateRuleVersion(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ any, arg db.CreateRuleVersionParams) (db.RuleVersion, error) {
-			require.Equal(t, ruleID, arg.RuleID)
+			server := newTestServer(t, store)
+			recorder := httptest.NewRecorder()
 
-			var scope map[string]interface{}
-			require.NoError(t, json.Unmarshal(arg.Scope, &scope))
-			regionIDs, ok := scope["region_id"].([]interface{})
-			require.True(t, ok)
-			require.Len(t, regionIDs, 1)
-			require.Equal(t, float64(operator.RegionID), regionIDs[0])
+			data, err := json.Marshal(tc.body)
+			require.NoError(t, err)
 
-			var gray map[string]interface{}
-			require.NoError(t, json.Unmarshal(arg.GrayConfig, &gray))
-			grayIDs, ok := gray["region_id"].([]interface{})
-			require.True(t, ok)
-			require.Len(t, grayIDs, 1)
-			require.Equal(t, float64(operator.RegionID), grayIDs[0])
+			request, err := http.NewRequest(http.MethodPost, tc.path, bytes.NewReader(data))
+			require.NoError(t, err)
 
-			return db.RuleVersion{
-				ID:         999,
-				RuleID:     arg.RuleID,
-				Version:    arg.Version,
-				Status:     arg.Status,
-				Priority:   arg.Priority,
-				Scope:      arg.Scope,
-				Condition:  arg.Condition,
-				Action:     arg.Action,
-				GrayConfig: arg.GrayConfig,
-				CreatedAt:  time.Now(),
-			}, nil
+			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			server.router.ServeHTTP(recorder, request)
+
+			require.Equal(t, http.StatusForbidden, recorder.Code)
 		})
-
-	store.EXPECT().
-		CreateRuleAudit(gomock.Any(), gomock.Any()).
-		Times(1).
-		Return(db.RuleAudit{}, nil)
-
-	server := newTestServer(t, store)
-	recorder := httptest.NewRecorder()
-
-	data, err := json.Marshal(body)
-	require.NoError(t, err)
-
-	request, err := http.NewRequest(http.MethodPost, "/v1/operators/me/rules/101/versions", bytes.NewReader(data))
-	require.NoError(t, err)
-
-	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-	server.router.ServeHTTP(recorder, request)
-
-	require.Equal(t, http.StatusCreated, recorder.Code)
+	}
 }
 
 func TestListOperatorRuleHitsProxyAPI(t *testing.T) {

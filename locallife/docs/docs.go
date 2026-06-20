@@ -20566,40 +20566,15 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "consumes": [
-                    "application/json"
-                ],
+                "description": "运营商规则引擎写入当前不向运营商端开放；规则发布、回滚、禁用由平台规则治理入口承接。",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "运营商-规则管理"
                 ],
-                "summary": "创建运营商规则",
-                "parameters": [
-                    {
-                        "description": "创建规则请求",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.createRuleRequest"
-                        }
-                    }
-                ],
+                "summary": "创建运营商规则（已关闭）",
                 "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "$ref": "#/definitions/db.Rule"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
@@ -20608,12 +20583,6 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -20762,16 +20731,14 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "consumes": [
-                    "application/json"
-                ],
+                "description": "运营商规则引擎写入当前不向运营商端开放；规则禁用必须走平台规则治理入口。",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "运营商-规则管理"
                 ],
-                "summary": "禁用运营商规则",
+                "summary": "禁用运营商规则（已关闭）",
                 "parameters": [
                     {
                         "type": "integer",
@@ -20779,29 +20746,9 @@ const docTemplate = `{
                         "name": "id",
                         "in": "path",
                         "required": true
-                    },
-                    {
-                        "description": "禁用请求",
-                        "name": "request",
-                        "in": "body",
-                        "schema": {
-                            "$ref": "#/definitions/api.disableRuleRequest"
-                        }
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/db.Rule"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
@@ -20810,18 +20757,6 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -20836,16 +20771,14 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "consumes": [
-                    "application/json"
-                ],
+                "description": "运营商规则引擎写入当前不向运营商端开放；规则发布必须走平台规则治理入口。",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "运营商-规则管理"
                 ],
-                "summary": "发布运营商规则",
+                "summary": "发布运营商规则（已关闭）",
                 "parameters": [
                     {
                         "type": "integer",
@@ -20853,30 +20786,9 @@ const docTemplate = `{
                         "name": "id",
                         "in": "path",
                         "required": true
-                    },
-                    {
-                        "description": "发布请求",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.publishRuleRequest"
-                        }
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/db.Rule"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
@@ -20885,18 +20797,6 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -20911,16 +20811,14 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "consumes": [
-                    "application/json"
-                ],
+                "description": "运营商规则引擎写入当前不向运营商端开放；规则回滚必须走平台规则治理入口。",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "运营商-规则管理"
                 ],
-                "summary": "回滚运营商规则",
+                "summary": "回滚运营商规则（已关闭）",
                 "parameters": [
                     {
                         "type": "integer",
@@ -20928,30 +20826,9 @@ const docTemplate = `{
                         "name": "id",
                         "in": "path",
                         "required": true
-                    },
-                    {
-                        "description": "回滚请求",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.rollbackRuleRequest"
-                        }
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/db.Rule"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
@@ -20960,18 +20837,6 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -20986,16 +20851,14 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "consumes": [
-                    "application/json"
-                ],
+                "description": "运营商规则引擎写入当前不向运营商端开放；规则版本变更必须走平台规则治理入口。",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "运营商-规则管理"
                 ],
-                "summary": "创建运营商规则版本",
+                "summary": "创建运营商规则版本（已关闭）",
                 "parameters": [
                     {
                         "type": "integer",
@@ -21003,30 +20866,9 @@ const docTemplate = `{
                         "name": "id",
                         "in": "path",
                         "required": true
-                    },
-                    {
-                        "description": "创建规则版本请求",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.createRuleVersionRequest"
-                        }
                     }
                 ],
                 "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "$ref": "#/definitions/db.RuleVersion"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
@@ -21035,12 +20877,6 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -35835,60 +35671,6 @@ const docTemplate = `{
                 }
             }
         },
-        "api.createRuleRequest": {
-            "type": "object",
-            "required": [
-                "category",
-                "name"
-            ],
-            "properties": {
-                "category": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "status": {
-                    "type": "string"
-                }
-            }
-        },
-        "api.createRuleVersionRequest": {
-            "type": "object",
-            "properties": {
-                "action": {
-                    "type": "object",
-                    "additionalProperties": true
-                },
-                "condition": {
-                    "type": "object",
-                    "additionalProperties": true
-                },
-                "effective_at": {
-                    "type": "string"
-                },
-                "expires_at": {
-                    "type": "string"
-                },
-                "gray_config": {
-                    "type": "object",
-                    "additionalProperties": true
-                },
-                "priority": {
-                    "type": "integer"
-                },
-                "scope": {
-                    "type": "object",
-                    "additionalProperties": true
-                },
-                "status": {
-                    "type": "string"
-                },
-                "version": {
-                    "type": "integer"
-                }
-            }
-        },
         "api.createTableRequest": {
             "type": "object",
             "required": [
@@ -36877,14 +36659,6 @@ const docTemplate = `{
             }
         },
         "api.disableProfitSharingConfigRequest": {
-            "type": "object",
-            "properties": {
-                "reason": {
-                    "type": "string"
-                }
-            }
-        },
-        "api.disableRuleRequest": {
             "type": "object",
             "properties": {
                 "reason": {
@@ -43215,18 +42989,6 @@ const docTemplate = `{
                 }
             }
         },
-        "api.publishRuleRequest": {
-            "type": "object",
-            "required": [
-                "version_id"
-            ],
-            "properties": {
-                "version_id": {
-                    "type": "integer",
-                    "minimum": 1
-                }
-            }
-        },
         "api.realtimeDashboardResponse": {
             "type": "object",
             "properties": {
@@ -45155,14 +44917,6 @@ const docTemplate = `{
                 },
                 "date": {
                     "type": "string"
-                }
-            }
-        },
-        "api.rollbackRuleRequest": {
-            "type": "object",
-            "properties": {
-                "version_id": {
-                    "type": "integer"
                 }
             }
         },
@@ -48132,91 +47886,6 @@ const docTemplate = `{
                 }
             }
         },
-        "db.Rule": {
-            "type": "object",
-            "properties": {
-                "category": {
-                    "type": "string"
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "created_by": {
-                    "$ref": "#/definitions/pgtype.Int8"
-                },
-                "current_version_id": {
-                    "$ref": "#/definitions/pgtype.Int8"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "status": {
-                    "type": "string"
-                },
-                "updated_at": {
-                    "type": "string"
-                }
-            }
-        },
-        "db.RuleVersion": {
-            "type": "object",
-            "properties": {
-                "action": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "condition": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "created_by": {
-                    "$ref": "#/definitions/pgtype.Int8"
-                },
-                "effective_at": {
-                    "$ref": "#/definitions/pgtype.Timestamptz"
-                },
-                "expires_at": {
-                    "$ref": "#/definitions/pgtype.Timestamptz"
-                },
-                "gray_config": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "priority": {
-                    "type": "integer"
-                },
-                "rule_id": {
-                    "type": "integer"
-                },
-                "scope": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "status": {
-                    "type": "string"
-                },
-                "version": {
-                    "type": "integer"
-                }
-            }
-        },
         "logic.AppliedPromotion": {
             "type": "object",
             "properties": {
@@ -48366,32 +48035,6 @@ const docTemplate = `{
                 "Finite",
                 "NegativeInfinity"
             ]
-        },
-        "pgtype.Int8": {
-            "type": "object",
-            "properties": {
-                "int64": {
-                    "type": "integer",
-                    "format": "int64"
-                },
-                "valid": {
-                    "type": "boolean"
-                }
-            }
-        },
-        "pgtype.Timestamptz": {
-            "type": "object",
-            "properties": {
-                "infinityModifier": {
-                    "$ref": "#/definitions/pgtype.InfinityModifier"
-                },
-                "time": {
-                    "type": "string"
-                },
-                "valid": {
-                    "type": "boolean"
-                }
-            }
         }
     },
     "securityDefinitions": {

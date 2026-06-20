@@ -227,12 +227,15 @@ func (q *Queries) ListProfitSharingConfigs(ctx context.Context, arg ListProfitSh
 }
 
 const listProfitSharingConfigsForRegion = `-- name: ListProfitSharingConfigsForRegion :many
-SELECT id, status, order_source, region_id, merchant_id, platform_rate, operator_rate, rider_enabled, priority, effective_at, expires_at, created_by, created_at, updated_at FROM profit_sharing_configs
-WHERE (NULLIF($1::text, '') IS NULL OR status = $1)
-  AND (NULLIF($2::text, '') IS NULL OR order_source = $2)
-  AND (region_id IS NULL OR region_id = $3)
-  AND ($4::bigint = 0 OR merchant_id = $4)
-ORDER BY priority ASC, id DESC
+SELECT psc.id, psc.status, psc.order_source, psc.region_id, psc.merchant_id, psc.platform_rate, psc.operator_rate, psc.rider_enabled, psc.priority, psc.effective_at, psc.expires_at, psc.created_by, psc.created_at, psc.updated_at
+FROM profit_sharing_configs psc
+LEFT JOIN merchants m ON m.id = psc.merchant_id
+WHERE (NULLIF($1::text, '') IS NULL OR psc.status = $1)
+  AND (NULLIF($2::text, '') IS NULL OR psc.order_source = $2)
+  AND (psc.region_id IS NULL OR psc.region_id = $3)
+  AND ($4::bigint = 0 OR psc.merchant_id = $4)
+  AND (psc.merchant_id IS NULL OR m.region_id = $3)
+ORDER BY psc.priority ASC, psc.id DESC
 LIMIT $5 OFFSET $6
 `
 
