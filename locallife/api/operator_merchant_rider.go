@@ -966,22 +966,22 @@ func (server *Server) getOperatorRiderSummary(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	pendingApproval, err := countStatus(db.RiderStatusPendingApproval)
+	pendingApproval, err := countStatus("pending_approval")
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	active, err := countStatus(db.RiderStatusActive)
+	active, err := countStatus("active")
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	rejected, err := countStatus(db.RiderStatusRejected)
+	rejected, err := countStatus("rejected")
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	suspended, err := countStatus(db.RiderStatusSuspended)
+	suspended, err := countStatus("suspended")
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return

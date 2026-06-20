@@ -68,7 +68,7 @@ func (server *Server) getOperatorRealtimeStats(ctx *gin.Context) {
 	go func() {
 		count, err := server.store.CountMerchantsByRegionWithStatus(ctx, db.CountMerchantsByRegionWithStatusParams{
 			RegionID: regionID,
-			Column2:  db.MerchantStatusApproved,
+			Column2:  "approved",
 		})
 		activeMerchantsChan <- result{count: int32(count), err: err}
 	}()
@@ -77,7 +77,7 @@ func (server *Server) getOperatorRealtimeStats(ctx *gin.Context) {
 	go func() {
 		count, err := server.store.CountRidersByRegionWithStatus(ctx, db.CountRidersByRegionWithStatusParams{
 			RegionID: pgtype.Int8{Int64: regionID, Valid: true},
-			Status:   db.RiderStatusActive,
+			Status:   "active",
 		})
 		activeRidersChan <- result{count: int32(count), err: err}
 	}()
@@ -95,7 +95,7 @@ func (server *Server) getOperatorRealtimeStats(ctx *gin.Context) {
 	go func() {
 		count, err := server.store.CountRidersByRegionWithStatus(ctx, db.CountRidersByRegionWithStatusParams{
 			RegionID: pgtype.Int8{Int64: regionID, Valid: true},
-			Status:   db.RiderStatusPendingApproval,
+			Status:   "pending",
 		})
 		pendingRidersChan <- result{count: int32(count), err: err}
 	}()
