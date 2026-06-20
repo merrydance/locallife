@@ -2492,6 +2492,21 @@ func (mr *MockStoreMockRecorder) CountOnlineRidersByRegion(ctx, regionID any) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountOnlineRidersByRegion", reflect.TypeOf((*MockStore)(nil).CountOnlineRidersByRegion), ctx, regionID)
 }
 
+// CountOperatorMerchants mocks base method.
+func (m *MockStore) CountOperatorMerchants(ctx context.Context, arg db.CountOperatorMerchantsParams) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountOperatorMerchants", ctx, arg)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountOperatorMerchants indicates an expected call of CountOperatorMerchants.
+func (mr *MockStoreMockRecorder) CountOperatorMerchants(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountOperatorMerchants", reflect.TypeOf((*MockStore)(nil).CountOperatorMerchants), ctx, arg)
+}
+
 // CountOperatorNotifications mocks base method.
 func (m *MockStore) CountOperatorNotifications(ctx context.Context, arg db.CountOperatorNotificationsParams) (int64, error) {
 	m.ctrl.T.Helper()
@@ -16009,6 +16024,21 @@ func (m *MockStore) ListOperatorApplications(ctx context.Context, arg db.ListOpe
 func (mr *MockStoreMockRecorder) ListOperatorApplications(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListOperatorApplications", reflect.TypeOf((*MockStore)(nil).ListOperatorApplications), ctx, arg)
+}
+
+// ListOperatorMerchants mocks base method.
+func (m *MockStore) ListOperatorMerchants(ctx context.Context, arg db.ListOperatorMerchantsParams) ([]db.Merchant, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListOperatorMerchants", ctx, arg)
+	ret0, _ := ret[0].([]db.Merchant)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListOperatorMerchants indicates an expected call of ListOperatorMerchants.
+func (mr *MockStoreMockRecorder) ListOperatorMerchants(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListOperatorMerchants", reflect.TypeOf((*MockStore)(nil).ListOperatorMerchants), ctx, arg)
 }
 
 // ListOperatorNotifications mocks base method.

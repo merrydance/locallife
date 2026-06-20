@@ -3,8 +3,9 @@ package api
 import (
 	"errors"
 	"net/http"
-	"sort"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -30,8 +31,13 @@ func pgNumericToFloat64(n pgtype.Numeric) float64 {
 type listOperatorMerchantsRequest struct {
 	Status   string `form:"status" binding:"omitempty,oneof=pending approved rejected suspended"`
 	RegionID int64  `form:"region_id" binding:"omitempty,min=1"`
+	Keyword  string `form:"keyword"`
 	Page     int32  `form:"page" binding:"omitempty,min=1"`
 	Limit    int32  `form:"limit" binding:"omitempty,min=1,max=100"`
+}
+
+type operatorMerchantSummaryRequest struct {
+	RegionID int64 `form:"region_id" binding:"omitempty,min=1"`
 }
 
 type merchantListItem struct {
@@ -67,7 +73,7 @@ type operatorMerchantSummaryResponse struct {
 
 func operatorMerchantStatusFilters(status string) []string {
 	if status == "" {
-		return nil
+		return []string{}
 	}
 	if status == db.MerchantStatusApproved {
 		return []string{db.MerchantStatusApproved, db.MerchantStatusActive}
@@ -75,95 +81,51 @@ func operatorMerchantStatusFilters(status string) []string {
 	return []string{status}
 }
 
-func sortMerchantsNewestFirst(merchants []db.Merchant) {
-	sort.SliceStable(merchants, func(i, j int) bool {
-		if !merchants[i].CreatedAt.Equal(merchants[j].CreatedAt) {
-			return merchants[i].CreatedAt.After(merchants[j].CreatedAt)
-		}
-		return merchants[i].ID > merchants[j].ID
-	})
-}
-
-func sliceMerchantPage(merchants []db.Merchant, offset int32, limit int32) []db.Merchant {
-	start := int(offset)
-	if start >= len(merchants) {
-		return []db.Merchant{}
-	}
-	end := start + int(limit)
-	if end > len(merchants) {
-		end = len(merchants)
-	}
-	return merchants[start:end]
-}
-
 func (server *Server) listOperatorMerchantRows(
 	ctx *gin.Context,
 	regionIDs []int64,
 	statuses []string,
+	keyword string,
 	offset int32,
 	limit int32,
 ) ([]db.Merchant, int64, error) {
-	fetchLimit := offset + limit
-	if fetchLimit <= 0 {
-		fetchLimit = limit
+	if statuses == nil {
+		statuses = []string{}
 	}
 
-	allMerchants := make([]db.Merchant, 0, limit)
-	var total int64
-
-	for _, regionID := range regionIDs {
-		if len(statuses) == 0 {
-			merchants, err := server.store.ListMerchantsByRegion(ctx, db.ListMerchantsByRegionParams{
-				RegionID: regionID,
-				Limit:    fetchLimit,
-				Offset:   0,
-			})
-			if err != nil {
-				return nil, 0, err
-			}
-			count, err := server.store.CountMerchantsByRegion(ctx, regionID)
-			if err != nil {
-				return nil, 0, err
-			}
-			allMerchants = append(allMerchants, merchants...)
-			total += count
-			continue
-		}
-
-		for _, status := range statuses {
-			merchants, err := server.store.ListMerchantsByRegionWithStatus(ctx, db.ListMerchantsByRegionWithStatusParams{
-				RegionID: regionID,
-				Column2:  status,
-				Limit:    fetchLimit,
-				Offset:   0,
-			})
-			if err != nil {
-				return nil, 0, err
-			}
-			count, err := server.store.CountMerchantsByRegionWithStatus(ctx, db.CountMerchantsByRegionWithStatusParams{
-				RegionID: regionID,
-				Column2:  status,
-			})
-			if err != nil {
-				return nil, 0, err
-			}
-			allMerchants = append(allMerchants, merchants...)
-			total += count
-		}
+	query := db.ListOperatorMerchantsParams{
+		RegionIds: regionIDs,
+		Statuses:  statuses,
+		Keyword:   keyword,
+		Offset:    offset,
+		Limit:     limit,
+	}
+	merchants, err := server.store.ListOperatorMerchants(ctx, query)
+	if err != nil {
+		return nil, 0, err
 	}
 
-	sortMerchantsNewestFirst(allMerchants)
-	return sliceMerchantPage(allMerchants, offset, limit), total, nil
+	total, err := server.store.CountOperatorMerchants(ctx, db.CountOperatorMerchantsParams{
+		RegionIds: regionIDs,
+		Statuses:  statuses,
+		Keyword:   keyword,
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return merchants, total, nil
 }
 
 // listOperatorMerchants 获取运营商管辖区域内的商户列表
 // @Summary 获取区域商户列表
-// @Description 运营商获取其管辖区域内的所有商户，支持按状态筛选；不传 region_id 时聚合全部可管区域，status=approved 会包含已激活商户
+// @Description 运营商获取其管辖区域内的所有商户，支持按状态和名称/电话关键字筛选；不传 region_id 时聚合全部可管区域，status=approved 会包含已激活商户
 // @Tags 运营商-商户骑手管理
 // @Accept json
 // @Produce json
 // @Param status query string false "商户状态；approved 表示正常商户，包含 approved 与 active" Enums(pending, approved, rejected, suspended)
 // @Param region_id query int false "区域ID；不传时聚合当前运营商全部可管区域"
+// @Param keyword query string false "商户名称或手机号关键字，前后空白会被忽略，最长 50 字符"
 // @Param page query int false "页码" default(1)
 // @Param limit query int false "每页数量" default(20) maximum(100)
 // @Success 200 {object} listOperatorMerchantsResponse
@@ -196,7 +158,12 @@ func (server *Server) listOperatorMerchants(ctx *gin.Context) {
 
 	offset := pageOffset(req.Page, req.Limit)
 	statuses := operatorMerchantStatusFilters(req.Status)
-	merchants, total, err := server.listOperatorMerchantRows(ctx, selection.RegionIDs, statuses, offset, req.Limit)
+	keyword := strings.TrimSpace(req.Keyword)
+	if utf8.RuneCountInString(keyword) > 50 {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("keyword is too long")))
+		return
+	}
+	merchants, total, err := server.listOperatorMerchantRows(ctx, selection.RegionIDs, statuses, keyword, offset, req.Limit)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
@@ -255,7 +222,7 @@ func resolveListOperatorMerchantRegionSelection(server *Server, ctx *gin.Context
 // @Security BearerAuth
 // @Router /v1/operator/merchants/summary [get]
 func (server *Server) getOperatorMerchantSummary(ctx *gin.Context) {
-	var req listOperatorMerchantsRequest
+	var req operatorMerchantSummaryRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return

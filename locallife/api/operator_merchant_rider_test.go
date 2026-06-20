@@ -50,15 +50,21 @@ func TestListOperatorMerchantsAPI(t *testing.T) {
 				expectOperatorManagedRegions(store, operator, operator.RegionID)
 
 				store.EXPECT().
-					ListMerchantsByRegion(gomock.Any(), db.ListMerchantsByRegionParams{
-						RegionID: operator.RegionID,
-						Limit:    20,
-						Offset:   0,
+					ListOperatorMerchants(gomock.Any(), db.ListOperatorMerchantsParams{
+						RegionIds: []int64{operator.RegionID},
+						Statuses:  []string{},
+						Keyword:   "",
+						Offset:    0,
+						Limit:     20,
 					}).
 					Return(merchants, nil)
 
 				store.EXPECT().
-					CountMerchantsByRegion(gomock.Any(), operator.RegionID).
+					CountOperatorMerchants(gomock.Any(), db.CountOperatorMerchantsParams{
+						RegionIds: []int64{operator.RegionID},
+						Statuses:  []string{},
+						Keyword:   "",
+					}).
 					Return(int64(2), nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -80,15 +86,6 @@ func TestListOperatorMerchantsAPI(t *testing.T) {
 				expectActiveOperatorAuth(store, user.ID, operator)
 				expectOperatorManagedRegions(store, operator, operator.RegionID)
 
-				store.EXPECT().
-					ListMerchantsByRegionWithStatus(gomock.Any(), db.ListMerchantsByRegionWithStatusParams{
-						RegionID: operator.RegionID,
-						Column2:  db.MerchantStatusApproved,
-						Limit:    20,
-						Offset:   0,
-					}).
-					Return(merchants, nil)
-
 				activeMerchants := []db.Merchant{
 					func() db.Merchant {
 						m := randomMerchantInRegionForOp(operator.RegionID)
@@ -96,28 +93,26 @@ func TestListOperatorMerchantsAPI(t *testing.T) {
 						return m
 					}(),
 				}
-				store.EXPECT().
-					ListMerchantsByRegionWithStatus(gomock.Any(), db.ListMerchantsByRegionWithStatusParams{
-						RegionID: operator.RegionID,
-						Column2:  db.MerchantStatusActive,
-						Limit:    20,
-						Offset:   0,
-					}).
-					Return(activeMerchants, nil)
+				allMerchants := append([]db.Merchant{}, merchants...)
+				allMerchants = append(allMerchants, activeMerchants...)
 
 				store.EXPECT().
-					CountMerchantsByRegionWithStatus(gomock.Any(), db.CountMerchantsByRegionWithStatusParams{
-						RegionID: operator.RegionID,
-						Column2:  db.MerchantStatusApproved,
+					ListOperatorMerchants(gomock.Any(), db.ListOperatorMerchantsParams{
+						RegionIds: []int64{operator.RegionID},
+						Statuses:  []string{db.MerchantStatusApproved, db.MerchantStatusActive},
+						Keyword:   "",
+						Offset:    0,
+						Limit:     20,
 					}).
-					Return(int64(2), nil)
+					Return(allMerchants, nil)
 
 				store.EXPECT().
-					CountMerchantsByRegionWithStatus(gomock.Any(), db.CountMerchantsByRegionWithStatusParams{
-						RegionID: operator.RegionID,
-						Column2:  db.MerchantStatusActive,
+					CountOperatorMerchants(gomock.Any(), db.CountOperatorMerchantsParams{
+						RegionIds: []int64{operator.RegionID},
+						Statuses:  []string{db.MerchantStatusApproved, db.MerchantStatusActive},
+						Keyword:   "",
 					}).
-					Return(int64(1), nil)
+					Return(int64(3), nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -143,24 +138,20 @@ func TestListOperatorMerchantsAPI(t *testing.T) {
 				expectOperatorManagedRegions(store, operator, regionA, regionB)
 
 				store.EXPECT().
-					ListMerchantsByRegion(gomock.Any(), db.ListMerchantsByRegionParams{
-						RegionID: regionA,
-						Limit:    20,
-						Offset:   0,
-					}).
-					Return([]db.Merchant{}, nil)
-				store.EXPECT().
-					CountMerchantsByRegion(gomock.Any(), regionA).
-					Return(int64(0), nil)
-				store.EXPECT().
-					ListMerchantsByRegion(gomock.Any(), db.ListMerchantsByRegionParams{
-						RegionID: regionB,
-						Limit:    20,
-						Offset:   0,
+					ListOperatorMerchants(gomock.Any(), db.ListOperatorMerchantsParams{
+						RegionIds: []int64{regionA, regionB},
+						Statuses:  []string{},
+						Keyword:   "",
+						Offset:    0,
+						Limit:     20,
 					}).
 					Return([]db.Merchant{regionBMerchant}, nil)
 				store.EXPECT().
-					CountMerchantsByRegion(gomock.Any(), regionB).
+					CountOperatorMerchants(gomock.Any(), db.CountOperatorMerchantsParams{
+						RegionIds: []int64{regionA, regionB},
+						Statuses:  []string{},
+						Keyword:   "",
+					}).
 					Return(int64(1), nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -170,6 +161,48 @@ func TestListOperatorMerchantsAPI(t *testing.T) {
 				require.Len(t, resp.Merchants, 1)
 				require.Equal(t, operator.RegionID+1, resp.Merchants[0].RegionID)
 				require.Equal(t, int64(1), resp.Total)
+			},
+		},
+		{
+			name:  "OK_WithStatusAndTrimmedKeywordSearch",
+			query: "?status=approved&keyword=%20%20%E5%B7%9D%E5%91%B3%20%20&page=2&limit=10",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				matchingMerchant := randomMerchantInRegionForOp(operator.RegionID)
+				matchingMerchant.Name = "川味小馆"
+				matchingMerchant.Phone = "18677889900"
+
+				expectActiveOperatorAuth(store, user.ID, operator)
+				expectOperatorManagedRegions(store, operator, operator.RegionID)
+
+				store.EXPECT().
+					ListOperatorMerchants(gomock.Any(), db.ListOperatorMerchantsParams{
+						RegionIds: []int64{operator.RegionID},
+						Statuses:  []string{db.MerchantStatusApproved, db.MerchantStatusActive},
+						Keyword:   "川味",
+						Offset:    10,
+						Limit:     10,
+					}).
+					Return([]db.Merchant{matchingMerchant}, nil)
+				store.EXPECT().
+					CountOperatorMerchants(gomock.Any(), db.CountOperatorMerchantsParams{
+						RegionIds: []int64{operator.RegionID},
+						Statuses:  []string{db.MerchantStatusApproved, db.MerchantStatusActive},
+						Keyword:   "川味",
+					}).
+					Return(int64(11), nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp listOperatorMerchantsResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Len(t, resp.Merchants, 1)
+				require.Equal(t, "川味小馆", resp.Merchants[0].Name)
+				require.Equal(t, int64(11), resp.Total)
+				require.Equal(t, int32(2), resp.Page)
+				require.Equal(t, int32(10), resp.Limit)
 			},
 		},
 		{

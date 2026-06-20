@@ -160,10 +160,11 @@ export async function loadOperatorMerchantListPageData(params: {
   statusFilter?: OperatorMerchantFilterStatus
   searchKeyword?: string
 }): Promise<OperatorMerchantListPageData> {
+  const keyword = params.searchKeyword?.trim() || undefined
   const query: MerchantQueryParams = {
     page: params.pageId,
     limit: params.pageSize,
-    keyword: params.searchKeyword || undefined,
+    keyword,
     status: params.statusFilter || undefined,
     sort_by: 'created_at',
     sort_order: 'desc',

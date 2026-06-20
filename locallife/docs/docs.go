@@ -18057,7 +18057,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "运营商获取其管辖区域内的所有商户，支持按状态筛选；不传 region_id 时聚合全部可管区域，status=approved 会包含已激活商户",
+                "description": "运营商获取其管辖区域内的所有商户，支持按状态和名称/电话关键字筛选；不传 region_id 时聚合全部可管区域，status=approved 会包含已激活商户",
                 "consumes": [
                     "application/json"
                 ],
@@ -18085,6 +18085,12 @@ const docTemplate = `{
                         "type": "integer",
                         "description": "区域ID；不传时聚合当前运营商全部可管区域",
                         "name": "region_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "商户名称或手机号关键字，前后空白会被忽略，最长 50 字符",
+                        "name": "keyword",
                         "in": "query"
                     },
                     {

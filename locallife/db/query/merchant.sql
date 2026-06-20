@@ -697,6 +697,32 @@ WHERE region_id = $1
   AND ($2::varchar IS NULL OR status = $2)
   AND deleted_at IS NULL;
 
+-- name: ListOperatorMerchants :many
+-- 运营商商户列表：按已授权区域集合、状态集合和关键字查询
+SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images, manual_open_status_until FROM merchants
+WHERE region_id = ANY(sqlc.arg('region_ids')::bigint[])
+  AND (cardinality(sqlc.arg('statuses')::text[]) = 0 OR status = ANY(sqlc.arg('statuses')::text[]))
+  AND (
+    sqlc.arg('keyword')::text = ''
+    OR name ILIKE '%' || sqlc.arg('keyword')::text || '%'
+    OR phone ILIKE '%' || sqlc.arg('keyword')::text || '%'
+  )
+  AND deleted_at IS NULL
+ORDER BY created_at DESC, id DESC
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
+
+-- name: CountOperatorMerchants :one
+-- 运营商商户数量：与 ListOperatorMerchants 保持同一过滤条件
+SELECT COUNT(*) FROM merchants
+WHERE region_id = ANY(sqlc.arg('region_ids')::bigint[])
+  AND (cardinality(sqlc.arg('statuses')::text[]) = 0 OR status = ANY(sqlc.arg('statuses')::text[]))
+  AND (
+    sqlc.arg('keyword')::text = ''
+    OR name ILIKE '%' || sqlc.arg('keyword')::text || '%'
+    OR phone ILIKE '%' || sqlc.arg('keyword')::text || '%'
+  )
+  AND deleted_at IS NULL;
+
 
 -- name: CheckBusinessLicenseExists :one
 -- 检查营业执照号是否已被其他已通过的申请占用

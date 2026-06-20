@@ -217,6 +217,8 @@ type Querier interface {
 	CountOnlineRiders(ctx context.Context) (int64, error)
 	// 统计区域内当前在线骑手数量
 	CountOnlineRidersByRegion(ctx context.Context, regionID pgtype.Int8) (int64, error)
+	// 运营商商户数量：与 ListOperatorMerchants 保持同一过滤条件
+	CountOperatorMerchants(ctx context.Context, arg CountOperatorMerchantsParams) (int64, error)
 	CountOperatorNotifications(ctx context.Context, arg CountOperatorNotificationsParams) (int64, error)
 	CountOperatorPendingDispatches(ctx context.Context, arg CountOperatorPendingDispatchesParams) (int64, error)
 	// 运营商追偿争议计数
@@ -1457,6 +1459,8 @@ type Querier interface {
 	ListOpenMerchants(ctx context.Context, arg ListOpenMerchantsParams) ([]Merchant, error)
 	// 列出所有申请（支持状态筛选）
 	ListOperatorApplications(ctx context.Context, arg ListOperatorApplicationsParams) ([]ListOperatorApplicationsRow, error)
+	// 运营商商户列表：按已授权区域集合、状态集合和关键字查询
+	ListOperatorMerchants(ctx context.Context, arg ListOperatorMerchantsParams) ([]Merchant, error)
 	ListOperatorNotifications(ctx context.Context, arg ListOperatorNotificationsParams) ([]Notification, error)
 	ListOperatorPendingDispatches(ctx context.Context, arg ListOperatorPendingDispatchesParams) ([]ListOperatorPendingDispatchesRow, error)
 	// =========================== 运营商视角 ===========================

@@ -2185,6 +2185,28 @@ func createMerchantInRegion(t *testing.T, regionID int64, status string) Merchan
 	return merchant
 }
 
+func createMerchantInRegionWithProfile(t *testing.T, regionID int64, status, name, phone string) Merchant {
+	user := createRandomUser(t)
+	appData, _ := json.Marshal(map[string]string{"test": "data"})
+	arg := CreateMerchantParams{
+		OwnerUserID:     user.ID,
+		Name:            name,
+		Description:     pgtype.Text{String: util.RandomString(50), Valid: true},
+		Phone:           phone,
+		Address:         util.RandomString(30),
+		Latitude:        pgtype.Numeric{},
+		Longitude:       pgtype.Numeric{},
+		Status:          status,
+		ApplicationData: appData,
+		RegionID:        regionID,
+	}
+
+	merchant, err := testStore.CreateMerchant(context.Background(), arg)
+	require.NoError(t, err)
+	require.NotEmpty(t, merchant)
+	return merchant
+}
+
 func TestListMerchantsByRegion(t *testing.T) {
 	region := createRandomRegion(t)
 
@@ -2307,6 +2329,78 @@ func TestCountMerchantsByRegionWithStatus(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, suspendedCount, int64(1))
+}
+
+func TestListOperatorMerchants_SearchesByKeywordWithinManagedRegions(t *testing.T) {
+	managedRegion := createRandomRegion(t)
+	unmanagedRegion := createRandomRegion(t)
+
+	nameMatched := createMerchantInRegionWithProfile(
+		t,
+		managedRegion.ID,
+		"approved",
+		"川味小馆"+util.RandomString(4),
+		"13800138001",
+	)
+	phoneMatched := createMerchantInRegionWithProfile(
+		t,
+		managedRegion.ID,
+		"active",
+		"普通商户"+util.RandomString(4),
+		"18677889900",
+	)
+	_ = createMerchantInRegionWithProfile(
+		t,
+		managedRegion.ID,
+		"approved",
+		"粤式茶餐厅"+util.RandomString(4),
+		"13900139000",
+	)
+	_ = createMerchantInRegionWithProfile(
+		t,
+		unmanagedRegion.ID,
+		"approved",
+		"川味越权店"+util.RandomString(4),
+		"18677889901",
+	)
+
+	nameResults, err := testStore.ListOperatorMerchants(context.Background(), ListOperatorMerchantsParams{
+		RegionIds: []int64{managedRegion.ID},
+		Statuses:  []string{},
+		Keyword:   "川味",
+		Limit:     10,
+		Offset:    0,
+	})
+	require.NoError(t, err)
+	require.Len(t, nameResults, 1)
+	require.Equal(t, nameMatched.ID, nameResults[0].ID)
+
+	nameCount, err := testStore.CountOperatorMerchants(context.Background(), CountOperatorMerchantsParams{
+		RegionIds: []int64{managedRegion.ID},
+		Statuses:  []string{},
+		Keyword:   "川味",
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), nameCount)
+
+	phoneResults, err := testStore.ListOperatorMerchants(context.Background(), ListOperatorMerchantsParams{
+		RegionIds: []int64{managedRegion.ID},
+		Statuses:  []string{"active"},
+		Keyword:   "7788",
+		Limit:     10,
+		Offset:    0,
+	})
+	require.NoError(t, err)
+	require.Len(t, phoneResults, 1)
+	require.Equal(t, phoneMatched.ID, phoneResults[0].ID)
+
+	phoneCount, err := testStore.CountOperatorMerchants(context.Background(), CountOperatorMerchantsParams{
+		RegionIds: []int64{managedRegion.ID},
+		Statuses:  []string{"active"},
+		Keyword:   "7788",
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), phoneCount)
 }
 
 func TestListMerchantsByRegion_ExcludesDeleted(t *testing.T) {

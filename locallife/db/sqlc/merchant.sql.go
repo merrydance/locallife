@@ -266,6 +266,32 @@ func (q *Queries) CountMerchantsByRegionWithStatus(ctx context.Context, arg Coun
 	return count, err
 }
 
+const countOperatorMerchants = `-- name: CountOperatorMerchants :one
+SELECT COUNT(*) FROM merchants
+WHERE region_id = ANY($1::bigint[])
+  AND (cardinality($2::text[]) = 0 OR status = ANY($2::text[]))
+  AND (
+    $3::text = ''
+    OR name ILIKE '%' || $3::text || '%'
+    OR phone ILIKE '%' || $3::text || '%'
+  )
+  AND deleted_at IS NULL
+`
+
+type CountOperatorMerchantsParams struct {
+	RegionIds []int64  `json:"region_ids"`
+	Statuses  []string `json:"statuses"`
+	Keyword   string   `json:"keyword"`
+}
+
+// 运营商商户数量：与 ListOperatorMerchants 保持同一过滤条件
+func (q *Queries) CountOperatorMerchants(ctx context.Context, arg CountOperatorMerchantsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countOperatorMerchants, arg.RegionIds, arg.Statuses, arg.Keyword)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countSearchMerchants = `-- name: CountSearchMerchants :one
 SELECT COUNT(*) FROM merchants m
 LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
@@ -2143,6 +2169,83 @@ type ListOpenMerchantsParams struct {
 // 获取营业中的商户列表
 func (q *Queries) ListOpenMerchants(ctx context.Context, arg ListOpenMerchantsParams) ([]Merchant, error) {
 	rows, err := q.db.Query(ctx, listOpenMerchants, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Merchant{}
+	for rows.Next() {
+		var i Merchant
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerUserID,
+			&i.Name,
+			&i.Description,
+			&i.Phone,
+			&i.Address,
+			&i.Latitude,
+			&i.Longitude,
+			&i.Status,
+			&i.ApplicationData,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Version,
+			&i.RegionID,
+			&i.IsOpen,
+			&i.AutoCloseAt,
+			&i.DeletedAt,
+			&i.PendingOwnerBind,
+			&i.BindCode,
+			&i.BindCodeExpiresAt,
+			&i.GroupID,
+			&i.BrandID,
+			&i.LogoMediaAssetID,
+			&i.AutoOpenByBusinessHours,
+			&i.StorefrontImages,
+			&i.EnvironmentImages,
+			&i.ManualOpenStatusUntil,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOperatorMerchants = `-- name: ListOperatorMerchants :many
+SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours, storefront_images, environment_images, manual_open_status_until FROM merchants
+WHERE region_id = ANY($1::bigint[])
+  AND (cardinality($2::text[]) = 0 OR status = ANY($2::text[]))
+  AND (
+    $3::text = ''
+    OR name ILIKE '%' || $3::text || '%'
+    OR phone ILIKE '%' || $3::text || '%'
+  )
+  AND deleted_at IS NULL
+ORDER BY created_at DESC, id DESC
+LIMIT $5 OFFSET $4
+`
+
+type ListOperatorMerchantsParams struct {
+	RegionIds []int64  `json:"region_ids"`
+	Statuses  []string `json:"statuses"`
+	Keyword   string   `json:"keyword"`
+	Offset    int32    `json:"offset"`
+	Limit     int32    `json:"limit"`
+}
+
+// 运营商商户列表：按已授权区域集合、状态集合和关键字查询
+func (q *Queries) ListOperatorMerchants(ctx context.Context, arg ListOperatorMerchantsParams) ([]Merchant, error) {
+	rows, err := q.db.Query(ctx, listOperatorMerchants,
+		arg.RegionIds,
+		arg.Statuses,
+		arg.Keyword,
+		arg.Offset,
+		arg.Limit,
+	)
 	if err != nil {
 		return nil, err
 	}

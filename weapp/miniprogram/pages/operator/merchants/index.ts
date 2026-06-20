@@ -17,6 +17,8 @@ interface MerchantListPageOptions {
   status?: string
 }
 
+let merchantListRequestSeq = 0
+
 Page({
   data: {
     loading: false,
@@ -75,14 +77,15 @@ Page({
   },
 
   async loadMerchants(refresh = false, silent = false) {
-    if (this.data.loading || (this.data.loadingMore && !refresh)) return
+    if (!refresh && (this.data.loading || this.data.loadingMore)) return
+    const requestSeq = ++merchantListRequestSeq
 
     try {
       if (refresh) {
         if (!silent) {
-          this.setData({ loading: true, error: null, page: 1 })
+          this.setData({ loading: true, loadingMore: false, error: null, page: 1 })
         } else {
-          this.setData({ loading: true, page: 1 })
+          this.setData({ loading: true, loadingMore: false, page: 1 })
         }
       } else {
         this.setData({ loadingMore: true })
@@ -95,6 +98,9 @@ Page({
         statusFilter: this.data.statusFilter,
         searchKeyword: this.data.searchKeyword
       })
+      if (requestSeq !== merchantListRequestSeq) {
+        return
+      }
       const merchants = refresh ? result.merchants : [...this.data.merchants, ...result.merchants]
       const total = refresh ? result.total : Number(result.total || merchants.length)
       const hasMore = merchants.length < total
@@ -110,6 +116,9 @@ Page({
         error: null
       })
     } catch (error) {
+      if (requestSeq !== merchantListRequestSeq) {
+        return
+      }
       console.error('加载商户列表失败:', error)
       if (refresh) {
         this.setData({
