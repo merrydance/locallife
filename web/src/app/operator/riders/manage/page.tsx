@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageContent, PageHeader, PageShell } from "@/components/merchant/layout/page-shell";
 import { apiGet, formatAmount } from "@/lib/api";
-import { formatRiderStatus, riderStatusOptions } from "@/lib/operator-display";
+import { formatRiderStatus, getActiveOperatorRegions, riderStatusOptions } from "@/lib/operator-display";
 import type { OperatorRiderDetail, OperatorRiderListResponse } from "@/types/operator-console";
 import type { OperatorRegionListResponse } from "@/types/operator-stats";
 
@@ -23,7 +23,7 @@ export default function OperatorRidersManagePage() {
 
   const loadRegions = useCallback(() => {
     apiGet<OperatorRegionListResponse>("/operator/regions", { page: 1, limit: 100 })
-      .then((res) => setRegions(res.regions ?? []))
+      .then((res) => setRegions(getActiveOperatorRegions(res.regions)))
       .catch(() => setRegions([]));
   }, []);
 

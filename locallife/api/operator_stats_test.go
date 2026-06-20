@@ -165,6 +165,102 @@ func TestGetRegionStatsAPI(t *testing.T) {
 	}
 }
 
+func TestListOperatorRegionsAPI_ReturnsOperatorRegionStatus(t *testing.T) {
+	user, _ := randomUser(t)
+	operator := randomOperator(user.ID)
+	region := db.Region{
+		ID:    operator.RegionID,
+		Code:  "130528",
+		Name:  "宁晋县",
+		Level: 3,
+	}
+	suspendedRegion := db.Region{
+		ID:    operator.RegionID + 1,
+		Code:  "130529",
+		Name:  "巨鹿县",
+		Level: 3,
+	}
+	relationCreatedAt := time.Date(2026, 6, 20, 9, 30, 0, 0, time.UTC)
+	relation := db.ListOperatorRegionRelationsRow{
+		ID:          88,
+		OperatorID:  operator.ID,
+		RegionID:    region.ID,
+		Status:      db.OperatorRegionStatusActive,
+		CreatedAt:   relationCreatedAt,
+		RegionName:  region.Name,
+		RegionCode:  region.Code,
+		RegionLevel: region.Level,
+	}
+	suspendedRelation := db.ListOperatorRegionRelationsRow{
+		ID:          89,
+		OperatorID:  operator.ID,
+		RegionID:    suspendedRegion.ID,
+		Status:      db.OperatorRegionStatusSuspended,
+		CreatedAt:   relationCreatedAt.Add(time.Hour),
+		RegionName:  suspendedRegion.Name,
+		RegionCode:  suspendedRegion.Code,
+		RegionLevel: suspendedRegion.Level,
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectActiveOperatorAuth(store, user.ID, operator)
+	store.EXPECT().
+		ListOperatorRegionRelations(gomock.Any(), operator.ID).
+		Times(1).
+		Return([]db.ListOperatorRegionRelationsRow{relation, suspendedRelation}, nil)
+	store.EXPECT().
+		GetRegion(gomock.Any(), relation.RegionID).
+		Times(1).
+		Return(region, nil)
+	store.EXPECT().
+		GetRegion(gomock.Any(), suspendedRelation.RegionID).
+		Times(1).
+		Return(suspendedRegion, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/operator/regions?page=1&limit=100", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp struct {
+		Regions []struct {
+			ID         int64  `json:"id"`
+			RegionID   int64  `json:"region_id"`
+			Code       string `json:"code"`
+			Name       string `json:"name"`
+			Level      int16  `json:"level"`
+			Status     string `json:"status"`
+			OperatorID int64  `json:"operator_id"`
+		} `json:"regions"`
+		Total int   `json:"total"`
+		Page  int32 `json:"page"`
+		Limit int32 `json:"limit"`
+	}
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Len(t, resp.Regions, 2)
+	require.Equal(t, relation.RegionID, resp.Regions[0].ID)
+	require.Equal(t, relation.RegionID, resp.Regions[0].RegionID)
+	require.Equal(t, relation.OperatorID, resp.Regions[0].OperatorID)
+	require.Equal(t, relation.RegionCode, resp.Regions[0].Code)
+	require.Equal(t, relation.RegionName, resp.Regions[0].Name)
+	require.Equal(t, relation.RegionLevel, resp.Regions[0].Level)
+	require.Equal(t, relation.Status, resp.Regions[0].Status)
+	require.Equal(t, suspendedRelation.RegionID, resp.Regions[1].RegionID)
+	require.Equal(t, suspendedRelation.OperatorID, resp.Regions[1].OperatorID)
+	require.Equal(t, suspendedRelation.Status, resp.Regions[1].Status)
+	require.Equal(t, 2, resp.Total)
+	require.Equal(t, int32(1), resp.Page)
+	require.Equal(t, int32(100), resp.Limit)
+}
+
 // ============================================================================
 // 商户排行测试
 // ============================================================================

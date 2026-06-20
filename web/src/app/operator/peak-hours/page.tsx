@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageContent, PageHeader, PageShell } from "@/components/merchant/layout/page-shell";
 import { apiDelete, apiGet, apiPost } from "@/lib/api";
-import { formatWeekdays } from "@/lib/operator-display";
+import { formatWeekdays, getActiveOperatorRegions } from "@/lib/operator-display";
 import type { OperatorRegionListResponse } from "@/types/operator-stats";
 import type { PeakHourConfigResponse } from "@/types/operator-console";
 
@@ -43,10 +43,10 @@ export default function OperatorPeakHoursPage() {
   const [weekdayPreset, setWeekdayPreset] = useState("workdays");
 
   useEffect(() => {
-    apiGet<OperatorRegionListResponse>("/operator/regions", { page: 1, limit: 1 })
+    apiGet<OperatorRegionListResponse>("/operator/regions", { page: 1, limit: 100 })
       .then((res) => {
-        const id = res.regions?.[0]?.id;
-        if (!id) throw new Error("未找到可管理区域");
+        const id = getActiveOperatorRegions(res.regions)?.[0]?.id;
+        if (!id) throw new Error("未找到运营中的管理区域");
         setRegionId(id);
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "加载区域失败"));

@@ -251,6 +251,55 @@ func (q *Queries) ListAllOperatorRegions(ctx context.Context, arg ListAllOperato
 	return items, nil
 }
 
+const listOperatorRegionRelations = `-- name: ListOperatorRegionRelations :many
+SELECT or_t.id, or_t.operator_id, or_t.region_id, or_t.status, or_t.created_at, r.name as region_name, r.code as region_code, r.level as region_level
+FROM operator_regions or_t
+JOIN regions r ON or_t.region_id = r.id
+WHERE or_t.operator_id = $1 AND or_t.status IN ('active', 'suspended')
+ORDER BY r.code
+`
+
+type ListOperatorRegionRelationsRow struct {
+	ID          int64     `json:"id"`
+	OperatorID  int64     `json:"operator_id"`
+	RegionID    int64     `json:"region_id"`
+	Status      string    `json:"status"`
+	CreatedAt   time.Time `json:"created_at"`
+	RegionName  string    `json:"region_name"`
+	RegionCode  string    `json:"region_code"`
+	RegionLevel int16     `json:"region_level"`
+}
+
+// 列出运营商区域关系用于展示，保留暂停关系状态；不可用于权限判断
+func (q *Queries) ListOperatorRegionRelations(ctx context.Context, operatorID int64) ([]ListOperatorRegionRelationsRow, error) {
+	rows, err := q.db.Query(ctx, listOperatorRegionRelations, operatorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListOperatorRegionRelationsRow{}
+	for rows.Next() {
+		var i ListOperatorRegionRelationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OperatorID,
+			&i.RegionID,
+			&i.Status,
+			&i.CreatedAt,
+			&i.RegionName,
+			&i.RegionCode,
+			&i.RegionLevel,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOperatorRegions = `-- name: ListOperatorRegions :many
 SELECT or_t.id, or_t.operator_id, or_t.region_id, or_t.status, or_t.created_at, r.name as region_name, r.code as region_code, r.level as region_level
 FROM operator_regions or_t

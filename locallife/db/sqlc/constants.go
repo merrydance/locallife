@@ -187,6 +187,9 @@ const (
 	RiderStatusActive    = "active"
 	RiderStatusSuspended = "suspended"
 
+	OperatorRegionStatusActive    = "active"
+	OperatorRegionStatusSuspended = "suspended"
+
 	RiderApplicationStatusDraft     = "draft"
 	RiderApplicationStatusSubmitted = "submitted"
 	RiderApplicationStatusApproved  = "approved"

@@ -24,6 +24,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { apiGet, formatAmount, getRecentRange } from "@/lib/api";
+import { getActiveOperatorRegions } from "@/lib/operator-display";
 import type {
   OperatorDailyTrendRow,
   OperatorRegionListResponse,
@@ -39,7 +40,7 @@ export default function OperatorRegionsStatsPage() {
   useEffect(() => {
     const range = getRecentRange(14);
     Promise.allSettled([
-      apiGet<OperatorRegionListResponse>("/operator/regions", { page: 1, limit: 1 }),
+      apiGet<OperatorRegionListResponse>("/operator/regions", { page: 1, limit: 100 }),
       apiGet<OperatorDailyTrendRow[]>("/operator/trend/daily", range),
     ]).then(async ([regionListResult, trendResult]) => {
       const errors: string[] = [];
@@ -52,7 +53,7 @@ export default function OperatorRegionsStatsPage() {
       }
 
       if (regionListResult.status === "fulfilled") {
-        const regionId = regionListResult.value.regions?.[0]?.id;
+        const regionId = getActiveOperatorRegions(regionListResult.value.regions)?.[0]?.id;
         if (regionId) {
           const statsResult = await Promise.allSettled([
             apiGet<OperatorRegionStatsResponse>(`/operator/regions/${regionId}/stats`, range),
@@ -65,7 +66,7 @@ export default function OperatorRegionsStatsPage() {
           }
         } else {
           setRegionStats(null);
-          errors.push("未找到区域信息");
+          errors.push("未找到运营中的管理区域");
         }
       } else {
         setRegionStats(null);

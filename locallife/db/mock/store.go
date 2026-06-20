@@ -16071,6 +16071,21 @@ func (mr *MockStoreMockRecorder) ListOperatorRegionApplicationsByOperator(ctx, o
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListOperatorRegionApplicationsByOperator", reflect.TypeOf((*MockStore)(nil).ListOperatorRegionApplicationsByOperator), ctx, operatorID)
 }
 
+// ListOperatorRegionRelations mocks base method.
+func (m *MockStore) ListOperatorRegionRelations(ctx context.Context, operatorID int64) ([]db.ListOperatorRegionRelationsRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListOperatorRegionRelations", ctx, operatorID)
+	ret0, _ := ret[0].([]db.ListOperatorRegionRelationsRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListOperatorRegionRelations indicates an expected call of ListOperatorRegionRelations.
+func (mr *MockStoreMockRecorder) ListOperatorRegionRelations(ctx, operatorID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListOperatorRegionRelations", reflect.TypeOf((*MockStore)(nil).ListOperatorRegionRelations), ctx, operatorID)
+}
+
 // ListOperatorRegions mocks base method.
 func (m *MockStore) ListOperatorRegions(ctx context.Context, operatorID int64) ([]db.ListOperatorRegionsRow, error) {
 	m.ctrl.T.Helper()

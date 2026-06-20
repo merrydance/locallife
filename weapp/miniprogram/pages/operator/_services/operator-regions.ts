@@ -37,7 +37,9 @@ function buildRegionPickerState(regions: ConsoleRegionOption[]): ConsoleRegionPi
 }
 
 function mapRegions(source: RegionResponse[]): ConsoleRegionOption[] {
-  return (source || []).map((item) => ({ id: item.id, name: item.name }))
+  return (source || [])
+    .filter((item) => item.status === 'active')
+    .map((item) => ({ id: item.id, name: item.name }))
 }
 
 export async function loadOperatorRegions(): Promise<ConsoleRegionPickerState> {

@@ -1,6 +1,13 @@
+import type { OperatorRegionResponse } from "@/types/operator-stats";
+
 export type SelectOption = {
   value: string;
   label: string;
+};
+
+const OPERATOR_REGION_STATUS_LABELS: Record<string, string> = {
+  active: "运营中",
+  suspended: "已暂停",
 };
 
 const MERCHANT_STATUS_LABELS: Record<string, string> = {
@@ -141,6 +148,16 @@ export function formatFoodSafetyIncidentType(type: string): string {
 
 export function formatMerchantStatus(status: string): string {
   return MERCHANT_STATUS_LABELS[status] ?? status;
+}
+
+export function formatOperatorRegionStatus(status: string): string {
+  return OPERATOR_REGION_STATUS_LABELS[status] ?? "状态未知";
+}
+
+export function getActiveOperatorRegions(
+  regions: OperatorRegionResponse[] | undefined
+): OperatorRegionResponse[] {
+  return (regions ?? []).filter((region) => region.status === "active");
 }
 
 export function formatRiderStatus(status: string): string {

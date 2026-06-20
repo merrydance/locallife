@@ -12,6 +12,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageContent, PageHeader, PageShell } from "@/components/merchant/layout/page-shell";
 import { apiGet, apiPatch } from "@/lib/api";
+import { getActiveOperatorRegions } from "@/lib/operator-display";
 import type { OperatorRulesResponse } from "@/types/operator-console";
 import type { OperatorRegionListResponse } from "@/types/operator-stats";
 
@@ -29,7 +30,7 @@ export default function OperatorRulesPage() {
 
   const loadRegions = useCallback(() => {
     apiGet<OperatorRegionListResponse>("/operator/regions", { page: 1, limit: 100 })
-      .then((res) => setRegions(res.regions ?? []))
+      .then((res) => setRegions(getActiveOperatorRegions(res.regions)))
       .catch(() => setRegions([]));
   }, []);
 

@@ -1464,6 +1464,8 @@ type Querier interface {
 	ListOperatorRecoveryDisputes(ctx context.Context, arg ListOperatorRecoveryDisputesParams) ([]ListOperatorRecoveryDisputesRow, error)
 	// 列出某运营商的所有区域扩展申请
 	ListOperatorRegionApplicationsByOperator(ctx context.Context, operatorID int64) ([]ListOperatorRegionApplicationsByOperatorRow, error)
+	// 列出运营商区域关系用于展示，保留暂停关系状态；不可用于权限判断
+	ListOperatorRegionRelations(ctx context.Context, operatorID int64) ([]ListOperatorRegionRelationsRow, error)
 	// 列出运营商管理的所有区域
 	ListOperatorRegions(ctx context.Context, operatorID int64) ([]ListOperatorRegionsRow, error)
 	ListOperators(ctx context.Context, arg ListOperatorsParams) ([]ListOperatorsRow, error)

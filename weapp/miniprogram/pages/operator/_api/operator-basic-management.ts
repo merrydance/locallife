@@ -9,7 +9,8 @@ import { request } from '../../../utils/request'
 // ==================== 数据类型定义 ====================
 
 /** 区域状态枚举 */
-export type RegionStatus = 'active' | 'inactive' | 'pending'
+export type RegionStatus = 'active' | 'suspended'
+export type RegionDisplayStatus = RegionStatus | 'unknown'
 export type RegionStatusTheme = 'primary' | 'default' | 'warning'
 
 /** 运营商状态枚举 */
@@ -17,7 +18,7 @@ export type OperatorStatus = 'active' | 'suspended' | 'pending'
 
 // ==================== 区域管理相关类型 ====================
 
-/** 区域信息响应 - 对齐 api.regionResponse */
+/** 区域信息响应 - 对齐 api.operatorRegionResponse */
 export interface RegionResponse {
     code: string
     id: number
@@ -27,6 +28,8 @@ export interface RegionResponse {
     name: string
     parent_id?: number
     status?: RegionStatus
+    region_id?: number
+    operator_region_id?: number
     operator_id?: number
     created_at?: string
     updated_at?: string
@@ -518,7 +521,7 @@ export class OperatorBasicManagementAdapter {
         code: string
         parentId?: number
         level: number
-        status: RegionStatus
+        status: RegionDisplayStatus
         status_label: string
         status_theme: RegionStatusTheme
         is_active: boolean
@@ -526,7 +529,7 @@ export class OperatorBasicManagementAdapter {
         createdAt: string
         updatedAt: string
     } {
-        const status = data.status ?? 'pending'
+        const status = normalizeRegionStatus(data.status)
         const statusDisplay = getRegionStatusDisplay(status)
         return {
             id: data.id,
@@ -623,26 +626,39 @@ export const regionAnalyticsService = new RegionAnalyticsService()
  * 格式化区域状态显示
  * @param status 区域状态
  */
-export function formatRegionStatus(status: RegionStatus): string {
-    const statusMap: Record<RegionStatus, string> = {
-        active: '正常',
-        inactive: '停用',
-        pending: '待审核'
+export function formatRegionStatus(status: RegionDisplayStatus): string {
+    const statusMap: Record<RegionDisplayStatus, string> = {
+        active: '运营中',
+        suspended: '已暂停',
+        unknown: '状态未知'
     }
     return statusMap[status] || status
 }
 
+export function normalizeRegionStatus(status?: RegionStatus | string): RegionDisplayStatus {
+    if (status === 'active' || status === 'suspended') {
+        return status
+    }
+
+    return 'unknown'
+}
+
 export function getRegionStatusDisplay(status?: RegionStatus | string) {
-    const normalizedStatus = (status || 'pending') as RegionStatus
-    const themeMap: Record<RegionStatus, RegionStatusTheme> = {
+    const normalizedStatus = normalizeRegionStatus(status)
+    const labelMap: Record<RegionDisplayStatus, string> = {
+        active: '运营中',
+        suspended: '已暂停',
+        unknown: '状态未知'
+    }
+    const themeMap: Record<RegionDisplayStatus, RegionStatusTheme> = {
         active: 'primary',
-        inactive: 'default',
-        pending: 'warning'
+        suspended: 'warning',
+        unknown: 'default'
     }
 
     return {
         normalizedStatus,
-        label: normalizedStatus === 'active' ? '运营中' : normalizedStatus === 'inactive' ? '已停用' : '待审核',
+        label: labelMap[normalizedStatus],
         theme: themeMap[normalizedStatus] || 'default',
         isActive: normalizedStatus === 'active'
     }

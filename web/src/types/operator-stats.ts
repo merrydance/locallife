@@ -1,6 +1,13 @@
 export interface OperatorRegionResponse {
   id: number;
+  region_id?: number;
+  operator_id?: number;
+  code?: string;
   name: string;
+  level?: number;
+  status: "active" | "suspended" | string;
+  operator_region_id?: number;
+  created_at?: string;
 }
 
 export interface OperatorRegionListResponse {

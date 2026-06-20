@@ -45,6 +45,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiGet, apiPost } from "@/lib/api";
+import { formatOperatorRegionStatus } from "@/lib/operator-display";
 import type {
   OperatorRegionExpansionApplication,
   OperatorRegionExpansionResponse,
@@ -65,6 +66,13 @@ function statusBadge(status: string) {
   if (status === "rejected")
     return <Badge variant="destructive">已拒绝</Badge>;
   return <Badge variant="outline">{STATUS_LABEL[status] ?? status}</Badge>;
+}
+
+function operatorRegionStatusBadge(status: string) {
+  const label = formatOperatorRegionStatus(status);
+  if (status === "active") return <Badge variant="secondary">{label}</Badge>;
+  if (status === "suspended") return <Badge variant="outline">{label}</Badge>;
+  return <Badge variant="outline">{label}</Badge>;
 }
 
 export default function OperatorRegionsPage() {
@@ -306,10 +314,13 @@ export default function OperatorRegionsPage() {
                     {managedRegions.map((r) => (
                       <div
                         key={r.id}
-                        className="flex items-center gap-3 rounded-lg border bg-muted/20 px-4 py-3"
+                        className="flex items-center justify-between gap-3 rounded-lg border bg-muted/20 px-4 py-3"
                       >
-                        <MapPin className="h-5 w-5 shrink-0 text-primary" />
-                        <span className="font-medium">{r.name}</span>
+                        <div className="flex min-w-0 items-center gap-3">
+                          <MapPin className="h-5 w-5 shrink-0 text-primary" />
+                          <span className="truncate font-medium">{r.name}</span>
+                        </div>
+                        {operatorRegionStatusBadge(r.status)}
                       </div>
                     ))}
                   </div>

@@ -35,10 +35,90 @@ type regionStatsResponse struct {
 }
 
 type operatorRegionListResponse struct {
-	Regions []regionResponse `json:"regions"`
-	Total   int              `json:"total"`
-	Page    int32            `json:"page"`
-	Limit   int32            `json:"limit"`
+	Regions []operatorRegionResponse `json:"regions"`
+	Total   int                      `json:"total"`
+	Page    int32                    `json:"page"`
+	Limit   int32                    `json:"limit"`
+}
+
+type operatorRegionResponse struct {
+	ID               int64      `json:"id"`
+	RegionID         int64      `json:"region_id"`
+	OperatorID       int64      `json:"operator_id,omitempty"`
+	Code             string     `json:"code"`
+	Name             string     `json:"name"`
+	Level            int16      `json:"level"`
+	ParentID         *int64     `json:"parent_id,omitempty"`
+	Longitude        *string    `json:"longitude,omitempty"`
+	Latitude         *string    `json:"latitude,omitempty"`
+	Status           string     `json:"status"`
+	OperatorRegionID *int64     `json:"operator_region_id,omitempty"`
+	CreatedAt        *time.Time `json:"created_at,omitempty"`
+}
+
+func newOperatorRegionResponseFromRelation(rel db.ListOperatorRegionRelationsRow, region db.Region) operatorRegionResponse {
+	resp := operatorRegionResponse{
+		ID:         rel.RegionID,
+		RegionID:   rel.RegionID,
+		OperatorID: rel.OperatorID,
+		Code:       rel.RegionCode,
+		Name:       rel.RegionName,
+		Level:      rel.RegionLevel,
+		Status:     rel.Status,
+	}
+
+	if resp.Code == "" {
+		resp.Code = region.Code
+	}
+	if resp.Name == "" {
+		resp.Name = region.Name
+	}
+	if resp.Level == 0 {
+		resp.Level = region.Level
+	}
+	if region.ParentID.Valid {
+		resp.ParentID = &region.ParentID.Int64
+	}
+	if region.Longitude.Valid {
+		lng := fmt.Sprintf("%v", region.Longitude)
+		resp.Longitude = &lng
+	}
+	if region.Latitude.Valid {
+		lat := fmt.Sprintf("%v", region.Latitude)
+		resp.Latitude = &lat
+	}
+	if rel.ID > 0 {
+		resp.OperatorRegionID = &rel.ID
+	}
+	if !rel.CreatedAt.IsZero() {
+		resp.CreatedAt = &rel.CreatedAt
+	}
+
+	return resp
+}
+
+func newLegacyOperatorRegionResponse(operator db.Operator, region db.Region) operatorRegionResponse {
+	resp := operatorRegionResponse{
+		ID:         region.ID,
+		RegionID:   region.ID,
+		OperatorID: operator.ID,
+		Code:       region.Code,
+		Name:       region.Name,
+		Level:      region.Level,
+		Status:     db.OperatorRegionStatusActive,
+	}
+	if region.ParentID.Valid {
+		resp.ParentID = &region.ParentID.Int64
+	}
+	if region.Longitude.Valid {
+		lng := fmt.Sprintf("%v", region.Longitude)
+		resp.Longitude = &lng
+	}
+	if region.Latitude.Valid {
+		lat := fmt.Sprintf("%v", region.Latitude)
+		resp.Latitude = &lat
+	}
+	return resp
 }
 
 // getRegionStats 获取区域统计
@@ -120,7 +200,7 @@ type listOperatorRegionsRequest struct {
 // @Produce json
 // @Param page query int false "页码"
 // @Param limit query int false "每页数量"
-// @Success 200 {object} map[string]interface{} "区域列表"
+// @Success 200 {object} operatorRegionListResponse "区域列表"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 403 {object} ErrorResponse "无权限"
 // @Failure 500 {object} ErrorResponse "服务器内部错误"
@@ -141,11 +221,12 @@ func (server *Server) listOperatorRegions(ctx *gin.Context) {
 		req.Limit = 20
 	}
 
-	response := make([]regionResponse, 0)
+	response := make([]operatorRegionResponse, 0)
 
-	// 优先使用 operator_regions 关系表（权限判断同源，避免返回无权限区域）
+	// 优先使用 operator_regions 关系表展示当前运营商的区域关系，保留暂停状态；
+	// 具体操作接口仍按 active 关系独立校验权限。
 	if op, ok := GetOperatorFromContext(ctx); ok {
-		regionRelations, err := server.store.ListOperatorRegions(ctx, op.ID)
+		regionRelations, err := server.store.ListOperatorRegionRelations(ctx, op.ID)
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
@@ -161,14 +242,14 @@ func (server *Server) listOperatorRegions(ctx *gin.Context) {
 					ctx.JSON(http.StatusInternalServerError, internalError(ctx, regionErr))
 					return
 				}
-				response = append(response, newRegionResponse(region))
+				response = append(response, newOperatorRegionResponseFromRelation(rel, region))
 			}
 			// 兼容旧模型：如果 operator.region_id 不在 operator_regions 中（入驻审批早于多区域支持），
 			// 仍需将其包含进来，避免旧运营商的初始区域丢失
 			if op.RegionID > 0 && !seenRegionIDs[op.RegionID] {
 				region, regionErr := server.store.GetRegion(ctx, op.RegionID)
 				if regionErr == nil {
-					response = append([]regionResponse{newRegionResponse(region)}, response...)
+					response = append([]operatorRegionResponse{newLegacyOperatorRegionResponse(op, region)}, response...)
 				}
 			}
 		} else if op.RegionID > 0 {
@@ -178,7 +259,7 @@ func (server *Server) listOperatorRegions(ctx *gin.Context) {
 				ctx.JSON(http.StatusInternalServerError, internalError(ctx, regionErr))
 				return
 			}
-			response = append(response, newRegionResponse(region))
+			response = append(response, newLegacyOperatorRegionResponse(op, region))
 		}
 	}
 
@@ -196,7 +277,8 @@ func (server *Server) listOperatorRegions(ctx *gin.Context) {
 			return
 		}
 
-		response = append(response, newRegionResponse(region))
+		operator, _ := GetOperatorFromContext(ctx)
+		response = append(response, newLegacyOperatorRegionResponse(operator, region))
 	}
 
 	ctx.JSON(http.StatusOK, operatorRegionListResponse{

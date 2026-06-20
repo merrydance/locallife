@@ -12,7 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { PageContent, PageHeader, PageShell } from "@/components/merchant/layout/page-shell";
 import { apiGet, apiPost, formatAmount } from "@/lib/api";
-import { formatMerchantStatus, merchantStatusOptions } from "@/lib/operator-display";
+import { formatMerchantStatus, getActiveOperatorRegions, merchantStatusOptions } from "@/lib/operator-display";
 import type {
   OperatorMerchantDetail,
   OperatorMerchantListResponse,
@@ -34,7 +34,7 @@ export default function OperatorMerchantsManagePage() {
 
   const loadRegions = useCallback(() => {
     apiGet<OperatorRegionListResponse>("/operator/regions", { page: 1, limit: 100 })
-      .then((res) => setRegions(res.regions ?? []))
+      .then((res) => setRegions(getActiveOperatorRegions(res.regions)))
       .catch(() => setRegions([]));
   }, []);
 

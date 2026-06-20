@@ -66,6 +66,7 @@
     "check:platform-dashboard-operations-view": "node scripts/check-platform-dashboard-operations-view.test.js",
     "check:platform-merchant-category-management": "node scripts/check-platform-merchant-category-management.test.js",
     "check:operator-merchant-capabilities": "node scripts/check-operator-merchant-capabilities.test.js",
+    "check:operator-region-status-contract": "node scripts/check-operator-region-status-contract.test.js",
     "check:rider-delivery-history-params": "node scripts/check-rider-delivery-history-params.test.js",
     "check:rider-delivery-deadline-view": "node scripts/check-rider-delivery-deadline-view.test.js",
     "check:rider-delivery-confirm-feedback": "node scripts/check-rider-delivery-confirm-feedback.test.js",

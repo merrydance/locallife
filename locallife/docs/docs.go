@@ -19053,8 +19053,7 @@ const docTemplate = `{
                     "200": {
                         "description": "区域列表",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/api.operatorRegionListResponse"
                         }
                     },
                     "400": {
@@ -41028,6 +41027,67 @@ const docTemplate = `{
                 },
                 "pending_rider_count": {
                     "type": "integer"
+                }
+            }
+        },
+        "api.operatorRegionListResponse": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "regions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.operatorRegionResponse"
+                    }
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.operatorRegionResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "latitude": {
+                    "type": "string"
+                },
+                "level": {
+                    "type": "integer"
+                },
+                "longitude": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "operator_id": {
+                    "type": "integer"
+                },
+                "operator_region_id": {
+                    "type": "integer"
+                },
+                "parent_id": {
+                    "type": "integer"
+                },
+                "region_id": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
                 }
             }
         },

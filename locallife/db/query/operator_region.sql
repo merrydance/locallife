@@ -20,6 +20,14 @@ JOIN regions r ON or_t.region_id = r.id
 WHERE or_t.operator_id = $1 AND or_t.status = 'active'
 ORDER BY r.code;
 
+-- name: ListOperatorRegionRelations :many
+-- 列出运营商区域关系用于展示，保留暂停关系状态；不可用于权限判断
+SELECT or_t.id, or_t.operator_id, or_t.region_id, or_t.status, or_t.created_at, r.name as region_name, r.code as region_code, r.level as region_level
+FROM operator_regions or_t
+JOIN regions r ON or_t.region_id = r.id
+WHERE or_t.operator_id = $1 AND or_t.status IN ('active', 'suspended')
+ORDER BY r.code;
+
 -- name: ListRegionOperators :many
 -- 列出管理某区域的所有运营商
 SELECT or_t.id, or_t.operator_id, or_t.region_id, or_t.status, or_t.created_at, o.name as operator_name, o.contact_name, o.contact_phone

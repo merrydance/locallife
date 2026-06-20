@@ -6060,6 +6060,46 @@ definitions:
       pending_rider_count:
         type: integer
     type: object
+  api.operatorRegionListResponse:
+    properties:
+      limit:
+        type: integer
+      page:
+        type: integer
+      regions:
+        items:
+          $ref: '#/definitions/api.operatorRegionResponse'
+        type: array
+      total:
+        type: integer
+    type: object
+  api.operatorRegionResponse:
+    properties:
+      code:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: integer
+      latitude:
+        type: string
+      level:
+        type: integer
+      longitude:
+        type: string
+      name:
+        type: string
+      operator_id:
+        type: integer
+      operator_region_id:
+        type: integer
+      parent_id:
+        type: integer
+      region_id:
+        type: integer
+      status:
+        type: string
+    type: object
   api.operatorRiderRankingRow:
     properties:
       avg_delivery_time_seconds:
@@ -23367,8 +23407,7 @@ paths:
         "200":
           description: 区域列表
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/api.operatorRegionListResponse'
         "400":
           description: 参数错误
           schema:
