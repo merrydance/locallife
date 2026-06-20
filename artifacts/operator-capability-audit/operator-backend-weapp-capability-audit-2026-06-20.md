@@ -162,7 +162,7 @@
 
 | 编号 | 类型 | 影响面 | 状态 |
 | --- | --- | --- | --- |
-| OPA-001 | 前后端契约漂移 | 区域列表状态 | 已确认 |
+| OPA-001 | 前后端契约漂移 | 区域列表状态 | 已修复：`5b642fef` |
 | OPA-002 | 小程序承诺但后端不支持 | 商户搜索 keyword | 已确认 |
 | OPA-003 | 小程序承诺但后端不支持 | 骑手搜索 keyword、API 类型 online_status | 已确认 |
 | OPA-004 | 前后端响应 DTO 漂移 | 分析页区域体检 | 已确认 |
@@ -965,6 +965,22 @@ SQL 证据：
 
 ### 已完成复核记录
 
+#### OPA-001 完成复核：运营商区域状态契约重构
+
+| 字段 | 记录 |
+| --- | --- |
+| 完成范围 | `OPA-001-A/B/C/D`；业务提交 `5b642fef fix: return operator region relation status`；涉及 `locallife/api/operator_stats.go`、`locallife/db/query/operator_region.sql`、`locallife/db/sqlc/*operator_region*`、`locallife/db/mock/store.go`、Swagger 生成物、`weapp/miniprogram/pages/operator/_api/operator-basic-management.ts`、`weapp/miniprogram/pages/operator/_services/operator-regions.ts`、`web/src/app/operator/**` 相关运营区域入口 |
+| 设计目标 | 已达成：`GET /v1/operator/regions` 返回运营商区域专用 DTO，`status` 明确为 `operator_regions.status`；小程序和 Web 不再把缺失关系状态默认成 `pending/待审核`；管理页展示全部 active/suspended 关系，操作入口只选择 active 关系 |
+| 设计修正 | 实现时没有复用 active-only 的 `ListOperatorRegions` 作为展示契约，而是新增 display-only 的 `ListOperatorRegionRelations`；原 `ListOperatorRegions` 保持 active-only，继续适合作为权限/可操作区域语义，避免展示状态和授权状态互相污染 |
+| 时序 | 读路径无写入时序；状态来源顺序固定为当前登录 operator -> `operator_regions` 关系 -> 区域基础信息补齐；前端操作入口先拿到足量关系再筛 active，避免第一页刚好是 suspended 时误判无可运营区域 |
+| 幂等 | 本项不新增写路径；区域扩展申请、区域暂停/恢复、峰时配置写入均未改变，重复请求语义不受影响 |
+| 越权 | `/v1/operator/regions` 仍从服务端登录态解析 operator，不接受前端传入 `operator_id`；具体统计、规则、商户、骑手、峰时等操作接口继续按 active 关系独立校验，不把“能展示 suspended 关系”升级成“能操作 suspended 区域” |
+| 小程序复核 | `RegionStatus` 收敛为 `active/suspended`，新增 `unknown` 仅作显示态；移除 `data.status ?? 'pending'`；区域管理列表保留全部关系，区域 picker 只返回 active；新增 `weapp/scripts/check-operator-region-status-contract.test.js` 锁定不能再把缺失状态展示为待审核 |
+| Web 兼容复核 | Web `OperatorRegionResponse` 增加关系状态；`rules`、`merchants/manage`、`riders/manage`、`peak-hours`、`regions/stats` 操作入口统一用 `getActiveOperatorRegions`；`regions` 管理页显示 `运营中/已暂停/状态未知`；新增 `web/scripts/check-operator-region-status-contract.test.js` 锁定契约 |
+| 回归 | 红灯：后端 focused API 测试和小程序契约脚本在修复前曾按预期失败；绿灯：`PATH=/usr/local/go/bin:$PATH go test ./api -run 'TestListOperatorRegionsAPI_ReturnsOperatorRegionStatus\|Test(GetRegionStatsAPI\|GetOperatorFinanceOverviewAPI\|GetOperatorCommissionAPI)' -count=1` 通过；`PATH=/usr/local/go/bin:$PATH make check-generated` 通过；`cd weapp && PATH="$HOME/.local/bin:$PATH" npm run check:operator-region-status-contract && PATH="$HOME/.local/bin:$PATH" npm run compile && PATH="$HOME/.local/bin:$PATH" npm run lint` 通过；`cd web && node scripts/check-operator-region-status-contract.test.js && PATH="$HOME/.local/bin:$PATH" npm run lint` 通过；`git diff --check` 通过 |
+| 非目标 | 未改运营商申请审批状态机；未迁移历史区域数据；未把申请记录状态混入已管理区域列表；未重构全局 operator 区域选择组件；未解决 OPA-004/006/007 等其它状态或错误语义问题 |
+| 剩余风险 | `PATH=/usr/local/go/bin:$PATH go test ./db/sqlc -run TestListOperatorRegionRelationsIncludesSuspendedForDisplay -count=1` 在执行新增 DB-backed 测试前被本地测试库 migration 状态阻断：`no migration found for version 276: read down for version 276 .: file does not exist`；当前 worktree 迁移文件到 `000274`，该问题属于本地 `locallife_test` schema 版本漂移，需清理测试库或补齐迁移历史后再跑该 persistence 测试 |
+
 #### OPA-005 完成复核：峰时时段列表跨区域读取权限
 
 | 字段 | 记录 |
@@ -985,4 +1001,4 @@ SQL 证据：
 
 | 编号 | 域 | 后端能力/页面 | 后端证据 | 小程序证据 | 状态 | Finding |
 | --- | --- | --- | --- | --- | --- | --- |
-| OPA-001 | 区域管理 | `/v1/operator/regions` 区域列表状态 | `operator_stats.go`, `region.go`, `operator_region.sql` | `operator/region/index`, `operator-regions.ts`, `operator-basic-management.ts` | 已确认漂移 | 已记录 |
+| OPA-001 | 区域管理 | `/v1/operator/regions` 区域列表状态 | `operator_stats.go`, `operator_region.sql`, `operator_region_test.go` | `operator/region/index`, `operator-regions.ts`, `operator-basic-management.ts` | 已修复：`5b642fef` | 已完成复核 |
