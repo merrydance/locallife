@@ -168,7 +168,7 @@
 | OPA-004 | 前后端响应 DTO 漂移 | 分析页区域体检 | 已确认 |
 | OPA-005 | 后端权限边界缺口 | 峰时时段列表跨区域读取 | 已修复：`36c91afa` |
 | OPA-006 | 后端状态模型漂移 | 实时统计与骑手生命周期 | 已修复：`35df01de` |
-| OPA-007 | 错误路径漂移 | 代取费配置 PATCH 失败无差别 POST | 已确认 |
+| OPA-007 | 错误路径漂移 | 代取费配置 PATCH 失败无差别 POST | 已修复：`e50b8503`、`6bf2fef9` |
 | OP-NOUI-001/002 | 后端已实现但无页面入口 | 追偿争议/追偿单 | 当前确认 |
 | OP-NOUI-003 | 后端已实现但无页面入口 | 分账规则配置 | 当前确认 |
 | OP-NOUI-004 | 后端已实现但无页面入口 | 规则引擎代理 | 当前确认 |
@@ -178,7 +178,7 @@
 
 ### OPA-001: 运营商区域管理页把已生效区域误显示为“待审核”
 
-- 状态：已确认
+- 状态：已修复：`5b642fef`
 - 风险级别：G2
 - 类型：前后端契约漂移、假业务状态、前端假真值
 - 影响页面：`weapp/miniprogram/pages/operator/region/index`
@@ -531,7 +531,7 @@ SQL 证据：
 
 ### OPA-007: 代取费配置 PATCH 任意失败都会降级 POST
 
-- 状态：已确认
+- 状态：已修复：`e50b8503`、`6bf2fef9`
 - 风险级别：G2
 - 类型：错误语义漂移、失败路径掩盖
 - 影响页面：`weapp/miniprogram/pages/operator/delivery-fee/index`
@@ -547,6 +547,7 @@ SQL 证据：
 
 - `server.go` 同时注册了 operator 可用的 delivery-fee config POST/PATCH。
 - `delivery_fee.go` 中 POST 是创建配置，PATCH 是更新配置；两者是不同业务语义。
+- `updateDeliveryFeeConfig()` 在配置不存在时返回 HTTP 404；小程序 `request()` 会把 HTTP status 写入 `AppError.statusCode`，因此前端可以稳定按 `statusCode === 404` 判定是否允许 POST。
 
 #### 根因
 
@@ -562,12 +563,16 @@ SQL 证据：
 
 - 只在明确的 404/配置不存在业务错误上降级 POST。
 - 其它错误直接向页面抛出原始语义，由页面显示可恢复错误。
+- 页面保存中禁用重复提交，成功后用后端返回值回填表单，失败时保留当前草稿。
+- 后端 POST 创建配置支持显式 `is_active=false`，避免首次保存停用状态时被固定写成启用。
 - 更推荐后端提供单一 upsert 语义接口，或前端先 GET 状态后选择 POST/PATCH，并保留并发冲突处理。
 
 #### 建议验证
 
-- 小程序 service 单测或集成测试：PATCH 404 才 POST；PATCH 403/400/500/网络失败不 POST。
-- 后端：确认 POST/PATCH 对权限和幂等语义都有测试覆盖。
+- 小程序：`npm run check:operator-delivery-fee-fallback`，覆盖 404 才 POST、非 404 不 POST、保存按钮防重入和后端返回值回填。
+- 小程序：`npm run compile && npm run lint`。
+- 后端：`go test ./api -run 'TestCreateDeliveryFeeConfigAPI_AllowsInactiveConfig|Test(Create|Update|Get)DeliveryFeeConfigAPI' -count=1`，确认 POST/PATCH/GET 配置契约。
+- 生成物：如修改后端 Swagger 契约，运行 `make swagger && make check-generated`。
 
 ## 修复任务计划
 
@@ -1023,6 +1028,22 @@ SQL 证据：
 | 非目标 | 未新增骑手申请区域归属 schema；未实现运营商骑手申请审核 API 或小程序入口；未迁移申请历史数据；未解决 OPA-003 的骑手 keyword 搜索和在线状态筛选；未调整商户状态模型 |
 | 剩余风险 | `pending_rider_count` 兼容字段仍存在，虽然已注释并由测试锁定为 0；如果未来要展示运营商待审骑手申请，必须先完成区域归属、授权边界、审批幂等和历史数据迁移设计，否则不能复用该字段补假数 |
 
+#### OPA-007 完成复核：代取费保存错误语义与幂等收口
+
+| 字段 | 记录 |
+| --- | --- |
+| 完成范围 | `OPA-007-A/B/C`；业务提交 `e50b8503 fix: constrain operator delivery fee fallback`、`6bf2fef9 fix: preserve delivery fee active state on create`；涉及 `weapp/miniprogram/pages/operator/_main_shared/api/delivery-fee.ts`、`weapp/miniprogram/pages/operator/_services/operator-region-config.ts`、`weapp/miniprogram/pages/operator/delivery-fee/index.ts`、`weapp/miniprogram/pages/operator/delivery-fee/index.wxml`、`weapp/scripts/check-operator-delivery-fee-fallback.test.js`、`weapp/package.json`、`locallife/api/delivery_fee.go`、`locallife/api/delivery_fee_test.go`、Swagger 生成物 |
+| 设计目标 | 已达成：PATCH 只有在 `AppError.statusCode === 404` 时才降级 POST；400/401/403/5xx/网络错误不再触发二次 POST；页面保存中禁用重复提交；成功后用后端返回值回填表单；创建配置时可显式保存 `is_active=false` |
+| Human-Centered UI Check | 角色是运营商，当前任务是在区域配置页保存一次代取费规则；高频路径是修改数值后一次提交；首屏优先保留表单和保存按钮；刷新/返回时以 GET 后端配置为真值；失败时保留草稿并展示可重试错误；低频的 upsert 接口重构不进入当前页面改动 |
+| 时序 | 保存链路为 PATCH -> 仅 404 时 POST -> 使用写接口返回值回填；非 404 错误直接停止并保留用户当前输入。弱网或服务端异常不会再因为 catch-all 进入创建路径；页面重入仍通过原有 `loadConfig()` 从后端恢复真实配置 |
+| 幂等 | 前端 `saving` 状态和按钮 loading/disabled 防止重复点击；本项未引入自动重试；POST 仍保留后端唯一约束和 409 语义；未把 PATCH/POST 暗改成无条件 upsert |
+| 越权 | 403/401 不再二次 POST 探测；后端 create/update 继续由 operator role、LoadOperator、ValidateOperatorRegionMiddleware 校验 path `region_id`；页面传参只作为待校验目标，不作为权限事实 |
+| 后端契约复核 | `updateDeliveryFeeConfig()` 缺配置返回 404，作为唯一前端 fallback 入口；`createDeliveryFeeConfig()` 新增可选 `is_active`，未传时默认 true，显式 false 时创建停用配置并写入审计日志 metadata |
+| 回归 | 红灯：`PATH="$HOME/.local/bin:$PATH" npm run check:operator-delivery-fee-fallback` 修复前因缺少 404 predicate 失败；红灯：`PATH=/usr/local/go/bin:$PATH go test ./api -run TestCreateDeliveryFeeConfigAPI_AllowsInactiveConfig -count=1` 修复前因 `arg.IsActive=true` 失败。绿灯：`npm run check:operator-delivery-fee-fallback` 通过；`npm run compile` 通过；`npm run lint` 通过；`PATH=/usr/local/go/bin:$PATH go test ./api -run 'TestCreateDeliveryFeeConfigAPI_AllowsInactiveConfig\|Test(Create\|Update\|Get)DeliveryFeeConfigAPI' -count=1` 通过；`PATH=/usr/local/go/bin:$PATH make swagger && PATH=/usr/local/go/bin:$PATH make check-generated` 通过 |
+| 扩展验证 | `PATH="$HOME/.local/bin:$PATH" npm run quality:check` 已执行，前置大量 check、lint、compile 通过；最后在既有 full-scan `gate:page-complexity` 阻断，超限文件为 `weapp/miniprogram/pages/merchant/group/application/index.ts`、`weapp/miniprogram/pages/register/merchant/group`、`weapp/miniprogram/pages/rider/deposit/index.ts`，均非本次变更路径 |
+| 非目标 | 未新增 `PUT /v1/delivery-fee/regions/:region_id/config` upsert；未重做代取费页面视觉；未改变计费模型、唯一约束或 409 冲突语义；未处理峰时时段编辑能力 |
+| 剩余风险 | 未在开发者工具里手工模拟网络超时和连续点击；当前自动化覆盖代码契约、编译和 lint。后续若要把创建/更新收敛为单一幂等 upsert，需要另开后端设计任务，补条件更新、审计日志、重复提交和冲突测试 |
+
 ## 后续审计工作记录
 
 后续继续在本节追加全量盘点结果。每个能力或页面至少记录：
@@ -1032,3 +1053,4 @@ SQL 证据：
 | OPA-001 | 区域管理 | `/v1/operator/regions` 区域列表状态 | `operator_stats.go`, `operator_region.sql`, `operator_region_test.go` | `operator/region/index`, `operator-regions.ts`, `operator-basic-management.ts` | 已修复：`5b642fef` | 已完成复核 |
 | OPA-005 | 峰时时段 | `/v1/operator/regions/:region_id/peak-hours` 列表授权 | `delivery_fee.go`, `delivery_fee_test.go` | `operator/region/config`, `operator/timeslot/index`, `delivery-fee.ts` | 已修复：`36c91afa` | 已完成复核 |
 | OPA-006 | 骑手管理/实时统计 | `/v1/operator/stats/realtime`、`/v1/operator/riders` 生命周期口径 | `operator_realtime.go`, `operator_merchant_rider.go`, `operator_realtime_test.go`, `operator_merchant_rider_test.go` | `operator/riders/index`, `operator-rider-management.ts`, `operator-analytics-dashboard.ts` | 已修复：`35df01de` | 已完成复核 |
+| OPA-007 | 代取费配置 | `/v1/delivery-fee/regions/:region_id/config` PATCH/POST 保存语义 | `delivery_fee.go`, `delivery_fee_test.go`, Swagger 生成物 | `operator/delivery-fee/index`, `delivery-fee.ts`, `operator-region-config.ts` | 已修复：`e50b8503`、`6bf2fef9` | 已完成复核 |
