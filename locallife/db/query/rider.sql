@@ -166,3 +166,37 @@ WHERE region_id = $1 AND status = $2;
 -- 统计区域内当前在线骑手数量
 SELECT COUNT(*) FROM riders
 WHERE region_id = $1 AND is_online = true;
+
+-- name: ListOperatorRiders :many
+-- 运营商骑手列表：按已授权区域集合、生命周期状态、关键字和在线状态查询
+SELECT id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id FROM riders
+WHERE region_id = ANY(sqlc.arg('region_ids')::bigint[])
+  AND (cardinality(sqlc.arg('statuses')::text[]) = 0 OR status = ANY(sqlc.arg('statuses')::text[]))
+  AND (
+    sqlc.arg('keyword')::text = ''
+    OR real_name ILIKE '%' || sqlc.arg('keyword')::text || '%'
+    OR phone ILIKE '%' || sqlc.arg('keyword')::text || '%'
+  )
+  AND (
+    sqlc.arg('online_status')::text = ''
+    OR (sqlc.arg('online_status')::text = 'online' AND is_online = true)
+    OR (sqlc.arg('online_status')::text = 'offline' AND is_online = false)
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
+
+-- name: CountOperatorRiders :one
+-- 运营商骑手数量：与 ListOperatorRiders 保持同一过滤条件
+SELECT COUNT(*) FROM riders
+WHERE region_id = ANY(sqlc.arg('region_ids')::bigint[])
+  AND (cardinality(sqlc.arg('statuses')::text[]) = 0 OR status = ANY(sqlc.arg('statuses')::text[]))
+  AND (
+    sqlc.arg('keyword')::text = ''
+    OR real_name ILIKE '%' || sqlc.arg('keyword')::text || '%'
+    OR phone ILIKE '%' || sqlc.arg('keyword')::text || '%'
+  )
+  AND (
+    sqlc.arg('online_status')::text = ''
+    OR (sqlc.arg('online_status')::text = 'online' AND is_online = true)
+    OR (sqlc.arg('online_status')::text = 'offline' AND is_online = false)
+  );

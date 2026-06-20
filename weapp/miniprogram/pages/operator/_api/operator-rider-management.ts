@@ -12,7 +12,7 @@ import { request } from '../../../utils/request'
 export type RiderStatus = 'approved' | 'active' | 'suspended'
 
 /** 骑手在线状态枚举 */
-export type RiderOnlineStatus = 'online' | 'offline' | 'busy' | 'break'
+export type RiderOnlineStatus = 'online' | 'offline'
 
 // ==================== 骑手管理相关类型 ====================
 
@@ -99,10 +99,6 @@ export interface RiderQueryParams extends Record<string, unknown> {
     status?: RiderStatus
     online_status?: RiderOnlineStatus
     keyword?: string
-    start_date?: string
-    end_date?: string
-    sort_by?: 'created_at'
-    sort_order?: 'asc' | 'desc'
     page?: number
     limit?: number
 }
@@ -313,9 +309,7 @@ export function getRiderStatusDisplay(status: RiderStatus | string) {
 export function formatOnlineStatus(status: RiderOnlineStatus): string {
     const statusMap: Record<RiderOnlineStatus, string> = {
         online: '在线',
-        offline: '离线',
-        busy: '忙碌',
-        break: '休息'
+        offline: '离线'
     }
     return statusMap[status] || status
 }

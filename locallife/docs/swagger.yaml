@@ -23650,7 +23650,7 @@ paths:
     get:
       consumes:
       - application/json
-      description: 运营商获取其管辖区域内的所有骑手，支持按状态筛选
+      description: 运营商获取其管辖区域内的所有骑手，支持按生命周期状态、姓名/电话关键字和在线状态筛选；不传 region_id 时聚合全部可管区域
       parameters:
       - description: 骑手状态
         enum:
@@ -23659,6 +23659,21 @@ paths:
         - suspended
         in: query
         name: status
+        type: string
+      - description: 区域ID；不传时聚合当前运营商全部可管区域
+        in: query
+        name: region_id
+        type: integer
+      - description: 骑手姓名或手机号关键字，前后空白会被忽略，最长 50 字符
+        in: query
+        name: keyword
+        type: string
+      - description: 在线状态；映射 riders.is_online 当前存储值
+        enum:
+        - online
+        - offline
+        in: query
+        name: online_status
         type: string
       - default: 1
         description: 页码

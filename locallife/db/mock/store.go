@@ -2567,6 +2567,21 @@ func (mr *MockStoreMockRecorder) CountOperatorRegions(ctx, operatorID any) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountOperatorRegions", reflect.TypeOf((*MockStore)(nil).CountOperatorRegions), ctx, operatorID)
 }
 
+// CountOperatorRiders mocks base method.
+func (m *MockStore) CountOperatorRiders(ctx context.Context, arg db.CountOperatorRidersParams) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountOperatorRiders", ctx, arg)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountOperatorRiders indicates an expected call of CountOperatorRiders.
+func (mr *MockStoreMockRecorder) CountOperatorRiders(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountOperatorRiders", reflect.TypeOf((*MockStore)(nil).CountOperatorRiders), ctx, arg)
+}
+
 // CountOperators mocks base method.
 func (m *MockStore) CountOperators(ctx context.Context) (int64, error) {
 	m.ctrl.T.Helper()
@@ -16129,6 +16144,21 @@ func (m *MockStore) ListOperatorRegions(ctx context.Context, operatorID int64) (
 func (mr *MockStoreMockRecorder) ListOperatorRegions(ctx, operatorID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListOperatorRegions", reflect.TypeOf((*MockStore)(nil).ListOperatorRegions), ctx, operatorID)
+}
+
+// ListOperatorRiders mocks base method.
+func (m *MockStore) ListOperatorRiders(ctx context.Context, arg db.ListOperatorRidersParams) ([]db.Rider, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListOperatorRiders", ctx, arg)
+	ret0, _ := ret[0].([]db.Rider)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListOperatorRiders indicates an expected call of ListOperatorRiders.
+func (mr *MockStoreMockRecorder) ListOperatorRiders(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListOperatorRiders", reflect.TypeOf((*MockStore)(nil).ListOperatorRiders), ctx, arg)
 }
 
 // ListOperators mocks base method.

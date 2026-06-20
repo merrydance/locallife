@@ -225,6 +225,8 @@ type Querier interface {
 	CountOperatorRecoveryDisputes(ctx context.Context, arg CountOperatorRecoveryDisputesParams) (int64, error)
 	// 统计运营商管理的区域数量
 	CountOperatorRegions(ctx context.Context, operatorID int64) (int64, error)
+	// 运营商骑手数量：与 ListOperatorRiders 保持同一过滤条件
+	CountOperatorRiders(ctx context.Context, arg CountOperatorRidersParams) (int64, error)
 	CountOperators(ctx context.Context) (int64, error)
 	CountOrderItems(ctx context.Context, orderID int64) (int64, error)
 	// 统计订单被催单次数（从状态日志表查询催单记录）
@@ -1472,6 +1474,8 @@ type Querier interface {
 	ListOperatorRegionRelations(ctx context.Context, operatorID int64) ([]ListOperatorRegionRelationsRow, error)
 	// 列出运营商管理的所有区域
 	ListOperatorRegions(ctx context.Context, operatorID int64) ([]ListOperatorRegionsRow, error)
+	// 运营商骑手列表：按已授权区域集合、生命周期状态、关键字和在线状态查询
+	ListOperatorRiders(ctx context.Context, arg ListOperatorRidersParams) ([]Rider, error)
 	ListOperators(ctx context.Context, arg ListOperatorsParams) ([]ListOperatorsRow, error)
 	ListOrderItemsByOrder(ctx context.Context, orderID int64) ([]OrderItem, error)
 	ListOrderItemsWithDishByOrder(ctx context.Context, orderID int64) ([]ListOrderItemsWithDishByOrderRow, error)

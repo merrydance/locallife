@@ -707,10 +707,12 @@ func (server *Server) getOperatorMerchantStats(ctx *gin.Context) {
 // ==================== 骑手列表查询 ====================
 
 type listOperatorRidersRequest struct {
-	Status   string `form:"status" binding:"omitempty,oneof=approved active suspended"`
-	RegionID int64  `form:"region_id" binding:"omitempty,min=1"`
-	Page     int32  `form:"page" binding:"omitempty,min=1"`
-	Limit    int32  `form:"limit" binding:"omitempty,min=1,max=100"`
+	Status       string `form:"status" binding:"omitempty,oneof=approved active suspended"`
+	RegionID     int64  `form:"region_id" binding:"omitempty,min=1"`
+	Keyword      string `form:"keyword"`
+	OnlineStatus string `form:"online_status"`
+	Page         int32  `form:"page" binding:"omitempty,min=1"`
+	Limit        int32  `form:"limit" binding:"omitempty,min=1,max=100"`
 }
 
 type riderListItem struct {
@@ -744,13 +746,72 @@ type operatorRiderSummaryResponse struct {
 	Online    int64 `json:"online"`
 }
 
+func operatorRiderStatusFilters(status string) []string {
+	if status == "" {
+		return []string{}
+	}
+	return []string{status}
+}
+
+func normalizeOperatorRiderOnlineStatus(input string) (string, error) {
+	onlineStatus := strings.TrimSpace(input)
+	switch onlineStatus {
+	case "", "online", "offline":
+		return onlineStatus, nil
+	default:
+		return "", errors.New("online_status must be online or offline")
+	}
+}
+
+func (server *Server) listOperatorRiderRows(
+	ctx *gin.Context,
+	regionIDs []int64,
+	statuses []string,
+	keyword string,
+	onlineStatus string,
+	offset int32,
+	limit int32,
+) ([]db.Rider, int64, error) {
+	if statuses == nil {
+		statuses = []string{}
+	}
+
+	query := db.ListOperatorRidersParams{
+		RegionIds:    regionIDs,
+		Statuses:     statuses,
+		Keyword:      keyword,
+		OnlineStatus: onlineStatus,
+		Offset:       offset,
+		Limit:        limit,
+	}
+	riders, err := server.store.ListOperatorRiders(ctx, query)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	total, err := server.store.CountOperatorRiders(ctx, db.CountOperatorRidersParams{
+		RegionIds:    regionIDs,
+		Statuses:     statuses,
+		Keyword:      keyword,
+		OnlineStatus: onlineStatus,
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return riders, total, nil
+}
+
 // listOperatorRiders 获取运营商管辖区域内的骑手列表
 // @Summary 获取区域骑手列表
-// @Description 运营商获取其管辖区域内的所有骑手，支持按状态筛选
+// @Description 运营商获取其管辖区域内的所有骑手，支持按生命周期状态、姓名/电话关键字和在线状态筛选；不传 region_id 时聚合全部可管区域
 // @Tags 运营商-商户骑手管理
 // @Accept json
 // @Produce json
 // @Param status query string false "骑手状态" Enums(approved, active, suspended)
+// @Param region_id query int false "区域ID；不传时聚合当前运营商全部可管区域"
+// @Param keyword query string false "骑手姓名或手机号关键字，前后空白会被忽略，最长 50 字符"
+// @Param online_status query string false "在线状态；映射 riders.is_online 当前存储值" Enums(online, offline)
 // @Param page query int false "页码" default(1)
 // @Param limit query int false "每页数量" default(20) maximum(100)
 // @Success 200 {object} listOperatorRidersResponse
@@ -767,13 +828,6 @@ func (server *Server) listOperatorRiders(ctx *gin.Context) {
 		return
 	}
 
-	// 从中间件获取运营商信息
-	operator, ok := GetOperatorFromContext(ctx)
-	if !ok {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("operator not found in context")))
-		return
-	}
-
 	// 设置默认值
 	if req.Page == 0 {
 		req.Page = 1
@@ -782,61 +836,26 @@ func (server *Server) listOperatorRiders(ctx *gin.Context) {
 		req.Limit = 20
 	}
 
-	// 确定目标区域 ID
-	targetRegionID := req.RegionID
-	if targetRegionID == 0 {
-		// 默认使用主区域
-		if operator.RegionID == 0 {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("operator has no assigned region")))
-			return
-		}
-		targetRegionID = operator.RegionID
-	} else {
-		// 验证是否有权管理该特定区域
-		if _, err := server.checkOperatorManagesRegion(ctx, targetRegionID); err != nil {
-			ctx.JSON(http.StatusForbidden, errorResponse(err))
-			return
-		}
+	keyword := strings.TrimSpace(req.Keyword)
+	if utf8.RuneCountInString(keyword) > 50 {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("keyword is too long")))
+		return
+	}
+	onlineStatus, err := normalizeOperatorRiderOnlineStatus(req.OnlineStatus)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	selection, err := resolveListOperatorRiderRegionSelection(server, ctx, req.RegionID)
+	if err != nil {
+		server.respondOperatorRegionSelectionError(ctx, err)
+		return
 	}
 
 	offset := pageOffset(req.Page, req.Limit)
-	regionID := pgtype.Int8{Int64: targetRegionID, Valid: true}
-
-	// 查询骑手列表
-	var riders []db.Rider
-	var total int64
-	var err error
-
-	if req.Status == "" {
-		riders, err = server.store.ListRidersByRegion(ctx, db.ListRidersByRegionParams{
-			RegionID: regionID,
-			Limit:    req.Limit,
-			Offset:   offset,
-		})
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-
-		total, err = server.store.CountRidersByRegion(ctx, regionID)
-	} else {
-		riders, err = server.store.ListRidersByRegionWithStatus(ctx, db.ListRidersByRegionWithStatusParams{
-			RegionID: regionID,
-			Status:   req.Status,
-			Limit:    req.Limit,
-			Offset:   offset,
-		})
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-
-		total, err = server.store.CountRidersByRegionWithStatus(ctx, db.CountRidersByRegionWithStatusParams{
-			RegionID: regionID,
-			Status:   req.Status,
-		})
-	}
-
+	statuses := operatorRiderStatusFilters(req.Status)
+	riders, total, err := server.listOperatorRiderRows(ctx, selection.RegionIDs, statuses, keyword, onlineStatus, offset, req.Limit)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
@@ -873,6 +892,16 @@ func (server *Server) listOperatorRiders(ctx *gin.Context) {
 		Page:     req.Page,
 		Limit:    req.Limit,
 	})
+}
+
+func resolveListOperatorRiderRegionSelection(server *Server, ctx *gin.Context, requestedRegionID int64) (operatorRegionSelection, error) {
+	if requestedRegionID > 0 {
+		if _, err := server.checkOperatorManagesRegion(ctx, requestedRegionID); err != nil {
+			return operatorRegionSelection{}, err
+		}
+		return operatorRegionSelection{RegionID: requestedRegionID, RegionIDs: []int64{requestedRegionID}}, nil
+	}
+	return server.resolveOperatorRegionSelection(ctx)
 }
 
 // getOperatorRiderSummary 获取区域骑手汇总

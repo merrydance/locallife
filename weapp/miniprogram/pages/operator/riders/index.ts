@@ -17,6 +17,8 @@ type RiderListDataset = {
   name?: string
 }
 
+let riderListRequestSeq = 0
+
 Page({
   data: {
     navBarHeight: 88,
@@ -67,7 +69,8 @@ Page({
   },
 
   async loadRiders(refresh: boolean, silent = false) {
-    if (this.data.loading || (this.data.loadingMore && !refresh)) return
+    if (!refresh && (this.data.loading || this.data.loadingMore)) return
+    const requestSeq = ++riderListRequestSeq
 
     try {
       if (refresh) {
@@ -84,6 +87,10 @@ Page({
         searchKeyword: this.data.searchKeyword
       })
 
+      if (requestSeq !== riderListRequestSeq) {
+        return
+      }
+
       const riders = refresh ? result.riders : [...this.data.riders, ...result.riders]
       const total = refresh ? result.total : Number(result.total || riders.length)
 
@@ -97,6 +104,9 @@ Page({
         initialLoading: false
       })
     } catch (error: unknown) {
+      if (requestSeq !== riderListRequestSeq) {
+        return
+      }
       const message = getErrorUserMessage(error, '加载骑手失败，请稍后重试')
       this.setData({ loading: false, loadingMore: false, initialLoading: false, error: message })
     }
@@ -128,12 +138,12 @@ Page({
   },
 
   onSearchClear() {
-    this.setData({ searchKeyword: '' })
+    this.setData({ searchKeyword: '', page: 1 })
     this.loadRiders(true)
   },
 
   onStatusFilterChange(e: WechatMiniprogram.CustomEvent<{ value: OperatorRiderFilterStatus }>) {
-    this.setData({ statusFilter: e.detail.value })
+    this.setData({ statusFilter: e.detail.value, page: 1 })
     this.loadRiders(true)
   },
 

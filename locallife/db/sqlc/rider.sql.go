@@ -37,6 +37,42 @@ func (q *Queries) CountOnlineRidersByRegion(ctx context.Context, regionID pgtype
 	return count, err
 }
 
+const countOperatorRiders = `-- name: CountOperatorRiders :one
+SELECT COUNT(*) FROM riders
+WHERE region_id = ANY($1::bigint[])
+  AND (cardinality($2::text[]) = 0 OR status = ANY($2::text[]))
+  AND (
+    $3::text = ''
+    OR real_name ILIKE '%' || $3::text || '%'
+    OR phone ILIKE '%' || $3::text || '%'
+  )
+  AND (
+    $4::text = ''
+    OR ($4::text = 'online' AND is_online = true)
+    OR ($4::text = 'offline' AND is_online = false)
+  )
+`
+
+type CountOperatorRidersParams struct {
+	RegionIds    []int64  `json:"region_ids"`
+	Statuses     []string `json:"statuses"`
+	Keyword      string   `json:"keyword"`
+	OnlineStatus string   `json:"online_status"`
+}
+
+// 运营商骑手数量：与 ListOperatorRiders 保持同一过滤条件
+func (q *Queries) CountOperatorRiders(ctx context.Context, arg CountOperatorRidersParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countOperatorRiders,
+		arg.RegionIds,
+		arg.Statuses,
+		arg.Keyword,
+		arg.OnlineStatus,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countRidersByRegion = `-- name: CountRidersByRegion :one
 SELECT COUNT(*) FROM riders
 WHERE region_id = $1
@@ -411,6 +447,82 @@ ORDER BY location_updated_at DESC
 
 func (q *Queries) ListOnlineRiders(ctx context.Context) ([]Rider, error) {
 	rows, err := q.db.Query(ctx, listOnlineRiders)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Rider{}
+	for rows.Next() {
+		var i Rider
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.RealName,
+			&i.IDCardNo,
+			&i.Phone,
+			&i.DepositAmount,
+			&i.FrozenDeposit,
+			&i.Status,
+			&i.IsOnline,
+			&i.CreditScore,
+			&i.CurrentLongitude,
+			&i.CurrentLatitude,
+			&i.LocationUpdatedAt,
+			&i.TotalOrders,
+			&i.TotalEarnings,
+			&i.OnlineDuration,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.RegionID,
+			&i.ApplicationID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOperatorRiders = `-- name: ListOperatorRiders :many
+SELECT id, user_id, real_name, id_card_no, phone, deposit_amount, frozen_deposit, status, is_online, credit_score, current_longitude, current_latitude, location_updated_at, total_orders, total_earnings, online_duration, created_at, updated_at, region_id, application_id FROM riders
+WHERE region_id = ANY($1::bigint[])
+  AND (cardinality($2::text[]) = 0 OR status = ANY($2::text[]))
+  AND (
+    $3::text = ''
+    OR real_name ILIKE '%' || $3::text || '%'
+    OR phone ILIKE '%' || $3::text || '%'
+  )
+  AND (
+    $4::text = ''
+    OR ($4::text = 'online' AND is_online = true)
+    OR ($4::text = 'offline' AND is_online = false)
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT $6 OFFSET $5
+`
+
+type ListOperatorRidersParams struct {
+	RegionIds    []int64  `json:"region_ids"`
+	Statuses     []string `json:"statuses"`
+	Keyword      string   `json:"keyword"`
+	OnlineStatus string   `json:"online_status"`
+	Offset       int32    `json:"offset"`
+	Limit        int32    `json:"limit"`
+}
+
+// 运营商骑手列表：按已授权区域集合、生命周期状态、关键字和在线状态查询
+func (q *Queries) ListOperatorRiders(ctx context.Context, arg ListOperatorRidersParams) ([]Rider, error) {
+	rows, err := q.db.Query(ctx, listOperatorRiders,
+		arg.RegionIds,
+		arg.Statuses,
+		arg.Keyword,
+		arg.OnlineStatus,
+		arg.Offset,
+		arg.Limit,
+	)
 	if err != nil {
 		return nil, err
 	}

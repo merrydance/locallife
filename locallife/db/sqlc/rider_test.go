@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -656,6 +657,116 @@ func createRiderInRegion(t *testing.T, regionID int64, status string) Rider {
 	}
 
 	return rider
+}
+
+func createRiderInRegionWithProfile(t *testing.T, regionID int64, status, realName, phone string, isOnline bool) Rider {
+	user := createRandomUser(t)
+	arg := CreateRiderParams{
+		UserID:   user.ID,
+		RealName: realName,
+		IDCardNo: "RID" + util.RandomString(15),
+		Phone:    phone,
+		RegionID: pgtype.Int8{Int64: regionID, Valid: true},
+	}
+
+	rider, err := testStore.CreateRider(context.Background(), arg)
+	require.NoError(t, err)
+
+	rider, err = testStore.UpdateRiderStatus(context.Background(), UpdateRiderStatusParams{
+		ID:     rider.ID,
+		Status: status,
+	})
+	require.NoError(t, err)
+
+	rider, err = testStore.UpdateRiderOnlineStatus(context.Background(), UpdateRiderOnlineStatusParams{
+		ID:       rider.ID,
+		IsOnline: isOnline,
+	})
+	require.NoError(t, err)
+
+	return rider
+}
+
+func TestListOperatorRiders_SearchesByKeywordAndOnlineStatusWithinManagedRegions(t *testing.T) {
+	managedRegion := createRandomRegion(t)
+	unmanagedRegion := createRandomRegion(t)
+	keyword := "骑手检索" + util.RandomString(4)
+	phoneSuffix := fmt.Sprintf("%04d", util.RandomInt(1000, 9999))
+
+	nameMatched := createRiderInRegionWithProfile(
+		t,
+		managedRegion.ID,
+		RiderStatusActive,
+		keyword+"在线",
+		"1867700"+phoneSuffix,
+		true,
+	)
+	phoneMatched := createRiderInRegionWithProfile(
+		t,
+		managedRegion.ID,
+		RiderStatusApproved,
+		"普通骑手"+util.RandomString(4),
+		"13988"+phoneSuffix+"01",
+		false,
+	)
+	_ = createRiderInRegionWithProfile(
+		t,
+		managedRegion.ID,
+		RiderStatusActive,
+		"普通骑手"+util.RandomString(4),
+		"13900"+phoneSuffix+"02",
+		true,
+	)
+	_ = createRiderInRegionWithProfile(
+		t,
+		unmanagedRegion.ID,
+		RiderStatusActive,
+		keyword+"越权",
+		"13988"+phoneSuffix+"03",
+		true,
+	)
+
+	nameResults, err := testStore.ListOperatorRiders(context.Background(), ListOperatorRidersParams{
+		RegionIds:    []int64{managedRegion.ID},
+		Statuses:     []string{RiderStatusActive},
+		Keyword:      keyword,
+		OnlineStatus: "online",
+		Limit:        10,
+		Offset:       0,
+	})
+	require.NoError(t, err)
+	require.Len(t, nameResults, 1)
+	require.Equal(t, nameMatched.ID, nameResults[0].ID)
+
+	nameCount, err := testStore.CountOperatorRiders(context.Background(), CountOperatorRidersParams{
+		RegionIds:    []int64{managedRegion.ID},
+		Statuses:     []string{RiderStatusActive},
+		Keyword:      keyword,
+		OnlineStatus: "online",
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), nameCount)
+
+	phoneResults, err := testStore.ListOperatorRiders(context.Background(), ListOperatorRidersParams{
+		RegionIds:    []int64{managedRegion.ID},
+		Statuses:     []string{},
+		Keyword:      phoneSuffix,
+		OnlineStatus: "offline",
+		Limit:        10,
+		Offset:       0,
+	})
+	require.NoError(t, err)
+	require.Len(t, phoneResults, 1)
+	require.Equal(t, phoneMatched.ID, phoneResults[0].ID)
+
+	phoneCount, err := testStore.CountOperatorRiders(context.Background(), CountOperatorRidersParams{
+		RegionIds:    []int64{managedRegion.ID},
+		Statuses:     []string{},
+		Keyword:      phoneSuffix,
+		OnlineStatus: "offline",
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), phoneCount)
 }
 
 func TestListRidersByRegion(t *testing.T) {

@@ -19419,7 +19419,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "运营商获取其管辖区域内的所有骑手，支持按状态筛选",
+                "description": "运营商获取其管辖区域内的所有骑手，支持按生命周期状态、姓名/电话关键字和在线状态筛选；不传 region_id 时聚合全部可管区域",
                 "consumes": [
                     "application/json"
                 ],
@@ -19440,6 +19440,28 @@ const docTemplate = `{
                         "type": "string",
                         "description": "骑手状态",
                         "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "区域ID；不传时聚合当前运营商全部可管区域",
+                        "name": "region_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "骑手姓名或手机号关键字，前后空白会被忽略，最长 50 字符",
+                        "name": "keyword",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "online",
+                            "offline"
+                        ],
+                        "type": "string",
+                        "description": "在线状态；映射 riders.is_online 当前存储值",
+                        "name": "online_status",
                         "in": "query"
                     },
                     {

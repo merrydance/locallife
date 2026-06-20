@@ -101,13 +101,12 @@ export async function loadOperatorRiderListPageData(params: {
   statusFilter?: OperatorRiderFilterStatus
   searchKeyword?: string
 }): Promise<OperatorRiderListPageData> {
+  const keyword = params.searchKeyword?.trim() || undefined
   const query: RiderQueryParams = {
     page: params.pageId,
     limit: params.pageSize,
-    keyword: params.searchKeyword || undefined,
+    keyword,
     status: params.statusFilter || undefined,
-    sort_by: 'created_at',
-    sort_order: 'desc',
     ...(params.regionId ? { region_id: params.regionId } : {})
   }
 

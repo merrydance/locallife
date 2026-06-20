@@ -595,17 +595,26 @@ func TestListOperatorRidersAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				expectActiveOperatorAuth(store, user.ID, operator)
+				expectOperatorManagedRegions(store, operator, operator.RegionID)
 
 				store.EXPECT().
-					ListRidersByRegion(gomock.Any(), db.ListRidersByRegionParams{
-						RegionID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-						Limit:    20,
-						Offset:   0,
+					ListOperatorRiders(gomock.Any(), db.ListOperatorRidersParams{
+						RegionIds:    []int64{operator.RegionID},
+						Statuses:     []string{},
+						Keyword:      "",
+						OnlineStatus: "",
+						Offset:       0,
+						Limit:        20,
 					}).
 					Return(riders, nil)
 
 				store.EXPECT().
-					CountRidersByRegion(gomock.Any(), pgtype.Int8{Int64: operator.RegionID, Valid: true}).
+					CountOperatorRiders(gomock.Any(), db.CountOperatorRidersParams{
+						RegionIds:    []int64{operator.RegionID},
+						Statuses:     []string{},
+						Keyword:      "",
+						OnlineStatus: "",
+					}).
 					Return(int64(2), nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -625,20 +634,25 @@ func TestListOperatorRidersAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				expectActiveOperatorAuth(store, user.ID, operator)
+				expectOperatorManagedRegions(store, operator, operator.RegionID)
 
 				store.EXPECT().
-					ListRidersByRegionWithStatus(gomock.Any(), db.ListRidersByRegionWithStatusParams{
-						RegionID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-						Status:   "active",
-						Limit:    20,
-						Offset:   0,
+					ListOperatorRiders(gomock.Any(), db.ListOperatorRidersParams{
+						RegionIds:    []int64{operator.RegionID},
+						Statuses:     []string{db.RiderStatusActive},
+						Keyword:      "",
+						OnlineStatus: "",
+						Offset:       0,
+						Limit:        20,
 					}).
 					Return(riders, nil)
 
 				store.EXPECT().
-					CountRidersByRegionWithStatus(gomock.Any(), db.CountRidersByRegionWithStatusParams{
-						RegionID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-						Status:   "active",
+					CountOperatorRiders(gomock.Any(), db.CountOperatorRidersParams{
+						RegionIds:    []int64{operator.RegionID},
+						Statuses:     []string{db.RiderStatusActive},
+						Keyword:      "",
+						OnlineStatus: "",
 					}).
 					Return(int64(2), nil)
 			},
@@ -647,8 +661,109 @@ func TestListOperatorRidersAPI(t *testing.T) {
 			},
 		},
 		{
+			name:  "OK_AllManagedRegionsWithoutRegionFilter",
+			query: "",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				regionA := operator.RegionID
+				regionB := operator.RegionID + 1
+				regionBRider := randomRiderInRegionForOp(regionB)
+				regionBRider.CreatedAt = time.Now().Add(time.Minute)
+
+				expectActiveOperatorAuth(store, user.ID, operator)
+				expectOperatorManagedRegions(store, operator, regionA, regionB)
+
+				store.EXPECT().
+					ListOperatorRiders(gomock.Any(), db.ListOperatorRidersParams{
+						RegionIds:    []int64{regionA, regionB},
+						Statuses:     []string{},
+						Keyword:      "",
+						OnlineStatus: "",
+						Offset:       0,
+						Limit:        20,
+					}).
+					Return([]db.Rider{regionBRider}, nil)
+				store.EXPECT().
+					CountOperatorRiders(gomock.Any(), db.CountOperatorRidersParams{
+						RegionIds:    []int64{regionA, regionB},
+						Statuses:     []string{},
+						Keyword:      "",
+						OnlineStatus: "",
+					}).
+					Return(int64(1), nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp listOperatorRidersResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Len(t, resp.Riders, 1)
+				require.Equal(t, operator.RegionID+1, resp.Riders[0].RegionID)
+				require.Equal(t, int64(1), resp.Total)
+			},
+		},
+		{
+			name:  "OK_WithStatusTrimmedKeywordAndOnlineStatus",
+			query: "?status=active&keyword=%20%20%E5%BC%A0%E4%B8%89%20%20&online_status=online&page=2&limit=10",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				matchingRider := randomRiderInRegionForOp(operator.RegionID)
+				matchingRider.RealName = "张三骑手"
+				matchingRider.IsOnline = true
+
+				expectActiveOperatorAuth(store, user.ID, operator)
+				expectOperatorManagedRegions(store, operator, operator.RegionID)
+
+				store.EXPECT().
+					ListOperatorRiders(gomock.Any(), db.ListOperatorRidersParams{
+						RegionIds:    []int64{operator.RegionID},
+						Statuses:     []string{db.RiderStatusActive},
+						Keyword:      "张三",
+						OnlineStatus: "online",
+						Offset:       10,
+						Limit:        10,
+					}).
+					Return([]db.Rider{matchingRider}, nil)
+				store.EXPECT().
+					CountOperatorRiders(gomock.Any(), db.CountOperatorRidersParams{
+						RegionIds:    []int64{operator.RegionID},
+						Statuses:     []string{db.RiderStatusActive},
+						Keyword:      "张三",
+						OnlineStatus: "online",
+					}).
+					Return(int64(11), nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp listOperatorRidersResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Len(t, resp.Riders, 1)
+				require.Equal(t, "张三骑手", resp.Riders[0].RealName)
+				require.True(t, resp.Riders[0].IsOnline)
+				require.Equal(t, int64(11), resp.Total)
+				require.Equal(t, int32(2), resp.Page)
+				require.Equal(t, int32(10), resp.Limit)
+			},
+		},
+		{
 			name:  "InvalidApplicationStatusFilter",
 			query: "?status=pending_approval",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectActiveOperatorAuth(store, user.ID, operator)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name:  "InvalidOnlineStatusFilter",
+			query: "?online_status=busy",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
