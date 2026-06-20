@@ -166,8 +166,8 @@
 | OPA-002 | 小程序承诺但后端不支持 | 商户搜索 keyword | 已确认 |
 | OPA-003 | 小程序承诺但后端不支持 | 骑手搜索 keyword、API 类型 online_status | 已确认 |
 | OPA-004 | 前后端响应 DTO 漂移 | 分析页区域体检 | 已确认 |
-| OPA-005 | 后端权限边界缺口 | 峰时时段列表跨区域读取 | 已确认 |
-| OPA-006 | 后端状态枚举漂移 | 实时统计待审骑手 | 已确认 |
+| OPA-005 | 后端权限边界缺口 | 峰时时段列表跨区域读取 | 已修复：`36c91afa` |
+| OPA-006 | 后端状态模型漂移 | 实时统计与骑手生命周期 | 已修复：`35df01de` |
 | OPA-007 | 错误路径漂移 | 代取费配置 PATCH 失败无差别 POST | 已确认 |
 | OP-NOUI-001/002 | 后端已实现但无页面入口 | 追偿争议/追偿单 | 当前确认 |
 | OP-NOUI-003 | 后端已实现但无页面入口 | 分账规则配置 | 当前确认 |
@@ -376,27 +376,27 @@ SQL 证据：
 - `riders/index.ts` 的 `onSearchChange()` 写入 `searchKeyword` 并触发 `loadRiders(true)`。
 - `_services/operator-rider-management.ts` 的 `loadOperatorRiderListPageData()` 把 `keyword` 放入 `RiderQueryParams`。
 - `_api/operator-rider-management.ts` 的 `RiderQueryParams` 声明 `keyword?: string` 和 `online_status?: RiderOnlineStatus`。
-- 同一文件的 `RiderStatus` 还包含 `offline`，但页面状态 tab 使用的是生命周期状态。
+- 原始审计时同一文件的 `RiderStatus` 还包含 `offline`，但该生命周期污染已在 OPA-006 中移除；OPA-003 剩余范围聚焦 `keyword` 和 `online_status` 能力承诺。
 
 #### 后端证据
 
 - `locallife/api/operator_merchant_rider.go` 中 `listOperatorRidersRequest` 只绑定 `status/region_id/page/limit`。
 - `listOperatorRiders()` 只按 `req.Status` 和一个目标区域查询 `ListRidersByRegion` 或 `ListRidersByRegionWithStatus`。
-- 后端 status binding 允许 `approved/active/suspended/pending_approval/rejected`，不接受 `offline`；也没有绑定 `online_status` 或 `keyword`。
+- OPA-006 后，后端 status binding 已收敛为 `approved/active/suspended`；当前仍没有绑定 `online_status` 或 `keyword`。
 
 #### 根因
 
-前端把骑手生命周期状态、在线状态和搜索条件放在同一个 API 类型中，但后端列表接口只实现生命周期状态过滤和分页。搜索关键词和在线状态没有进入 handler/SQL，`offline` 也不是后端生命周期状态。
+前端 service 把搜索关键词和在线状态放进查询参数模型，但后端列表接口只实现生命周期状态过滤和分页。搜索关键词没有进入 handler/SQL，在线状态也没有可信来源与时效语义。
 
 #### 用户影响
 
 - 运营商搜索骑手姓名或手机号时，列表不按搜索词过滤。
-- 后续如果页面接入 `online_status` 或 `offline` status，用户会看到无效筛选或 400 参数错误。
+- 后续如果页面继续接入 `online_status`，用户会看到无效筛选或误以为在线状态是强实时真值。
 - 多区域运营商从 dashboard 带 `region_id` 进入时可限定区域；直接进入骑手页时仍默认主区域，这一点需继续和产品口径确认。
 
 #### 修复方向
 
-- 拆分前端类型：生命周期状态使用后端 `status` 枚举，在线状态使用独立 `online_status`，不要把 `offline` 放进生命周期 `RiderStatus`。
+- 生命周期状态已由 OPA-006 收敛为 `approved/active/suspended`；OPA-003 不再重新引入申请态或 `offline` 生命周期。
 - 后端如支持搜索/在线筛选，应显式绑定 `keyword/online_status` 并新增 SQL/sqlc 查询。
 - 如果暂不支持，应删除页面搜索承诺或在页面上改为本地已加载数据内搜索，并清楚标注作用范围；更推荐后端支持。
 
@@ -486,44 +486,48 @@ SQL 证据：
 - 后端：`go test ./api -run TestListPeakHourConfigs` 或新增 focused test。
 - 小程序：区域配置页和峰时配置页在合法区域仍能读取；非法跳转参数展示无权限错误。
 
-### OPA-006: 实时统计的“待审骑手”使用了错误状态值
+### OPA-006: 实时统计与骑手管理混用了“申请状态”和“骑手生命周期状态”
 
-- 状态：已确认
+- 状态：已修复：`35df01de`；错误修复 `b1ebb921` 已通过 `51737559` 回滚
 - 风险级别：G2
-- 类型：后端状态枚举漂移、运营指标失真
-- 影响页面：`dashboard/index`、`analytics/index`
-- 影响接口：`GET /v1/operator/stats/realtime`
+- 类型：状态模型漂移、运营指标失真、区域指标越权风险
+- 影响页面：`dashboard/index`、`analytics/index`、`riders/index`
+- 影响接口：`GET /v1/operator/stats/realtime`、`GET /v1/operator/riders`、`GET /v1/operator/riders/summary`
 
 #### 前端证据
 
-- `_services/operator-workbench.ts` 和 `_services/operator-analytics-dashboard.ts` 读取 `pending_rider_count` 并展示为待审骑手指标。
-- `_api/operator-rider-management.ts` 把前端 `pending` 规范化成后端 `pending_approval`，骑手列表 tab “待入驻”实际请求 `pending_approval`。
+- `_services/operator-workbench.ts` 和 `_services/operator-analytics-dashboard.ts` 读取 `pending_rider_count`，旧页面文案把它解释为待审骑手。
+- `_api/operator-rider-management.ts` 曾把前端 `pending` 规范化成后端 `pending_approval`，`riders/index.wxml` 曾展示“待入驻”tab。
+- 这些前端承诺都假设 `riders.status` 存在待审态，但真实骑手生命周期不包含 `pending` 或 `pending_approval`。
 
-#### 后端证据
+#### 后端与生产库证据
 
-- `operator_merchant_rider.go` 的 `listOperatorRidersRequest` 允许状态包含 `pending_approval`，骑手汇总也使用 `countStatus("pending_approval")`。
-- `operator_realtime.go` 的 `getOperatorRealtimeStats()` 统计待审骑手时调用 `CountRidersByRegionWithStatus(... Status: "pending")`。
-- `db/sqlc/constants.go` 当前只定义 `RiderStatusApproved/Active/Suspended`，没有统一常量覆盖 `pending_approval`，导致魔法字符串分散。
+- 修复前 `operator_realtime.go` 的 `getOperatorRealtimeStats()` 用 `riders.status = 'pending'` 统计待审骑手，但生产约束不允许该值。
+- 修复前 `operator_merchant_rider.go` 的列表和汇总允许 `pending_approval/rejected`，但这些也不是 `riders.status` 的合法生命周期值。
+- 生产只读聚合显示：`riders.status` 当前为 `active=2`、`approved=2`；`rider_applications.status` 当前为 `approved=4`、`draft=96`。
+- 生产约束显示：`riders_status_check` 只允许 `approved/active/suspended`；`rider_applications_status_check` 只允许 `draft/submitted/approved`。
+- `rider_applications` 当前没有 `region_id`，提交态申请不能安全归属到运营商区域统计。
 
 #### 根因
 
-实时统计和骑手管理列表/汇总使用了不同的待审状态语义：一个用 `pending`，一个用 `pending_approval`。当前小程序页面已经按 `pending_approval` 对齐列表，而实时统计仍使用旧值。
+原 finding 把“待审骑手”误归因为 `pending` 与 `pending_approval` 的枚举命名不一致；深入核对后确认这是更上层的状态模型混用：骑手申请表表达申请流程，骑手表表达已形成骑手后的生命周期。运营商区域统计如果直接读取未按区域归属的申请表，会把全局申请状态泄漏进某个运营商的区域指标。
 
 #### 用户影响
 
-- 工作台/分析页待审骑手数量可能偏低或为 0。
-- 运营商会误判当前没有待处理骑手，影响审核和调度准备。
+- 工作台/分析页旧 `pending_rider_count` 不是可解释的区域指标，可能长期为 0 或诱导运营商理解为“没有待处理申请”。
+- 骑手列表旧“待入驻”tab 承诺了后端生命周期不存在的状态，用户筛选后只能得到空结果或错误结果。
+- 如果短期用 `rider_applications.submitted` 补数，会产生跨区域/全局申请数量泄漏风险。
 
-#### 修复方向
+#### 已采纳修复方向
 
-- 后端统一骑手状态常量，在 `db/sqlc/constants.go` 增补真实 rider status 常量，禁止 handler 魔法字符串。
-- `getOperatorRealtimeStats()` 改为统计 `pending_approval`，并补测试与骑手 summary 对齐。
-- 如果历史数据仍存在 `pending`，应明确是否迁移或兼容双状态，不能静默只算一个。
+- `pending_rider_count` 保留为兼容字段，但明确返回 `0`，直到存在可按运营商区域归属的骑手申请模型。
+- 骑手列表、汇总和小程序 tab 全部收敛到真实 `riders.status` 生命周期：`approved/active/suspended`；页面文案从“待入驻”改为“待激活”。
+- 小程序 analytics 指标不再展示假的“待审 N”，改为围绕真实 active rider 口径表达。
+- 后端测试锁定 realtime 不再查询 `riders.pending`、`riders.pending_approval` 或全局 `rider_applications.submitted`。
 
-#### 建议验证
+#### 后续设计前置条件
 
-- 后端：构造 `pending_approval` 骑手，验证 realtime `pending_rider_count` 与 `getOperatorRiderSummary()` 一致。
-- 小程序：dashboard/analytics 与骑手列表待入驻 tab 的数量口径一致。
+如果产品需要运营商审核骑手申请，必须先在申请模型或分配流程中建立区域归属、运营商授权、重复提交和审批时序，再新增 operator rider application review API 与小程序入口；不能在当前区域统计接口里临时拼接全局申请表。
 
 ### OPA-007: 代取费配置 PATCH 任意失败都会降级 POST
 
@@ -717,49 +721,57 @@ SQL 证据：
 - 统计接口的区域授权、空数据、错误语义、时间窗口均可解释。
 - dashboard 与 analytics 如果共用指标，口径一致或差异被明确命名。
 
-### OPA-006 修复计划：待审骑手状态枚举统一
+### OPA-006 修复计划：骑手申请状态与生命周期状态分离
 
-背景：实时统计用 `pending` 统计待审骑手，骑手列表和汇总使用 `pending_approval`，导致 dashboard/analytics 指标可能失真。
+背景：实时统计旧代码用 `riders.status = pending` 统计“待审骑手”，骑手列表旧代码又允许 `pending_approval/rejected`。审计过程中确认这不是简单枚举拼写问题：`riders` 表只有已形成骑手后的生命周期状态，待审属于 `rider_applications` 申请流程；且申请表当前没有区域归属，不能直接进入运营商区域指标。
 
-设计目标：骑手生命周期状态有单一枚举来源；实时统计、列表、汇总、小程序 tab 使用同一待审口径。
+设计目标：运营商实时统计和骑手管理只表达真实可归属、可授权的骑手生命周期；小程序不再展示后端不支持的“待入驻/待审骑手”承诺；未来如要做运营商审核骑手申请，先补区域归属和授权模型。
 
-边界与非目标：本项不重构骑手全生命周期审批流程，不调整商户状态枚举，不新增在线状态筛选。
+边界与非目标：本项不新增骑手申请审核入口，不迁移 `rider_applications` schema，不把申请表的全局数量拼入区域实时统计，不解决 OPA-003 的搜索和在线筛选缺口。
 
 时序、幂等、越权关注：
-- 读统计无写入幂等问题，但状态口径必须和审核写路径一致。
-- 如果生产存在历史 `pending` 数据，需先只读统计数量，再决定迁移、兼容双读或废弃；不能静默改变业务口径。
-- 多区域统计必须沿用当前 operator 区域选择逻辑。
+- 当前修复只影响读路径和页面展示，无新增写入幂等问题。
+- 申请审批时序仍由申请流负责；只有申请批准并形成 `riders` 记录后，才进入运营商骑手生命周期统计。
+- `rider_applications` 未区域化前，任何 submitted/pending 申请数量都不能作为某个运营商区域的指标暴露。
+- 多区域实时统计继续沿用当前 operator 区域选择和权限解析，不接受前端传 `operator_id`。
 
 子任务：
 
-1. `OPA-006-A` 状态枚举源审计
+1. `OPA-006-A` 状态模型源审计
    - 文件：`locallife/db/sqlc/constants.go`、`locallife/api/operator_merchant_rider.go`、`locallife/api/operator_realtime.go`、骑手申请/审核相关文件。
-   - 内容：列出 rider status 全量枚举和写入点，确认真实待审值是 `pending_approval`。
-   - 验证：`rg -n '"pending"|"pending_approval"|RiderStatus' locallife` 结果入审计记录。
-   - 可提交范围：文档或常量测试，不混业务修复。
+   - 内容：列出 `riders.status` 与 `rider_applications.status` 的合法枚举、写入点和生产只读聚合；确认二者不能互相替代。
+   - 验证：`rg -n '"pending"|"pending_approval"|RiderStatus|rider_applications' locallife`；生产只读聚合只记录枚举数量，不输出 PII。
+   - 可提交范围：文档或 focused 测试，不混入业务修复。
 
-2. `OPA-006-B` 常量补齐与魔法字符串替换
-   - 文件：`locallife/db/sqlc/constants.go`、`locallife/api/operator_realtime.go`、必要的 handler/service 文件。
-   - 内容：补 `RiderStatusPendingApproval`、`RiderStatusRejected` 等真实枚举常量；实时统计改用常量。
-   - 验证：`cd locallife && go test ./api -run 'Test.*Realtime|Test.*RiderSummary'`。
-   - 可提交范围：常量、引用替换、focused 测试。
+2. `OPA-006-B` 错误修复回滚
+   - 文件：`locallife/api/operator_merchant_rider.go`、`locallife/api/operator_realtime.go`、`locallife/api/operator_realtime_test.go`、`locallife/db/sqlc/constants.go`、`weapp/miniprogram/pages/operator/riders/index.wxml`。
+   - 内容：回滚把 `pending` 改成 `pending_approval` 的错误修复，避免把申请态继续伪装成骑手生命周期。
+   - 验证：回滚后重新跑 OPA-006 focused 测试，确认没有保留错误待审口径。
+   - 可提交范围：独立 revert 提交 `51737559`，便于 review 看清纠偏动作。
 
-3. `OPA-006-C` 历史数据口径决策
-   - 文件：迁移脚本仅在确认存在历史 `pending` 且业务要求归并时新增；否则只更新审计文档。
-   - 内容：只读查询生产/测试数据中 `pending` 与 `pending_approval` 数量；若需迁移，另开高风险数据修复任务，带回滚和抽样验证。
-   - 验证：查询记录不包含敏感凭据；迁移任务必须单独 review。
-   - 可提交范围：文档或独立 migration，不和 handler 修复混提。
+3. `OPA-006-C` 后端生命周期契约修复
+   - 文件：`locallife/api/operator_realtime.go`、`locallife/api/operator_merchant_rider.go`、`locallife/api/operator_realtime_test.go`、`locallife/api/operator_merchant_rider_test.go`、Swagger 生成物。
+   - 内容：`pending_rider_count` 作为兼容字段固定返回 `0` 并注释说明原因；列表 status 只接受 `approved/active/suspended`；summary 返回 `approved/active/suspended/online`；测试禁止查询 `riders.pending`、`riders.pending_approval` 或全局 `rider_applications.submitted`。
+   - 验证：`cd locallife && PATH=/usr/local/go/bin:$PATH go test ./api -run 'TestGetOperatorRealtimeStatsAPI_DoesNotUseApplicationStatusesForRegionRiders|TestGetOperatorRiderSummaryAPI|TestListOperatorRidersAPI' -count=1`；`PATH=/usr/local/go/bin:$PATH make check-generated`。
+   - 可提交范围：后端 API、测试、Swagger 生成物。
 
-4. `OPA-006-D` 小程序指标一致性回归
-   - 文件：`weapp/miniprogram/pages/operator/_services/operator-workbench.ts`、`_services/operator-analytics-dashboard.ts`、`riders/index.*`
-   - 内容：确认待审指标和骑手待入驻 tab 使用同一后端状态，不引入本地转换漂移。
-   - 验证：`cd weapp && npm run compile && npm run lint`。
-   - 可提交范围：只有发现前端漂移才提交代码，否则更新复核记录。
+4. `OPA-006-D` 小程序骑手生命周期显示收口
+   - 文件：`weapp/miniprogram/pages/operator/_api/operator-rider-management.ts`、`weapp/miniprogram/pages/operator/_services/operator-rider-management.ts`、`weapp/miniprogram/pages/operator/_services/operator-analytics-dashboard.ts`、`weapp/miniprogram/pages/operator/riders/index.wxml`。
+   - 内容：移除 `pending/pending_approval/rejected/offline` 生命周期承诺；`approved` 显示为待激活；analytics 不再展示假的待审计数。
+   - 验证：`cd weapp && PATH="$HOME/.local/bin:$PATH" npm run compile && PATH="$HOME/.local/bin:$PATH" npm run lint`。
+   - 可提交范围：小程序类型、service adapter、页面 tab 文案。
+
+5. `OPA-006-E` 未来骑手申请区域化设计前置
+   - 文件：本文档或后续骑手申请设计文档。
+   - 内容：如果要让运营商处理骑手申请，先设计申请区域归属、运营商可见性、审批幂等、重复提交、审核冲突和历史数据迁移，再新增后端和小程序入口。
+   - 验证：架构 review；不在 OPA-006 当前修复里暗改 schema 或页面。
+   - 可提交范围：文档或独立设计任务。
 
 大问题复核：
-- `pending_rider_count` 与骑手 summary/list 待审数量在同一数据集下可对齐。
-- 代码中不再出现与待审骑手相关的裸 `"pending"`。
-- 历史数据是否需要迁移有明确结论。
+- `riders.status` 生命周期只剩 `approved/active/suspended`，页面和后端契约一致。
+- `pending_rider_count` 不再假装能表达区域待审申请；兼容字段为 0 且有注释和测试锁定。
+- 申请态和骑手生命周期不再在 API 类型、summary、realtime、tab 文案中混用。
+- 未来待审申请能力被明确拆成新设计任务，不在当前指标接口中补假数。
 
 ### OPA-007 修复计划：代取费保存错误语义与幂等收口
 
@@ -851,7 +863,7 @@ SQL 证据：
 
 ### OPA-003 修复计划：骑手搜索与在线状态模型拆分
 
-背景：小程序骑手 API 类型包含 `keyword`、`online_status` 和生命周期 status `offline`，后端只支持生命周期状态过滤，且不支持 keyword/online_status。
+背景：小程序骑手 API 类型包含 `keyword`、`online_status`，但后端只支持 `approved/active/suspended` 生命周期状态过滤和分页，不支持 keyword/online_status。原先混入生命周期的 `offline/pending_approval/rejected` 已由 OPA-006 收口，不能在 OPA-003 中重新引入。
 
 设计目标：骑手生命周期、在线状态、搜索关键词分层清楚；后端明确支持哪些查询条件，页面只暴露真实能力。
 
@@ -866,7 +878,7 @@ SQL 证据：
 
 1. `OPA-003-A` 骑手状态模型裁决
    - 文件：`weapp/miniprogram/pages/operator/_api/operator-rider-management.ts`、`locallife/api/operator_merchant_rider.go`
-   - 内容：确认生命周期枚举：`approved/active/suspended/pending_approval/rejected`；`offline` 从生命周期 status 移除。确认是否有后端在线状态源；没有则删除 `online_status` 类型承诺。
+   - 内容：确认生命周期枚举维持 OPA-006 的 `approved/active/suspended`；不得重新引入 `pending_approval/rejected/offline`。确认是否有后端在线状态源；没有则删除 `online_status` 类型承诺。
    - 验证：契约 review。
    - 可提交范围：类型清理或文档。
 
@@ -995,6 +1007,22 @@ SQL 证据：
 | 非目标 | 未重构全局 operator 区域授权中间件；未改代取费配置 POST/PATCH 的错误语义；未处理食安、追偿等 resource-id 型授权深挖 |
 | 剩余风险 | `swag` 生成时仍输出 Go runtime const evaluation warning，但命令退出 0 且 `make check-generated` 报告 generated artifacts are in sync；resource-id 型 operator GET 仍按后续全量审计继续深挖 |
 
+#### OPA-006 完成复核：骑手申请状态与生命周期状态分离
+
+| 字段 | 记录 |
+| --- | --- |
+| 完成范围 | `OPA-006-A/B/C/D`；错误业务提交 `b1ebb921 fix: align operator realtime pending rider status`，纠偏回滚 `51737559 Revert "fix: align operator realtime pending rider status"`，正确业务提交 `35df01de fix: align operator rider lifecycle status semantics`；涉及 `locallife/api/operator_realtime.go`、`locallife/api/operator_merchant_rider.go`、`locallife/api/operator_realtime_test.go`、`locallife/api/operator_merchant_rider_test.go`、Swagger 生成物、`weapp/miniprogram/pages/operator/_api/operator-rider-management.ts`、`weapp/miniprogram/pages/operator/_services/operator-rider-management.ts`、`weapp/miniprogram/pages/operator/_services/operator-analytics-dashboard.ts`、`weapp/miniprogram/pages/operator/riders/index.wxml` |
+| 设计目标 | 已达成修正后的设计目标：实时统计和骑手管理只使用 `riders.status` 生命周期；小程序不再展示“待入驻/待审骑手”这类后端无真实生命周期支撑的承诺；`pending_rider_count` 作为兼容字段保留但返回 0，避免页面或外部调用方误解为真实区域待审申请数 |
+| 设计修正 | 原 finding 把问题判断为 `pending` 与 `pending_approval` 枚举不一致；生产约束和代码链路复核后确认这是状态模型边界错误。`rider_applications.status` 表达申请流程，`riders.status` 表达骑手生命周期，且申请表没有 `region_id`，不能进入运营商区域实时统计 |
+| 生产只读证据 | 生产聚合：`rider_applications.status` 为 `approved=4`、`draft=96`；`riders.status` 为 `active=2`、`approved=2`；约束：`rider_applications_status_check` 允许 `draft/submitted/approved`，`riders_status_check` 允许 `approved/active/suspended`；查询未输出姓名、电话、证件等 PII |
+| 时序 | 本次只改读路径和展示口径；申请审批时序仍是申请流先推进，批准后形成 `riders` 记录，再进入运营商骑手生命周期统计。没有把未区域化的 submitted application 拼入区域实时统计，也没有改变审核写路径 |
+| 幂等 | 不新增写路径；列表、summary、realtime 都是读路径，重复请求只重新读取相同生命周期口径；没有增加重复提交、超时重试或并发写入风险 |
+| 越权 | 避免把全局 `rider_applications.submitted` 泄漏给某个运营商区域；现有 rider list/detail/stats 仍沿用当前 operator 区域解析和 rider 归属校验；页面传入 status 只作为筛选条件，不能扩大可见范围 |
+| 小程序复核 | `RiderStatus` 收敛为 `approved/active/suspended`；`approved` 显示为“待激活”；移除 `pending/pending_approval/rejected/offline` 生命周期承诺；analytics active rider 指标不再显示假的“待审 N”；缺失/未知状态展示为“状态未知”而不是降级成 pending |
+| 回归 | 后端：`PATH=/usr/local/go/bin:$PATH go test ./api -run 'TestGetOperatorRealtimeStatsAPI_DoesNotUseApplicationStatusesForRegionRiders\|TestGetOperatorRiderSummaryAPI\|TestListOperatorRidersAPI' -count=1` 通过；生成检查：`PATH=/usr/local/go/bin:$PATH make check-generated` 通过；小程序：`cd weapp && PATH="$HOME/.local/bin:$PATH" npm run compile` 通过，`cd weapp && PATH="$HOME/.local/bin:$PATH" npm run lint` 通过；提交前 `git diff --check` 通过 |
+| 非目标 | 未新增骑手申请区域归属 schema；未实现运营商骑手申请审核 API 或小程序入口；未迁移申请历史数据；未解决 OPA-003 的骑手 keyword 搜索和在线状态筛选；未调整商户状态模型 |
+| 剩余风险 | `pending_rider_count` 兼容字段仍存在，虽然已注释并由测试锁定为 0；如果未来要展示运营商待审骑手申请，必须先完成区域归属、授权边界、审批幂等和历史数据迁移设计，否则不能复用该字段补假数 |
+
 ## 后续审计工作记录
 
 后续继续在本节追加全量盘点结果。每个能力或页面至少记录：
@@ -1002,3 +1030,5 @@ SQL 证据：
 | 编号 | 域 | 后端能力/页面 | 后端证据 | 小程序证据 | 状态 | Finding |
 | --- | --- | --- | --- | --- | --- | --- |
 | OPA-001 | 区域管理 | `/v1/operator/regions` 区域列表状态 | `operator_stats.go`, `operator_region.sql`, `operator_region_test.go` | `operator/region/index`, `operator-regions.ts`, `operator-basic-management.ts` | 已修复：`5b642fef` | 已完成复核 |
+| OPA-005 | 峰时时段 | `/v1/operator/regions/:region_id/peak-hours` 列表授权 | `delivery_fee.go`, `delivery_fee_test.go` | `operator/region/config`, `operator/timeslot/index`, `delivery-fee.ts` | 已修复：`36c91afa` | 已完成复核 |
+| OPA-006 | 骑手管理/实时统计 | `/v1/operator/stats/realtime`、`/v1/operator/riders` 生命周期口径 | `operator_realtime.go`, `operator_merchant_rider.go`, `operator_realtime_test.go`, `operator_merchant_rider_test.go` | `operator/riders/index`, `operator-rider-management.ts`, `operator-analytics-dashboard.ts` | 已修复：`35df01de` | 已完成复核 |
