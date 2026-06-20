@@ -63,6 +63,7 @@ type RedisTaskProcessor struct {
 	deliveryBroadcast         *logic.DeliveryBroadcastLogic
 	mediaRegistry             *media.Registry
 	ocrService                *ocr.Service
+	foodPermitVerifier        merchantFoodPermitOfficialVerifier
 	onboardingReviewSvc       *logic.OnboardingReviewService
 	credentialGovSvc          *logic.CredentialGovernanceService
 	merchantReviewSvc         *logic.MerchantOnboardingReviewService
@@ -154,6 +155,7 @@ func NewRedisTaskProcessor(
 		deliveryBroadcast:   deliveryBroadcast,
 		mediaRegistry:       mediaRegistry,
 		ocrService:          ocrService,
+		foodPermitVerifier:  logic.NewMerchantFoodPermitOfficialVerifier(logic.MerchantFoodPermitOfficialVerifierConfig{}),
 		onboardingReviewSvc: onboardingReviewSvc,
 		credentialGovSvc:    credentialGovSvc,
 		merchantReviewSvc: logic.NewMerchantOnboardingReviewService(

@@ -310,6 +310,7 @@ func (processor *RedisTaskProcessor) processMerchantApplicationFoodPermitOCRJob(
 			parseFoodPermitOCRTextFallback(&ocrData, ocrData.RawText)
 		}
 	}
+	processor.repairMerchantFoodPermitOCRDataFromOfficialVerification(ctx, &ocrData, job, payload.ApplicationID)
 	ocrData.Readiness = buildMerchantFoodPermitReadiness(ocrData.CompanyName, ocrData.OperatorName, ocrData.RawText, ocrData.ValidTo)
 	ocrJSON, _ := json.Marshal(ocrData)
 	updatedApp, err := processor.store.UpdateMerchantApplicationFoodPermit(ctx, db.UpdateMerchantApplicationFoodPermitParams{

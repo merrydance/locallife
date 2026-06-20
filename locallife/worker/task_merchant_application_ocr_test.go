@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/ocr"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -68,6 +69,43 @@ func (stubStructuredFoodPermitOCRProvider) Recognize(_ context.Context, capabili
 			},
 		},
 	}, nil
+}
+
+type stubSmallCateringQRCodeFoodPermitOCRProvider struct{}
+
+func (stubSmallCateringQRCodeFoodPermitOCRProvider) Name() ocr.ProviderName {
+	return ocr.ProviderNameAliyun
+}
+
+func (stubSmallCateringQRCodeFoodPermitOCRProvider) Recognize(_ context.Context, capability ocr.Capability, req ocr.RecognizeRequest) (ocr.RecognizeResponse, error) {
+	if capability != ocr.CapabilityAliyunFoodPermit {
+		return ocr.RecognizeResponse{}, nil
+	}
+	recognizedAt := time.Date(2026, 3, 25, 10, 8, 0, 0, time.UTC)
+	return ocr.RecognizeResponse{
+		RawResult: json.RawMessage(`{"data":{"qrCode":"http://121.28.87.7:8081/OrcodeXcyXzf.jsp?flowId=2130528020270&zsId=2130528020270"}}`),
+		Normalized: ocr.NormalizedResult{
+			DocumentType: ocr.DocumentTypeFoodPermit,
+			RecognizedAt: recognizedAt,
+			FoodPermit: &ocr.FoodPermitResult{
+				BusinessName: "食品小作坊小餐饮登记证2130528020270",
+				RawText:      "食品小作坊小餐饮登记证\n二维码：http://121.28.87.7:8081/OrcodeXcyXzf.jsp?flowId=2130528020270&zsId=2130528020270",
+			},
+		},
+	}, nil
+}
+
+type stubMerchantFoodPermitOfficialVerifier struct {
+	result logic.MerchantFoodPermitOfficialVerification
+	err    error
+	calls  *int
+}
+
+func (stub stubMerchantFoodPermitOfficialVerifier) VerifyMerchantFoodPermit(ctx context.Context, rawResult []byte) (logic.MerchantFoodPermitOfficialVerification, error) {
+	if stub.calls != nil {
+		*stub.calls = *stub.calls + 1
+	}
+	return stub.result, stub.err
 }
 
 type stubFoodPermitBinaryReader struct{}
@@ -395,6 +433,7 @@ func TestProcessTaskMerchantApplicationFoodPermitOCR_PrefersStructuredFields(t *
 	})
 	require.NoError(t, err)
 
+	verifierCalls := 0
 	processor := &RedisTaskProcessor{
 		store: store,
 		ocrService: ocr.NewService(
@@ -402,6 +441,7 @@ func TestProcessTaskMerchantApplicationFoodPermitOCR_PrefersStructuredFields(t *
 			router,
 			stubFoodPermitBinaryReader{},
 		),
+		foodPermitVerifier: stubMerchantFoodPermitOfficialVerifier{calls: &verifierCalls},
 	}
 	app := db.MerchantApplication{
 		ID:                     77,
@@ -478,6 +518,116 @@ func TestProcessTaskMerchantApplicationFoodPermitOCR_PrefersStructuredFields(t *
 	task := asynq.NewTask(TaskMerchantApplicationFoodPermitOCR, payload)
 	err = processor.ProcessTaskMerchantApplicationFoodPermitOCR(context.Background(), task)
 	require.NoError(t, err)
+	require.Zero(t, verifierCalls)
+}
+
+func TestProcessTaskMerchantApplicationFoodPermitOCR_BackfillsSmallCateringFromOfficialVerification(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	router, err := ocr.NewStaticRouter(map[ocr.DocumentType]ocr.Route{
+		ocr.DocumentTypeFoodPermit: {
+			Provider:   stubSmallCateringQRCodeFoodPermitOCRProvider{},
+			Capability: ocr.CapabilityAliyunFoodPermit,
+		},
+	})
+	require.NoError(t, err)
+
+	processor := &RedisTaskProcessor{
+		store: store,
+		ocrService: ocr.NewService(
+			store,
+			router,
+			stubFoodPermitBinaryReader{},
+		),
+		foodPermitVerifier: stubMerchantFoodPermitOfficialVerifier{
+			result: logic.MerchantFoodPermitOfficialVerification{
+				CompanyName:  "宁晋县周鹏饭店",
+				OperatorName: "周松涛",
+				PermitNo:     "2130528020270",
+				CreditCode:   "92130528MA0A5XB46A",
+				Address:      "河北省邢台市宁晋县测试路1号",
+				ValidTo:      "2028年12月21日",
+			},
+		},
+	}
+	app := db.MerchantApplication{
+		ID:                     78,
+		Status:                 "draft",
+		FoodPermitMediaAssetID: pgtype.Int8{Int64: 100, Valid: true},
+		FoodPermitOcr:          []byte(`{"status":"pending","ocr_job_id":89}`),
+	}
+
+	createdAt := time.Date(2026, 3, 25, 10, 7, 0, 0, time.UTC)
+	startedAt := time.Date(2026, 3, 25, 10, 7, 30, 0, time.UTC)
+	baseJob := db.OcrJob{
+		ID:           89,
+		DocumentType: string(ocr.DocumentTypeFoodPermit),
+		Provider:     string(ocr.ProviderNameAliyun),
+		MediaAssetID: 100,
+		OwnerType:    string(ocr.OwnerTypeMerchantApplication),
+		OwnerID:      78,
+		Status:       string(ocr.JobStatusPending),
+		CreatedAt:    createdAt,
+	}
+	syncUpsert, syncVersion := expectMerchantSubjectProfileSyncFromWorker(t, store, app.ID, func(t *testing.T, arg db.UpsertMerchantSubjectProfileParams) {
+		require.Equal(t, "2130528020270", arg.FoodPermitNumber)
+		require.Equal(t, "宁晋县周鹏饭店", arg.FoodPermitCompanyName)
+		require.Equal(t, app.FoodPermitMediaAssetID, arg.FoodPermitMediaAssetID)
+	})
+	auditCall := expectOCRSuccessAuditLog(t, store, db.OcrJob{
+		ID:        89,
+		Status:    string(ocr.JobStatusSucceeded),
+		OwnerType: string(ocr.OwnerTypeMerchantApplication),
+		Provider:  string(ocr.ProviderNameAliyun),
+	})
+
+	gomock.InOrder(
+		store.EXPECT().GetOCRJob(gomock.Any(), int64(89)).Return(baseJob, nil),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), int64(78)).Return(app, nil),
+		store.EXPECT().GetOCRJob(gomock.Any(), int64(89)).Return(baseJob, nil),
+		store.EXPECT().MarkOCRJobProcessing(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, _ db.MarkOCRJobProcessingParams) (db.OcrJob, error) {
+			job := baseJob
+			job.Status = string(ocr.JobStatusProcessing)
+			job.StartedAt = pgtype.Timestamptz{Time: startedAt, Valid: true}
+			return job, nil
+		}),
+		store.EXPECT().CompleteOCRJob(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CompleteOCRJobParams) (db.OcrJob, error) {
+			job := baseJob
+			job.Status = string(ocr.JobStatusSucceeded)
+			job.StartedAt = pgtype.Timestamptz{Time: startedAt, Valid: true}
+			job.NormalizedResult = arg.NormalizedResult
+			job.RawResult = arg.RawResult
+			job.FinishedAt = pgtype.Timestamptz{Time: startedAt.Add(6 * time.Second), Valid: true}
+			return job, nil
+		}),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), int64(78)).Return(app, nil),
+		store.EXPECT().UpdateMerchantApplicationFoodPermit(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.UpdateMerchantApplicationFoodPermitParams) (db.MerchantApplication, error) {
+			var payload foodPermitOCRData
+			require.NoError(t, json.Unmarshal(arg.FoodPermitOcr, &payload))
+			require.Equal(t, "2130528020270", payload.PermitNo)
+			require.Equal(t, "宁晋县周鹏饭店", payload.CompanyName)
+			require.Equal(t, "周松涛", payload.OperatorName)
+			require.Equal(t, "2028年12月21日", payload.ValidTo)
+			require.NotNil(t, payload.Readiness)
+			require.Equal(t, ocrReadinessStateReady, payload.Readiness.State)
+			require.Contains(t, payload.RawText, "官方核验主体名称：宁晋县周鹏饭店")
+			updatedApp := app
+			updatedApp.FoodPermitOcr = arg.FoodPermitOcr
+			return updatedApp, nil
+		}),
+		syncUpsert,
+		syncVersion,
+		auditCall,
+	)
+
+	payload, err := json.Marshal(merchantApplicationOCRPayload{ApplicationID: 78, MediaAssetID: 100, OCRJobID: 89})
+	require.NoError(t, err)
+
+	task := asynq.NewTask(TaskMerchantApplicationFoodPermitOCR, payload)
+	err = processor.ProcessTaskMerchantApplicationFoodPermitOCR(context.Background(), task)
+	require.NoError(t, err)
 }
 
 func TestParseFoodPermitOCRTextFallback_ExtractsLikelyCompanyName(t *testing.T) {
@@ -489,6 +639,53 @@ func TestParseFoodPermitOCRTextFallback_ExtractsLikelyCompanyName(t *testing.T) 
 	require.Equal(t, "测试餐饮有限公司", data.CompanyName)
 	require.Equal(t, "JY12345678901234", data.PermitNo)
 	require.Equal(t, "2027年01月08日", data.ValidTo)
+}
+
+func TestRepairMerchantFoodPermitOCRDataFromOfficialVerification_FailsOpen(t *testing.T) {
+	t.Parallel()
+
+	data := foodPermitOCRData{
+		RawText: "食品小作坊小餐饮登记证",
+	}
+	processor := &RedisTaskProcessor{
+		foodPermitVerifier: stubMerchantFoodPermitOfficialVerifier{err: errors.New("official endpoint timeout")},
+	}
+	changed := processor.repairMerchantFoodPermitOCRDataFromOfficialVerification(context.Background(), &data, db.OcrJob{
+		ID:        90,
+		Provider:  string(ocr.ProviderNameAliyun),
+		RawResult: []byte(`{"data":{"qrCode":"http://121.28.87.7:8081/OrcodeXcyXzf.jsp?flowId=2130528020270&zsId=2130528020270"}}`),
+	}, 79)
+
+	require.False(t, changed)
+	require.Equal(t, "食品小作坊小餐饮登记证", data.RawText)
+	require.Empty(t, data.PermitNo)
+	require.Empty(t, data.CompanyName)
+	require.Empty(t, data.OperatorName)
+	require.Empty(t, data.ValidTo)
+}
+
+func TestRepairFoodPermitOCRDataFromOfficialVerification_DoesNotReplaceRecognizedCompanyName(t *testing.T) {
+	t.Parallel()
+
+	data := foodPermitOCRData{
+		PermitNo:    "JY11105000000001",
+		CompanyName: "测试餐饮有限公司",
+		ValidTo:     "2030年12月31日",
+	}
+
+	changed := repairFoodPermitOCRDataFromOfficialVerification(&data, logic.MerchantFoodPermitOfficialVerification{
+		CompanyName:  "另一家餐饮有限公司",
+		OperatorName: "张三",
+		PermitNo:     "2130528020270",
+		ValidTo:      "2028年12月21日",
+	})
+
+	require.False(t, changed)
+	require.Equal(t, "测试餐饮有限公司", data.CompanyName)
+	require.Equal(t, "JY11105000000001", data.PermitNo)
+	require.Empty(t, data.OperatorName)
+	require.Equal(t, "2030年12月31日", data.ValidTo)
+	require.Empty(t, data.RawText)
 }
 
 func TestParseFoodPermitOCRTextFallback_RejectsSuspiciousCompanyName(t *testing.T) {
