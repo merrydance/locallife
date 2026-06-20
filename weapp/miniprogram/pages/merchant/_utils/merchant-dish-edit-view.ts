@@ -49,7 +49,6 @@ export interface DishEditFormData {
   member_price: number
   is_online: boolean
   is_available: boolean
-  is_packaging: boolean
   sort_order: number
   prepare_time: number
   image_asset_id: number
@@ -250,7 +249,6 @@ export function buildDishEditLoadPatch(params: {
       member_price: params.detail?.member_price || 0,
       is_online: params.detail?.is_online ?? true,
       is_available: params.detail?.is_available ?? true,
-      is_packaging: params.detail?.is_packaging ?? false,
       sort_order: params.detail?.sort_order || 0,
       prepare_time: params.detail?.prepare_time || 15,
       image_asset_id: params.detail?.image_asset_id || 0,
@@ -521,9 +519,6 @@ export function getDishEditValidationMessage(params: {
   if (params.formData.prepare_time < 1 || params.formData.prepare_time > 120) {
     return '出餐时间需在1-120分钟'
   }
-  if (params.formData.is_packaging && !params.formData.is_online) {
-    return '包装菜品必须保持上架'
-  }
   if (params.imageUploading) {
     return '请等待图片上传完成'
   }
@@ -542,8 +537,7 @@ export function buildDishSubmitPayload(params: {
     category_id: params.formData.category_id,
     price: params.formData.price,
     is_online: params.formData.is_online,
-    is_available: params.formData.is_packaging ? true : params.formData.is_available,
-    is_packaging: params.formData.is_packaging,
+    is_available: params.formData.is_available,
     prepare_time: params.formData.prepare_time
   }
 
