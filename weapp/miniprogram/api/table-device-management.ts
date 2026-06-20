@@ -232,6 +232,25 @@ export interface MerchantDeviceAccessResponse {
     block_reason?: string
 }
 
+export interface MerchantDeviceAccessRequestContext {
+    merchantId?: number
+}
+
+function buildMerchantDeviceAccessRequestContext(context?: MerchantDeviceAccessRequestContext) {
+    const merchantId = Number(context?.merchantId || 0)
+    if (merchantId <= 0) {
+        return {
+            header: undefined,
+            query: undefined
+        }
+    }
+
+    return {
+        header: { 'X-Merchant-ID': String(merchantId) },
+        query: { merchant_id: merchantId }
+    }
+}
+
 /** 打印机异常对账任务响应 */
 export interface PrinterReconciliationJobResponse {
     id: number
@@ -560,10 +579,15 @@ export class DeviceManagementService {
     /**
      * 获取设备管理能力
      */
-    async getMerchantDeviceAccess(): Promise<MerchantDeviceAccessResponse> {
+    async getMerchantDeviceAccess(
+        context?: MerchantDeviceAccessRequestContext
+    ): Promise<MerchantDeviceAccessResponse> {
+        const requestContext = buildMerchantDeviceAccessRequestContext(context)
         return request({
             url: '/v1/merchant/devices/access',
-            method: 'GET'
+            method: 'GET',
+            data: requestContext.query,
+            header: requestContext.header
         })
     }
 
@@ -828,7 +852,7 @@ export class TableDeviceAdapter {
 export const tableManagementService = new TableManagementService()
 export const deviceManagementService = new DeviceManagementService()
 export const displayConfigService = new DisplayConfigService()
-export const getMerchantDeviceAccess = () => deviceManagementService.getMerchantDeviceAccess()
+export const getMerchantDeviceAccess = (context?: MerchantDeviceAccessRequestContext) => deviceManagementService.getMerchantDeviceAccess(context)
 
 // ==================== 便捷函数 ====================
 

@@ -121,6 +121,29 @@ UPDATE sample_items
 SET archived_at = NOW();"
 
 run_case \
+  on_conflict_do_update_is_not_unscoped_write \
+  0 \
+  "SQL guardrail passed" \
+  "-- name: UpsertSample :one
+INSERT INTO sample_items (id, status, updated_at)
+VALUES (\$1, \$2, NOW())
+RETURNING id, status, updated_at;" \
+  "-- name: UpsertSample :one
+INSERT INTO sample_items (id, status, updated_at)
+VALUES (\$1, \$2, NOW())
+ON CONFLICT (id) DO UPDATE
+SET status = EXCLUDED.status,
+    updated_at = NOW()
+RETURNING id, status, updated_at;" \
+  "-- name: UpsertSample :one
+INSERT INTO sample_items (id, status, updated_at)
+VALUES (\$1, \$2, NOW())
+ON CONFLICT (id) DO UPDATE
+SET status = EXCLUDED.status,
+    updated_at = NOW()
+RETURNING id, status, updated_at;"
+
+run_case \
   allow_select_star_passes \
   0 \
   "SQL guardrail passed" \

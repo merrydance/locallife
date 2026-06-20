@@ -43,57 +43,96 @@ export interface UpsertMerchantPackagingOptionRequest extends Record<string, unk
   sort_order: number
 }
 
+export interface MerchantPackagingRequestContext {
+  merchantId?: number
+}
+
+function buildMerchantPackagingRequestContext(context?: MerchantPackagingRequestContext) {
+  const merchantId = Number(context?.merchantId || 0)
+  if (merchantId <= 0) {
+    return {
+      header: undefined,
+      query: undefined
+    }
+  }
+
+  return {
+    header: { 'X-Merchant-ID': String(merchantId) },
+    query: { merchant_id: merchantId }
+  }
+}
+
 export class MerchantPackagingService {
-  static async getSettings(): Promise<MerchantPackagingSettingsResponse> {
+  static async getSettings(context?: MerchantPackagingRequestContext): Promise<MerchantPackagingSettingsResponse> {
+    const requestContext = buildMerchantPackagingRequestContext(context)
     return request<MerchantPackagingSettingsResponse>({
       url: '/v1/merchant/packaging-settings',
-      method: 'GET'
+      method: 'GET',
+      data: requestContext.query,
+      header: requestContext.header
     })
   }
 
   static async updateSettings(
-    data: UpsertMerchantPackagingSettingsRequest
+    data: UpsertMerchantPackagingSettingsRequest,
+    context?: MerchantPackagingRequestContext
   ): Promise<MerchantPackagingSettingsResponse> {
+    const requestContext = buildMerchantPackagingRequestContext(context)
     return request<MerchantPackagingSettingsResponse>({
       url: '/v1/merchant/packaging-settings',
       method: 'PUT',
-      data
+      data,
+      header: requestContext.header
     })
   }
 
-  static async listOptions(): Promise<MerchantPackagingOptionResponse[]> {
+  static async listOptions(context?: MerchantPackagingRequestContext): Promise<MerchantPackagingOptionResponse[]> {
+    const requestContext = buildMerchantPackagingRequestContext(context)
     const response = await request<MerchantPackagingOptionListResponse>({
       url: '/v1/merchant/packaging-options',
-      method: 'GET'
+      method: 'GET',
+      data: requestContext.query,
+      header: requestContext.header
     })
     return response.options || []
   }
 
   static async createOption(
-    data: UpsertMerchantPackagingOptionRequest
+    data: UpsertMerchantPackagingOptionRequest,
+    context?: MerchantPackagingRequestContext
   ): Promise<MerchantPackagingOptionResponse> {
+    const requestContext = buildMerchantPackagingRequestContext(context)
     return request<MerchantPackagingOptionResponse>({
       url: '/v1/merchant/packaging-options',
       method: 'POST',
-      data
+      data,
+      header: requestContext.header
     })
   }
 
   static async updateOption(
     id: number,
-    data: UpsertMerchantPackagingOptionRequest
+    data: UpsertMerchantPackagingOptionRequest,
+    context?: MerchantPackagingRequestContext
   ): Promise<MerchantPackagingOptionResponse> {
+    const requestContext = buildMerchantPackagingRequestContext(context)
     return request<MerchantPackagingOptionResponse>({
       url: `/v1/merchant/packaging-options/${id}`,
       method: 'PUT',
-      data
+      data,
+      header: requestContext.header
     })
   }
 
-  static async deleteOption(id: number): Promise<MerchantPackagingOptionResponse> {
+  static async deleteOption(
+    id: number,
+    context?: MerchantPackagingRequestContext
+  ): Promise<MerchantPackagingOptionResponse> {
+    const requestContext = buildMerchantPackagingRequestContext(context)
     return request<MerchantPackagingOptionResponse>({
       url: `/v1/merchant/packaging-options/${id}`,
-      method: 'DELETE'
+      method: 'DELETE',
+      header: requestContext.header
     })
   }
 }

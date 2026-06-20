@@ -321,11 +321,11 @@ has_sqlguard_justification() {
       statement="$(printf ' %s ' "$statement" | tr -s ' ')"
       [[ "$statement" =~ [^[:space:]] ]] || continue
 
-      if [[ "$statement" =~ [[:space:]]update[[:space:]] ]] && [[ ! "$statement" =~ [[:space:]]where[[:space:]] ]]; then
+      if [[ "$statement" =~ ^[[:space:]]*update[[:space:]] ]] && [[ ! "$statement" =~ [[:space:]]where[[:space:]] ]]; then
         printf 'update\n'
       fi
 
-      if [[ "$statement" =~ [[:space:]]delete[[:space:]]+from[[:space:]] ]] && [[ ! "$statement" =~ [[:space:]]where[[:space:]] ]]; then
+      if [[ "$statement" =~ ^[[:space:]]*delete[[:space:]]+from[[:space:]] ]] && [[ ! "$statement" =~ [[:space:]]where[[:space:]] ]]; then
         printf 'delete\n'
       fi
     done <<< "$normalized"

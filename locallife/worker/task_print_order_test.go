@@ -738,6 +738,7 @@ func TestProcessTaskPrintOrder_BlocksBaofuProfitSharingReceiptWhenBillMissing(t 
 	store.EXPECT().GetOrderDisplayConfigByMerchant(gomock.Any(), order.MerchantID).Return(config, nil)
 	store.EXPECT().ListActiveCloudPrintersByMerchant(gomock.Any(), order.MerchantID).Return([]db.CloudPrinter{printer}, nil)
 	store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Return([]db.ListOrderItemsWithDishByOrderRow{{Name: "牛肉面", Quantity: 1, Subtotal: 10000}}, nil)
+	store.EXPECT().ListOrderPackagingItems(gomock.Any(), order.ID).Return([]db.OrderPackagingItem{}, nil)
 	store.EXPECT().GetUser(gomock.Any(), order.UserID).Return(db.User{ID: order.UserID, FullName: "张三"}, nil)
 	store.EXPECT().
 		GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
@@ -812,6 +813,7 @@ func TestProcessTaskPrintOrder_ManualTriggerRequiresManualConfig(t *testing.T) {
 		IsActive:     true,
 	}}, nil)
 	store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Return([]db.ListOrderItemsWithDishByOrderRow{{Name: "牛肉面", Quantity: 1, Subtotal: 1800}}, nil)
+	store.EXPECT().ListOrderPackagingItems(gomock.Any(), order.ID).Return([]db.OrderPackagingItem{}, nil)
 	store.EXPECT().GetUser(gomock.Any(), order.UserID).Return(db.User{ID: order.UserID, FullName: "张三"}, nil)
 	store.EXPECT().
 		GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
@@ -863,6 +865,7 @@ func TestProcessTaskPrintOrder_SkipsUnsupportedPrinterType(t *testing.T) {
 	store.EXPECT().GetOrderDisplayConfigByMerchant(gomock.Any(), order.MerchantID).Return(config, nil)
 	store.EXPECT().ListActiveCloudPrintersByMerchant(gomock.Any(), order.MerchantID).Return([]db.CloudPrinter{legacyPrinter, supportedPrinter}, nil)
 	store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Return([]db.ListOrderItemsWithDishByOrderRow{{Name: "牛肉面", Quantity: 1, Subtotal: 1800}}, nil)
+	store.EXPECT().ListOrderPackagingItems(gomock.Any(), order.ID).Return([]db.OrderPackagingItem{}, nil)
 	store.EXPECT().GetUser(gomock.Any(), order.UserID).Return(db.User{ID: order.UserID, FullName: "张三"}, nil)
 	store.EXPECT().
 		GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
@@ -934,6 +937,7 @@ func TestProcessTaskPrintOrder_PrintsShangpengReceiptWithoutFeieTagsAndKeepsPend
 	store.EXPECT().GetOrderDisplayConfigByMerchant(gomock.Any(), order.MerchantID).Return(config, nil)
 	store.EXPECT().ListActiveCloudPrintersByMerchant(gomock.Any(), order.MerchantID).Return([]db.CloudPrinter{printer}, nil)
 	store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Return([]db.ListOrderItemsWithDishByOrderRow{{Name: "鸡肉饭", Quantity: 1, Subtotal: 3600}}, nil)
+	store.EXPECT().ListOrderPackagingItems(gomock.Any(), order.ID).Return([]db.OrderPackagingItem{}, nil)
 	store.EXPECT().GetUser(gomock.Any(), order.UserID).Return(db.User{ID: order.UserID, FullName: "李四"}, nil)
 	store.EXPECT().
 		GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
@@ -1141,6 +1145,7 @@ func TestProcessTaskPrintOrder_SkipsDuplicateTaskKeyReentry(t *testing.T) {
 	store.EXPECT().GetOrderDisplayConfigByMerchant(gomock.Any(), order.MerchantID).Return(config, nil)
 	store.EXPECT().ListActiveCloudPrintersByMerchant(gomock.Any(), order.MerchantID).Return([]db.CloudPrinter{printer}, nil)
 	store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Return([]db.ListOrderItemsWithDishByOrderRow{{Name: "牛肉面", Quantity: 1, Subtotal: 1800}}, nil)
+	store.EXPECT().ListOrderPackagingItems(gomock.Any(), order.ID).Return([]db.OrderPackagingItem{}, nil)
 	store.EXPECT().GetUser(gomock.Any(), order.UserID).Return(db.User{ID: order.UserID, FullName: "张三"}, nil)
 	store.EXPECT().
 		GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{

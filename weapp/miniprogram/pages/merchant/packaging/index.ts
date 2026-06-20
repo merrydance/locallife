@@ -2,10 +2,11 @@ import {
   MerchantPackagingOrderType,
   MerchantPackagingService
 } from '../_main_shared/api/packaging'
-import { ensureMerchantConsoleAccess } from '../../../utils/console-access'
+import { ensureMerchantPackagingManagementAccess } from '../../../utils/console-access'
 import { logger } from '../../../utils/logger'
 import { getStableBarHeights } from '../../../utils/responsive'
 import { getErrorUserMessage } from '../../../utils/user-facing'
+import { syncCurrentMerchantContext } from '../_utils/current-merchant'
 import {
   buildPackagingDraft,
   buildPackagingSaveFailurePatch,
@@ -37,6 +38,7 @@ if (typeof Page !== 'undefined') {
       saveErrorMessage: '',
       loading: false,
       saving: false,
+      merchantId: 0,
       lastLoadedAt: 0,
       orderTypeOptions: ORDER_TYPE_OPTIONS,
       form: buildPackagingDraft({
@@ -63,10 +65,33 @@ if (typeof Page !== 'undefined') {
         accessErrorMessage: '',
         initialLoading: true,
         initialError: false,
-        initialErrorMessage: ''
+        initialErrorMessage: '',
+        refreshErrorMessage: '',
+        saveErrorMessage: ''
       })
 
-      const accessResult = await ensureMerchantConsoleAccess()
+      let merchantId = this.data.merchantId
+      try {
+        const merchantContext = await syncCurrentMerchantContext({ currentMerchantId: this.data.merchantId })
+        merchantId = merchantContext.merchantId
+        if (merchantContext.changed) {
+          this.resetDraftForMerchant(merchantId)
+        } else if (merchantId !== this.data.merchantId) {
+          this.setData({ merchantId })
+        }
+      } catch (err) {
+        logger.error('Sync merchant packaging context failed', err)
+        const message = getErrorUserMessage(err, '获取商户信息失败，请重试')
+        this.setData({
+          accessReady: true,
+          accessDenied: false,
+          accessErrorMessage: message,
+          initialLoading: false
+        })
+        return
+      }
+
+      const accessResult = await ensureMerchantPackagingManagementAccess({ merchantId })
       this.setData({
         accessReady: true,
         accessDenied: accessResult.status === 'denied',
@@ -127,15 +152,69 @@ if (typeof Page !== 'undefined') {
       void this.loadSettings(false, true)
     },
 
+    resetDraftForMerchant(merchantId: number) {
+      const emptyDraft = buildPackagingDraft({
+        merchant_id: merchantId,
+        enabled: false,
+        required: true,
+        applicable_order_types: DEFAULT_ORDER_TYPES
+      }, [])
+      this.setData({
+        merchantId,
+        lastLoadedAt: 0,
+        form: emptyDraft,
+        initialForm: clonePackagingDraft(emptyDraft),
+        hasChanges: false,
+        initialLoading: true,
+        initialError: false,
+        initialErrorMessage: '',
+        refreshErrorMessage: '',
+        saveErrorMessage: ''
+      })
+    },
+
+    async syncMerchantContext(): Promise<boolean | null> {
+      try {
+        const context = await syncCurrentMerchantContext({ currentMerchantId: this.data.merchantId })
+        if (context.changed) {
+          this.resetDraftForMerchant(context.merchantId)
+          return true
+        }
+        if (context.merchantId !== this.data.merchantId) {
+          this.setData({ merchantId: context.merchantId })
+        }
+        return false
+      } catch (err) {
+        logger.error('Sync merchant packaging context failed', err)
+        const message = getErrorUserMessage(err, '获取商户信息失败，请重试')
+        if (this.data.initialLoading) {
+          this.setData({
+            initialLoading: false,
+            initialError: true,
+            initialErrorMessage: message
+          })
+        } else {
+          this.setData({ refreshErrorMessage: `${message}，当前已保留上次同步结果` })
+        }
+        return null
+      }
+    },
+
     async loadSettings(showLoading = true, force = false) {
       if (this.data.loading) {
         wx.stopPullDownRefresh()
         return false
       }
 
+      const merchantChanged = await this.syncMerchantContext()
+      if (merchantChanged === null || !this.data.merchantId) {
+        wx.stopPullDownRefresh()
+        return false
+      }
+
       const hasExistingData = !this.data.initialLoading
       const isSilentRefresh = !showLoading && hasExistingData
-      if (!force && hasExistingData && !shouldRefreshPackagingSettings(this.data.lastLoadedAt, PACKAGING_AUTO_REFRESH_WINDOW_MS)) {
+      if (!force && !merchantChanged && hasExistingData && !shouldRefreshPackagingSettings(this.data.lastLoadedAt, PACKAGING_AUTO_REFRESH_WINDOW_MS)) {
         wx.stopPullDownRefresh()
         return true
       }
@@ -150,9 +229,10 @@ if (typeof Page !== 'undefined') {
       })
 
       try {
+        const requestContext = { merchantId: this.data.merchantId }
         const [settings, options] = await Promise.all([
-          MerchantPackagingService.getSettings(),
-          MerchantPackagingService.listOptions()
+          MerchantPackagingService.getSettings(requestContext),
+          MerchantPackagingService.listOptions(requestContext)
         ])
         const form = buildPackagingDraft(settings, options)
         this.setData({
@@ -362,7 +442,7 @@ if (typeof Page !== 'undefined') {
       this.setData({ saving: true, saveErrorMessage: '' })
 
       try {
-        const savedForm = await savePackagingDraft(currentForm)
+        const savedForm = await savePackagingDraft(currentForm, { merchantId: this.data.merchantId })
         this.setData({
           form: savedForm,
           initialForm: clonePackagingDraft(savedForm),

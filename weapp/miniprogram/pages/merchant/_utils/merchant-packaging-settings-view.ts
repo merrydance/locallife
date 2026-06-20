@@ -1,6 +1,7 @@
 import {
   MerchantPackagingOrderType,
   MerchantPackagingOptionResponse,
+  MerchantPackagingRequestContext,
   MerchantPackagingService,
   MerchantPackagingSettingsResponse,
   UpsertMerchantPackagingOptionRequest
@@ -164,16 +165,22 @@ export function buildPackagingSaveFailurePatch(
   }
 }
 
-export async function savePackagingDraft(form: PackagingSettingsDraft): Promise<PackagingSettingsDraft> {
+export async function savePackagingDraft(
+  form: PackagingSettingsDraft,
+  context?: MerchantPackagingRequestContext
+): Promise<PackagingSettingsDraft> {
   try {
-    return await savePackagingDraftInternal(form)
+    return await savePackagingDraftInternal(form, context)
   } catch (err) {
-    await reconcilePersistedOptionIds(form)
+    await reconcilePersistedOptionIds(form, context)
     throw err
   }
 }
 
-async function savePackagingDraftInternal(form: PackagingSettingsDraft): Promise<PackagingSettingsDraft> {
+async function savePackagingDraftInternal(
+  form: PackagingSettingsDraft,
+  context?: MerchantPackagingRequestContext
+): Promise<PackagingSettingsDraft> {
   const activeOptions = getActiveOptions(form)
   const activePersistedEnabledIds = new Set(
     activeOptions
@@ -190,7 +197,7 @@ async function savePackagingDraftInternal(form: PackagingSettingsDraft): Promise
     required: form.required,
     applicable_order_types: form.applicable_order_types,
     default_option_id: firstPassDefaultId || null
-  })
+  }, context)
 
   const mappings: OptionSaveMapping[] = []
   let nextSortOrder = 0
@@ -198,15 +205,15 @@ async function savePackagingDraftInternal(form: PackagingSettingsDraft): Promise
   for (const option of form.options || []) {
     const previousId = option.id
     if (option.deleted) {
-      if (option.id > 0) await MerchantPackagingService.deleteOption(option.id)
+      if (option.id > 0) await MerchantPackagingService.deleteOption(option.id, context)
       mappings.push({ previousId: option.id, savedId: option.id, enabled: false, deleted: true })
       continue
     }
 
     const sortOrder = nextSortOrder
     const saved = option.id > 0
-      ? await MerchantPackagingService.updateOption(option.id, toOptionPayload(option, sortOrder))
-      : await MerchantPackagingService.createOption(toOptionPayload(option, sortOrder))
+      ? await MerchantPackagingService.updateOption(option.id, toOptionPayload(option, sortOrder), context)
+      : await MerchantPackagingService.createOption(toOptionPayload(option, sortOrder), context)
     applySavedOption(option, saved, sortOrder)
     nextSortOrder += 1
     mappings.push({ previousId, savedId: saved.id, enabled: saved.is_enabled, deleted: false })
@@ -220,7 +227,7 @@ async function savePackagingDraftInternal(form: PackagingSettingsDraft): Promise
       required: form.required,
       applicable_order_types: form.applicable_order_types,
       default_option_id: finalDefaultId || null
-    })
+    }, context)
   }
 
   return clonePackagingDraft(form)
@@ -287,9 +294,12 @@ function applySavedOption(
   option.deleted = false
 }
 
-async function reconcilePersistedOptionIds(form: PackagingSettingsDraft): Promise<void> {
+async function reconcilePersistedOptionIds(
+  form: PackagingSettingsDraft,
+  context?: MerchantPackagingRequestContext
+): Promise<void> {
   try {
-    const persistedOptions = await MerchantPackagingService.listOptions()
+    const persistedOptions = await MerchantPackagingService.listOptions(context)
     const persistedByName = new Map<string, MerchantPackagingOptionResponse>()
 
     for (const option of persistedOptions || []) {
