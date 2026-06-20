@@ -317,6 +317,26 @@ func TestReplaceOrderPassesClientIPToLogic(t *testing.T) {
 	require.Equal(t, int64(123), captureSvc.input.OrderID)
 }
 
+func TestReplaceOrderPassesLegacyPackagingFreezeToLogic(t *testing.T) {
+	user, _ := randomUser(t)
+	server := newTestServer(t, nil)
+	server.config.PackagingLegacyDishFreezeEnabled = true
+	captureSvc := &replaceOrderCaptureCommandService{}
+	server.orderCommandSvc = captureSvc
+
+	body := `{"items":[{"dish_id":1001,"quantity":1}]}`
+	req, err := http.NewRequest(http.MethodPost, "/v1/orders/123/replace", strings.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.True(t, captureSvc.input.RejectLegacyPackagingDishes)
+}
+
 func TestCreateOrderAPIPassesPackagingIdentityToLogic(t *testing.T) {
 	user, _ := randomUser(t)
 	server := newTestServer(t, nil)
@@ -1802,6 +1822,13 @@ func randomOrder(userID, merchantID int64) db.Order {
 		Status:      "pending",
 		CreatedAt:   time.Now(),
 	}
+}
+
+func expectNoOrderPackagingItems(store *mockdb.MockStore, orderID int64) {
+	store.EXPECT().
+		ListOrderPackagingItems(gomock.Any(), orderID).
+		Times(1).
+		Return([]db.OrderPackagingItem{}, nil)
 }
 
 func merchantFeeBreakdownTestOrder(userID, merchantID int64, offset int64) db.Order {
@@ -3824,6 +3851,7 @@ func TestListMerchantOrderPrintJobsAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
 				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
 				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				expectNoOrderPackagingItems(store, order.ID)
 				store.EXPECT().ListPrintLogsByOrder(gomock.Any(), order.ID).Times(1).Return(printLogs, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -3920,6 +3948,7 @@ func TestGetMerchantOrderPrintJobStatusAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
 				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
 				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				expectNoOrderPackagingItems(store, order.ID)
 				store.EXPECT().GetPrintLog(gomock.Any(), printLog.ID).Times(1).Return(printLog, nil)
 				store.EXPECT().GetCloudPrinterIncludingDeleted(gomock.Any(), printer.ID).Times(1).Return(printer, nil)
 			},
@@ -3951,6 +3980,7 @@ func TestGetMerchantOrderPrintJobStatusAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
 				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
 				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				expectNoOrderPackagingItems(store, order.ID)
 				store.EXPECT().GetPrintLog(gomock.Any(), printLog.ID).Times(1).Return(printLog, nil)
 				store.EXPECT().GetCloudPrinterIncludingDeleted(gomock.Any(), printer.ID).Times(1).Return(shangpengPrinter, nil)
 			},
@@ -3984,6 +4014,7 @@ func TestGetMerchantOrderPrintJobStatusAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
 				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
 				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				expectNoOrderPackagingItems(store, order.ID)
 				noVendorLog := printLog
 				noVendorLog.VendorOrderID = pgtype.Text{}
 				store.EXPECT().GetPrintLog(gomock.Any(), printLog.ID).Times(1).Return(noVendorLog, nil)
@@ -4014,6 +4045,7 @@ func TestGetMerchantOrderPrintJobStatusAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
 				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
 				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				expectNoOrderPackagingItems(store, order.ID)
 				store.EXPECT().GetPrintLog(gomock.Any(), printLog.ID).Times(1).Return(printLog, nil)
 				store.EXPECT().GetCloudPrinterIncludingDeleted(gomock.Any(), printer.ID).Times(1).Return(deletedPrinter, nil)
 			},
@@ -4046,6 +4078,7 @@ func TestGetMerchantOrderPrintJobStatusAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
 				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
 				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				expectNoOrderPackagingItems(store, order.ID)
 				store.EXPECT().GetPrintLog(gomock.Any(), printLog.ID).Times(1).Return(printLog, nil)
 				store.EXPECT().GetCloudPrinterIncludingDeleted(gomock.Any(), printer.ID).Times(1).Return(foreignPrinter, nil)
 			},
@@ -4321,6 +4354,7 @@ func TestRetryMerchantOrderPrintJobAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
 				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
 				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				expectNoOrderPackagingItems(store, order.ID)
 				store.EXPECT().GetPrintLog(gomock.Any(), currentPrintLog.ID).Times(1).Return(currentPrintLog, nil)
 				store.EXPECT().GetLatestPrintLogByOrderAndPrinter(gomock.Any(), db.GetLatestPrintLogByOrderAndPrinterParams{OrderID: order.ID, PrinterID: printer.ID}).Times(1).Return(currentPrintLog, nil)
 				store.EXPECT().GetCloudPrinterIncludingDeleted(gomock.Any(), printer.ID).Times(1).Return(printer, nil)
@@ -4355,6 +4389,7 @@ func TestRetryMerchantOrderPrintJobAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
 				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
 				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				expectNoOrderPackagingItems(store, order.ID)
 				store.EXPECT().GetPrintLog(gomock.Any(), currentPrintLog.ID).Times(1).Return(currentPrintLog, nil)
 				store.EXPECT().GetLatestPrintLogByOrderAndPrinter(gomock.Any(), db.GetLatestPrintLogByOrderAndPrinterParams{OrderID: order.ID, PrinterID: printer.ID}).Times(1).Return(currentPrintLog, nil)
 				store.EXPECT().GetCloudPrinterIncludingDeleted(gomock.Any(), printer.ID).Times(1).Return(shangpengPrinter, nil)
@@ -4389,6 +4424,7 @@ func TestRetryMerchantOrderPrintJobAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
 				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
 				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				expectNoOrderPackagingItems(store, order.ID)
 				store.EXPECT().GetPrintLog(gomock.Any(), currentPrintLog.ID).Times(1).Return(currentPrintLog, nil)
 				store.EXPECT().GetLatestPrintLogByOrderAndPrinter(gomock.Any(), db.GetLatestPrintLogByOrderAndPrinterParams{OrderID: order.ID, PrinterID: printer.ID}).Times(1).Return(currentPrintLog, nil)
 				store.EXPECT().GetCloudPrinterIncludingDeleted(gomock.Any(), printer.ID).Times(1).Return(inactivePrinter, nil)
@@ -4408,6 +4444,7 @@ func TestRetryMerchantOrderPrintJobAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
 				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
 				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				expectNoOrderPackagingItems(store, order.ID)
 				store.EXPECT().GetPrintLog(gomock.Any(), currentPrintLog.ID).Times(1).Return(currentPrintLog, nil)
 				store.EXPECT().GetLatestPrintLogByOrderAndPrinter(gomock.Any(), db.GetLatestPrintLogByOrderAndPrinterParams{OrderID: order.ID, PrinterID: printer.ID}).Times(1).Return(currentPrintLog, nil)
 				store.EXPECT().GetCloudPrinterIncludingDeleted(gomock.Any(), printer.ID).Times(1).Return(deletedPrinter, nil)
@@ -4428,6 +4465,7 @@ func TestRetryMerchantOrderPrintJobAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
 				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
 				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				expectNoOrderPackagingItems(store, order.ID)
 				store.EXPECT().GetPrintLog(gomock.Any(), currentPrintLog.ID).Times(1).Return(currentPrintLog, nil)
 				distributor.EXPECT().DistributeTaskPrintOrder(gomock.Any(), gomock.Any()).Times(0)
 			},
@@ -4445,6 +4483,7 @@ func TestRetryMerchantOrderPrintJobAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
 				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
 				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				expectNoOrderPackagingItems(store, order.ID)
 				store.EXPECT().GetPrintLog(gomock.Any(), currentPrintLog.ID).Times(1).Return(currentPrintLog, nil)
 				store.EXPECT().GetLatestPrintLogByOrderAndPrinter(gomock.Any(), db.GetLatestPrintLogByOrderAndPrinterParams{OrderID: order.ID, PrinterID: printer.ID}).Times(1).Return(latestPrintLog, nil)
 				distributor.EXPECT().DistributeTaskPrintOrder(gomock.Any(), gomock.Any()).Times(0)

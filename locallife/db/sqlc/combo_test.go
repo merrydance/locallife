@@ -618,7 +618,10 @@ func TestGetCombosWithMerchantByIDs(t *testing.T) {
 
 	// 批量查询
 	comboIDs := []int64{combo1.ID, combo2.ID}
-	results, err := testStore.GetCombosWithMerchantByIDs(context.Background(), comboIDs)
+	results, err := testStore.GetCombosWithMerchantByIDs(context.Background(), GetCombosWithMerchantByIDsParams{
+		Column1:          comboIDs,
+		ExcludePackaging: false,
+	})
 	require.NoError(t, err)
 	require.Len(t, results, 2)
 
@@ -657,7 +660,10 @@ func TestGetCombosWithMerchantByIDs_VerifyPrices(t *testing.T) {
 	require.NoError(t, err)
 
 	// 查询
-	results, err := testStore.GetCombosWithMerchantByIDs(context.Background(), []int64{combo.ID})
+	results, err := testStore.GetCombosWithMerchantByIDs(context.Background(), GetCombosWithMerchantByIDsParams{
+		Column1:          []int64{combo.ID},
+		ExcludePackaging: false,
+	})
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 
@@ -669,13 +675,19 @@ func TestGetCombosWithMerchantByIDs_VerifyPrices(t *testing.T) {
 }
 
 func TestGetCombosWithMerchantByIDs_EmptyIDs(t *testing.T) {
-	results, err := testStore.GetCombosWithMerchantByIDs(context.Background(), []int64{})
+	results, err := testStore.GetCombosWithMerchantByIDs(context.Background(), GetCombosWithMerchantByIDsParams{
+		Column1:          []int64{},
+		ExcludePackaging: false,
+	})
 	require.NoError(t, err)
 	require.Empty(t, results)
 }
 
 func TestGetCombosWithMerchantByIDs_NonExistentIDs(t *testing.T) {
-	results, err := testStore.GetCombosWithMerchantByIDs(context.Background(), []int64{999999999})
+	results, err := testStore.GetCombosWithMerchantByIDs(context.Background(), GetCombosWithMerchantByIDsParams{
+		Column1:          []int64{999999999},
+		ExcludePackaging: false,
+	})
 	require.NoError(t, err)
 	require.Empty(t, results)
 }
@@ -695,7 +707,10 @@ func TestGetCombosWithMerchantByIDs_FilterOffline(t *testing.T) {
 	require.NoError(t, err)
 
 	// 查询应该过滤掉下架套餐
-	results, err := testStore.GetCombosWithMerchantByIDs(context.Background(), []int64{offlineCombo.ID})
+	results, err := testStore.GetCombosWithMerchantByIDs(context.Background(), GetCombosWithMerchantByIDsParams{
+		Column1:          []int64{offlineCombo.ID},
+		ExcludePackaging: false,
+	})
 	require.NoError(t, err)
 	require.Empty(t, results, "下架套餐不应被返回")
 }
@@ -736,31 +751,41 @@ func TestPublicComboQueriesExcludeUnavailableChildDishes(t *testing.T) {
 	require.Len(t, combosByID, 1)
 	require.Equal(t, availableCombo.ID, combosByID[0].ID)
 
-	combosWithMerchant, err := testStore.GetCombosWithMerchantByIDs(context.Background(), []int64{availableCombo.ID, unavailableCombo.ID})
+	combosWithMerchant, err := testStore.GetCombosWithMerchantByIDs(context.Background(), GetCombosWithMerchantByIDsParams{
+		Column1:          []int64{availableCombo.ID, unavailableCombo.ID},
+		ExcludePackaging: false,
+	})
 	require.NoError(t, err)
 	require.Len(t, combosWithMerchant, 1)
 	require.Equal(t, availableCombo.ID, combosWithMerchant[0].ID)
 
-	menuCombos, err := testStore.ListOnlineCombosByMerchant(context.Background(), merchant.ID)
+	menuCombos, err := testStore.ListOnlineCombosByMerchant(context.Background(), ListOnlineCombosByMerchantParams{
+		MerchantID:       merchant.ID,
+		ExcludePackaging: false,
+	})
 	require.NoError(t, err)
 	require.Contains(t, comboIDsFromListOnline(menuCombos), availableCombo.ID)
 	require.NotContains(t, comboIDsFromListOnline(menuCombos), unavailableCombo.ID)
 
-	publicMerchantCombos, err := testStore.GetMerchantOnlineCombos(context.Background(), merchant.ID)
+	publicMerchantCombos, err := testStore.GetMerchantOnlineCombos(context.Background(), GetMerchantOnlineCombosParams{
+		MerchantID:       merchant.ID,
+		ExcludePackaging: false,
+	})
 	require.NoError(t, err)
 	require.Contains(t, comboIDsFromMerchantOnline(publicMerchantCombos), availableCombo.ID)
 	require.NotContains(t, comboIDsFromMerchantOnline(publicMerchantCombos), unavailableCombo.ID)
 
 	searchRows, err := testStore.SearchCombosGlobal(context.Background(), SearchCombosGlobalParams{
-		Column1: searchName,
-		Limit:   20,
-		Offset:  0,
-		Column4: 39.9282,
-		Column5: 116.4507,
+		UserLat:          39.9282,
+		UserLng:          116.4507,
+		ExcludePackaging: false,
 		RegionID: pgtype.Int8{
 			Int64: merchant.RegionID,
 			Valid: true,
 		},
+		Keyword: searchName,
+		Limit:   20,
+		Offset:  0,
 	})
 	require.NoError(t, err)
 	require.Contains(t, comboIDsFromSearch(searchRows), availableCombo.ID)
@@ -785,11 +810,12 @@ func TestPublicComboQueriesExcludeUnavailableChildDishes(t *testing.T) {
 	require.NotContains(t, popularIDs, unavailableCombo.ID)
 
 	searchCount, err := testStore.CountSearchCombosGlobal(context.Background(), CountSearchCombosGlobalParams{
-		Column1: searchName,
 		RegionID: pgtype.Int8{
 			Int64: merchant.RegionID,
 			Valid: true,
 		},
+		ExcludePackaging: false,
+		Keyword:          searchName,
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), searchCount)
@@ -822,25 +848,27 @@ func TestSearchCombosGlobal_ExcludesTakeoutSuspendedMerchants(t *testing.T) {
 	require.NoError(t, err)
 
 	combos, err := testStore.SearchCombosGlobal(context.Background(), SearchCombosGlobalParams{
-		Column1: uniqueName,
-		Limit:   10,
-		Offset:  0,
-		Column4: 39.9282,
-		Column5: 116.4507,
+		UserLat:          39.9282,
+		UserLng:          116.4507,
+		ExcludePackaging: false,
 		RegionID: pgtype.Int8{
 			Int64: merchant.RegionID,
 			Valid: true,
 		},
+		Keyword: uniqueName,
+		Limit:   10,
+		Offset:  0,
 	})
 	require.NoError(t, err)
 	require.Empty(t, combos)
 
 	count, err := testStore.CountSearchCombosGlobal(context.Background(), CountSearchCombosGlobalParams{
-		Column1: uniqueName,
 		RegionID: pgtype.Int8{
 			Int64: merchant.RegionID,
 			Valid: true,
 		},
+		ExcludePackaging: false,
+		Keyword:          uniqueName,
 	})
 	require.NoError(t, err)
 	require.Zero(t, count)

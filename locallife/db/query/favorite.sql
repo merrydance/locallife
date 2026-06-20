@@ -59,12 +59,15 @@ FROM favorites f
 JOIN dishes d ON d.id = f.dish_id
 JOIN merchants m ON m.id = d.merchant_id
 WHERE f.user_id = $1 AND f.favorite_type = 'dish'
+  AND (NOT sqlc.arg('exclude_packaging')::boolean OR d.is_packaging = false)
 ORDER BY f.created_at DESC, f.id DESC
 LIMIT $2 OFFSET $3;
 
 -- name: CountFavoriteDishes :one
 SELECT COUNT(*) FROM favorites
-WHERE user_id = $1 AND favorite_type = 'dish';
+JOIN dishes d ON d.id = favorites.dish_id
+WHERE favorites.user_id = $1 AND favorites.favorite_type = 'dish'
+  AND (NOT sqlc.arg('exclude_packaging')::boolean OR d.is_packaging = false);
 
 -- name: IsMerchantFavorited :one
 SELECT EXISTS(
@@ -74,6 +77,11 @@ SELECT EXISTS(
 
 -- name: IsDishFavorited :one
 SELECT EXISTS(
-    SELECT 1 FROM favorites
-    WHERE user_id = $1 AND favorite_type = 'dish' AND dish_id = $2
+    SELECT 1
+    FROM favorites f
+    JOIN dishes d ON d.id = f.dish_id
+    WHERE f.user_id = sqlc.arg('user_id')
+      AND f.favorite_type = 'dish'
+      AND f.dish_id = sqlc.arg('dish_id')
+      AND (NOT sqlc.arg('exclude_packaging')::boolean OR d.is_packaging = false)
 ) AS is_favorited;

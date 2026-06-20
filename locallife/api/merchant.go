@@ -1294,7 +1294,10 @@ func (server *Server) getPublicMerchantDishes(ctx *gin.Context) {
 		return
 	}
 
-	dishes, err := server.store.GetMerchantDishesWithCategory(ctx, req.ID)
+	dishes, err := server.store.GetMerchantDishesWithCategory(ctx, db.GetMerchantDishesWithCategoryParams{
+		MerchantID:       req.ID,
+		ExcludePackaging: server.legacyPackagingDishFreezeEnabled(),
+	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
@@ -1451,7 +1454,10 @@ func (server *Server) getPublicMerchantCombos(ctx *gin.Context) {
 		return
 	}
 
-	combos, err := server.store.GetMerchantOnlineCombos(ctx, req.ID)
+	combos, err := server.store.GetMerchantOnlineCombos(ctx, db.GetMerchantOnlineCombosParams{
+		MerchantID:       req.ID,
+		ExcludePackaging: server.legacyPackagingDishFreezeEnabled(),
+	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
@@ -1642,7 +1648,10 @@ func (server *Server) enrichPublicComboListImages(ctx context.Context, combos []
 	}
 
 	// 批量查询成员图片
-	memberImages, err := server.store.GetComboMemberImagesByCombos(ctx, comboIDs)
+	memberImages, err := server.store.GetComboMemberImagesByCombos(ctx, db.GetComboMemberImagesByCombosParams{
+		Column1:          comboIDs,
+		ExcludePackaging: server.legacyPackagingDishFreezeEnabled(),
+	})
 	if err != nil {
 		log.Error().Err(err).Msg("enrichPublicComboListImages: failed to get images")
 		return

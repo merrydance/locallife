@@ -176,7 +176,9 @@ func (s *OrderService) CreateOrder(ctx context.Context, input CreateOrderCommand
 	}
 
 	normalizeFn := s.buildNormalizerFunc()
-	subtotal, items, err := CalculateOrderItems(ctx, s.store, input.MerchantID, input.Items, normalizeFn)
+	subtotal, items, err := CalculateOrderItems(ctx, s.store, input.MerchantID, input.Items, normalizeFn, CalculateOrderItemsOptions{
+		RejectLegacyPackagingDishes: input.RejectLegacyPackagingDishes,
+	})
 	if err != nil {
 		return CreateOrderCommandResult{}, NewRequestError(http.StatusBadRequest, err)
 	}

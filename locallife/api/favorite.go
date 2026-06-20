@@ -332,13 +332,17 @@ func (server *Server) addFavoriteDish(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 验证菜品存在
-	_, err := server.store.GetDish(ctx, req.DishID)
+	dish, err := server.store.GetDish(ctx, req.DishID)
 	if err != nil {
 		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	if server.legacyPackagingDishFreezeEnabled() && dish.IsPackaging {
+		ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
 		return
 	}
 
@@ -392,16 +396,20 @@ func (server *Server) listFavoriteDishes(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	dishes, err := server.store.ListFavoriteDishes(ctx, db.ListFavoriteDishesParams{
-		UserID: authPayload.UserID,
-		Limit:  req.PageSize,
-		Offset: offset,
+		UserID:           authPayload.UserID,
+		Limit:            req.PageSize,
+		Offset:           offset,
+		ExcludePackaging: server.legacyPackagingDishFreezeEnabled(),
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	count, err := server.store.CountFavoriteDishes(ctx, authPayload.UserID)
+	count, err := server.store.CountFavoriteDishes(ctx, db.CountFavoriteDishesParams{
+		UserID:           authPayload.UserID,
+		ExcludePackaging: server.legacyPackagingDishFreezeEnabled(),
+	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
@@ -481,8 +489,9 @@ func (server *Server) getFavoriteDishStatus(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 	exists, err := server.store.IsDishFavorited(ctx, db.IsDishFavoritedParams{
-		UserID: authPayload.UserID,
-		DishID: pgtype.Int8{Int64: dishID, Valid: true},
+		UserID:           authPayload.UserID,
+		DishID:           pgtype.Int8{Int64: dishID, Valid: true},
+		ExcludePackaging: server.legacyPackagingDishFreezeEnabled(),
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -510,7 +519,10 @@ func (server *Server) getFavoritesSummary(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	dishCount, err := server.store.CountFavoriteDishes(ctx, authPayload.UserID)
+	dishCount, err := server.store.CountFavoriteDishes(ctx, db.CountFavoriteDishesParams{
+		UserID:           authPayload.UserID,
+		ExcludePackaging: server.legacyPackagingDishFreezeEnabled(),
+	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return

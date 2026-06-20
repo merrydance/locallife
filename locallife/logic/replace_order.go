@@ -21,11 +21,12 @@ import (
 
 // ReplaceOrderInput defines the input for replacing a reservation order.
 type ReplaceOrderInput struct {
-	UserID   int64
-	OrderID  int64
-	Items    []OrderItemInput
-	Notes    string
-	ClientIP string
+	UserID                      int64
+	OrderID                     int64
+	Items                       []OrderItemInput
+	Notes                       string
+	ClientIP                    string
+	RejectLegacyPackagingDishes bool
 }
 
 // ReplaceOrderResult reports the replacement outcome.
@@ -105,7 +106,9 @@ func ReplaceReservationOrderWithBaofu(
 		return ReplaceOrderResult{}, NewRequestError(http.StatusForbidden, errors.New("dining session does not belong to you"))
 	}
 
-	subtotal, items, err := CalculateOrderItems(ctx, store, reservation.MerchantID, input.Items, normalize)
+	subtotal, items, err := CalculateOrderItems(ctx, store, reservation.MerchantID, input.Items, normalize, CalculateOrderItemsOptions{
+		RejectLegacyPackagingDishes: input.RejectLegacyPackagingDishes,
+	})
 	if err != nil {
 		return ReplaceOrderResult{}, NewRequestError(http.StatusBadRequest, err)
 	}

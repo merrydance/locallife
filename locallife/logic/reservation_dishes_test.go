@@ -160,6 +160,36 @@ func TestValidateReservationItemsRejectsUnavailableDish(t *testing.T) {
 	require.Contains(t, requestErr.Error(), "暂不可售")
 }
 
+func TestValidateReservationItemsRejectsLegacyPackagingDishWhenFreezeEnabled(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	merchantID := int64(20)
+	dishID := int64(40)
+
+	store.EXPECT().
+		GetDish(gomock.Any(), dishID).
+		Return(db.Dish{
+			ID:          dishID,
+			MerchantID:  merchantID,
+			Name:        "旧餐盒",
+			Price:       100,
+			IsAvailable: true,
+			IsOnline:    true,
+			IsPackaging: true,
+		}, nil)
+
+	_, _, err := ValidateReservationItems(context.Background(), store, merchantID, []ReservationItemInput{{
+		DishID:   &dishID,
+		Quantity: 1,
+	}}, ValidateReservationItemsOptions{RejectLegacyPackagingDishes: true})
+
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 400, reqErr.Status)
+	require.Equal(t, "包装已迁移到包装设置，请在包装设置中维护", reqErr.Err.Error())
+}
+
 func TestValidateReservationItemsRejectsUnavailableComboChildDish(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -192,6 +222,40 @@ func TestValidateReservationItemsRejectsUnavailableComboChildDish(t *testing.T) 
 	reqErr := assertRequestError(t, err)
 	require.Equal(t, 400, reqErr.Status)
 	require.Contains(t, reqErr.Error(), "暂不可售菜品")
+}
+
+func TestValidateReservationItemsRejectsComboWithLegacyPackagingChildWhenFreezeEnabled(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	merchantID := int64(20)
+	comboID := int64(50)
+	dishID := int64(60)
+
+	store.EXPECT().
+		GetComboSet(gomock.Any(), comboID).
+		Return(db.ComboSet{
+			ID:         comboID,
+			MerchantID: merchantID,
+			Name:       "多人套餐",
+			ComboPrice: 6800,
+			IsOnline:   true,
+		}, nil)
+	store.EXPECT().
+		ListComboDishOrderability(gomock.Any(), comboID).
+		Return([]db.ListComboDishOrderabilityRow{
+			comboDishOrderabilityRow(dishID, "旧餐盒", true, true, true, true),
+		}, nil)
+
+	_, _, err := ValidateReservationItems(context.Background(), store, merchantID, []ReservationItemInput{{
+		ComboID:  &comboID,
+		Quantity: 1,
+	}}, ValidateReservationItemsOptions{RejectLegacyPackagingDishes: true})
+
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 400, reqErr.Status)
+	require.Equal(t, "包装已迁移到包装设置，请在包装设置中维护", reqErr.Err.Error())
 }
 
 func TestValidateReservationItemsPropagatesComboChildOrderabilityStoreError(t *testing.T) {

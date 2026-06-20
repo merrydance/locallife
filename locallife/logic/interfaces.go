@@ -173,20 +173,21 @@ type OrderPolicy interface {
 }
 
 type CreateOrderCommandInput struct {
-	UserID                    int64
-	MerchantID                int64
-	OrderType                 string
-	AddressID                 *int64
-	TableID                   *int64
-	ReservationID             *int64
-	BillingGroupID            *int64
-	Items                     []OrderItemInput
-	Notes                     string
-	UserVoucherID             *int64
-	UseBalance                bool
-	IdempotencyKey            string
-	PackagingOptionID         *int64
-	PackagingSelectionVersion *int64
+	UserID                      int64
+	MerchantID                  int64
+	OrderType                   string
+	AddressID                   *int64
+	TableID                     *int64
+	ReservationID               *int64
+	BillingGroupID              *int64
+	Items                       []OrderItemInput
+	Notes                       string
+	UserVoucherID               *int64
+	UseBalance                  bool
+	IdempotencyKey              string
+	PackagingOptionID           *int64
+	PackagingSelectionVersion   *int64
+	RejectLegacyPackagingDishes bool
 
 	RulesEngine        rules.Engine
 	RulesEngineEnabled bool

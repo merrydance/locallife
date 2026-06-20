@@ -66,6 +66,16 @@ func TestLoadConfig_DefaultsAndTrimQuotes(t *testing.T) {
 	require.EqualValues(t, 200, config.BaofuAccountVerifyFeeFen)
 	require.Equal(t, "9931", config.BaofuBusinessIndustryID)
 	require.Equal(t, "758-2", config.BaofuMerchantReportBusiness)
+	require.False(t, config.PackagingLegacyDishFreezeEnabled)
+}
+
+func TestLoadConfig_ReadsPackagingLegacyDishFreezeFlag(t *testing.T) {
+	configDir := writeTestConfigFile(t, "ENVIRONMENT=test\nDB_SOURCE=postgresql:///test\nMIGRATION_URL=file://db/migration\nPACKAGING_LEGACY_DISH_FREEZE_ENABLED=true\n")
+
+	config, err := LoadConfig(configDir)
+	require.NoError(t, err)
+
+	require.True(t, config.PackagingLegacyDishFreezeEnabled)
 }
 
 func TestLoadConfig_ReadsWechatPaymentConfig(t *testing.T) {

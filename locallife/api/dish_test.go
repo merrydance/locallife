@@ -789,6 +789,46 @@ func TestCreateDishAPI(t *testing.T) {
 	}
 }
 
+func TestCreateDishRejectsLegacyPackagingWhenFreezeEnabled(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetMerchantDishCategory(gomock.Any(), gomock.Any()).
+		Times(0)
+	store.EXPECT().
+		CreateDishTx(gomock.Any(), gomock.Any()).
+		Times(0)
+
+	server := newTestServer(t, store)
+	server.config.PackagingLegacyDishFreezeEnabled = true
+	recorder := httptest.NewRecorder()
+
+	body := gin.H{
+		"name":         "普通餐盒",
+		"price":        100,
+		"is_available": true,
+		"is_online":    true,
+		"is_packaging": true,
+	}
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/dishes", bytes.NewReader(data))
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "包装已迁移到包装设置")
+}
+
 func TestSetDishCustomizationsAPIAllowsOptionNames(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
@@ -1310,6 +1350,54 @@ func TestGetPublicDishDetailRejectsUnavailableDish(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, recorder.Code)
 }
 
+func TestGetPublicDishDetailHidesLegacyPackagingWhenFreezeEnabled(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	dish := randomDish(merchant.ID, nil)
+	completeDish := db.GetDishCompleteRow{
+		ID:                  dish.ID,
+		MerchantID:          dish.MerchantID,
+		CategoryID:          dish.CategoryID,
+		Name:                dish.Name,
+		Description:         dish.Description,
+		ImageMediaAssetID:   dish.ImageMediaAssetID,
+		Price:               dish.Price,
+		MemberPrice:         dish.MemberPrice,
+		IsAvailable:         true,
+		IsOnline:            true,
+		IsPackaging:         true,
+		SortOrder:           dish.SortOrder,
+		CreatedAt:           dish.CreatedAt,
+		UpdatedAt:           dish.UpdatedAt,
+		CategoryName:        pgtype.Text{String: "热菜", Valid: true},
+		Ingredients:         []byte(`[]`),
+		Tags:                []byte(`[]`),
+		CustomizationGroups: []byte(`[]`),
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetDishComplete(gomock.Any(), dish.ID).
+		Times(1).
+		Return(completeDish, nil)
+
+	server := newTestServer(t, store)
+	server.config.PackagingLegacyDishFreezeEnabled = true
+	recorder := httptest.NewRecorder()
+
+	url := fmt.Sprintf("/v1/public/dishes/%d", dish.ID)
+	request, err := http.NewRequest(http.MethodGet, url, nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusNotFound, recorder.Code)
+}
+
 func TestListDishesByMerchantAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
@@ -1604,6 +1692,42 @@ func TestUpdateDishAPI(t *testing.T) {
 			tc.checkResponse(t, recorder)
 		})
 	}
+}
+
+func TestUpdateDishRejectsLegacyPackagingWhenFreezeEnabled(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	dish := randomDish(merchant.ID, nil)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetDish(gomock.Any(), gomock.Eq(dish.ID)).
+		Times(1).
+		Return(dish, nil)
+	store.EXPECT().
+		UpdateDishTx(gomock.Any(), gomock.Any()).
+		Times(0)
+
+	server := newTestServer(t, store)
+	server.config.PackagingLegacyDishFreezeEnabled = true
+	recorder := httptest.NewRecorder()
+
+	data, err := json.Marshal(gin.H{"is_packaging": true})
+	require.NoError(t, err)
+
+	url := fmt.Sprintf("/v1/dishes/%d", dish.ID)
+	request, err := http.NewRequest(http.MethodPut, url, bytes.NewReader(data))
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "包装已迁移到包装设置")
 }
 
 func TestUpdateDishStatusAPI(t *testing.T) {

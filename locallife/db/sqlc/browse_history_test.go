@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/merrydance/locallife/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -250,6 +252,73 @@ func TestCountBrowseHistoryByType(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(2), dishCount)
+}
+
+func TestBrowseHistoryFilteredExcludesPackagingDish(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	category := createRandomDishCategory(t)
+	visibleDish := createRandomDish(t, merchant.ID, category.ID)
+	packagingDish, err := testStore.CreateDish(context.Background(), CreateDishParams{
+		MerchantID:  merchant.ID,
+		CategoryID:  pgtype.Int8{Int64: category.ID, Valid: true},
+		Name:        "餐盒" + util.RandomString(6),
+		Description: pgtype.Text{String: "legacy packaging", Valid: true},
+		Price:       100,
+		IsAvailable: true,
+		IsOnline:    true,
+		SortOrder:   1,
+		IsPackaging: true,
+	})
+	require.NoError(t, err)
+	user := createRandomUser(t)
+
+	_ = recordBrowseHistoryHelper(t, user.ID, "merchant", merchant.ID)
+	_ = recordBrowseHistoryHelper(t, user.ID, "dish", visibleDish.ID)
+	_ = recordBrowseHistoryHelper(t, user.ID, "dish", packagingDish.ID)
+
+	dishHistories, err := testStore.ListBrowseHistoryByTypeFiltered(context.Background(), ListBrowseHistoryByTypeFilteredParams{
+		UserID:           user.ID,
+		TargetType:       "dish",
+		ExcludePackaging: true,
+		Limit:            10,
+		Offset:           0,
+	})
+	require.NoError(t, err)
+	require.Len(t, dishHistories, 1)
+	require.Equal(t, visibleDish.ID, dishHistories[0].TargetID)
+
+	dishCount, err := testStore.CountBrowseHistoryByTypeFiltered(context.Background(), CountBrowseHistoryByTypeFilteredParams{
+		UserID:           user.ID,
+		TargetType:       "dish",
+		ExcludePackaging: true,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), dishCount)
+
+	allHistories, err := testStore.ListBrowseHistoryFiltered(context.Background(), ListBrowseHistoryFilteredParams{
+		UserID:           user.ID,
+		ExcludePackaging: true,
+		Limit:            10,
+		Offset:           0,
+	})
+	require.NoError(t, err)
+	require.Len(t, allHistories, 2)
+
+	allCount, err := testStore.CountBrowseHistoryFiltered(context.Background(), CountBrowseHistoryFilteredParams{
+		UserID:           user.ID,
+		ExcludePackaging: true,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(2), allCount)
+
+	unfilteredCount, err := testStore.CountBrowseHistoryByTypeFiltered(context.Background(), CountBrowseHistoryByTypeFilteredParams{
+		UserID:           user.ID,
+		TargetType:       "dish",
+		ExcludePackaging: false,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(2), unfilteredCount)
 }
 
 // ==================== DeleteBrowseHistory Tests ====================

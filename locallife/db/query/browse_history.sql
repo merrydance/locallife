@@ -20,6 +20,41 @@ WHERE user_id = $1 AND target_type = $2
 ORDER BY last_viewed_at DESC
 LIMIT $3 OFFSET $4;
 
+-- name: ListBrowseHistoryFiltered :many
+SELECT bh.id, bh.user_id, bh.target_type, bh.target_id, bh.last_viewed_at, bh.view_count
+FROM browse_history bh
+WHERE bh.user_id = sqlc.arg('user_id')
+  AND (
+    NOT sqlc.arg('exclude_packaging')::boolean
+    OR bh.target_type <> 'dish'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM dishes d
+      WHERE d.id = bh.target_id
+        AND d.is_packaging = true
+    )
+  )
+ORDER BY bh.last_viewed_at DESC
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
+
+-- name: ListBrowseHistoryByTypeFiltered :many
+SELECT bh.id, bh.user_id, bh.target_type, bh.target_id, bh.last_viewed_at, bh.view_count
+FROM browse_history bh
+WHERE bh.user_id = sqlc.arg('user_id')
+  AND bh.target_type = sqlc.arg('target_type')
+  AND (
+    NOT sqlc.arg('exclude_packaging')::boolean
+    OR bh.target_type <> 'dish'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM dishes d
+      WHERE d.id = bh.target_id
+        AND d.is_packaging = true
+    )
+  )
+ORDER BY bh.last_viewed_at DESC
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
+
 -- name: CountBrowseHistory :one
 SELECT COUNT(*) FROM browse_history
 WHERE user_id = $1;
@@ -27,6 +62,35 @@ WHERE user_id = $1;
 -- name: CountBrowseHistoryByType :one
 SELECT COUNT(*) FROM browse_history
 WHERE user_id = $1 AND target_type = $2;
+
+-- name: CountBrowseHistoryFiltered :one
+SELECT COUNT(*) FROM browse_history bh
+WHERE bh.user_id = sqlc.arg('user_id')
+  AND (
+    NOT sqlc.arg('exclude_packaging')::boolean
+    OR bh.target_type <> 'dish'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM dishes d
+      WHERE d.id = bh.target_id
+        AND d.is_packaging = true
+    )
+  );
+
+-- name: CountBrowseHistoryByTypeFiltered :one
+SELECT COUNT(*) FROM browse_history bh
+WHERE bh.user_id = sqlc.arg('user_id')
+  AND bh.target_type = sqlc.arg('target_type')
+  AND (
+    NOT sqlc.arg('exclude_packaging')::boolean
+    OR bh.target_type <> 'dish'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM dishes d
+      WHERE d.id = bh.target_id
+        AND d.is_packaging = true
+    )
+  );
 
 -- name: DeleteBrowseHistory :exec
 DELETE FROM browse_history

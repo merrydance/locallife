@@ -55,13 +55,18 @@ func comboDetailsRow(combo db.ComboSet, dishesJSON, tagsJSON []byte) db.GetCombo
 	}
 }
 
-func comboDishOrderabilityRow(dishID int64, name string, dishExists bool, isOnline bool, isAvailable bool) db.ListComboDishOrderabilityRow {
+func comboDishOrderabilityRow(dishID int64, name string, dishExists bool, isOnline bool, isAvailable bool, isPackaging ...bool) db.ListComboDishOrderabilityRow {
+	packaging := false
+	if len(isPackaging) > 0 {
+		packaging = isPackaging[0]
+	}
 	return db.ListComboDishOrderabilityRow{
 		DishID:      dishID,
 		DishName:    name,
 		DishExists:  pgtype.Bool{Bool: dishExists, Valid: true},
 		IsOnline:    isOnline,
 		IsAvailable: isAvailable,
+		IsPackaging: packaging,
 	}
 }
 
@@ -72,7 +77,10 @@ func expectComboSummaryReload(store *mockdb.MockStore, combo db.ComboSet, dishes
 		Return(comboDetailsRow(combo, dishesJSON, tagsJSON), nil)
 
 	store.EXPECT().
-		GetComboMemberImagesByCombos(gomock.Any(), gomock.Eq([]int64{combo.ID})).
+		GetComboMemberImagesByCombos(gomock.Any(), gomock.Eq(db.GetComboMemberImagesByCombosParams{
+			Column1:          []int64{combo.ID},
+			ExcludePackaging: false,
+		})).
 		Times(1).
 		Return(nil, nil)
 }
@@ -434,7 +442,10 @@ func TestGetComboSetAPI(t *testing.T) {
 					Return(merchant, nil)
 
 				store.EXPECT().
-					GetComboMemberImagesByCombos(gomock.Any(), gomock.Eq([]int64{combo.ID})).
+					GetComboMemberImagesByCombos(gomock.Any(), gomock.Eq(db.GetComboMemberImagesByCombosParams{
+						Column1:          []int64{combo.ID},
+						ExcludePackaging: false,
+					})).
 					Times(1).
 					Return([]db.GetComboMemberImagesByCombosRow{{
 						ComboID:           combo.ID,
@@ -765,7 +776,10 @@ func TestGetPublicComboDetailAPI_ApprovedMerchantKeepsOpenState(t *testing.T) {
 		Return(merchant, nil)
 
 	store.EXPECT().
-		GetComboMemberImagesByCombos(gomock.Any(), gomock.Eq([]int64{combo.ID})).
+		GetComboMemberImagesByCombos(gomock.Any(), gomock.Eq(db.GetComboMemberImagesByCombosParams{
+			Column1:          []int64{combo.ID},
+			ExcludePackaging: false,
+		})).
 		Times(1).
 		Return(nil, nil)
 
@@ -782,6 +796,51 @@ func TestGetPublicComboDetailAPI_ApprovedMerchantKeepsOpenState(t *testing.T) {
 	var response comboSetWithDetailsResponse
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 	require.True(t, response.IsOpen)
+}
+
+func TestGetPublicComboDetailAPIExcludesLegacyPackagingImagesWhenFreezeEnabled(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	merchant.IsOpen = true
+	combo := randomComboSet(merchant.ID)
+	combo.IsOnline = true
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetComboSetWithDetails(gomock.Any(), gomock.Eq(combo.ID)).
+		Times(1).
+		Return(comboDetailsRow(combo, nil, nil), nil)
+	store.EXPECT().
+		ListComboDishOrderability(gomock.Any(), gomock.Eq(combo.ID)).
+		Times(1).
+		Return([]db.ListComboDishOrderabilityRow{
+			comboDishOrderabilityRow(201, "可售菜品", true, true, true),
+		}, nil)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), combo.MerchantID).
+		Times(1).
+		Return(merchant, nil)
+	store.EXPECT().
+		GetComboMemberImagesByCombos(gomock.Any(), gomock.Eq(db.GetComboMemberImagesByCombosParams{
+			Column1:          []int64{combo.ID},
+			ExcludePackaging: true,
+		})).
+		Times(1).
+		Return(nil, nil)
+
+	server, _ := newTestServerForMedia(t, store)
+	server.config.PackagingLegacyDishFreezeEnabled = true
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, fmt.Sprintf("/v1/public/combos/%d", combo.ID), nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
 }
 
 func TestGetPublicComboDetailAPI_RejectsUnavailableChildDish(t *testing.T) {
@@ -806,6 +865,46 @@ func TestGetPublicComboDetailAPI_RejectsUnavailableChildDish(t *testing.T) {
 		}, nil)
 
 	server, _ := newTestServerForMedia(t, store)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, fmt.Sprintf("/v1/public/combos/%d", combo.ID), nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusNotFound, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "combo set not found")
+}
+
+func TestGetPublicComboDetailAPIRejectsLegacyPackagingChildWhenFreezeEnabled(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	combo := randomComboSet(merchant.ID)
+	combo.IsOnline = true
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetComboSetWithDetails(gomock.Any(), gomock.Eq(combo.ID)).
+		Times(1).
+		Return(comboDetailsRow(combo, nil, nil), nil)
+	store.EXPECT().
+		ListComboDishOrderability(gomock.Any(), gomock.Eq(combo.ID)).
+		Times(1).
+		Return([]db.ListComboDishOrderabilityRow{
+			comboDishOrderabilityRow(201, "旧餐盒", true, true, true, true),
+		}, nil)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), gomock.Any()).
+		Times(0)
+	store.EXPECT().
+		GetComboMemberImagesByCombos(gomock.Any(), gomock.Any()).
+		Times(0)
+
+	server, _ := newTestServerForMedia(t, store)
+	server.config.PackagingLegacyDishFreezeEnabled = true
 	recorder := httptest.NewRecorder()
 
 	request, err := http.NewRequest(http.MethodGet, fmt.Sprintf("/v1/public/combos/%d", combo.ID), nil)

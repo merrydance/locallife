@@ -586,22 +586,23 @@ func (server *Server) createOrder(ctx *gin.Context) {
 	}
 
 	result, err := service.CreateOrder(ctx, logic.CreateOrderCommandInput{
-		UserID:                    authPayload.UserID,
-		MerchantID:                req.MerchantID,
-		OrderType:                 req.OrderType,
-		AddressID:                 req.AddressID,
-		TableID:                   req.TableID,
-		ReservationID:             req.ReservationID,
-		BillingGroupID:            req.BillingGroupID,
-		Items:                     toOrderItemInputs(req.Items),
-		Notes:                     req.Notes,
-		UserVoucherID:             req.UserVoucherID,
-		UseBalance:                req.UseBalance,
-		IdempotencyKey:            strings.TrimSpace(ctx.GetHeader(orderCreateIdempotencyHeader)),
-		PackagingOptionID:         req.PackagingOptionID,
-		PackagingSelectionVersion: req.PackagingSelectionVersion,
-		RulesEngine:               server.rulesEngine,
-		RulesEngineEnabled:        server.config.RulesEngineEnabled,
+		UserID:                      authPayload.UserID,
+		MerchantID:                  req.MerchantID,
+		OrderType:                   req.OrderType,
+		AddressID:                   req.AddressID,
+		TableID:                     req.TableID,
+		ReservationID:               req.ReservationID,
+		BillingGroupID:              req.BillingGroupID,
+		Items:                       toOrderItemInputs(req.Items),
+		Notes:                       req.Notes,
+		UserVoucherID:               req.UserVoucherID,
+		UseBalance:                  req.UseBalance,
+		IdempotencyKey:              strings.TrimSpace(ctx.GetHeader(orderCreateIdempotencyHeader)),
+		PackagingOptionID:           req.PackagingOptionID,
+		PackagingSelectionVersion:   req.PackagingSelectionVersion,
+		RejectLegacyPackagingDishes: server.config.PackagingLegacyDishFreezeEnabled,
+		RulesEngine:                 server.rulesEngine,
+		RulesEngineEnabled:          server.config.RulesEngineEnabled,
 		OnRuleDecision: func(input rules.Context, decision rules.Decision, actorRole string) {
 			server.recordRuleHit(ctx, input, decision, actorRole)
 		},
@@ -1017,11 +1018,12 @@ func (server *Server) replaceOrder(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 	result, err := server.orderCommandSvc.ReplaceOrder(ctx, logic.ReplaceOrderInput{
-		UserID:   authPayload.UserID,
-		OrderID:  uriReq.ID,
-		Items:    toOrderItemInputs(req.Items),
-		Notes:    req.Notes,
-		ClientIP: ctx.ClientIP(),
+		UserID:                      authPayload.UserID,
+		OrderID:                     uriReq.ID,
+		Items:                       toOrderItemInputs(req.Items),
+		Notes:                       req.Notes,
+		ClientIP:                    ctx.ClientIP(),
+		RejectLegacyPackagingDishes: server.config.PackagingLegacyDishFreezeEnabled,
 	})
 	if err != nil {
 		if isPaymentServiceNotConfigured(err) {
@@ -2833,14 +2835,15 @@ func (server *Server) calculateOrder(ctx *gin.Context) {
 
 	result, err := service.CalculateOrderPreview(ctx, logic.CalculateOrderPreviewInput{
 		OrderCalculationInput: logic.OrderCalculationInput{
-			UserID:        authPayload.UserID,
-			MerchantID:    req.MerchantID,
-			OrderType:     req.OrderType,
-			Latitude:      req.Latitude,
-			Longitude:     req.Longitude,
-			AddressID:     req.AddressID,
-			UserVoucherID: req.UserVoucherID,
-			VoucherCode:   req.VoucherCode,
+			UserID:                      authPayload.UserID,
+			MerchantID:                  req.MerchantID,
+			OrderType:                   req.OrderType,
+			Latitude:                    req.Latitude,
+			Longitude:                   req.Longitude,
+			AddressID:                   req.AddressID,
+			UserVoucherID:               req.UserVoucherID,
+			VoucherCode:                 req.VoucherCode,
+			RejectLegacyPackagingDishes: server.config.PackagingLegacyDishFreezeEnabled,
 		},
 		MapClient: server.mapClient,
 		Normalize: func(_ context.Context, dishID int64, customizations map[string]interface{}) ([]byte, int64, error) {

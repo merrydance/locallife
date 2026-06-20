@@ -36,6 +36,7 @@ func TestCalculateOrderItems(t *testing.T) {
 		name       string
 		items      []OrderItemInput
 		normalize  NormalizeDishCustomizationsFunc
+		options    CalculateOrderItemsOptions
 		buildStubs func(store *mockdb.MockStore)
 		check      func(t *testing.T, subtotal int64, orderItems []db.CreateOrderItemParams, err error)
 	}{
@@ -175,6 +176,44 @@ func TestCalculateOrderItems(t *testing.T) {
 			},
 		},
 		{
+			name:  "LegacyPackagingDishAllowedWhenFreezeDisabled",
+			items: []OrderItemInput{{DishID: &dishID, Quantity: 1}},
+			normalize: func(ctx context.Context, dishID int64, _ map[string]interface{}) ([]byte, int64, error) {
+				return nil, 0, nil
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				dish := defaultDish
+				dish.IsPackaging = true
+				store.EXPECT().
+					GetDish(gomock.Any(), dishID).
+					Times(1).
+					Return(dish, nil)
+			},
+			check: func(t *testing.T, subtotal int64, orderItems []db.CreateOrderItemParams, err error) {
+				require.NoError(t, err)
+				require.Equal(t, defaultDish.Price, subtotal)
+				require.Len(t, orderItems, 1)
+				require.Equal(t, "Dish A", orderItems[0].Name)
+			},
+		},
+		{
+			name:    "RejectLegacyPackagingDishWhenFreezeEnabled",
+			items:   []OrderItemInput{{DishID: &dishID, Quantity: 1}},
+			options: CalculateOrderItemsOptions{RejectLegacyPackagingDishes: true},
+			buildStubs: func(store *mockdb.MockStore) {
+				dish := defaultDish
+				dish.IsPackaging = true
+				store.EXPECT().
+					GetDish(gomock.Any(), dishID).
+					Times(1).
+					Return(dish, nil)
+			},
+			check: func(t *testing.T, _ int64, _ []db.CreateOrderItemParams, err error) {
+				require.Error(t, err)
+				require.Equal(t, "包装已迁移到包装设置，请在包装设置中维护", err.Error())
+			},
+		},
+		{
 			name:  "ComboCustomizationsNotAllowed",
 			items: []OrderItemInput{{ComboID: &comboID, Quantity: 1, Customizations: map[string]interface{}{"x": "y"}}},
 			check: func(t *testing.T, _ int64, _ []db.CreateOrderItemParams, err error) {
@@ -249,6 +288,27 @@ func TestCalculateOrderItems(t *testing.T) {
 			},
 		},
 		{
+			name:    "RejectComboWithLegacyPackagingChildWhenFreezeEnabled",
+			items:   []OrderItemInput{{ComboID: &comboID, Quantity: 1}},
+			options: CalculateOrderItemsOptions{RejectLegacyPackagingDishes: true},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetComboSet(gomock.Any(), comboID).
+					Times(1).
+					Return(defaultCombo, nil)
+				row := comboDishOrderabilityRow(dishID, "餐盒", true, true, true)
+				row.IsPackaging = true
+				store.EXPECT().
+					ListComboDishOrderability(gomock.Any(), comboID).
+					Times(1).
+					Return([]db.ListComboDishOrderabilityRow{row}, nil)
+			},
+			check: func(t *testing.T, _ int64, _ []db.CreateOrderItemParams, err error) {
+				require.Error(t, err)
+				require.Equal(t, "包装已迁移到包装设置，请在包装设置中维护", err.Error())
+			},
+		},
+		{
 			name:  "ComboChildOrderabilityStoreError",
 			items: []OrderItemInput{{ComboID: &comboID, Quantity: 1}},
 			buildStubs: func(store *mockdb.MockStore) {
@@ -308,7 +368,7 @@ func TestCalculateOrderItems(t *testing.T) {
 				tc.buildStubs(store)
 			}
 
-			subtotal, orderItems, err := CalculateOrderItems(context.Background(), store, merchantID, tc.items, tc.normalize)
+			subtotal, orderItems, err := CalculateOrderItems(context.Background(), store, merchantID, tc.items, tc.normalize, tc.options)
 			tc.check(t, subtotal, orderItems, err)
 		})
 	}

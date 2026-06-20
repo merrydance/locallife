@@ -22,12 +22,13 @@ const (
 
 // AddReservationDishesInput describes the add-dishes request.
 type AddReservationDishesInput struct {
-	UserID        int64
-	ReservationID int64
-	Items         []ReservationItemInput
-	Now           time.Time
-	PaymentFacade PaymentFacade
-	ClientIP      string
+	UserID                      int64
+	ReservationID               int64
+	Items                       []ReservationItemInput
+	RejectLegacyPackagingDishes bool
+	Now                         time.Time
+	PaymentFacade               PaymentFacade
+	ClientIP                    string
 }
 
 // AddReservationDishesResult returns the add-dishes outcome.
@@ -67,7 +68,9 @@ func AddReservationDishes(ctx context.Context, store db.Store, input AddReservat
 		return result, err
 	}
 
-	validatedItems, addedAmount, err := ValidateReservationItems(ctx, store, reservation.MerchantID, input.Items)
+	validatedItems, addedAmount, err := ValidateReservationItems(ctx, store, reservation.MerchantID, input.Items, ValidateReservationItemsOptions{
+		RejectLegacyPackagingDishes: input.RejectLegacyPackagingDishes,
+	})
 	if err != nil {
 		return result, err
 	}
@@ -133,13 +136,14 @@ func AddReservationDishes(ctx context.Context, store db.Store, input AddReservat
 
 // ModifyReservationDishesInput describes a modify-dishes request.
 type ModifyReservationDishesInput struct {
-	UserID        int64
-	ReservationID int64
-	Items         []ReservationItemInput
-	Now           time.Time
-	PaymentFacade PaymentFacade
-	ClientIP      string
-	TaskScheduler TaskScheduler
+	UserID                      int64
+	ReservationID               int64
+	Items                       []ReservationItemInput
+	RejectLegacyPackagingDishes bool
+	Now                         time.Time
+	PaymentFacade               PaymentFacade
+	ClientIP                    string
+	TaskScheduler               TaskScheduler
 }
 
 // ModifyReservationDishesResult returns modify-dishes outcomes.
@@ -236,7 +240,9 @@ func ModifyReservationDishes(
 		return result, err
 	}
 
-	validatedItems, newTotal, err := ValidateReservationItems(ctx, store, reservation.MerchantID, input.Items)
+	validatedItems, newTotal, err := ValidateReservationItems(ctx, store, reservation.MerchantID, input.Items, ValidateReservationItemsOptions{
+		RejectLegacyPackagingDishes: input.RejectLegacyPackagingDishes,
+	})
 	if err != nil {
 		return result, err
 	}

@@ -127,12 +127,18 @@ func TestScanTableAPI(t *testing.T) {
 					Return([]db.ListDishCategoriesRow{listCategory}, nil)
 
 				store.EXPECT().
-					ListDishesForMenu(gomock.Any(), gomock.Eq(merchant.ID)).
+					ListDishesForMenu(gomock.Any(), gomock.Eq(db.ListDishesForMenuParams{
+						MerchantID:       merchant.ID,
+						ExcludePackaging: false,
+					})).
 					Times(1).
 					Return([]db.ListDishesForMenuRow{dish}, nil)
 
 				store.EXPECT().
-					ListOnlineCombosByMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
+					ListOnlineCombosByMerchant(gomock.Any(), gomock.Eq(db.ListOnlineCombosByMerchantParams{
+						MerchantID:       merchant.ID,
+						ExcludePackaging: false,
+					})).
 					Times(1).
 					Return([]db.ListOnlineCombosByMerchantRow{combo}, nil)
 
@@ -204,12 +210,18 @@ func TestScanTableAPI(t *testing.T) {
 				brokenDish := dish
 				brokenDish.Tags = []byte(`not-json`)
 				store.EXPECT().
-					ListDishesForMenu(gomock.Any(), gomock.Eq(merchant.ID)).
+					ListDishesForMenu(gomock.Any(), gomock.Eq(db.ListDishesForMenuParams{
+						MerchantID:       merchant.ID,
+						ExcludePackaging: false,
+					})).
 					Times(1).
 					Return([]db.ListDishesForMenuRow{brokenDish}, nil)
 
 				store.EXPECT().
-					ListOnlineCombosByMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
+					ListOnlineCombosByMerchant(gomock.Any(), gomock.Eq(db.ListOnlineCombosByMerchantParams{
+						MerchantID:       merchant.ID,
+						ExcludePackaging: false,
+					})).
 					Times(0)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -243,12 +255,18 @@ func TestScanTableAPI(t *testing.T) {
 					Return([]db.ListDishCategoriesRow{listCategory, listCategory2}, nil)
 
 				store.EXPECT().
-					ListDishesForMenu(gomock.Any(), gomock.Eq(merchant.ID)).
+					ListDishesForMenu(gomock.Any(), gomock.Eq(db.ListDishesForMenuParams{
+						MerchantID:       merchant.ID,
+						ExcludePackaging: false,
+					})).
 					Times(1).
 					Return([]db.ListDishesForMenuRow{dish}, nil)
 
 				store.EXPECT().
-					ListOnlineCombosByMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
+					ListOnlineCombosByMerchant(gomock.Any(), gomock.Eq(db.ListOnlineCombosByMerchantParams{
+						MerchantID:       merchant.ID,
+						ExcludePackaging: false,
+					})).
 					Times(1).
 					Return([]db.ListOnlineCombosByMerchantRow{}, nil)
 
@@ -628,6 +646,66 @@ func TestScanTableAPI(t *testing.T) {
 			tc.checkResponse(t, recorder)
 		})
 	}
+}
+
+func TestScanTableAPIExcludesLegacyPackagingWhenFreezeEnabled(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	merchant.IsOpen = true
+	table := randomTable(merchant.ID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
+		Times(1).
+		Return(merchant, nil)
+	store.EXPECT().
+		GetTableByMerchantAndNo(gomock.Any(), gomock.Eq(db.GetTableByMerchantAndNoParams{
+			MerchantID: merchant.ID,
+			TableNo:    table.TableNo,
+		})).
+		Times(1).
+		Return(table, nil)
+	store.EXPECT().
+		ListDishCategories(gomock.Any(), gomock.Eq(merchant.ID)).
+		Times(1).
+		Return([]db.ListDishCategoriesRow{}, nil)
+	store.EXPECT().
+		ListDishesForMenu(gomock.Any(), gomock.Eq(db.ListDishesForMenuParams{
+			MerchantID:       merchant.ID,
+			ExcludePackaging: true,
+		})).
+		Times(1).
+		Return([]db.ListDishesForMenuRow{}, nil)
+	store.EXPECT().
+		ListOnlineCombosByMerchant(gomock.Any(), gomock.Eq(db.ListOnlineCombosByMerchantParams{
+			MerchantID:       merchant.ID,
+			ExcludePackaging: true,
+		})).
+		Times(1).
+		Return([]db.ListOnlineCombosByMerchantRow{}, nil)
+	store.EXPECT().
+		ListActiveDeliveryPromotionsByMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
+		Times(1).
+		Return([]db.MerchantDeliveryPromotion{}, nil)
+	store.EXPECT().
+		ListActiveDiscountRules(gomock.Any(), gomock.Eq(merchant.ID)).
+		Times(1).
+		Return([]db.DiscountRule{}, nil)
+
+	server := newTestServer(t, store)
+	server.config.PackagingLegacyDishFreezeEnabled = true
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, fmt.Sprintf("/v1/scan/table?merchant_id=%d&table_no=%s", merchant.ID, table.TableNo), nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
 }
 
 // ==================== generateTableQRCode 测试 ====================

@@ -17,6 +17,11 @@ type stubOrderQueryService struct {
 	err     error
 }
 
+type captureOrderQueryService struct {
+	stubOrderQueryService
+	input logic.CalculateOrderPreviewInput
+}
+
 func (s stubOrderQueryService) GetUserOrder(context.Context, logic.GetUserOrderQueryInput) (logic.GetUserOrderQueryResult, error) {
 	return logic.GetUserOrderQueryResult{}, nil
 }
@@ -38,6 +43,11 @@ func (s stubOrderQueryService) GetMerchantOrderStats(context.Context, logic.GetM
 }
 
 func (s stubOrderQueryService) CalculateOrderPreview(context.Context, logic.CalculateOrderPreviewInput) (logic.OrderCalculationResult, error) {
+	return s.preview, s.err
+}
+
+func (s *captureOrderQueryService) CalculateOrderPreview(_ context.Context, input logic.CalculateOrderPreviewInput) (logic.OrderCalculationResult, error) {
+	s.input = input
 	return s.preview, s.err
 }
 
@@ -100,4 +110,22 @@ func TestCalculateOrderAPI_ReturnsPromotionEngineFields(t *testing.T) {
 	require.Len(t, response.Data.LadderPromotions, 1)
 	require.Len(t, response.Data.VoucherTrials, 1)
 	require.Equal(t, "余额可覆盖本单", response.Data.PaymentAssessment.PaymentHint)
+}
+
+func TestCalculateOrderAPIPassesLegacyPackagingFreezeToLogic(t *testing.T) {
+	server := newTestServer(t, nil)
+	server.config.PackagingLegacyDishFreezeEnabled = true
+	captureSvc := &captureOrderQueryService{}
+	server.orderQuerySvc = captureSvc
+
+	user, _ := randomUser(t)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodGet, "/v1/orders/calculate?merchant_id=1&order_type=takeout", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.True(t, captureSvc.input.RejectLegacyPackagingDishes)
 }

@@ -167,6 +167,8 @@ type Querier interface {
 	CountBaofuWithdrawalOrdersByOwner(ctx context.Context, arg CountBaofuWithdrawalOrdersByOwnerParams) (int64, error)
 	CountBrowseHistory(ctx context.Context, userID int64) (int64, error)
 	CountBrowseHistoryByType(ctx context.Context, arg CountBrowseHistoryByTypeParams) (int64, error)
+	CountBrowseHistoryByTypeFiltered(ctx context.Context, arg CountBrowseHistoryByTypeFilteredParams) (int64, error)
+	CountBrowseHistoryFiltered(ctx context.Context, arg CountBrowseHistoryFilteredParams) (int64, error)
 	CountCombinedPaymentSubOrders(ctx context.Context, combinedPaymentID int64) (int32, error)
 	CountComboSetsByMerchant(ctx context.Context, arg CountComboSetsByMerchantParams) (int64, error)
 	CountDeliveriesByRiderHistory(ctx context.Context, arg CountDeliveriesByRiderHistoryParams) (int64, error)
@@ -178,7 +180,7 @@ type Querier interface {
 	CountDistinctUsersInClaimWindow(ctx context.Context, arg CountDistinctUsersInClaimWindowParams) (int64, error)
 	// 统计可探索包间总数
 	CountExploreNearbyRooms(ctx context.Context, arg CountExploreNearbyRoomsParams) (int64, error)
-	CountFavoriteDishes(ctx context.Context, userID int64) (int64, error)
+	CountFavoriteDishes(ctx context.Context, arg CountFavoriteDishesParams) (int64, error)
 	CountFavoriteMerchants(ctx context.Context, userID int64) (int64, error)
 	CountFoodSafetyCasesByRegion(ctx context.Context, regionID int64) (int64, error)
 	CountFoodSafetyCasesByRegionAndStatus(ctx context.Context, arg CountFoodSafetyCasesByRegionAndStatusParams) (int64, error)
@@ -737,14 +739,14 @@ type Querier interface {
 	// 根据订单ID查询其所有合单子单（一个订单可能参与多次合单支付尝试）
 	GetCombinedPaymentSubOrdersByOrder(ctx context.Context, orderID int64) ([]CombinedPaymentSubOrder, error)
 	// 批量获取多个套餐的成员图片
-	GetComboMemberImagesByCombos(ctx context.Context, dollar_1 []int64) ([]GetComboMemberImagesByCombosRow, error)
+	GetComboMemberImagesByCombos(ctx context.Context, arg GetComboMemberImagesByCombosParams) ([]GetComboMemberImagesByCombosRow, error)
 	GetComboSet(ctx context.Context, id int64) (ComboSet, error)
 	GetComboSetWithDetails(ctx context.Context, id int64) (GetComboSetWithDetailsRow, error)
 	// 批量获取套餐详情
 	GetCombosByIDs(ctx context.Context, dollar_1 []int64) ([]GetCombosByIDsRow, error)
 	// 批量获取套餐详情及商户信息（用于推荐流展示）
 	// 当套餐没有专属图片时，使用套餐内第一个菜品的图片作为展示图
-	GetCombosWithMerchantByIDs(ctx context.Context, dollar_1 []int64) ([]GetCombosWithMerchantByIDsRow, error)
+	GetCombosWithMerchantByIDs(ctx context.Context, arg GetCombosWithMerchantByIDsParams) ([]GetCombosWithMerchantByIDsRow, error)
 	GetCredentialLedger(ctx context.Context, id int64) (CredentialLedger, error)
 	// 查询顾客最喜欢的菜品
 	GetCustomerFavoriteDishes(ctx context.Context, arg GetCustomerFavoriteDishesParams) ([]GetCustomerFavoriteDishesRow, error)
@@ -784,7 +786,7 @@ type Querier interface {
 	// 注：当前merchants表无cuisine_type字段，简化为按价格区间查询热门菜品
 	GetDishIDsByCuisines(ctx context.Context, arg GetDishIDsByCuisinesParams) ([]int64, error)
 	// 获取带有指定标签的菜品ID列表（用于推荐过滤）
-	GetDishIDsByTagID(ctx context.Context, tagID int64) ([]int64, error)
+	GetDishIDsByTagID(ctx context.Context, arg GetDishIDsByTagIDParams) ([]int64, error)
 	// 获取单个菜品的复购率（用于过滤）
 	GetDishRepurchaseRate(ctx context.Context, dishID pgtype.Int8) (GetDishRepurchaseRateRow, error)
 	// 获取单个菜品近30天销量
@@ -792,12 +794,12 @@ type Querier interface {
 	GetDishWithCustomizations(ctx context.Context, id int64) (GetDishWithCustomizationsRow, error)
 	GetDishWithDetails(ctx context.Context, id int64) (GetDishWithDetailsRow, error)
 	// 批量获取菜品详情（用于推荐结果）
-	GetDishesByIDs(ctx context.Context, dollar_1 []int64) ([]GetDishesByIDsRow, error)
+	GetDishesByIDs(ctx context.Context, arg GetDishesByIDsParams) ([]GetDishesByIDsRow, error)
 	// 批量获取菜品（不过滤上下架状态，用于权限验证等）
 	GetDishesByIDsAll(ctx context.Context, dollar_1 []int64) ([]GetDishesByIDsAllRow, error)
 	// 批量获取菜品详情及商户信息（用于推荐流展示）
 	// 返回菜品信息、商户信息、近30天销量
-	GetDishesWithMerchantByIDs(ctx context.Context, dollar_1 []int64) ([]GetDishesWithMerchantByIDsRow, error)
+	GetDishesWithMerchantByIDs(ctx context.Context, arg GetDishesWithMerchantByIDsParams) ([]GetDishesWithMerchantByIDsRow, error)
 	// 获取用户未购买过的热门菜品（探索推荐）
 	GetExploreDishes(ctx context.Context, arg GetExploreDishesParams) ([]GetExploreDishesRow, error)
 	GetExternalPaymentCommand(ctx context.Context, id int64) (ExternalPaymentCommand, error)
@@ -885,7 +887,7 @@ type Querier interface {
 	GetMerchantDishCategory(ctx context.Context, arg GetMerchantDishCategoryParams) (MerchantDishCategory, error)
 	GetMerchantDishCategoryForUpdate(ctx context.Context, arg GetMerchantDishCategoryForUpdateParams) (MerchantDishCategory, error)
 	// 获取商户所有在线菜品（含分类信息）- 消费者端使用
-	GetMerchantDishesWithCategory(ctx context.Context, merchantID int64) ([]GetMerchantDishesWithCategoryRow, error)
+	GetMerchantDishesWithCategory(ctx context.Context, arg GetMerchantDishesWithCategoryParams) ([]GetMerchantDishesWithCategoryRow, error)
 	// 商户财务概览：统计收入、服务费、净收入
 	GetMerchantFinanceOverview(ctx context.Context, arg GetMerchantFinanceOverviewParams) (GetMerchantFinanceOverviewRow, error)
 	GetMerchantGroup(ctx context.Context, id int64) (MerchantGroup, error)
@@ -903,7 +905,7 @@ type Querier interface {
 	GetMerchantMembershipSettings(ctx context.Context, merchantID int64) (MerchantMembershipSetting, error)
 	GetMerchantOfflineCustomer(ctx context.Context, arg GetMerchantOfflineCustomerParams) (MerchantOfflineCustomer, error)
 	// 获取商户所有在线套餐 - 消费者端使用
-	GetMerchantOnlineCombos(ctx context.Context, merchantID int64) ([]GetMerchantOnlineCombosRow, error)
+	GetMerchantOnlineCombos(ctx context.Context, arg GetMerchantOnlineCombosParams) ([]GetMerchantOnlineCombosRow, error)
 	// 订单来源分析
 	GetMerchantOrderSourceStats(ctx context.Context, arg GetMerchantOrderSourceStatsParams) ([]GetMerchantOrderSourceStatsRow, error)
 	// 商户概览: 指定日期范围的汇总统计
@@ -1025,7 +1027,7 @@ type Querier interface {
 	// 推荐系统查询 (Recommendation Queries)
 	// ============================================
 	// 获取全平台热门菜品（基于销量）
-	GetPopularDishes(ctx context.Context, limit int32) ([]GetPopularDishesRow, error)
+	GetPopularDishes(ctx context.Context, arg GetPopularDishesParams) ([]GetPopularDishesRow, error)
 	GetPopularKeywords(ctx context.Context, arg GetPopularKeywordsParams) ([]GetPopularKeywordsRow, error)
 	// ============================================
 	// 商户推荐查询
@@ -1049,7 +1051,7 @@ type Querier interface {
 	GetProfitSharingReturnByOutReturnNo(ctx context.Context, outReturnNo string) (ProfitSharingReturn, error)
 	GetProfitSharingSlaSummary(ctx context.Context, arg GetProfitSharingSlaSummaryParams) (GetProfitSharingSlaSummaryRow, error)
 	// 获取随机菜品（用于推荐探索）
-	GetRandomDishes(ctx context.Context, limit int32) ([]int64, error)
+	GetRandomDishes(ctx context.Context, arg GetRandomDishesParams) ([]int64, error)
 	// 实时大盘数据(最近24小时)
 	GetRealtimeDashboard(ctx context.Context) (GetRealtimeDashboardRow, error)
 	GetRechargeRule(ctx context.Context, id int64) (RechargeRule, error)
@@ -1307,6 +1309,8 @@ type Querier interface {
 	ListBossesByMerchant(ctx context.Context, merchantID int64) ([]ListBossesByMerchantRow, error)
 	ListBrowseHistory(ctx context.Context, arg ListBrowseHistoryParams) ([]BrowseHistory, error)
 	ListBrowseHistoryByType(ctx context.Context, arg ListBrowseHistoryByTypeParams) ([]BrowseHistory, error)
+	ListBrowseHistoryByTypeFiltered(ctx context.Context, arg ListBrowseHistoryByTypeFilteredParams) ([]BrowseHistory, error)
+	ListBrowseHistoryFiltered(ctx context.Context, arg ListBrowseHistoryFilteredParams) ([]BrowseHistory, error)
 	ListCartItems(ctx context.Context, cartID int64) ([]ListCartItemsRow, error)
 	// 获取购物车商品详情（用于结算时校验价格和可用性）
 	ListCartItemsForCheckout(ctx context.Context, dollar_1 []int64) ([]ListCartItemsForCheckoutRow, error)
@@ -1353,7 +1357,7 @@ type Querier interface {
 	ListDishTags(ctx context.Context, dishID int64) ([]Tag, error)
 	ListDishesByMerchant(ctx context.Context, arg ListDishesByMerchantParams) ([]ListDishesByMerchantRow, error)
 	// 获取商户上架菜品（用于扫码点餐菜单展示）
-	ListDishesForMenu(ctx context.Context, merchantID int64) ([]ListDishesForMenuRow, error)
+	ListDishesForMenu(ctx context.Context, arg ListDishesForMenuParams) ([]ListDishesForMenuRow, error)
 	ListDueClaimRecoveries(ctx context.Context, arg ListDueClaimRecoveriesParams) ([]ClaimRecovery, error)
 	ListEnabledMerchantPackagingOptions(ctx context.Context, merchantID int64) ([]MerchantPackagingOption, error)
 	ListExpiredActiveCredentialLedgers(ctx context.Context, arg ListExpiredActiveCredentialLedgersParams) ([]CredentialLedger, error)
@@ -1461,7 +1465,7 @@ type Querier interface {
 	ListOCRDeadLetterJobs(ctx context.Context, arg ListOCRDeadLetterJobsParams) ([]OcrJob, error)
 	ListOCRJobsByOwner(ctx context.Context, arg ListOCRJobsByOwnerParams) ([]OcrJob, error)
 	// 获取商户上架套餐（用于扫码点餐菜单展示）
-	ListOnlineCombosByMerchant(ctx context.Context, merchantID int64) ([]ListOnlineCombosByMerchantRow, error)
+	ListOnlineCombosByMerchant(ctx context.Context, arg ListOnlineCombosByMerchantParams) ([]ListOnlineCombosByMerchantRow, error)
 	ListOnlineRiders(ctx context.Context) ([]Rider, error)
 	ListOpenDiningSessionsBefore(ctx context.Context, arg ListOpenDiningSessionsBeforeParams) ([]DiningSession, error)
 	// 获取营业中的商户列表
@@ -1771,7 +1775,7 @@ type Querier interface {
 	// Sorting: Open Merchants First > Sales (Weighted) > Distance.
 	SearchCombosGlobal(ctx context.Context, arg SearchCombosGlobalParams) ([]SearchCombosGlobalRow, error)
 	// 全局菜品搜索，只返回菜品ID（用于推荐接口的关键词过滤）
-	SearchDishIDsGlobal(ctx context.Context, dollar_1 pgtype.Text) ([]int64, error)
+	SearchDishIDsGlobal(ctx context.Context, arg SearchDishIDsGlobalParams) ([]int64, error)
 	SearchDishesByName(ctx context.Context, arg SearchDishesByNameParams) ([]Dish, error)
 	// 全局菜品搜索（跨商户），只搜索已激活商户的上架菜品
 	SearchDishesGlobal(ctx context.Context, arg SearchDishesGlobalParams) ([]SearchDishesGlobalRow, error)

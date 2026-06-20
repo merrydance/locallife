@@ -361,20 +361,21 @@ func (server *Server) createReservation(ctx *gin.Context) {
 
 	now := time.Now()
 	result, err := logic.CreateReservation(ctx, server.store, logic.CreateReservationInput{
-		UserID:              authPayload.UserID,
-		TableID:             req.TableID,
-		ReservationDate:     reservationDate,
-		ReservationTime:     reservationTime,
-		GuestCount:          req.GuestCount,
-		ContactName:         req.ContactName,
-		ContactPhone:        req.ContactPhone,
-		PaymentMode:         req.PaymentMode,
-		Notes:               req.Notes,
-		Items:               reservationItems,
-		Now:                 now,
-		PaymentTimeoutMins:  PaymentTimeoutMinutes,
-		RefundDeadlineHours: RefundDeadlineHours,
-		DefaultDeposit:      DefaultDepositAmount,
+		UserID:                      authPayload.UserID,
+		TableID:                     req.TableID,
+		ReservationDate:             reservationDate,
+		ReservationTime:             reservationTime,
+		GuestCount:                  req.GuestCount,
+		ContactName:                 req.ContactName,
+		ContactPhone:                req.ContactPhone,
+		PaymentMode:                 req.PaymentMode,
+		Notes:                       req.Notes,
+		Items:                       reservationItems,
+		RejectLegacyPackagingDishes: server.legacyPackagingDishFreezeEnabled(),
+		Now:                         now,
+		PaymentTimeoutMins:          PaymentTimeoutMinutes,
+		RefundDeadlineHours:         RefundDeadlineHours,
+		DefaultDeposit:              DefaultDepositAmount,
 	})
 	if err != nil {
 		if writeLogicRequestError(ctx, err) {
@@ -1516,12 +1517,13 @@ func (server *Server) addDishesToReservation(ctx *gin.Context) {
 	}
 
 	result, err := logic.AddReservationDishes(ctx, server.store, logic.AddReservationDishesInput{
-		UserID:        authPayload.UserID,
-		ReservationID: uriReq.ID,
-		Items:         addItems,
-		Now:           time.Now(),
-		PaymentFacade: server.paymentFacade,
-		ClientIP:      ctx.ClientIP(),
+		UserID:                      authPayload.UserID,
+		ReservationID:               uriReq.ID,
+		Items:                       addItems,
+		RejectLegacyPackagingDishes: server.legacyPackagingDishFreezeEnabled(),
+		Now:                         time.Now(),
+		PaymentFacade:               server.paymentFacade,
+		ClientIP:                    ctx.ClientIP(),
 	})
 	if err != nil {
 		if writeReservationPaymentConfigError(ctx, err, "add reservation dishes") {
@@ -1615,13 +1617,14 @@ func (server *Server) modifyReservationDishes(ctx *gin.Context) {
 	}
 
 	result, err := logic.ModifyReservationDishes(ctx, server.store, logic.ModifyReservationDishesInput{
-		UserID:        authPayload.UserID,
-		ReservationID: uriReq.ID,
-		Items:         modifyItems,
-		Now:           time.Now(),
-		PaymentFacade: server.paymentFacade,
-		ClientIP:      ctx.ClientIP(),
-		TaskScheduler: apiTaskScheduler{server: server},
+		UserID:                      authPayload.UserID,
+		ReservationID:               uriReq.ID,
+		Items:                       modifyItems,
+		RejectLegacyPackagingDishes: server.legacyPackagingDishFreezeEnabled(),
+		Now:                         time.Now(),
+		PaymentFacade:               server.paymentFacade,
+		ClientIP:                    ctx.ClientIP(),
+		TaskScheduler:               apiTaskScheduler{server: server},
 	})
 	if err != nil {
 		if writeReservationPaymentConfigError(ctx, err, "modify reservation dishes") {

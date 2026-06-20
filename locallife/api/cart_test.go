@@ -313,6 +313,71 @@ func TestGetCartAPIIncludesPackagingOptionsAndSelectedOption(t *testing.T) {
 	require.True(t, response.Items[0].IsPackaging)
 }
 
+func TestGetCartAPIHidesComboWithLegacyPackagingChildWhenFreezeEnabled(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	cart := randomCart(user.ID, merchant.ID)
+	cart.OrderType = db.OrderTypeDineIn
+	comboID := util.RandomInt(1000, 2000)
+	comboItem := db.ListCartItemsRow{
+		ID:               util.RandomInt(2000, 3000),
+		CartID:           cart.ID,
+		ComboID:          pgtype.Int8{Int64: comboID, Valid: true},
+		Quantity:         1,
+		Customizations:   []byte(`{}`),
+		ComboName:        pgtype.Text{String: "含餐盒套餐", Valid: true},
+		ComboPrice:       pgtype.Int8{Int64: 2800, Valid: true},
+		ComboIsAvailable: pgtype.Bool{Bool: true, Valid: true},
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetCartByUserAndMerchant(gomock.Any(), gomock.Eq(db.GetCartByUserAndMerchantParams{
+			UserID:     user.ID,
+			MerchantID: merchant.ID,
+			OrderType:  db.OrderTypeDineIn,
+		})).
+		Times(1).
+		Return(cart, nil)
+	store.EXPECT().
+		ListCartItems(gomock.Any(), gomock.Eq(cart.ID)).
+		Times(1).
+		Return([]db.ListCartItemsRow{comboItem}, nil)
+	store.EXPECT().
+		ListComboDishOrderability(gomock.Any(), comboID).
+		Times(1).
+		Return([]db.ListComboDishOrderabilityRow{
+			{
+				DishID:      101,
+				DishName:    "旧餐盒",
+				DishExists:  pgtype.Bool{Bool: true, Valid: true},
+				IsOnline:    true,
+				IsAvailable: true,
+				IsPackaging: true,
+			},
+		}, nil)
+
+	server := newTestServer(t, store)
+	server.config.PackagingLegacyDishFreezeEnabled = true
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, fmt.Sprintf("/v1/cart?merchant_id=%d&order_type=%s", merchant.ID, db.OrderTypeDineIn), nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response cartResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.Empty(t, response.Items)
+	require.Equal(t, 0, response.TotalCount)
+	require.Equal(t, int64(0), response.Subtotal)
+}
+
 func TestPutCartPackagingSelectionRejectsForeignCart(t *testing.T) {
 	user, _ := randomUser(t)
 	otherUser, _ := randomUser(t)
@@ -1616,14 +1681,16 @@ func TestGetAllCartsAPI(t *testing.T) {
 	merchant1 := randomMerchant(user.ID)
 	merchant2 := randomMerchant(user.ID)
 	summaryArg := db.GetUserCartsSummaryParams{
-		UserID: user.ID,
+		UserID:           user.ID,
+		ExcludePackaging: false,
 		OrderType: pgtype.Text{
 			String: "",
 			Valid:  false,
 		},
 	}
 	detailsArg := db.GetUserCartsWithDetailsParams{
-		UserID: user.ID,
+		UserID:           user.ID,
+		ExcludePackaging: false,
 		OrderType: pgtype.Text{
 			String: "",
 			Valid:  false,
@@ -1821,6 +1888,42 @@ func TestGetAllCartsAPI(t *testing.T) {
 			tc.checkResponse(t, recorder)
 		})
 	}
+}
+
+func TestGetAllCartsAPIExcludesLegacyPackagingWhenFreezeEnabled(t *testing.T) {
+	user, _ := randomUser(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetUserCartsSummary(gomock.Any(), gomock.Eq(db.GetUserCartsSummaryParams{
+			UserID:           user.ID,
+			ExcludePackaging: true,
+			OrderType:        pgtype.Text{Valid: false},
+		})).
+		Times(1).
+		Return(db.GetUserCartsSummaryRow{}, nil)
+	store.EXPECT().
+		GetUserCartsWithDetails(gomock.Any(), gomock.Eq(db.GetUserCartsWithDetailsParams{
+			UserID:           user.ID,
+			ExcludePackaging: true,
+			OrderType:        pgtype.Text{Valid: false},
+		})).
+		Times(1).
+		Return([]db.GetUserCartsWithDetailsRow{}, nil)
+
+	server := newTestServer(t, store)
+	server.config.PackagingLegacyDishFreezeEnabled = true
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/cart/summary", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
 }
 
 // ==================== CombinedCheckout Tests (合单结算预览) ====================
@@ -2139,6 +2242,60 @@ func TestCombinedCheckoutAPI_TakeoutAppliesDeliveryFeeDiscount(t *testing.T) {
 	require.Equal(t, int64(2320), response.Data.TotalAmount)
 }
 
+func TestCombinedCheckoutAPIRejectsLegacyPackagingDishWhenFreezeEnabled(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	cartID := int64(13)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetUserCartsByCartIDs(gomock.Any(), db.GetUserCartsByCartIDsParams{
+			UserID:  user.ID,
+			Column2: []int64{cartID},
+		}).
+		Times(1).
+		Return([]db.GetUserCartsByCartIDsRow{{
+			ID:             cartID,
+			UserID:         user.ID,
+			MerchantID:     merchant.ID,
+			MerchantName:   merchant.Name,
+			RegionID:       merchant.RegionID,
+			SubMchid:       pgtype.Text{String: "sub_mch_001", Valid: true},
+			MerchantStatus: "active",
+		}}, nil)
+	store.EXPECT().
+		GetCart(gomock.Any(), cartID).
+		Times(1).
+		Return(db.Cart{ID: cartID, UserID: user.ID, MerchantID: merchant.ID, OrderType: db.OrderTypeDineIn}, nil)
+	store.EXPECT().
+		ListCartItems(gomock.Any(), cartID).
+		Times(1).
+		Return([]db.ListCartItemsRow{{
+			DishID:          pgtype.Int8{Int64: 5, Valid: true},
+			DishName:        pgtype.Text{String: "旧餐盒", Valid: true},
+			DishPrice:       pgtype.Int8{Int64: 100, Valid: true},
+			DishIsPackaging: pgtype.Bool{Bool: true, Valid: true},
+			Quantity:        1,
+		}}, nil)
+
+	server := newTestServer(t, store)
+	server.config.PackagingLegacyDishFreezeEnabled = true
+	recorder := httptest.NewRecorder()
+	body, err := json.Marshal(gin.H{"cart_ids": []int64{cartID}})
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/cart/combined-checkout/preview", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+}
+
 func TestCombinedCheckoutAPI_TakeoutFallsBackWhenMapUnavailable(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
@@ -2258,4 +2415,67 @@ func TestCombinedCheckoutAPI_TakeoutFallsBackWhenMapUnavailable(t *testing.T) {
 	require.Equal(t, int64(2500), response.Data.Items[0].TotalAmount)
 	require.Equal(t, int64(500), response.Data.TotalDeliveryFee)
 	require.Equal(t, int64(2500), response.Data.TotalAmount)
+}
+
+func TestListBrowseHistorySkipsLegacyPackagingDishWhenFreezeEnabled(t *testing.T) {
+	user, _ := randomUser(t)
+	visibleDishID := int64(102)
+	now := time.Now()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		ListBrowseHistoryByTypeFiltered(gomock.Any(), gomock.Eq(db.ListBrowseHistoryByTypeFilteredParams{
+			UserID:           user.ID,
+			TargetType:       "dish",
+			ExcludePackaging: true,
+			Limit:            20,
+			Offset:           0,
+		})).
+		Times(1).
+		Return([]db.BrowseHistory{
+			{ID: 2, UserID: user.ID, TargetType: "dish", TargetID: visibleDishID, LastViewedAt: now, ViewCount: 2},
+		}, nil)
+	store.EXPECT().
+		CountBrowseHistoryByTypeFiltered(gomock.Any(), gomock.Eq(db.CountBrowseHistoryByTypeFilteredParams{
+			UserID:           user.ID,
+			TargetType:       "dish",
+			ExcludePackaging: true,
+		})).
+		Times(1).
+		Return(int64(1), nil)
+	store.EXPECT().
+		GetDishesByIDs(gomock.Any(), gomock.Eq(db.GetDishesByIDsParams{
+			DishIds:          []int64{visibleDishID},
+			ExcludePackaging: true,
+		})).
+		Times(1).
+		Return([]db.GetDishesByIDsRow{{
+			ID:          visibleDishID,
+			MerchantID:  10,
+			Name:        "牛肉饭",
+			Price:       1800,
+			IsAvailable: true,
+			IsOnline:    true,
+		}}, nil)
+
+	server := newTestServer(t, store)
+	server.config.PackagingLegacyDishFreezeEnabled = true
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/history/browse?type=dish&page=1&page_size=20", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var response listBrowseHistoryResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.Len(t, response.Items, 1)
+	require.Equal(t, visibleDishID, response.Items[0].TargetID)
+	require.Equal(t, "牛肉饭", response.Items[0].Name)
+	require.Equal(t, int64(1), response.Total)
 }

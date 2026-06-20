@@ -161,7 +161,8 @@ SELECT
   COALESCE(d.name, '') AS dish_name,
   (d.id IS NOT NULL AND d.deleted_at IS NULL) AS dish_exists,
   COALESCE(d.is_online, false)::boolean AS is_online,
-  COALESCE(d.is_available, false)::boolean AS is_available
+  COALESCE(d.is_available, false)::boolean AS is_available,
+  COALESCE(d.is_packaging, false)::boolean AS is_packaging
 FROM combo_dishes cd
 LEFT JOIN dishes d ON d.id = cd.dish_id
 WHERE cd.combo_id = $1
@@ -363,6 +364,7 @@ WHERE cs.id = ANY($1::bigint[])
             OR d.deleted_at IS NOT NULL
             OR d.is_online IS DISTINCT FROM true
             OR d.is_available IS DISTINCT FROM true
+            OR (sqlc.arg('exclude_packaging')::boolean AND d.is_packaging = true)
         )
   );
 
@@ -385,7 +387,7 @@ SELECT
       '[]'
     ) as tags
 FROM combo_sets cs
-WHERE cs.merchant_id = $1
+WHERE cs.merchant_id = sqlc.arg('merchant_id')
   AND cs.deleted_at IS NULL
   AND cs.is_online = true
   AND EXISTS (
@@ -407,6 +409,7 @@ WHERE cs.merchant_id = $1
             OR d.deleted_at IS NOT NULL
             OR d.is_online IS DISTINCT FROM true
             OR d.is_available IS DISTINCT FROM true
+            OR (sqlc.arg('exclude_packaging')::boolean AND d.is_packaging = true)
         )
   )
 ORDER BY created_at DESC;
@@ -476,7 +479,7 @@ SELECT
         ), 0
     )::int AS monthly_sales,
     -- Distance Calculation
-    COALESCE(earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($4::float8, $5::float8)), 9999999)::float8 AS distance,
+    COALESCE(earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth(sqlc.arg('user_lat')::float8, sqlc.arg('user_lng')::float8)), 9999999)::float8 AS distance,
     COALESCE(
       (SELECT json_agg(t.name)
        FROM combo_tags ct
@@ -496,6 +499,7 @@ LEFT JOIN LATERAL (
       AND d.deleted_at IS NULL
       AND d.is_online = true
       AND d.is_available = true
+      AND (NOT sqlc.arg('exclude_packaging')::boolean OR d.is_packaging = false)
     ORDER BY cd.id ASC
     LIMIT 1
 ) AS dish_img ON TRUE
@@ -525,18 +529,19 @@ WHERE
               OR d.deleted_at IS NOT NULL
               OR d.is_online IS DISTINCT FROM true
               OR d.is_available IS DISTINCT FROM true
+              OR (sqlc.arg('exclude_packaging')::boolean AND d.is_packaging = true)
           )
     )
     AND (
-        $1::text = '' OR 
-        cs.name ILIKE '%' || $1 || '%' OR 
-        m.name ILIKE '%' || $1 || '%'
+        sqlc.arg('keyword')::text = '' OR
+        cs.name ILIKE '%' || sqlc.arg('keyword') || '%' OR
+        m.name ILIKE '%' || sqlc.arg('keyword') || '%'
     )
 ORDER BY 
     m.is_open DESC, 
     monthly_sales DESC,
     distance ASC
-LIMIT $2 OFFSET $3;
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: CountSearchCombosGlobal :one
 -- Count for pagination
@@ -570,12 +575,13 @@ WHERE
               OR d.deleted_at IS NOT NULL
               OR d.is_online IS DISTINCT FROM true
               OR d.is_available IS DISTINCT FROM true
+              OR (sqlc.arg('exclude_packaging')::boolean AND d.is_packaging = true)
           )
     )
     AND (
-        $1::text = '' OR 
-        cs.name ILIKE '%' || $1 || '%' OR 
-        m.name ILIKE '%' || $1 || '%'
+        sqlc.arg('keyword')::text = '' OR
+        cs.name ILIKE '%' || sqlc.arg('keyword') || '%' OR
+        m.name ILIKE '%' || sqlc.arg('keyword') || '%'
     );
 
 -- name: GetComboMemberImagesByCombos :many
@@ -587,4 +593,5 @@ WHERE cd.combo_id = ANY($1::bigint[])
   AND d.deleted_at IS NULL
   AND d.is_online = true
   AND d.is_available = true
+  AND (NOT sqlc.arg('exclude_packaging')::boolean OR d.is_packaging = false)
 ORDER BY cd.combo_id, cd.id ASC;

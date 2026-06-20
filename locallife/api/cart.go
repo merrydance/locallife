@@ -128,7 +128,11 @@ func (server *Server) getCart(ctx *gin.Context) {
 		return
 	}
 
-	logicResp := logic.BuildCartResponse(cart, items)
+	logicResp, err := server.buildCartLogicResponse(ctx, cart, items)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("build cart response: %w", err)))
+		return
+	}
 	if err := server.attachCartPackagingState(ctx, authPayload.UserID, &cart, &logicResp); err != nil {
 		if writeLogicRequestError(ctx, err) {
 			return
@@ -202,6 +206,20 @@ func emptyCartPackagingResponse() cartPackagingResponse {
 	return cartPackagingResponse{Options: []cartPackagingOptionResponse{}}
 }
 
+func (server *Server) buildCartLogicResponse(ctx context.Context, cart db.Cart, items []db.ListCartItemsRow) (logic.CartResponse, error) {
+	options := logic.CartResponseOptions{
+		HideLegacyPackagingDishes: server.legacyPackagingDishFreezeEnabled(),
+	}
+	if options.HideLegacyPackagingDishes {
+		legacyPackagingComboIDs, err := logic.FindLegacyPackagingComboIDsInCartItems(ctx, server.store, items)
+		if err != nil {
+			return logic.CartResponse{}, err
+		}
+		options.LegacyPackagingComboIDs = legacyPackagingComboIDs
+	}
+	return logic.BuildCartResponse(cart, items, options), nil
+}
+
 type addCartItemRequest struct {
 	// 商户ID (必填)
 	MerchantID int64 `json:"merchant_id" binding:"required,min=1"`
@@ -259,16 +277,17 @@ func (server *Server) addCartItem(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	result, err := logic.AddCartItem(ctx, server.store, logic.AddCartItemInput{
-		UserID:         authPayload.UserID,
-		MerchantID:     req.MerchantID,
-		OrderType:      req.OrderType,
-		TableID:        req.TableID,
-		ReservationID:  req.ReservationID,
-		DishID:         req.DishID,
-		ComboID:        req.ComboID,
-		Quantity:       req.Quantity,
-		Customizations: req.Customizations,
-		MaxQuantity:    CartItemMaxQuantity,
+		UserID:                      authPayload.UserID,
+		MerchantID:                  req.MerchantID,
+		OrderType:                   req.OrderType,
+		TableID:                     req.TableID,
+		ReservationID:               req.ReservationID,
+		DishID:                      req.DishID,
+		ComboID:                     req.ComboID,
+		Quantity:                    req.Quantity,
+		Customizations:              req.Customizations,
+		MaxQuantity:                 CartItemMaxQuantity,
+		RejectLegacyPackagingDishes: server.legacyPackagingDishFreezeEnabled(),
 		NormalizeCustomizings: func(ctx context.Context, dishID int64, customizations map[string]interface{}) (map[string]interface{}, error) {
 			ginCtx, ok := ctx.(*gin.Context)
 			if !ok {
@@ -295,7 +314,11 @@ func (server *Server) returnUpdatedCart(ctx *gin.Context, cart db.Cart, statusCo
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("list cart items: %w", err)))
 		return
 	}
-	logicResp := logic.BuildCartResponse(cart, items)
+	logicResp, err := server.buildCartLogicResponse(ctx, cart, items)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("build cart response: %w", err)))
+		return
+	}
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 	if err := server.attachCartPackagingState(ctx, authPayload.UserID, &cart, &logicResp); err != nil {
 		if writeLogicRequestError(ctx, err) {
@@ -351,11 +374,12 @@ func (server *Server) updateCartItem(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	result, err := logic.UpdateCartItem(ctx, server.store, logic.UpdateCartItemInput{
-		UserID:         authPayload.UserID,
-		ItemID:         itemID,
-		Quantity:       req.Quantity,
-		Customizations: req.Customizations,
-		MaxQuantity:    CartItemMaxQuantity,
+		UserID:                      authPayload.UserID,
+		ItemID:                      itemID,
+		Quantity:                    req.Quantity,
+		Customizations:              req.Customizations,
+		MaxQuantity:                 CartItemMaxQuantity,
+		RejectLegacyPackagingDishes: server.legacyPackagingDishFreezeEnabled(),
 	})
 	if err != nil {
 		if writeLogicRequestError(ctx, err) {
@@ -663,15 +687,16 @@ func (server *Server) calculateCart(ctx *gin.Context) {
 	}
 
 	preview, err := logic.CalculateCartPreview(ctx, server.store, server.mapClient, merchant, feeFn, logic.CartPreviewInput{
-		UserID:        authPayload.UserID,
-		MerchantID:    req.MerchantID,
-		OrderType:     req.OrderType,
-		TableID:       req.TableID,
-		ReservationID: req.ReservationID,
-		AddressID:     req.AddressID,
-		Latitude:      req.Latitude,
-		Longitude:     req.Longitude,
-		VoucherID:     req.VoucherID,
+		UserID:                      authPayload.UserID,
+		MerchantID:                  req.MerchantID,
+		OrderType:                   req.OrderType,
+		TableID:                     req.TableID,
+		ReservationID:               req.ReservationID,
+		RejectLegacyPackagingDishes: server.legacyPackagingDishFreezeEnabled(),
+		AddressID:                   req.AddressID,
+		Latitude:                    req.Latitude,
+		Longitude:                   req.Longitude,
+		VoucherID:                   req.VoucherID,
 	})
 	if err != nil {
 		if writeLogicRequestError(ctx, err) {
@@ -785,33 +810,40 @@ func (server *Server) listBrowseHistory(ctx *gin.Context) {
 	var items []db.BrowseHistory
 	var total int64
 	var err error
+	excludePackaging := server.legacyPackagingDishFreezeEnabled()
 
 	if targetType != "" {
-		items, err = server.store.ListBrowseHistoryByType(ctx, db.ListBrowseHistoryByTypeParams{
-			UserID:     authPayload.UserID,
-			TargetType: targetType,
-			Limit:      int32(pageSize),
-			Offset:     pageOffset(int32(page), int32(pageSize)),
+		items, err = server.store.ListBrowseHistoryByTypeFiltered(ctx, db.ListBrowseHistoryByTypeFilteredParams{
+			UserID:           authPayload.UserID,
+			TargetType:       targetType,
+			ExcludePackaging: excludePackaging,
+			Limit:            int32(pageSize),
+			Offset:           pageOffset(int32(page), int32(pageSize)),
 		})
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("list browse history by type: %w", err)))
 			return
 		}
-		total, err = server.store.CountBrowseHistoryByType(ctx, db.CountBrowseHistoryByTypeParams{
-			UserID:     authPayload.UserID,
-			TargetType: targetType,
+		total, err = server.store.CountBrowseHistoryByTypeFiltered(ctx, db.CountBrowseHistoryByTypeFilteredParams{
+			UserID:           authPayload.UserID,
+			TargetType:       targetType,
+			ExcludePackaging: excludePackaging,
 		})
 	} else {
-		items, err = server.store.ListBrowseHistory(ctx, db.ListBrowseHistoryParams{
-			UserID: authPayload.UserID,
-			Limit:  int32(pageSize),
-			Offset: pageOffset(int32(page), int32(pageSize)),
+		items, err = server.store.ListBrowseHistoryFiltered(ctx, db.ListBrowseHistoryFilteredParams{
+			UserID:           authPayload.UserID,
+			ExcludePackaging: excludePackaging,
+			Limit:            int32(pageSize),
+			Offset:           pageOffset(int32(page), int32(pageSize)),
 		})
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("list browse history: %w", err)))
 			return
 		}
-		total, err = server.store.CountBrowseHistory(ctx, authPayload.UserID)
+		total, err = server.store.CountBrowseHistoryFiltered(ctx, db.CountBrowseHistoryFilteredParams{
+			UserID:           authPayload.UserID,
+			ExcludePackaging: excludePackaging,
+		})
 	}
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("count browse history: %w", err)))
@@ -845,7 +877,10 @@ func (server *Server) listBrowseHistory(ctx *gin.Context) {
 	// 批量获取菜品信息（最多 1 次 DB 调用）
 	dishMap := make(map[int64]db.GetDishesByIDsRow, len(dishIDs))
 	if len(dishIDs) > 0 {
-		dishes, err := server.store.GetDishesByIDs(ctx, dishIDs)
+		dishes, err := server.store.GetDishesByIDs(ctx, db.GetDishesByIDsParams{
+			DishIds:          dishIDs,
+			ExcludePackaging: server.legacyPackagingDishFreezeEnabled(),
+		})
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("batch get dishes for history: %w", err)))
 			return
@@ -870,8 +905,8 @@ func (server *Server) listBrowseHistory(ctx *gin.Context) {
 	historyImgURLs := server.batchPublicImageURLs(ctx, historyAssetIDs, media.VariantCard)
 
 	// 组装响应
-	result := make([]browseHistoryItem, len(items))
-	for i, item := range items {
+	result := make([]browseHistoryItem, 0, len(items))
+	for _, item := range items {
 		historyItem := browseHistoryItem{
 			ID:           item.ID,
 			TargetType:   item.TargetType,
@@ -895,7 +930,7 @@ func (server *Server) listBrowseHistory(ctx *gin.Context) {
 				}
 			}
 		}
-		result[i] = historyItem
+		result = append(result, historyItem)
 	}
 
 	ctx.JSON(http.StatusOK, listBrowseHistoryResponse{
@@ -964,7 +999,8 @@ func (server *Server) getUserCartsSummary(ctx *gin.Context) {
 	orderType := ctx.Query("order_type")
 
 	argSummary := db.GetUserCartsSummaryParams{
-		UserID: authPayload.UserID,
+		UserID:           authPayload.UserID,
+		ExcludePackaging: server.legacyPackagingDishFreezeEnabled(),
 		OrderType: pgtype.Text{
 			String: orderType,
 			Valid:  orderType != "",
@@ -979,7 +1015,8 @@ func (server *Server) getUserCartsSummary(ctx *gin.Context) {
 	}
 
 	argDetails := db.GetUserCartsWithDetailsParams{
-		UserID: authPayload.UserID,
+		UserID:           authPayload.UserID,
+		ExcludePackaging: server.legacyPackagingDishFreezeEnabled(),
 		OrderType: pgtype.Text{
 			String: orderType,
 			Valid:  orderType != "",
@@ -1136,15 +1173,15 @@ func (server *Server) previewCombinedCheckout(ctx *gin.Context) {
 			return
 		}
 
-		var subtotal int64
-		for _, item := range cartItems {
-			var unitPrice int64
-			if item.DishID.Valid {
-				unitPrice = item.DishPrice.Int64
-			} else if item.ComboID.Valid {
-				unitPrice = item.ComboPrice.Int64
+		subtotal, err := logic.CalculateCartItemsSubtotal(ctx, server.store, cartItems, logic.CartItemsSubtotalOptions{
+			RejectLegacyPackagingDishes: server.legacyPackagingDishFreezeEnabled(),
+		})
+		if err != nil {
+			if writeLogicRequestError(ctx, err) {
+				return
 			}
-			subtotal += unitPrice * int64(item.Quantity)
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("calculate cart subtotal: %w", err)))
+			return
 		}
 
 		var deliveryFee int64
@@ -1330,7 +1367,10 @@ func (server *Server) enrichComboImages(ctx context.Context, items []cartItemRes
 	}
 
 	// 批量查询成员图片
-	memberImages, err := server.store.GetComboMemberImagesByCombos(ctx, comboIDs)
+	memberImages, err := server.store.GetComboMemberImagesByCombos(ctx, db.GetComboMemberImagesByCombosParams{
+		Column1:          comboIDs,
+		ExcludePackaging: server.legacyPackagingDishFreezeEnabled(),
+	})
 	if err != nil {
 		log.Error().Err(err).Msg("failed to get combo member images")
 		return

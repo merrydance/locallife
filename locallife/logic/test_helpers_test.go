@@ -15,12 +15,17 @@ func assertRequestError(t *testing.T, err error) *RequestError {
 	return reqErr
 }
 
-func comboDishOrderabilityRow(dishID int64, name string, dishExists bool, isOnline bool, isAvailable bool) db.ListComboDishOrderabilityRow {
+func comboDishOrderabilityRow(dishID int64, name string, dishExists bool, isOnline bool, isAvailable bool, isPackaging ...bool) db.ListComboDishOrderabilityRow {
+	packaging := false
+	if len(isPackaging) > 0 {
+		packaging = isPackaging[0]
+	}
 	return db.ListComboDishOrderabilityRow{
 		DishID:      dishID,
 		DishName:    name,
 		DishExists:  pgtype.Bool{Bool: dishExists, Valid: true},
 		IsOnline:    isOnline,
 		IsAvailable: isAvailable,
+		IsPackaging: packaging,
 	}
 }

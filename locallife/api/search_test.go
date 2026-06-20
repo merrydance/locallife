@@ -238,6 +238,82 @@ func TestSearchDishesAPI(t *testing.T) {
 	}
 }
 
+func TestSearchDishesAPIExcludesLegacyPackagingWhenFreezeEnabled(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(util.RandomInt(1, 100))
+
+	testCases := []struct {
+		name       string
+		query      string
+		buildStubs func(store *mockdb.MockStore)
+	}{
+		{
+			name:  "GlobalSearch",
+			query: "?keyword=鸡&region_id=1&page_id=1&page_size=10",
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					SearchDishesGlobal(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ context.Context, arg db.SearchDishesGlobalParams) ([]db.SearchDishesGlobalRow, error) {
+						require.True(t, arg.ExcludePackaging)
+						return []db.SearchDishesGlobalRow{}, nil
+					})
+				store.EXPECT().
+					CountSearchDishesGlobal(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ context.Context, arg db.CountSearchDishesGlobalParams) (int64, error) {
+						require.True(t, arg.ExcludePackaging)
+						return 0, nil
+					})
+			},
+		},
+		{
+			name:  "MerchantScopedSearch",
+			query: fmt.Sprintf("?keyword=鸡&merchant_id=%d&page_id=1&page_size=10", merchant.ID),
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					SearchDishesByName(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ context.Context, arg db.SearchDishesByNameParams) ([]db.Dish, error) {
+						require.Equal(t, merchant.ID, arg.MerchantID)
+						require.True(t, arg.ExcludePackaging)
+						return []db.Dish{}, nil
+					})
+				store.EXPECT().
+					CountSearchDishesByName(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ context.Context, arg db.CountSearchDishesByNameParams) (int64, error) {
+						require.Equal(t, merchant.ID, arg.MerchantID)
+						require.True(t, arg.ExcludePackaging)
+						return 0, nil
+					})
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			tc.buildStubs(store)
+
+			server := newTestServer(t, store)
+			server.config.PackagingLegacyDishFreezeEnabled = true
+			recorder := httptest.NewRecorder()
+
+			request, err := http.NewRequest(http.MethodGet, "/v1/search/dishes"+tc.query, nil)
+			require.NoError(t, err)
+			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+			server.router.ServeHTTP(recorder, request)
+			require.Equal(t, http.StatusOK, recorder.Code)
+		})
+	}
+}
+
 // ==================== 商户搜索测试 ====================
 
 func TestSearchMerchantsAPI(t *testing.T) {
@@ -620,6 +696,40 @@ func TestSearchCombosAPI(t *testing.T) {
 			tc.checkResponse(t, recorder)
 		})
 	}
+}
+
+func TestSearchCombosAPIExcludesLegacyPackagingWhenFreezeEnabled(t *testing.T) {
+	user, _ := randomUser(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		SearchCombosGlobal(gomock.Any(), gomock.Any()).
+		Times(1).
+		DoAndReturn(func(_ context.Context, arg db.SearchCombosGlobalParams) ([]db.SearchCombosGlobalRow, error) {
+			require.True(t, arg.ExcludePackaging)
+			return []db.SearchCombosGlobalRow{}, nil
+		})
+	store.EXPECT().
+		CountSearchCombosGlobal(gomock.Any(), gomock.Any()).
+		Times(1).
+		DoAndReturn(func(_ context.Context, arg db.CountSearchCombosGlobalParams) (int64, error) {
+			require.True(t, arg.ExcludePackaging)
+			return 0, nil
+		})
+
+	server := newTestServer(t, store)
+	server.config.PackagingLegacyDishFreezeEnabled = true
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/search/combos?keyword=套餐&region_id=1&page_id=1&page_size=10", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
 }
 
 // ==================== 包间搜索测试 ====================

@@ -1,6 +1,7 @@
 package logic
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -46,13 +47,30 @@ type CartResponse struct {
 	Packaging     CartPackagingState `json:"packaging"`
 }
 
+type CartResponseOptions struct {
+	HideLegacyPackagingDishes bool
+	LegacyPackagingComboIDs   map[int64]bool
+}
+
 // BuildCartResponse converts cart + item rows into response-friendly structures.
-func BuildCartResponse(cart db.Cart, items []db.ListCartItemsRow) CartResponse {
+func BuildCartResponse(cart db.Cart, items []db.ListCartItemsRow, options ...CartResponseOptions) CartResponse {
+	opts := CartResponseOptions{}
+	if len(options) > 0 {
+		opts = options[0]
+	}
+
 	cartItems := make([]CartItemResponse, 0, len(items))
 	var subtotal int64
 	var totalCount int
 
 	for _, item := range items {
+		if opts.HideLegacyPackagingDishes && item.DishID.Valid && item.DishIsPackaging.Bool {
+			continue
+		}
+		if opts.HideLegacyPackagingDishes && item.ComboID.Valid && opts.LegacyPackagingComboIDs[item.ComboID.Int64] {
+			continue
+		}
+
 		var unitPrice int64
 		var name string
 		var imageAssetID *int64
@@ -130,6 +148,36 @@ func BuildCartResponse(cart db.Cart, items []db.ListCartItemsRow) CartResponse {
 		TotalCount:    totalCount,
 		Subtotal:      subtotal,
 	}
+}
+
+func FindLegacyPackagingComboIDsInCartItems(ctx context.Context, store db.Store, items []db.ListCartItemsRow) (map[int64]bool, error) {
+	comboIDs := make([]int64, 0)
+	seen := make(map[int64]bool)
+	for _, item := range items {
+		if !item.ComboID.Valid || seen[item.ComboID.Int64] {
+			continue
+		}
+		seen[item.ComboID.Int64] = true
+		comboIDs = append(comboIDs, item.ComboID.Int64)
+	}
+	if len(comboIDs) == 0 {
+		return nil, nil
+	}
+
+	legacyPackagingComboIDs := make(map[int64]bool)
+	for _, comboID := range comboIDs {
+		dishes, err := store.ListComboDishOrderability(ctx, comboID)
+		if err != nil {
+			return nil, err
+		}
+		for _, dish := range dishes {
+			if dish.IsPackaging {
+				legacyPackagingComboIDs[comboID] = true
+				break
+			}
+		}
+	}
+	return legacyPackagingComboIDs, nil
 }
 
 func nullableInt64(v pgtype.Int8) *int64 {

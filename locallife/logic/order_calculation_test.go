@@ -79,6 +79,41 @@ func TestCalculateOrderPreview_InvalidCustomizations(t *testing.T) {
 	require.Equal(t, "invalid customizations in cart", reqErr.Err.Error())
 }
 
+func TestCalculateOrderPreview_RejectsLegacyPackagingDishWhenFreezeEnabled(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetCartByUserAndMerchant(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.Cart{ID: 10}, nil)
+	store.EXPECT().
+		ListCartItems(gomock.Any(), int64(10)).
+		Times(1).
+		Return([]db.ListCartItemsRow{{
+			DishID:          pgtype.Int8{Int64: 1, Valid: true},
+			DishName:        pgtype.Text{String: "旧餐盒", Valid: true},
+			DishPrice:       pgtype.Int8{Int64: 100, Valid: true},
+			DishIsPackaging: pgtype.Bool{Bool: true, Valid: true},
+			Quantity:        1,
+		}}, nil)
+
+	_, err := CalculateOrderPreview(
+		context.Background(),
+		store,
+		nil,
+		OrderCalculationInput{UserID: 1, MerchantID: 2, OrderType: "takeout", RejectLegacyPackagingDishes: true},
+		func(context.Context, int64, map[string]interface{}) ([]byte, int64, error) { return nil, 0, nil },
+		func(context.Context, int64, int64, int32, int64) (DeliveryFeeComputation, error) {
+			return DeliveryFeeComputation{}, nil
+		},
+	)
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 400, reqErr.Status)
+	require.Equal(t, "包装已迁移到包装设置，请在包装设置中维护", reqErr.Err.Error())
+}
+
 func TestCalculateOrderPreview_WithVoucher(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -253,6 +288,112 @@ func TestCalculateCartPreview_TakeawayIgnoresDeliveryLocation(t *testing.T) {
 	require.Equal(t, int64(0), result.DeliveryFeeDiscount)
 	require.Equal(t, int32(0), result.DeliveryDistance)
 	require.Equal(t, int64(2000), result.Promotion.TotalAmount)
+}
+
+func TestCalculateCartPreview_RejectsLegacyPackagingDishWhenFreezeEnabled(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	userID := int64(1)
+	merchantID := int64(2)
+	cartID := int64(30)
+
+	store.EXPECT().
+		GetCartByUserAndMerchant(gomock.Any(), db.GetCartByUserAndMerchantParams{
+			UserID:     userID,
+			MerchantID: merchantID,
+			OrderType:  db.OrderTypeTakeaway,
+		}).
+		Times(1).
+		Return(db.Cart{ID: cartID}, nil)
+	store.EXPECT().
+		ListCartItems(gomock.Any(), cartID).
+		Times(1).
+		Return([]db.ListCartItemsRow{{
+			DishID:          pgtype.Int8{Int64: 5, Valid: true},
+			DishName:        pgtype.Text{String: "旧餐盒", Valid: true},
+			DishPrice:       pgtype.Int8{Int64: 100, Valid: true},
+			DishIsPackaging: pgtype.Bool{Bool: true, Valid: true},
+			Quantity:        1,
+		}}, nil)
+
+	_, err := CalculateCartPreview(
+		context.Background(),
+		store,
+		nil,
+		db.Merchant{ID: merchantID, RegionID: 9},
+		func(context.Context, int64, int64, int32, int64) (DeliveryFeeComputation, error) {
+			t.Fatal("delivery fee should not be called for rejected cart item")
+			return DeliveryFeeComputation{}, nil
+		},
+		CartPreviewInput{
+			UserID:                      userID,
+			MerchantID:                  merchantID,
+			OrderType:                   db.OrderTypeTakeaway,
+			RejectLegacyPackagingDishes: true,
+		},
+	)
+
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 400, reqErr.Status)
+	require.Equal(t, "包装已迁移到包装设置，请在包装设置中维护", reqErr.Err.Error())
+}
+
+func TestCalculateCartPreview_RejectsComboWithLegacyPackagingChildWhenFreezeEnabled(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	userID := int64(1)
+	merchantID := int64(2)
+	cartID := int64(30)
+	comboID := int64(50)
+
+	store.EXPECT().
+		GetCartByUserAndMerchant(gomock.Any(), db.GetCartByUserAndMerchantParams{
+			UserID:     userID,
+			MerchantID: merchantID,
+			OrderType:  db.OrderTypeTakeaway,
+		}).
+		Times(1).
+		Return(db.Cart{ID: cartID}, nil)
+	store.EXPECT().
+		ListCartItems(gomock.Any(), cartID).
+		Times(1).
+		Return([]db.ListCartItemsRow{{
+			ComboID:    pgtype.Int8{Int64: comboID, Valid: true},
+			ComboName:  pgtype.Text{String: "多人套餐", Valid: true},
+			ComboPrice: pgtype.Int8{Int64: 6800, Valid: true},
+			Quantity:   1,
+		}}, nil)
+	store.EXPECT().
+		ListComboDishOrderability(gomock.Any(), comboID).
+		Times(1).
+		Return([]db.ListComboDishOrderabilityRow{
+			comboDishOrderabilityRow(60, "旧餐盒", true, true, true, true),
+		}, nil)
+
+	_, err := CalculateCartPreview(
+		context.Background(),
+		store,
+		nil,
+		db.Merchant{ID: merchantID, RegionID: 9},
+		func(context.Context, int64, int64, int32, int64) (DeliveryFeeComputation, error) {
+			t.Fatal("delivery fee should not be called for rejected cart item")
+			return DeliveryFeeComputation{}, nil
+		},
+		CartPreviewInput{
+			UserID:                      userID,
+			MerchantID:                  merchantID,
+			OrderType:                   db.OrderTypeTakeaway,
+			RejectLegacyPackagingDishes: true,
+		},
+	)
+
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 400, reqErr.Status)
+	require.Equal(t, "包装已迁移到包装设置，请在包装设置中维护", reqErr.Err.Error())
 }
 
 func TestCalculateCartPreview_SelectedPackagingAddsFeeAndKeepsFoodSubtotalForPromotions(t *testing.T) {

@@ -68,11 +68,18 @@ func (q *Queries) AddFavoriteMerchant(ctx context.Context, arg AddFavoriteMercha
 
 const countFavoriteDishes = `-- name: CountFavoriteDishes :one
 SELECT COUNT(*) FROM favorites
-WHERE user_id = $1 AND favorite_type = 'dish'
+JOIN dishes d ON d.id = favorites.dish_id
+WHERE favorites.user_id = $1 AND favorites.favorite_type = 'dish'
+  AND (NOT $2::boolean OR d.is_packaging = false)
 `
 
-func (q *Queries) CountFavoriteDishes(ctx context.Context, userID int64) (int64, error) {
-	row := q.db.QueryRow(ctx, countFavoriteDishes, userID)
+type CountFavoriteDishesParams struct {
+	UserID           int64 `json:"user_id"`
+	ExcludePackaging bool  `json:"exclude_packaging"`
+}
+
+func (q *Queries) CountFavoriteDishes(ctx context.Context, arg CountFavoriteDishesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countFavoriteDishes, arg.UserID, arg.ExcludePackaging)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -92,18 +99,24 @@ func (q *Queries) CountFavoriteMerchants(ctx context.Context, userID int64) (int
 
 const isDishFavorited = `-- name: IsDishFavorited :one
 SELECT EXISTS(
-    SELECT 1 FROM favorites
-    WHERE user_id = $1 AND favorite_type = 'dish' AND dish_id = $2
+    SELECT 1
+    FROM favorites f
+    JOIN dishes d ON d.id = f.dish_id
+    WHERE f.user_id = $1
+      AND f.favorite_type = 'dish'
+      AND f.dish_id = $2
+      AND (NOT $3::boolean OR d.is_packaging = false)
 ) AS is_favorited
 `
 
 type IsDishFavoritedParams struct {
-	UserID int64       `json:"user_id"`
-	DishID pgtype.Int8 `json:"dish_id"`
+	UserID           int64       `json:"user_id"`
+	DishID           pgtype.Int8 `json:"dish_id"`
+	ExcludePackaging bool        `json:"exclude_packaging"`
 }
 
 func (q *Queries) IsDishFavorited(ctx context.Context, arg IsDishFavoritedParams) (bool, error) {
-	row := q.db.QueryRow(ctx, isDishFavorited, arg.UserID, arg.DishID)
+	row := q.db.QueryRow(ctx, isDishFavorited, arg.UserID, arg.DishID, arg.ExcludePackaging)
 	var is_favorited bool
 	err := row.Scan(&is_favorited)
 	return is_favorited, err
@@ -146,14 +159,16 @@ FROM favorites f
 JOIN dishes d ON d.id = f.dish_id
 JOIN merchants m ON m.id = d.merchant_id
 WHERE f.user_id = $1 AND f.favorite_type = 'dish'
+  AND (NOT $4::boolean OR d.is_packaging = false)
 ORDER BY f.created_at DESC, f.id DESC
 LIMIT $2 OFFSET $3
 `
 
 type ListFavoriteDishesParams struct {
-	UserID int64 `json:"user_id"`
-	Limit  int32 `json:"limit"`
-	Offset int32 `json:"offset"`
+	UserID           int64 `json:"user_id"`
+	Limit            int32 `json:"limit"`
+	Offset           int32 `json:"offset"`
+	ExcludePackaging bool  `json:"exclude_packaging"`
 }
 
 type ListFavoriteDishesRow struct {
@@ -172,7 +187,12 @@ type ListFavoriteDishesRow struct {
 }
 
 func (q *Queries) ListFavoriteDishes(ctx context.Context, arg ListFavoriteDishesParams) ([]ListFavoriteDishesRow, error) {
-	rows, err := q.db.Query(ctx, listFavoriteDishes, arg.UserID, arg.Limit, arg.Offset)
+	rows, err := q.db.Query(ctx, listFavoriteDishes,
+		arg.UserID,
+		arg.Limit,
+		arg.Offset,
+		arg.ExcludePackaging,
+	)
 	if err != nil {
 		return nil, err
 	}
