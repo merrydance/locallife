@@ -88,6 +88,11 @@ func TestBaofuWithdrawServiceQueryBalanceUsesCollectMerchant(t *testing.T) {
 		ContractNo:   pgtype.Text{String: "CM_BINDING", Valid: true},
 		SharingMerID: pgtype.Text{String: "RIDER_SHARE_001", Valid: true},
 	}, nil)
+	store.EXPECT().GetBaofuWithdrawalAccountGuardByOwner(gomock.Any(), db.GetBaofuWithdrawalAccountGuardByOwnerParams{
+		OwnerType:        db.BaofuAccountOwnerTypeRider,
+		OwnerID:          9,
+		AccountBindingID: 81,
+	}).Return(db.BaofuWithdrawalAccountGuard{}, db.ErrRecordNotFound)
 
 	result, err := service.QueryBalance(context.Background(), BaofuBalanceQueryInput{
 		OwnerType: db.BaofuAccountOwnerTypeRider,
@@ -100,6 +105,55 @@ func TestBaofuWithdrawServiceQueryBalanceUsesCollectMerchant(t *testing.T) {
 	require.Equal(t, "CM_BINDING", client.balanceReq.ContractNo)
 	require.Equal(t, db.BaofuAccountTypePersonal, client.balanceReq.AccountType)
 	require.Equal(t, 1, client.balanceCallCount)
+}
+
+func TestBaofuWithdrawServiceQueryBalanceDeductsLocalReservedAmount(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	client := &baofuWithdrawClientRecorder{
+		balanceRes: &baofucontracts.BalanceResult{ContractNo: "CM_BINDING", AvailableAmountFen: 1200, PendingAmountFen: 300, LedgerAmountFen: 1500},
+	}
+	service := NewBaofuWithdrawService(store, client, BaofuWithdrawServiceConfig{
+		CollectMerchantID: "COLLECT_MER",
+		CollectTerminalID: "COLLECT_TER",
+		PayoutMerchantID:  "PAYOUT_MER",
+		PayoutTerminalID:  "PAYOUT_TER",
+	})
+
+	binding := db.BaofuAccountBinding{
+		ID:           81,
+		OwnerType:    db.BaofuAccountOwnerTypeRider,
+		OwnerID:      9,
+		AccountType:  db.BaofuAccountTypePersonal,
+		OpenState:    db.BaofuAccountOpenStateActive,
+		ContractNo:   pgtype.Text{String: "CM_BINDING", Valid: true},
+		SharingMerID: pgtype.Text{String: "RIDER_SHARE_001", Valid: true},
+	}
+	store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
+		OwnerType: binding.OwnerType,
+		OwnerID:   binding.OwnerID,
+	}).Return(binding, nil)
+	store.EXPECT().GetBaofuWithdrawalAccountGuardByOwner(gomock.Any(), db.GetBaofuWithdrawalAccountGuardByOwnerParams{
+		OwnerType:        binding.OwnerType,
+		OwnerID:          binding.OwnerID,
+		AccountBindingID: binding.ID,
+	}).Return(db.BaofuWithdrawalAccountGuard{
+		OwnerType:         binding.OwnerType,
+		OwnerID:           binding.OwnerID,
+		AccountBindingID:  binding.ID,
+		ReservedAmountFen: 800,
+	}, nil)
+
+	result, err := service.QueryBalance(context.Background(), BaofuBalanceQueryInput{
+		OwnerType: binding.OwnerType,
+		OwnerID:   binding.OwnerID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(400), result.AvailableAmountFen)
+	require.Equal(t, int64(300), result.PendingAmountFen)
+	require.True(t, result.CanWithdraw)
 }
 
 func TestBaofuWithdrawServiceQueryBalanceReturnsUnavailableWhenBindingMissing(t *testing.T) {

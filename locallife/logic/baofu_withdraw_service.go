@@ -29,6 +29,7 @@ const (
 
 type baofuWithdrawStore interface {
 	GetBaofuAccountBindingByOwner(ctx context.Context, arg db.GetBaofuAccountBindingByOwnerParams) (db.BaofuAccountBinding, error)
+	GetBaofuWithdrawalAccountGuardByOwner(ctx context.Context, arg db.GetBaofuWithdrawalAccountGuardByOwnerParams) (db.BaofuWithdrawalAccountGuard, error)
 	GetBaofuWithdrawalOrderByIdempotency(ctx context.Context, arg db.GetBaofuWithdrawalOrderByIdempotencyParams) (db.BaofuWithdrawalOrder, error)
 	CreateBaofuWithdrawalOrderWithReservationAndSubmittedCommandTx(ctx context.Context, arg db.CreateBaofuWithdrawalOrderWithReservationAndSubmittedCommandTxParams) (db.CreateBaofuWithdrawalOrderWithReservationAndSubmittedCommandTxResult, error)
 }
@@ -137,7 +138,11 @@ func (s *BaofuWithdrawService) QueryBalance(ctx context.Context, input BaofuBala
 	if upstream == nil {
 		return result, errors.New("baofu balance query returned empty result")
 	}
-	result.AvailableAmountFen = upstream.AvailableAmountFen
+	localReservedAmountFen, err := s.baofuWithdrawalLocalReservedAmount(ctx, binding)
+	if err != nil {
+		return result, err
+	}
+	result.AvailableAmountFen = baofuWithdrawalAvailableAfterLocalReservation(upstream.AvailableAmountFen, localReservedAmountFen)
 	result.PendingAmountFen = upstream.PendingAmountFen
 	result.LedgerAmountFen = upstream.LedgerAmountFen
 	result.FrozenAmountFen = upstream.FrozenAmountFen
@@ -145,6 +150,34 @@ func (s *BaofuWithdrawService) QueryBalance(ctx context.Context, input BaofuBala
 	result.StatusDesc = "结算账户已开通"
 	result.CanWithdraw = true
 	return result, nil
+}
+
+func (s *BaofuWithdrawService) baofuWithdrawalLocalReservedAmount(ctx context.Context, binding db.BaofuAccountBinding) (int64, error) {
+	guard, err := s.store.GetBaofuWithdrawalAccountGuardByOwner(ctx, db.GetBaofuWithdrawalAccountGuardByOwnerParams{
+		OwnerType:        binding.OwnerType,
+		OwnerID:          binding.OwnerID,
+		AccountBindingID: binding.ID,
+	})
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("get baofu withdrawal account guard: %w", err)
+	}
+	if guard.ReservedAmountFen <= 0 {
+		return 0, nil
+	}
+	return guard.ReservedAmountFen, nil
+}
+
+func baofuWithdrawalAvailableAfterLocalReservation(providerAvailableAmountFen int64, localReservedAmountFen int64) int64 {
+	if localReservedAmountFen <= 0 {
+		return providerAvailableAmountFen
+	}
+	if providerAvailableAmountFen <= localReservedAmountFen {
+		return 0
+	}
+	return providerAvailableAmountFen - localReservedAmountFen
 }
 
 func (s *BaofuWithdrawService) CreateWithdrawal(ctx context.Context, input BaofuCreateWithdrawalInput) (BaofuCreateWithdrawalResult, error) {
