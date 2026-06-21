@@ -1165,6 +1165,9 @@ func (server *Server) updateDish(ctx *gin.Context) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("category does not belong to this merchant")))
 			return
 		}
+		if respondMerchantSelectableTagTxError(ctx, err) {
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("update dish tx: %w", err)))
 		return
 	}

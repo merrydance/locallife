@@ -102,6 +102,9 @@ func respondCustomizationTagLookupError(ctx *gin.Context, tagID int64, err error
 }
 
 func respondDishCustomizationTxError(ctx *gin.Context, operation string, err error) {
+	if respondMerchantSelectableTagTxError(ctx, err) {
+		return
+	}
 	if errors.Is(err, db.ErrCustomizationTagUnavailable) || errors.Is(err, db.ErrDuplicateCustomizationOption) {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return

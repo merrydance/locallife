@@ -286,6 +286,29 @@ func TestCreateComboSetAPI(t *testing.T) {
 			},
 		},
 		{
+			name: "UnselectableMerchantTagDuringCreate",
+			body: gin.H{
+				"name":        combo.Name,
+				"combo_price": combo.ComboPrice,
+				"tag_ids":     []int64{101},
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					CreateComboSetTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.CreateComboSetTxResult{}, db.ErrMerchantSelectableTagUnavailable)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Contains(t, recorder.Body.String(), "tag is not selectable for this merchant")
+			},
+		},
+		{
 			name: "DuplicateDishes",
 			body: gin.H{
 				"name":        combo.Name,
@@ -1137,6 +1160,40 @@ func TestUpdateComboSetAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name: "UnselectableMerchantTagDuringUpdate",
+			body: gin.H{
+				"id":      combo.ID,
+				"tag_ids": []int64{101},
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetComboSet(gomock.Any(), gomock.Eq(combo.ID)).
+					Times(1).
+					Return(combo, nil)
+
+				store.EXPECT().
+					ListComboDishOrderability(gomock.Any(), gomock.Eq(combo.ID)).
+					Times(1).
+					Return([]db.ListComboDishOrderabilityRow{
+						comboDishOrderabilityRow(normalizedDishID, normalizedDish.Name, true, true, true),
+					}, nil)
+
+				store.EXPECT().
+					UpdateComboSetTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.UpdateComboSetTxResult{}, db.ErrMerchantSelectableTagUnavailable)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Contains(t, recorder.Body.String(), "tag is not selectable for this merchant")
 			},
 		},
 		{

@@ -207,6 +207,40 @@ func TestCreateTableAPI(t *testing.T) {
 			},
 		},
 		{
+			name: "UnselectableMerchantTagDuringCreate",
+			body: gin.H{
+				"table_no":   table.TableNo,
+				"table_type": table.TableType,
+				"capacity":   table.Capacity,
+				"tag_ids":    []int64{tagID},
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetTableByMerchantAndNo(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.Table{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
+					GetTag(gomock.Any(), gomock.Eq(tagID)).
+					Times(1).
+					Return(db.Tag{ID: tagID, Type: "table"}, nil)
+
+				store.EXPECT().
+					CreateTableTx(gomock.Any(), gomock.AssignableToTypeOf(db.CreateTableTxParams{})).
+					Times(1).
+					Return(db.CreateTableTxResult{}, db.ErrMerchantSelectableTagUnavailable)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Contains(t, recorder.Body.String(), "tag is not selectable for this merchant")
+			},
+		},
+		{
 			name: "NoAuthorization",
 			body: gin.H{
 				"table_no":   table.TableNo,
@@ -793,6 +827,39 @@ func TestUpdateTableAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
+			},
+		},
+		{
+			name:    "UnselectableMerchantTagDuringUpdate",
+			tableID: table.ID,
+			body: gin.H{
+				"capacity": newCapacity,
+				"tag_ids":  []int64{tagID},
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetTable(gomock.Any(), gomock.Eq(table.ID)).
+					Times(1).
+					Return(table, nil)
+
+				store.EXPECT().
+					GetTag(gomock.Any(), gomock.Eq(tagID)).
+					Times(1).
+					Return(db.Tag{ID: tagID, Type: "table"}, nil)
+
+				store.EXPECT().
+					UpdateTableTx(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateTableTxParams{})).
+					Times(1).
+					Return(db.UpdateTableTxResult{}, db.ErrMerchantSelectableTagUnavailable)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Contains(t, recorder.Body.String(), "tag is not selectable for this merchant")
 			},
 		},
 		{

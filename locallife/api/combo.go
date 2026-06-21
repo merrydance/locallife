@@ -391,6 +391,9 @@ func (server *Server) createComboSet(ctx *gin.Context) {
 		TagIDs:        req.TagIDs,
 	})
 	if err != nil {
+		if respondMerchantSelectableTagTxError(ctx, err) {
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -852,6 +855,9 @@ func (server *Server) updateComboSet(ctx *gin.Context) {
 		TagIDs:            tagIDs,
 	})
 	if err != nil {
+		if respondMerchantSelectableTagTxError(ctx, err) {
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}

@@ -745,6 +745,40 @@ func TestCreateDishAPI(t *testing.T) {
 			},
 		},
 		{
+			name: "UnselectableMerchantTagDuringCreate",
+			body: gin.H{
+				"category_id":  category.ID,
+				"name":         dish.Name,
+				"price":        dish.Price,
+				"is_available": true,
+				"is_online":    true,
+				"tag_ids":      []int64{101},
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetMerchantDishCategory(gomock.Any(), gomock.Eq(db.GetMerchantDishCategoryParams{
+						MerchantID: merchant.ID,
+						CategoryID: category.ID,
+					})).
+					Times(1).
+					Return(db.MerchantDishCategory{}, nil)
+
+				store.EXPECT().
+					CreateDishTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.CreateDishTxResult{}, db.ErrMerchantSelectableTagUnavailable)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Contains(t, recorder.Body.String(), "tag is not selectable for this merchant")
+			},
+		},
+		{
 			name: "InvalidPrice",
 			body: gin.H{
 				"name":  dish.Name,
@@ -1663,6 +1697,33 @@ func TestUpdateDishAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
 				require.Contains(t, recorder.Body.String(), "category does not belong to this merchant")
+			},
+		},
+		{
+			name:   "UnselectableMerchantTagDuringUpdate",
+			dishID: dish.ID,
+			body: gin.H{
+				"tag_ids": []int64{101},
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetDish(gomock.Any(), gomock.Eq(dish.ID)).
+					Times(1).
+					Return(dish, nil)
+
+				store.EXPECT().
+					UpdateDishTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.UpdateDishTxResult{}, db.ErrMerchantSelectableTagUnavailable)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Contains(t, recorder.Body.String(), "tag is not selectable for this merchant")
 			},
 		},
 	}

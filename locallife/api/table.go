@@ -385,6 +385,9 @@ func (server *Server) createTable(ctx *gin.Context) {
 			TagIDs: req.TagIds,
 		})
 		if err != nil {
+			if respondMerchantSelectableTagTxError(ctx, err) {
+				return
+			}
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
@@ -864,6 +867,9 @@ func (server *Server) updateTable(ctx *gin.Context) {
 			}
 			if errors.Is(err, db.ErrTableHasFutureReservations) {
 				ctx.JSON(http.StatusConflict, errorResponse(errTableUpdateFutureReservations))
+				return
+			}
+			if respondMerchantSelectableTagTxError(ctx, err) {
 				return
 			}
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
