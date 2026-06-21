@@ -17270,6 +17270,21 @@ func (mr *MockStoreMockRecorder) ListProfitSharingConfigsForRegion(ctx, arg any)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListProfitSharingConfigsForRegion", reflect.TypeOf((*MockStore)(nil).ListProfitSharingConfigsForRegion), ctx, arg)
 }
 
+// ListProfitSharingConfigsForRegions mocks base method.
+func (m *MockStore) ListProfitSharingConfigsForRegions(ctx context.Context, arg db.ListProfitSharingConfigsForRegionsParams) ([]db.ProfitSharingConfig, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListProfitSharingConfigsForRegions", ctx, arg)
+	ret0, _ := ret[0].([]db.ProfitSharingConfig)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListProfitSharingConfigsForRegions indicates an expected call of ListProfitSharingConfigsForRegions.
+func (mr *MockStoreMockRecorder) ListProfitSharingConfigsForRegions(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListProfitSharingConfigsForRegions", reflect.TypeOf((*MockStore)(nil).ListProfitSharingConfigsForRegions), ctx, arg)
+}
+
 // ListProfitSharingOrdersByMerchant mocks base method.
 func (m *MockStore) ListProfitSharingOrdersByMerchant(ctx context.Context, arg db.ListProfitSharingOrdersByMerchantParams) ([]db.ProfitSharingOrder, error) {
 	m.ctrl.T.Helper()

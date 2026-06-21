@@ -290,6 +290,70 @@ func (q *Queries) ListProfitSharingConfigsForRegion(ctx context.Context, arg Lis
 	return items, nil
 }
 
+const listProfitSharingConfigsForRegions = `-- name: ListProfitSharingConfigsForRegions :many
+SELECT psc.id, psc.status, psc.order_source, psc.region_id, psc.merchant_id, psc.platform_rate, psc.operator_rate, psc.rider_enabled, psc.priority, psc.effective_at, psc.expires_at, psc.created_by, psc.created_at, psc.updated_at
+FROM profit_sharing_configs psc
+LEFT JOIN merchants m ON m.id = psc.merchant_id
+WHERE (NULLIF($1::text, '') IS NULL OR psc.status = $1)
+  AND (NULLIF($2::text, '') IS NULL OR psc.order_source = $2)
+  AND (psc.region_id IS NULL OR psc.region_id = ANY($3::bigint[]))
+  AND ($4::bigint = 0 OR psc.merchant_id = $4)
+  AND (psc.merchant_id IS NULL OR m.region_id = ANY($3::bigint[]))
+ORDER BY psc.priority ASC, psc.id DESC
+LIMIT $6 OFFSET $5
+`
+
+type ListProfitSharingConfigsForRegionsParams struct {
+	Status      string  `json:"status"`
+	OrderSource string  `json:"order_source"`
+	RegionIds   []int64 `json:"region_ids"`
+	MerchantID  int64   `json:"merchant_id"`
+	Offset      int32   `json:"offset"`
+	Limit       int32   `json:"limit"`
+}
+
+func (q *Queries) ListProfitSharingConfigsForRegions(ctx context.Context, arg ListProfitSharingConfigsForRegionsParams) ([]ProfitSharingConfig, error) {
+	rows, err := q.db.Query(ctx, listProfitSharingConfigsForRegions,
+		arg.Status,
+		arg.OrderSource,
+		arg.RegionIds,
+		arg.MerchantID,
+		arg.Offset,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ProfitSharingConfig{}
+	for rows.Next() {
+		var i ProfitSharingConfig
+		if err := rows.Scan(
+			&i.ID,
+			&i.Status,
+			&i.OrderSource,
+			&i.RegionID,
+			&i.MerchantID,
+			&i.PlatformRate,
+			&i.OperatorRate,
+			&i.RiderEnabled,
+			&i.Priority,
+			&i.EffectiveAt,
+			&i.ExpiresAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setProfitSharingAuditActor = `-- name: SetProfitSharingAuditActor :exec
 SELECT set_config('app.actor_id', $1::text, true),
   set_config('app.actor_role', $2, true),

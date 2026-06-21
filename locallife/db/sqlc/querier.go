@@ -1557,6 +1557,7 @@ type Querier interface {
 	ListProfitSharingConfigAudits(ctx context.Context, arg ListProfitSharingConfigAuditsParams) ([]ProfitSharingConfigAudit, error)
 	ListProfitSharingConfigs(ctx context.Context, arg ListProfitSharingConfigsParams) ([]ProfitSharingConfig, error)
 	ListProfitSharingConfigsForRegion(ctx context.Context, arg ListProfitSharingConfigsForRegionParams) ([]ProfitSharingConfig, error)
+	ListProfitSharingConfigsForRegions(ctx context.Context, arg ListProfitSharingConfigsForRegionsParams) ([]ProfitSharingConfig, error)
 	ListProfitSharingOrdersByMerchant(ctx context.Context, arg ListProfitSharingOrdersByMerchantParams) ([]ProfitSharingOrder, error)
 	ListProfitSharingOrdersByOperator(ctx context.Context, arg ListProfitSharingOrdersByOperatorParams) ([]ProfitSharingOrder, error)
 	ListProfitSharingOrdersByOrderIDsForMerchant(ctx context.Context, arg ListProfitSharingOrdersByOrderIDsForMerchantParams) ([]ListProfitSharingOrdersByOrderIDsForMerchantRow, error)

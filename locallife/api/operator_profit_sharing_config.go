@@ -4,11 +4,11 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 )
 
 type listOperatorProfitSharingConfigsRequest struct {
+	RegionID    int64  `form:"region_id" binding:"omitempty,min=1"`
 	Status      string `form:"status"`
 	OrderSource string `form:"order_source"`
 	MerchantID  int64  `form:"merchant_id"`
@@ -28,6 +28,7 @@ type listOperatorProfitSharingConfigsResponse struct {
 // @Tags 运营商数据统计
 // @Accept json
 // @Produce json
+// @Param region_id query int false "区域ID；不传时聚合当前运营商全部可管区域"
 // @Param status query string false "状态"
 // @Param order_source query string false "订单来源"
 // @Param merchant_id query int false "商户ID"
@@ -52,19 +53,19 @@ func (server *Server) listOperatorProfitSharingConfigs(ctx *gin.Context) {
 		req.Limit = 20
 	}
 
-	regionID, err := server.getOperatorRegionID(ctx)
+	selection, err := server.resolveOperatorRegionSelection(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(err))
+		server.respondOperatorRegionSelectionError(ctx, err)
 		return
 	}
 
-	configs, err := server.store.ListProfitSharingConfigsForRegion(ctx, db.ListProfitSharingConfigsForRegionParams{
-		Column1:  req.Status,
-		Column2:  req.OrderSource,
-		RegionID: pgtype.Int8{Int64: regionID, Valid: regionID > 0},
-		Column4:  req.MerchantID,
-		Limit:    req.Limit,
-		Offset:   pageOffset(req.Page, req.Limit),
+	configs, err := server.store.ListProfitSharingConfigsForRegions(ctx, db.ListProfitSharingConfigsForRegionsParams{
+		Status:      req.Status,
+		OrderSource: req.OrderSource,
+		RegionIds:   selection.RegionIDs,
+		MerchantID:  req.MerchantID,
+		Limit:       req.Limit,
+		Offset:      pageOffset(req.Page, req.Limit),
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
