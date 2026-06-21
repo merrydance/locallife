@@ -78,6 +78,7 @@ func TestListOperatorRules_RiderDepositUsesRegionConfigBeforeOperatorConfig(t *t
 		WeatherCoeffLight: numericFromFloat(1.1),
 	}
 
+	expectOperatorManagesRegion(store, operator, operator.RegionID, true)
 	store.EXPECT().
 		GetRegionRuleConfigByRegion(gomock.Any(), int64(12)).
 		Return(db.RegionRuleConfig{
@@ -119,6 +120,103 @@ func TestListOperatorRules_RiderDepositUsesRegionConfigBeforeOperatorConfig(t *t
 	require.Contains(t, rule.Desc, "当前区域配置")
 }
 
+func TestListOperatorRules_NoRegionParamRejectsSuspendedLegacyPrimaryRegion(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	operator := db.Operator{ID: 8, UserID: 88, RegionID: 12}
+
+	store.EXPECT().
+		CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
+			OperatorID: operator.ID,
+			RegionID:   operator.RegionID,
+		}).
+		Return(false, nil)
+	store.EXPECT().
+		GetOperatorRegion(gomock.Any(), db.GetOperatorRegionParams{
+			OperatorID: operator.ID,
+			RegionID:   operator.RegionID,
+		}).
+		Return(db.OperatorRegion{
+			OperatorID: operator.ID,
+			RegionID:   operator.RegionID,
+			Status:     db.OperatorRegionStatusSuspended,
+		}, nil)
+	store.EXPECT().
+		ListOperatorRegions(gomock.Any(), operator.ID).
+		Return([]db.ListOperatorRegionsRow{}, nil)
+
+	ctx, recorder := newJSONTestContext(http.MethodGet, "/v1/operator/rules", "")
+	ctx.Set(operatorKey, operator)
+
+	server.listOperatorRules(ctx)
+
+	require.Equal(t, http.StatusForbidden, recorder.Code)
+}
+
+func TestListOperatorRules_ExplicitRegionUsesAuthorizedRegion(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	operator := db.Operator{ID: 8, UserID: 88, RegionID: 12, RiderDeposit: 26000}
+	explicitRegionID := int64(34)
+
+	expectOperatorManagesRegion(store, operator, explicitRegionID, true)
+	store.EXPECT().
+		GetRegionRuleConfigByRegion(gomock.Any(), explicitRegionID).
+		Return(weatherOnlyRegionRuleConfig(explicitRegionID), nil)
+	store.EXPECT().
+		GetActiveProfitSharingConfig(gomock.Any(), gomock.Any()).
+		Return(db.ProfitSharingConfig{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetPlatformConfig(gomock.Any(), db.GetPlatformConfigParams{
+			ConfigKey: operatorRiderDepositConfigKey,
+			ScopeType: db.PlatformConfigScopeGlobal,
+			ScopeID:   pgtype.Int8{Valid: false},
+		}).
+		Return(db.PlatformConfig{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetDeliveryFeeConfigByRegion(gomock.Any(), explicitRegionID).
+		Return(db.DeliveryFeeConfig{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetPlatformConfig(gomock.Any(), db.GetPlatformConfigParams{
+			ConfigKey: deliveryFeeDefaultConfigKey,
+			ScopeType: db.PlatformConfigScopeGlobal,
+			ScopeID:   pgtype.Int8{Valid: false},
+		}).
+		Return(db.PlatformConfig{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetLatestWeatherCoefficient(gomock.Any(), explicitRegionID).
+		Return(db.WeatherCoefficient{}, db.ErrRecordNotFound)
+
+	ctx, recorder := newJSONTestContext(http.MethodGet, "/v1/operator/rules?region_id=34", "")
+	ctx.Set(operatorKey, operator)
+
+	server.listOperatorRules(ctx)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+}
+
+func TestListOperatorRules_InvalidRegionParamReturnsBadRequest(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	operator := db.Operator{ID: 8, UserID: 88, RegionID: 12}
+
+	ctx, recorder := newJSONTestContext(http.MethodGet, "/v1/operator/rules?region_id=-1", "")
+	ctx.Set(operatorKey, operator)
+
+	server.listOperatorRules(ctx)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+}
+
 func TestListOperatorRules_RiderDepositUsesPlatformDefaultWhenOperatorStillOnLegacyBaseline(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -133,6 +231,7 @@ func TestListOperatorRules_RiderDepositUsesPlatformDefaultWhenOperatorStillOnLeg
 		WeatherCoeffLight: numericFromFloat(1.1),
 	}
 
+	expectOperatorManagesRegion(store, operator, operator.RegionID, true)
 	store.EXPECT().
 		GetRegionRuleConfigByRegion(gomock.Any(), int64(12)).
 		Return(weatherOnlyRegionRuleConfig(12), nil)
@@ -189,6 +288,7 @@ func TestListOperatorRules_RiderDepositUsesSystemDefaultWhenNoOverridesExist(t *
 		WeatherCoeffLight: numericFromFloat(1.1),
 	}
 
+	expectOperatorManagesRegion(store, operator, operator.RegionID, true)
 	store.EXPECT().
 		GetRegionRuleConfigByRegion(gomock.Any(), int64(12)).
 		Return(weatherOnlyRegionRuleConfig(12), nil)
@@ -237,6 +337,7 @@ func TestUpdateOperatorRule_RiderDepositUpdatesRegionWithoutTouchingPlatformDefa
 	server := newTestServer(t, store)
 	operator := db.Operator{ID: 8, UserID: 88, RegionID: 12, RiderDeposit: 26000}
 
+	expectOperatorManagesRegion(store, operator, operator.RegionID, true)
 	store.EXPECT().
 		UpdateOperatorRules(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ any, arg db.UpdateOperatorRulesParams) (db.Operator, error) {
@@ -284,6 +385,7 @@ func TestListOperatorRules_RiderDepositIgnoresOperatorScopedConfigAndUsesPlatfor
 		WeatherCoeffLight: numericFromFloat(1.1),
 	}
 
+	expectOperatorManagesRegion(store, operator, operator.RegionID, true)
 	store.EXPECT().
 		GetRegionRuleConfigByRegion(gomock.Any(), int64(12)).
 		Return(weatherOnlyRegionRuleConfig(12), nil)
@@ -459,6 +561,7 @@ func TestUpdateOperatorRule_RiderDepositDemotesOnlineRiderWhenThresholdIncreases
 		RegionID:      pgtype.Int8{Int64: 12, Valid: true},
 	}
 
+	expectOperatorManagesRegion(store, operator, operator.RegionID, true)
 	store.EXPECT().
 		UpdateOperatorRules(gomock.Any(), gomock.Any()).
 		Return(operator, nil)
@@ -579,6 +682,7 @@ func TestListOperatorRules_DeliveryFeeUsesPlatformDefaultWhenRegionConfigMissing
 	server := newTestServer(t, store)
 	operator := db.Operator{ID: 8, UserID: 88, RegionID: 12, RiderDeposit: 26000}
 
+	expectOperatorManagesRegion(store, operator, operator.RegionID, true)
 	store.EXPECT().
 		GetRegionRuleConfigByRegion(gomock.Any(), int64(12)).
 		Return(db.RegionRuleConfig{RegionID: 12}, nil)
@@ -644,6 +748,7 @@ func TestListOperatorRules_WeatherUsesCityScopedPlatformDefaultWhenRegionRuleMis
 	server := newTestServer(t, store)
 	operator := db.Operator{ID: 8, UserID: 88, RegionID: 12, RiderDeposit: 26000}
 
+	expectOperatorManagesRegion(store, operator, operator.RegionID, true)
 	store.EXPECT().
 		GetRegionRuleConfigByRegion(gomock.Any(), int64(12)).
 		Return(db.RegionRuleConfig{}, db.ErrRecordNotFound)
@@ -798,6 +903,7 @@ func TestUpdateOperatorRule_WeatherDoesNotOverwritePlatformCityDefault(t *testin
 	server := newTestServer(t, store)
 	operator := db.Operator{ID: 8, UserID: 88, RegionID: 12, RiderDeposit: 26000}
 
+	expectOperatorManagesRegion(store, operator, operator.RegionID, true)
 	store.EXPECT().
 		UpsertRegionRuleConfig(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ any, arg db.UpsertRegionRuleConfigParams) (db.RegionRuleConfig, error) {
@@ -827,6 +933,7 @@ func TestUpdateOperatorRule_WeatherCoefficientInvalidatesWeatherCache(t *testing
 	server.weatherCache = cache
 	operator := db.Operator{ID: 8, UserID: 88, RegionID: 12}
 
+	expectOperatorManagesRegion(store, operator, operator.RegionID, true)
 	store.EXPECT().
 		UpsertRegionRuleConfig(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ any, arg db.UpsertRegionRuleConfigParams) (db.RegionRuleConfig, error) {
@@ -856,6 +963,7 @@ func TestUpdateOperatorRule_WeatherCoefficientCacheDeleteFailureIsNonFatal(t *te
 	server.weatherCache = &testWeatherCache{deleteErr: errors.New("redis unavailable")}
 	operator := db.Operator{ID: 8, UserID: 88, RegionID: 12}
 
+	expectOperatorManagesRegion(store, operator, operator.RegionID, true)
 	store.EXPECT().
 		UpsertRegionRuleConfig(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ any, arg db.UpsertRegionRuleConfigParams) (db.RegionRuleConfig, error) {
@@ -893,6 +1001,7 @@ func TestUpdateOperatorRule_BaseDeliveryFeeSeedsRegionConfigWithPlatformMaxFee(t
 	createdConfig := seedConfig
 	createdConfig.ID = 99
 
+	expectOperatorManagesRegion(store, operator, operator.RegionID, true)
 	store.EXPECT().
 		GetDeliveryFeeConfigByRegion(gomock.Any(), int64(12)).
 		Return(db.DeliveryFeeConfig{}, db.ErrRecordNotFound)
@@ -960,6 +1069,7 @@ func TestUpdateOperatorRule_BaseDeliveryFeeReusesInactiveRegionConfig(t *testing
 		IsActive:      false,
 	}
 
+	expectOperatorManagesRegion(store, operator, operator.RegionID, true)
 	store.EXPECT().
 		GetDeliveryFeeConfigByRegion(gomock.Any(), int64(12)).
 		Return(existingConfig, nil)
@@ -1004,6 +1114,7 @@ func TestUpdateOperatorRule_MaxDeliveryFeeAllowsUnlimited(t *testing.T) {
 	updatedConfig := existingConfig
 	updatedConfig.MaxFee = pgtype.Int8{}
 
+	expectOperatorManagesRegion(store, operator, operator.RegionID, true)
 	store.EXPECT().
 		GetDeliveryFeeConfigByRegion(gomock.Any(), int64(12)).
 		Return(existingConfig, nil)

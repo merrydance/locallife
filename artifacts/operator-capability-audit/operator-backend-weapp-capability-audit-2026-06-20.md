@@ -179,7 +179,7 @@
 | OP-NOUI-003 | 后端已实现但无页面入口 | 分账规则配置 | 当前确认 |
 | OP-NOUI-004 | 后端已实现但无页面入口 | 规则引擎代理 | 当前确认 |
 | OP-RISK-001 | 后端-only 残余风险 | 分账配置默认单区域口径 | 已修复：默认聚合全部可管区域，merchant-scoped 配置不跨区泄漏 |
-| OP-RISK-002 | API 直接调用残余风险 | `/v1/operator/rules` 无参 legacy 兜底 | 待加固：小程序页面路径已显式传 `region_id` |
+| OP-RISK-002 | API 直接调用残余风险 | `/v1/operator/rules` 无参 legacy 兜底 | 已修复：无参复用单区域 active 授权解析，suspended legacy fail closed |
 | OP-CONTRACT-002/005 | 历史候选 | 商户/骑手 summary `region_id` | 当前代码已支持或无页面调用，不计当前缺陷 |
 
 ## 二轮漂移复盘与方法修正
@@ -871,7 +871,7 @@ SQL 证据：
 
 - `OPA-011`、`OPA-012` 是新增方法发现的真实生产路径漂移，均影响当前运营商小程序默认路径，不能视为文档债。
 - `OP-RISK-001` 分账配置属于 backend-only 加固项；后续已从 `getOperatorRegionID()` 切换为多区域选择器，默认聚合全部 active 可管区域，merchant-scoped 配置仍按商户所属区域过滤。
-- `OP-RISK-002` `/v1/operator/rules` 后端无参时会先返回 `operators.region_id`，没有校验 active/suspended 关系；小程序规则页当前强制从区域页进入并传 `region_id`，页面路径未复现，但 API 直接调用口径应后续统一。
+- `OP-RISK-002` `/v1/operator/rules` 后端无参兜底已复用单区域 active 授权解析，不再直接信任 `operators.region_id`；小程序规则页当前仍显式传 `region_id`，页面路径保持原语义。
 - 本轮暂未把商户/骑手详情页展示原始 ID、坐标等体验问题升为前后端漂移；它们属于后续运营端信息架构升级机会，不影响当前后端真值或权限边界。
 
 ## 修复任务计划
@@ -1026,8 +1026,8 @@ SQL 证据：
 
 3. `OP-RISK-002-A` 规则无参兜底加固
    - 文件：`locallife/api/operator_rules.go`
-   - 内容：`resolveOperatorRuleRegionID()` 无参时不直接信 `operator.RegionID`；改为 `getOperatorRegionID()` 或显式校验 active/suspended 关系。由于小程序规则页已传 `region_id`，本项主要锁 API 直接调用。
-   - 验证：新增 suspended relation 无参 API tests；现有 `rules/index` 小程序路径不受影响。
+   - 内容：已将 `resolveOperatorRuleRegionID()` 无参路径改为 `getOperatorRegionID()`，规则配置保持单区域能力，不默认聚合；legacy 主区域必须通过 active 授权关系，suspended fail closed。
+   - 验证：新增 suspended relation 无参、显式授权区域、非法 `region_id` API tests；现有 `rules/index` 小程序路径不受影响。
 
 4. `OP-RISK-002-B` 运营侧 helper 使用矩阵脚本化
    - 文件：可新增 `weapp/scripts/check-operator-capability-audit` 补充项或后端轻量脚本。
@@ -1410,7 +1410,7 @@ SQL 证据：
 | History Batch 7 | `OPA-008`、`OPA-009`、`OPA-010` | 用户回归暴露的二轮漂移收口 | 已完成：页面成功态可见、调度区域授权一致、财务关键展示由 ViewModel 输出 |
 | Next Batch 1 | `OPA-011` | 食安案件多区域默认视图与处置授权 | 多区域列表、详情、调查、结案测试通过；非管理/suspended fail closed |
 | Next Batch 2 | `OPA-012` | 佣金明细默认聚合与财务口径统一 | overview、recent commission、bill items 同一区域集合；summary/page/count 一致 |
-| Next Batch 3 | `OP-RISK-001/002` | backend-only 和 API 直接调用残余风险加固 | 分账配置已完成多区域默认聚合；规则无参兜底仍需完成显式语义裁决与 focused tests |
+| Next Batch 3 | `OP-RISK-001/002` | backend-only 和 API 直接调用残余风险加固 | 分账配置和规则无参兜底已完成；helper 使用矩阵脚本化仍需收口 |
 
 ### 每个大问题完成后的复核模板
 
@@ -1664,6 +1664,20 @@ SQL 证据：
 | 非目标 | 未改变平台侧分账配置创建/更新/停用接口；未改变实际订单分账计算、分账订单 SQL、支付/退款/提现流程；未新增运营商小程序页面 |
 | 剩余风险 | 默认 `locallife_test` 本地库当前记录到 migration version 277，但本分支 migration 目录到 276，直接跑 `go test ./db/sqlc` 会被 migrate 初始化阻断；本次已用干净临时库验证 SQLC 行为，后续仍建议清理默认测试库漂移 |
 
+#### OP-RISK-002-A 完成复核：区域规则无参兜底授权加固
+
+| 字段 | 记录 |
+| --- | --- |
+| 完成范围 | `OP-RISK-002-A`；本次提交涉及 `locallife/api/operator_rules.go`、`locallife/api/operator_deposit_rules_test.go`、本文档 |
+| 设计目标 | 已达成：`GET/PATCH /v1/operator/rules` 仍是单区域规则配置能力；显式 `region_id` 继续按该区域授权；无参不再直接返回 `operators.region_id`，而是复用 `getOperatorRegionID()` 的 active/suspended/多区域必选语义 |
+| 设计修正 | 不把规则列表改成多区域聚合。规则页展示和写入都面向单个区域规则配置，多区域 operator 应显式传 `region_id`；当前小程序规则页已经从区域入口携带 `region_id` |
+| 时序 | 读/写规则前先解析授权区域；suspended legacy 主区域不会继续读取 `GetRegionRuleConfigByRegion`、分账配置、运费配置或天气配置；写路径不会进入 `UpsertRegionRuleConfig` 或运费更新 |
+| 幂等 | 读路径无副作用；写路径仍沿用既有更新语义和骑手状态同步逻辑，本项只在写入前增加同一授权解析，不改变重复提交结果 |
+| 越权 | 新增回归覆盖无参 suspended legacy primary region 返回 403；显式授权区域可读；非法 `region_id` 返回 400；既有规则读写测试显式声明当前 operator 必须管理目标区域 |
+| 回归 | 红灯：新增 `TestListOperatorRules_NoRegionParamRejectsSuspendedLegacyPrimaryRegion` 在旧实现上未触发 `CheckOperatorManagesRegion/GetOperatorRegion`，直接进入规则读取；绿灯：`PATH=/usr/local/go/bin:$PATH go test ./api -run 'TestListOperatorRules_(NoRegionParamRejectsSuspendedLegacyPrimaryRegion\|ExplicitRegionUsesAuthorizedRegion\|InvalidRegionParamReturnsBadRequest)' -count=1` 通过；扩展绿灯：`PATH=/usr/local/go/bin:$PATH go test ./api -run 'Test(ListOperatorRules\|UpdateOperatorRule)' -count=1` 通过 |
+| 非目标 | 未重构规则配置字段、天气系数、运费 fallback、骑手押金阈值同步；未新增小程序页面；未处理 helper 使用矩阵脚本化，留给 `OP-RISK-002-B` |
+| 剩余风险 | 当前仍依赖文档和 focused tests 约束 `getOperatorRegionID()` 使用点分类；下一小任务需要把 helper 使用矩阵脚本化，防止后续新增 operator handler 时再次出现默认语义漂移 |
+
 ## 后续审计工作记录
 
 后续继续在本节追加全量盘点结果。每个能力或页面至少记录：
@@ -1683,4 +1697,4 @@ SQL 证据：
 | OPA-011 | 食安案件 | `/v1/operator/food-safety/cases`、`/:id`、`/investigate`、`/resolve` 默认单区域口径 | `operator_food_safety_cases.go`, `operator_food_safety_cases_test.go`, `trust_score.sql`, sqlc/mock 生成物 | `operator/safety/report`, `operator/safety/detail`, `operator-safety.ts`, `operator-basic-management.ts`, `check-operator-food-safety-contract.test.js` | 已修复：`9e8bef7f`、`632921a8`、本次 gate 收口 | 已完成复核 |
 | OPA-012 | 财务佣金 | `/v1/operators/me/commission` 与 `/finance/overview` 默认区域口径不一致 | `operator_stats.go`, `operator_stats_test.go`, Swagger 生成物 | `operator/finance/withdraw`, `operator/finance/bills`, `operator-finance.ts`, `check-operator-finance-overview-display.test.js` | 已修复：本次 OPA-012 提交 | 已完成复核 |
 | OP-RISK-001 | 分账配置 | `/v1/operators/me/profit-sharing/configs` 默认单区域口径 | `operator_profit_sharing_config.go`, `profit_sharing_config.sql`, `profit_sharing_config_test.go` | 当前运营商小程序无入口 | 已修复 | 已完成复核 |
-| OP-RISK-002 | 区域规则 | `/v1/operator/rules` 无参 legacy 兜底 | `operator_rules.go` | `operator/rules/index` 当前显式传 `region_id` | 待加固 | API 直接调用残余风险 |
+| OP-RISK-002 | 区域规则 | `/v1/operator/rules` 无参 legacy 兜底 | `operator_rules.go`, `operator_deposit_rules_test.go` | `operator/rules/index` 当前显式传 `region_id` | 已修复 | 已完成复核；helper 使用矩阵脚本化待 `OP-RISK-002-B` |
