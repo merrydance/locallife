@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -353,6 +354,171 @@ func (q *Queries) GetBaofuDailyReconciliation(ctx context.Context, arg GetBaofuD
 			&i.HistoricalRetryableFailedRefundAmount,
 			&i.HistoricalQueryableFailedRefundCount,
 			&i.HistoricalQueryableFailedRefundAmount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBaofuWithdrawalReservationDrifts = `-- name: ListBaofuWithdrawalReservationDrifts :many
+WITH reserved_reservation_totals AS (
+    SELECT
+        owner_type,
+        owner_id,
+        account_binding_id,
+        COUNT(*)::bigint AS reserved_reservation_count,
+        COALESCE(SUM(amount_fen), 0)::bigint AS reserved_reservation_amount_fen,
+        MIN(id)::bigint AS sample_reservation_id,
+        MAX(updated_at) AS latest_reserved_at
+    FROM baofu_withdrawal_reservations
+    WHERE status = 'reserved'
+    GROUP BY owner_type, owner_id, account_binding_id
+),
+drifts AS (
+    SELECT
+        'processing_missing_reserved_reservation'::text AS drift_type,
+        bwo.owner_type,
+        bwo.owner_id,
+        bwo.account_binding_id,
+        bwo.id::bigint AS withdrawal_order_id,
+        COALESCE(bwr.id, 0)::bigint AS reservation_id,
+        COALESCE(bwag.id, 0)::bigint AS guard_id,
+        bwo.status::text AS withdrawal_status,
+        COALESCE(bwr.status, '')::text AS reservation_status,
+        COALESCE(bwag.reserved_amount_fen, 0)::bigint AS guard_reserved_amount_fen,
+        0::bigint AS reserved_reservation_amount_fen,
+        bwo.amount::bigint AS amount_delta_fen,
+        bwo.updated_at AS observed_at
+    FROM baofu_withdrawal_orders bwo
+    LEFT JOIN baofu_withdrawal_reservations bwr
+      ON bwr.withdrawal_order_id = bwo.id
+    LEFT JOIN baofu_withdrawal_account_guards bwag
+      ON bwag.owner_type = bwo.owner_type
+     AND bwag.owner_id = bwo.owner_id
+     AND bwag.account_binding_id = bwo.account_binding_id
+    WHERE bwo.status = 'processing'
+      AND (bwr.id IS NULL OR bwr.status <> 'reserved')
+
+    UNION ALL
+
+    SELECT
+        'terminal_reserved_reservation'::text AS drift_type,
+        bwo.owner_type,
+        bwo.owner_id,
+        bwo.account_binding_id,
+        bwo.id::bigint AS withdrawal_order_id,
+        bwr.id::bigint AS reservation_id,
+        COALESCE(bwag.id, 0)::bigint AS guard_id,
+        bwo.status::text AS withdrawal_status,
+        bwr.status::text AS reservation_status,
+        COALESCE(bwag.reserved_amount_fen, 0)::bigint AS guard_reserved_amount_fen,
+        bwr.amount_fen::bigint AS reserved_reservation_amount_fen,
+        bwr.amount_fen::bigint AS amount_delta_fen,
+        GREATEST(bwo.updated_at, bwr.updated_at) AS observed_at
+    FROM baofu_withdrawal_orders bwo
+    JOIN baofu_withdrawal_reservations bwr
+      ON bwr.withdrawal_order_id = bwo.id
+     AND bwr.status = 'reserved'
+    LEFT JOIN baofu_withdrawal_account_guards bwag
+      ON bwag.owner_type = bwo.owner_type
+     AND bwag.owner_id = bwo.owner_id
+     AND bwag.account_binding_id = bwo.account_binding_id
+    WHERE bwo.status IN ('succeeded', 'failed', 'returned')
+
+    UNION ALL
+
+    SELECT
+        'guard_reserved_mismatch'::text AS drift_type,
+        COALESCE(bwag.owner_type, rrt.owner_type)::text AS owner_type,
+        COALESCE(bwag.owner_id, rrt.owner_id)::bigint AS owner_id,
+        COALESCE(bwag.account_binding_id, rrt.account_binding_id)::bigint AS account_binding_id,
+        0::bigint AS withdrawal_order_id,
+        COALESCE(rrt.sample_reservation_id, 0)::bigint AS reservation_id,
+        COALESCE(bwag.id, 0)::bigint AS guard_id,
+        ''::text AS withdrawal_status,
+        ''::text AS reservation_status,
+        COALESCE(bwag.reserved_amount_fen, 0)::bigint AS guard_reserved_amount_fen,
+        COALESCE(rrt.reserved_reservation_amount_fen, 0)::bigint AS reserved_reservation_amount_fen,
+        (COALESCE(bwag.reserved_amount_fen, 0) - COALESCE(rrt.reserved_reservation_amount_fen, 0))::bigint AS amount_delta_fen,
+        COALESCE(bwag.updated_at, rrt.latest_reserved_at) AS observed_at
+    FROM baofu_withdrawal_account_guards bwag
+    FULL OUTER JOIN reserved_reservation_totals rrt
+      ON rrt.owner_type = bwag.owner_type
+     AND rrt.owner_id = bwag.owner_id
+     AND rrt.account_binding_id = bwag.account_binding_id
+    WHERE COALESCE(bwag.reserved_amount_fen, 0) <> COALESCE(rrt.reserved_reservation_amount_fen, 0)
+)
+SELECT
+    drift_type,
+    owner_type,
+    owner_id,
+    account_binding_id,
+    withdrawal_order_id,
+    reservation_id,
+    guard_id,
+    withdrawal_status,
+    reservation_status,
+    guard_reserved_amount_fen,
+    reserved_reservation_amount_fen,
+    amount_delta_fen,
+    observed_at
+FROM drifts
+WHERE ($1::text IS NULL OR owner_type = $1::text)
+  AND ($2::bigint IS NULL OR owner_id = $2::bigint)
+ORDER BY observed_at DESC, drift_type ASC, owner_type ASC, owner_id ASC, account_binding_id ASC, withdrawal_order_id NULLS LAST, reservation_id NULLS LAST, guard_id NULLS LAST
+LIMIT $3::int
+`
+
+type ListBaofuWithdrawalReservationDriftsParams struct {
+	OwnerType  pgtype.Text `json:"owner_type"`
+	OwnerID    pgtype.Int8 `json:"owner_id"`
+	LimitCount int32       `json:"limit_count"`
+}
+
+type ListBaofuWithdrawalReservationDriftsRow struct {
+	DriftType                    string    `json:"drift_type"`
+	OwnerType                    string    `json:"owner_type"`
+	OwnerID                      int64     `json:"owner_id"`
+	AccountBindingID             int64     `json:"account_binding_id"`
+	WithdrawalOrderID            int64     `json:"withdrawal_order_id"`
+	ReservationID                int64     `json:"reservation_id"`
+	GuardID                      int64     `json:"guard_id"`
+	WithdrawalStatus             string    `json:"withdrawal_status"`
+	ReservationStatus            string    `json:"reservation_status"`
+	GuardReservedAmountFen       int64     `json:"guard_reserved_amount_fen"`
+	ReservedReservationAmountFen int64     `json:"reserved_reservation_amount_fen"`
+	AmountDeltaFen               int64     `json:"amount_delta_fen"`
+	ObservedAt                   time.Time `json:"observed_at"`
+}
+
+func (q *Queries) ListBaofuWithdrawalReservationDrifts(ctx context.Context, arg ListBaofuWithdrawalReservationDriftsParams) ([]ListBaofuWithdrawalReservationDriftsRow, error) {
+	rows, err := q.db.Query(ctx, listBaofuWithdrawalReservationDrifts, arg.OwnerType, arg.OwnerID, arg.LimitCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListBaofuWithdrawalReservationDriftsRow{}
+	for rows.Next() {
+		var i ListBaofuWithdrawalReservationDriftsRow
+		if err := rows.Scan(
+			&i.DriftType,
+			&i.OwnerType,
+			&i.OwnerID,
+			&i.AccountBindingID,
+			&i.WithdrawalOrderID,
+			&i.ReservationID,
+			&i.GuardID,
+			&i.WithdrawalStatus,
+			&i.ReservationStatus,
+			&i.GuardReservedAmountFen,
+			&i.ReservedReservationAmountFen,
+			&i.AmountDeltaFen,
+			&i.ObservedAt,
 		); err != nil {
 			return nil, err
 		}

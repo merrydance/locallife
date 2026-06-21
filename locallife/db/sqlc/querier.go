@@ -1314,6 +1314,7 @@ type Querier interface {
 	ListBaofuProcessingProfitSharingOrdersForRecovery(ctx context.Context, arg ListBaofuProcessingProfitSharingOrdersForRecoveryParams) ([]ProfitSharingOrder, error)
 	ListBaofuProfitSharingOrdersReadyForCommand(ctx context.Context, arg ListBaofuProfitSharingOrdersReadyForCommandParams) ([]ProfitSharingOrder, error)
 	ListBaofuWithdrawalOrdersByOwner(ctx context.Context, arg ListBaofuWithdrawalOrdersByOwnerParams) ([]BaofuWithdrawalOrder, error)
+	ListBaofuWithdrawalReservationDrifts(ctx context.Context, arg ListBaofuWithdrawalReservationDriftsParams) ([]ListBaofuWithdrawalReservationDriftsRow, error)
 	ListBehaviorActionsByDecision(ctx context.Context, decisionID int64) ([]BehaviorAction, error)
 	ListBehaviorActionsByStatusAndType(ctx context.Context, arg ListBehaviorActionsByStatusAndTypeParams) ([]BehaviorAction, error)
 	ListBehaviorAppealsByEntity(ctx context.Context, arg ListBehaviorAppealsByEntityParams) ([]BehaviorAppeal, error)

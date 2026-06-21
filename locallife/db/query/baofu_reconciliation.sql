@@ -274,3 +274,111 @@ FULL JOIN historical_failed_refund_reconciliation hfr
  AND hfr.provider = br.provider
  AND hfr.channel = br.channel
 ORDER BY date DESC, provider ASC, channel ASC;
+
+-- name: ListBaofuWithdrawalReservationDrifts :many
+WITH reserved_reservation_totals AS (
+    SELECT
+        owner_type,
+        owner_id,
+        account_binding_id,
+        COUNT(*)::bigint AS reserved_reservation_count,
+        COALESCE(SUM(amount_fen), 0)::bigint AS reserved_reservation_amount_fen,
+        MIN(id)::bigint AS sample_reservation_id,
+        MAX(updated_at) AS latest_reserved_at
+    FROM baofu_withdrawal_reservations
+    WHERE status = 'reserved'
+    GROUP BY owner_type, owner_id, account_binding_id
+),
+drifts AS (
+    SELECT
+        'processing_missing_reserved_reservation'::text AS drift_type,
+        bwo.owner_type,
+        bwo.owner_id,
+        bwo.account_binding_id,
+        bwo.id::bigint AS withdrawal_order_id,
+        COALESCE(bwr.id, 0)::bigint AS reservation_id,
+        COALESCE(bwag.id, 0)::bigint AS guard_id,
+        bwo.status::text AS withdrawal_status,
+        COALESCE(bwr.status, '')::text AS reservation_status,
+        COALESCE(bwag.reserved_amount_fen, 0)::bigint AS guard_reserved_amount_fen,
+        0::bigint AS reserved_reservation_amount_fen,
+        bwo.amount::bigint AS amount_delta_fen,
+        bwo.updated_at AS observed_at
+    FROM baofu_withdrawal_orders bwo
+    LEFT JOIN baofu_withdrawal_reservations bwr
+      ON bwr.withdrawal_order_id = bwo.id
+    LEFT JOIN baofu_withdrawal_account_guards bwag
+      ON bwag.owner_type = bwo.owner_type
+     AND bwag.owner_id = bwo.owner_id
+     AND bwag.account_binding_id = bwo.account_binding_id
+    WHERE bwo.status = 'processing'
+      AND (bwr.id IS NULL OR bwr.status <> 'reserved')
+
+    UNION ALL
+
+    SELECT
+        'terminal_reserved_reservation'::text AS drift_type,
+        bwo.owner_type,
+        bwo.owner_id,
+        bwo.account_binding_id,
+        bwo.id::bigint AS withdrawal_order_id,
+        bwr.id::bigint AS reservation_id,
+        COALESCE(bwag.id, 0)::bigint AS guard_id,
+        bwo.status::text AS withdrawal_status,
+        bwr.status::text AS reservation_status,
+        COALESCE(bwag.reserved_amount_fen, 0)::bigint AS guard_reserved_amount_fen,
+        bwr.amount_fen::bigint AS reserved_reservation_amount_fen,
+        bwr.amount_fen::bigint AS amount_delta_fen,
+        GREATEST(bwo.updated_at, bwr.updated_at) AS observed_at
+    FROM baofu_withdrawal_orders bwo
+    JOIN baofu_withdrawal_reservations bwr
+      ON bwr.withdrawal_order_id = bwo.id
+     AND bwr.status = 'reserved'
+    LEFT JOIN baofu_withdrawal_account_guards bwag
+      ON bwag.owner_type = bwo.owner_type
+     AND bwag.owner_id = bwo.owner_id
+     AND bwag.account_binding_id = bwo.account_binding_id
+    WHERE bwo.status IN ('succeeded', 'failed', 'returned')
+
+    UNION ALL
+
+    SELECT
+        'guard_reserved_mismatch'::text AS drift_type,
+        COALESCE(bwag.owner_type, rrt.owner_type)::text AS owner_type,
+        COALESCE(bwag.owner_id, rrt.owner_id)::bigint AS owner_id,
+        COALESCE(bwag.account_binding_id, rrt.account_binding_id)::bigint AS account_binding_id,
+        0::bigint AS withdrawal_order_id,
+        COALESCE(rrt.sample_reservation_id, 0)::bigint AS reservation_id,
+        COALESCE(bwag.id, 0)::bigint AS guard_id,
+        ''::text AS withdrawal_status,
+        ''::text AS reservation_status,
+        COALESCE(bwag.reserved_amount_fen, 0)::bigint AS guard_reserved_amount_fen,
+        COALESCE(rrt.reserved_reservation_amount_fen, 0)::bigint AS reserved_reservation_amount_fen,
+        (COALESCE(bwag.reserved_amount_fen, 0) - COALESCE(rrt.reserved_reservation_amount_fen, 0))::bigint AS amount_delta_fen,
+        COALESCE(bwag.updated_at, rrt.latest_reserved_at) AS observed_at
+    FROM baofu_withdrawal_account_guards bwag
+    FULL OUTER JOIN reserved_reservation_totals rrt
+      ON rrt.owner_type = bwag.owner_type
+     AND rrt.owner_id = bwag.owner_id
+     AND rrt.account_binding_id = bwag.account_binding_id
+    WHERE COALESCE(bwag.reserved_amount_fen, 0) <> COALESCE(rrt.reserved_reservation_amount_fen, 0)
+)
+SELECT
+    drift_type,
+    owner_type,
+    owner_id,
+    account_binding_id,
+    withdrawal_order_id,
+    reservation_id,
+    guard_id,
+    withdrawal_status,
+    reservation_status,
+    guard_reserved_amount_fen,
+    reserved_reservation_amount_fen,
+    amount_delta_fen,
+    observed_at
+FROM drifts
+WHERE (sqlc.narg('owner_type')::text IS NULL OR owner_type = sqlc.narg('owner_type')::text)
+  AND (sqlc.narg('owner_id')::bigint IS NULL OR owner_id = sqlc.narg('owner_id')::bigint)
+ORDER BY observed_at DESC, drift_type ASC, owner_type ASC, owner_id ASC, account_binding_id ASC, withdrawal_order_id NULLS LAST, reservation_id NULLS LAST, guard_id NULLS LAST
+LIMIT sqlc.arg(limit_count)::int;

@@ -319,6 +319,10 @@ const (
 	BaofuWithdrawalReservationReleaseReasonReturned = "returned"
 	BaofuWithdrawalReservationReleaseReasonRejected = "rejected"
 
+	BaofuWithdrawalReservationDriftTypeProcessingMissingReservedReservation = "processing_missing_reserved_reservation"
+	BaofuWithdrawalReservationDriftTypeTerminalReservedReservation          = "terminal_reserved_reservation"
+	BaofuWithdrawalReservationDriftTypeGuardReservedMismatch                = "guard_reserved_mismatch"
+
 	BaofuMerchantReportTypeWechat = "WECHAT"
 	BaofuMerchantReportTypeAlipay = "ALIPAY"
 

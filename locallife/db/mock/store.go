@@ -14555,6 +14555,21 @@ func (mr *MockStoreMockRecorder) ListBaofuWithdrawalOrdersByOwner(ctx, arg any) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListBaofuWithdrawalOrdersByOwner", reflect.TypeOf((*MockStore)(nil).ListBaofuWithdrawalOrdersByOwner), ctx, arg)
 }
 
+// ListBaofuWithdrawalReservationDrifts mocks base method.
+func (m *MockStore) ListBaofuWithdrawalReservationDrifts(ctx context.Context, arg db.ListBaofuWithdrawalReservationDriftsParams) ([]db.ListBaofuWithdrawalReservationDriftsRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListBaofuWithdrawalReservationDrifts", ctx, arg)
+	ret0, _ := ret[0].([]db.ListBaofuWithdrawalReservationDriftsRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListBaofuWithdrawalReservationDrifts indicates an expected call of ListBaofuWithdrawalReservationDrifts.
+func (mr *MockStoreMockRecorder) ListBaofuWithdrawalReservationDrifts(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListBaofuWithdrawalReservationDrifts", reflect.TypeOf((*MockStore)(nil).ListBaofuWithdrawalReservationDrifts), ctx, arg)
+}
+
 // ListBehaviorActionsByDecision mocks base method.
 func (m *MockStore) ListBehaviorActionsByDecision(ctx context.Context, decisionID int64) ([]db.BehaviorAction, error) {
 	m.ctrl.T.Helper()
