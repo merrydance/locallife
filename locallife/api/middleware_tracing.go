@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"net/http"
 	"net/url"
 	"time"
 
@@ -65,16 +66,13 @@ func RequestLoggingMiddleware() gin.HandlerFunc {
 		clientIP := ctx.ClientIP()
 		method := ctx.Request.Method
 		userAgent := ctx.Request.UserAgent()
-		isClientLogScanner401 := path == "/v1/logs/error" && status == 401 && isScannerUserAgent(userAgent)
 
 		// 根据状态码选择日志级别
 		var logEvent *zerolog.Event
-		switch {
-		case isClientLogScanner401:
-			logEvent = log.Info()
-		case status >= 500:
+		switch requestLogLevel(path, status, userAgent) {
+		case zerolog.ErrorLevel:
 			logEvent = log.Error()
-		case status >= 400:
+		case zerolog.WarnLevel:
 			logEvent = log.Warn()
 		default:
 			logEvent = log.Info()
@@ -105,6 +103,33 @@ func RequestLoggingMiddleware() gin.HandlerFunc {
 		}
 
 		logEvent.Msg("HTTP request")
+	}
+}
+
+func requestLogLevel(path string, status int, userAgent string) zerolog.Level {
+	if isScannerUserAgent(userAgent) && isBlockedScannerStatus(status) {
+		return zerolog.InfoLevel
+	}
+	if status >= http.StatusInternalServerError {
+		return zerolog.ErrorLevel
+	}
+	if status >= http.StatusBadRequest {
+		return zerolog.WarnLevel
+	}
+	return zerolog.InfoLevel
+}
+
+func isBlockedScannerStatus(status int) bool {
+	switch status {
+	case http.StatusBadRequest,
+		http.StatusUnauthorized,
+		http.StatusForbidden,
+		http.StatusNotFound,
+		http.StatusMethodNotAllowed,
+		http.StatusTooManyRequests:
+		return true
+	default:
+		return false
 	}
 }
 

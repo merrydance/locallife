@@ -1,9 +1,11 @@
 package api
 
 import (
+	"net/http"
 	"net/url"
 	"testing"
 
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 )
 
@@ -31,4 +33,15 @@ func TestSanitizeQueryRedactsWechatLoginSecrets(t *testing.T) {
 	require.NotContains(t, sanitized, "session-key")
 	require.NotContains(t, sanitized, "access-token")
 	require.NotContains(t, sanitized, "refresh-token")
+}
+
+func TestRequestLogLevelForScannerTraffic(t *testing.T) {
+	scannerUA := "Mozilla/5.0 Tencent Security Team"
+
+	require.Equal(t, zerolog.InfoLevel, requestLogLevel("/anything", http.StatusUnauthorized, scannerUA))
+	require.Equal(t, zerolog.InfoLevel, requestLogLevel("/anything", http.StatusForbidden, scannerUA))
+	require.Equal(t, zerolog.InfoLevel, requestLogLevel("/anything", http.StatusNotFound, scannerUA))
+	require.Equal(t, zerolog.InfoLevel, requestLogLevel("/anything", http.StatusTooManyRequests, scannerUA))
+	require.Equal(t, zerolog.ErrorLevel, requestLogLevel("/anything", http.StatusInternalServerError, scannerUA))
+	require.Equal(t, zerolog.WarnLevel, requestLogLevel("/anything", http.StatusUnauthorized, "LocalLifeWeapp/1.0"))
 }
