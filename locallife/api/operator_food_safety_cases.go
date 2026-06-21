@@ -245,12 +245,6 @@ func (server *Server) getOperatorFoodSafetyCase(ctx *gin.Context) {
 		return
 	}
 
-	regionID, err := server.getOperatorRegionID(ctx)
-	if err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(err))
-		return
-	}
-
 	caseRecord, err := server.store.GetFoodSafetyCase(ctx, caseID)
 	if err != nil {
 		if isNotFoundError(err) {
@@ -260,8 +254,8 @@ func (server *Server) getOperatorFoodSafetyCase(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	if caseRecord.RegionID != regionID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("forbidden")))
+	if _, err := server.checkOperatorManagesRegion(ctx, caseRecord.RegionID); err != nil {
+		server.respondOperatorRegionSelectionError(ctx, err)
 		return
 	}
 
@@ -306,12 +300,6 @@ func (server *Server) investigateOperatorFoodSafetyCase(ctx *gin.Context) {
 		return
 	}
 
-	regionID, err := server.getOperatorRegionID(ctx)
-	if err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(err))
-		return
-	}
-
 	caseRecord, err := server.store.GetFoodSafetyCase(ctx, caseID)
 	if err != nil {
 		if isNotFoundError(err) {
@@ -321,8 +309,8 @@ func (server *Server) investigateOperatorFoodSafetyCase(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	if caseRecord.RegionID != regionID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("forbidden")))
+	if _, err := server.checkOperatorManagesRegion(ctx, caseRecord.RegionID); err != nil {
+		server.respondOperatorRegionSelectionError(ctx, err)
 		return
 	}
 	if caseRecord.Status == "resolved" {
@@ -379,12 +367,6 @@ func (server *Server) resolveOperatorFoodSafetyCase(ctx *gin.Context) {
 		return
 	}
 
-	regionID, err := server.getOperatorRegionID(ctx)
-	if err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(err))
-		return
-	}
-
 	caseRecord, err := server.store.GetFoodSafetyCase(ctx, caseID)
 	if err != nil {
 		if isNotFoundError(err) {
@@ -394,8 +376,8 @@ func (server *Server) resolveOperatorFoodSafetyCase(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	if caseRecord.RegionID != regionID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("forbidden")))
+	if _, err := server.checkOperatorManagesRegion(ctx, caseRecord.RegionID); err != nil {
+		server.respondOperatorRegionSelectionError(ctx, err)
 		return
 	}
 	if caseRecord.Status == "resolved" {
@@ -425,7 +407,7 @@ func (server *Server) resolveOperatorFoodSafetyCase(ctx *gin.Context) {
 
 	resolved, err := server.store.ResolveFoodSafetyCaseTx(ctx, db.ResolveFoodSafetyCaseTxParams{
 		CaseID:                      caseID,
-		RegionID:                    regionID,
+		RegionID:                    caseRecord.RegionID,
 		InvestigationReport:         effectiveInvestigationReport,
 		MerchantRectificationReport: merchantRectificationReport,
 		Resolution:                  resolution,

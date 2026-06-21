@@ -134,6 +134,116 @@ func TestResolveOperatorFoodSafetyCase_UsesResolutionTx(t *testing.T) {
 	require.Equal(t, "黄焖鸡", resolved.PrimaryProductLabel)
 }
 
+func TestOperatorFoodSafetyCaseDetailAndActions_AuthorizeByCaseRegion(t *testing.T) {
+	user, _ := randomUser(t)
+	operator := randomOperator(user.ID)
+	operator.RegionID = 86
+	caseRegionID := int64(87)
+
+	now := time.Now()
+	baseCaseRecord := db.FoodSafetyCase{
+		ID:                  86,
+		MerchantID:          2086,
+		RegionID:            caseRegionID,
+		PrimaryProductKey:   "dish:986",
+		PrimaryProductLabel: "砂锅米线",
+		Status:              "merchant-suspended",
+		TriggerReason:       "同商户同产品食安举报触发熔断",
+		CreatedAt:           now,
+		UpdatedAt:           now,
+	}
+
+	testCases := []struct {
+		name       string
+		method     string
+		url        string
+		body       map[string]any
+		setupStore func(store *mockdb.MockStore, caseRecord db.FoodSafetyCase)
+	}{
+		{
+			name:   "Detail",
+			method: http.MethodGet,
+			url:    "/v1/operator/food-safety/cases/86",
+			setupStore: func(store *mockdb.MockStore, caseRecord db.FoodSafetyCase) {
+				store.EXPECT().
+					ListFoodSafetyIncidentsByCase(gomock.Any(), pgtype.Int8{Int64: caseRecord.ID, Valid: true}).
+					Return([]db.ListFoodSafetyIncidentsByCaseRow{}, nil)
+			},
+		},
+		{
+			name:   "Investigate",
+			method: http.MethodPost,
+			url:    "/v1/operator/food-safety/cases/86/investigate",
+			body: map[string]any{
+				"investigation_report": "运营商现场核查确认同批次餐品存在食安风险。",
+			},
+			setupStore: func(store *mockdb.MockStore, caseRecord db.FoodSafetyCase) {
+				updated := caseRecord
+				updated.Status = "investigating"
+				updated.InvestigationReport = pgtype.Text{String: "运营商现场核查确认同批次餐品存在食安风险。", Valid: true}
+				store.EXPECT().
+					UpdateFoodSafetyCaseInvestigation(gomock.Any(), db.UpdateFoodSafetyCaseInvestigationParams{
+						ID:                  caseRecord.ID,
+						InvestigationReport: updated.InvestigationReport,
+					}).
+					Return(updated, nil)
+			},
+		},
+		{
+			name:   "Resolve",
+			method: http.MethodPost,
+			url:    "/v1/operator/food-safety/cases/86/resolve",
+			body: map[string]any{
+				"investigation_report":          "运营商现场核查确认同批次餐品存在食安风险。",
+				"merchant_rectification_report": "商户已完成后厨消杀并更换涉事原料。",
+				"resolution":                    "整改验收通过，同意恢复营业。",
+			},
+			setupStore: func(store *mockdb.MockStore, caseRecord db.FoodSafetyCase) {
+				resolved := caseRecord
+				resolved.Status = "resolved"
+				resolved.ResolvedAt = pgtype.Timestamptz{Time: now, Valid: true}
+				store.EXPECT().
+					ResolveFoodSafetyCaseTx(gomock.Any(), db.ResolveFoodSafetyCaseTxParams{
+						CaseID:                      caseRecord.ID,
+						RegionID:                    caseRegionID,
+						InvestigationReport:         "运营商现场核查确认同批次餐品存在食安风险。",
+						MerchantRectificationReport: "商户已完成后厨消杀并更换涉事原料。",
+						Resolution:                  "整改验收通过，同意恢复营业。",
+					}).
+					Return(db.ResolveFoodSafetyCaseTxResult{Case: resolved}, nil)
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			expectActiveOperatorAuth(store, user.ID, operator)
+			expectOperatorManagesRegion(store, operator, operator.RegionID, true)
+			store.EXPECT().GetFoodSafetyCase(gomock.Any(), baseCaseRecord.ID).Return(baseCaseRecord, nil)
+			store.EXPECT().
+				CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
+					OperatorID: operator.ID,
+					RegionID:   caseRegionID,
+				}).
+				Return(true, nil)
+			tc.setupStore(store, baseCaseRecord)
+
+			server := newTestServer(t, store)
+			request := newOperatorFoodSafetyCaseTestRequest(t, tc.method, tc.url, tc.body)
+			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+			recorder := httptest.NewRecorder()
+			server.router.ServeHTTP(recorder, request)
+
+			require.Equal(t, http.StatusOK, recorder.Code)
+		})
+	}
+}
+
 func TestResolveOperatorFoodSafetyCase_RejectsMissingInvestigationReport(t *testing.T) {
 	user, _ := randomUser(t)
 	operator := randomOperator(user.ID)
@@ -219,6 +329,12 @@ func TestOperatorFoodSafetyCaseDetailAndActions_ForbidCrossRegion(t *testing.T) 
 			expectActiveOperatorAuth(store, user.ID, operator)
 			expectOperatorManagesRegion(store, operator, operator.RegionID, true)
 			store.EXPECT().GetFoodSafetyCase(gomock.Any(), int64(83)).Return(caseRecord, nil)
+			store.EXPECT().
+				CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
+					OperatorID: operator.ID,
+					RegionID:   caseRecord.RegionID,
+				}).
+				Return(false, nil)
 
 			server := newTestServer(t, store)
 			request := newOperatorFoodSafetyCaseTestRequest(t, tc.method, tc.url, tc.body)

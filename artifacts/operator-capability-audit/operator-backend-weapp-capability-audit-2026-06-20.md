@@ -1421,6 +1421,19 @@ SQL 证据：
 
 ### 已完成复核记录
 
+#### OPA-011-C 子任务复核：食安案件详情与处置按案件真实区域授权
+
+| 字段 | 记录 |
+| --- | --- |
+| 完成范围 | `OPA-011-C` 第一小步；涉及 `locallife/api/operator_food_safety_cases.go`、`locallife/api/operator_food_safety_cases_test.go` |
+| 设计目标 | 已达成当前子任务目标：详情、调查、结案不再先解析运营商默认区域；统一先读取案件，再以 `caseRecord.RegionID` 调用 `checkOperatorManagesRegion()`；结案事务入参 `RegionID` 改为案件真实区域，事务内仍保留区域二次校验 |
+| 时序 | 读案件后再做授权，避免页面只凭案件 ID 获得操作权；调查/结案仍在授权通过后进入原有状态判断和事务/条件更新，未改变 resolved case、调查报告缺失、并发更新的顺序 |
+| 幂等 | 本步未新增写路径；调查仍由 `UpdateFoodSafetyCaseInvestigation` 的 `status <> 'resolved'` 条件防止已结案覆盖；结案仍由 `ResolveFoodSafetyCaseTx` 在事务内锁定案件并拒绝重复结案 |
+| 越权 | 已新增回归覆盖：运营商默认区域与案件区域不同但同时管理案件区域时允许详情/调查/结案；案件区域不归属当前运营商时 403；授权事实来自后端 `operator_id + case.region_id`，不依赖前端传参或 legacy 默认区 |
+| 回归 | 红灯：`PATH=/usr/local/go/bin:$PATH go test ./api -run 'TestOperatorFoodSafetyCaseDetailAndActions_AuthorizeByCaseRegion\|TestOperatorFoodSafetyCaseDetailAndActions_ForbidCrossRegion' -count=1` 在修复前返回 403 且缺少案件区域授权调用；绿灯：同命令通过；扩展绿灯：`PATH=/usr/local/go/bin:$PATH go test ./api -run 'Test.*OperatorFoodSafetyCase' -count=1` 通过；`git diff --check` 通过 |
+| 非目标 | 尚未完成 `OPA-011-B` 列表默认多区域聚合；尚未改小程序食安列表区域筛选；尚未处理 `OPA-012` 佣金和 `OP-RISK-001/002` |
+| 剩余风险 | 当前小程序食安列表无参默认仍走旧的单区域/default 口径，需下一小任务改为全部 active 授权区域并补多区域列表分页/total 回归 |
+
 #### OPA-001 完成复核：运营商区域状态契约重构
 
 | 字段 | 记录 |
