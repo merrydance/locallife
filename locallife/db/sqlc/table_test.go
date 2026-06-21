@@ -505,6 +505,78 @@ func TestCreateTableTxRollsBackWhenTagInsertFails(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestCreateTableTxRejectsInactiveSelectableTag(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	tableNo := "TX-" + util.RandomString(8)
+	inactiveTag, err := testStore.CreateTag(context.Background(), CreateTagParams{
+		Name:      "停用桌台标签-" + util.RandomString(8),
+		Type:      TagTypeTable,
+		SortOrder: 1,
+		Status:    "inactive",
+	})
+	require.NoError(t, err)
+	_, err = testStore.LinkMerchantSelectableTag(context.Background(), LinkMerchantSelectableTagParams{
+		MerchantID: merchant.ID,
+		TagID:      inactiveTag.ID,
+		SortOrder:  1,
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.CreateTableTx(context.Background(), CreateTableTxParams{
+		Table: CreateTableParams{
+			MerchantID:   merchant.ID,
+			TableNo:      tableNo,
+			TableType:    TableTypeTable,
+			Capacity:     4,
+			Description:  pgtype.Text{String: "停用标签测试", Valid: true},
+			MinimumSpend: pgtype.Int8{Int64: 0, Valid: false},
+			Status:       TableStatusAvailable,
+		},
+		TagIDs: []int64{inactiveTag.ID},
+	})
+	require.ErrorIs(t, err, ErrMerchantSelectableTagUnavailable)
+
+	_, err = testStore.GetTableByMerchantAndNo(context.Background(), GetTableByMerchantAndNoParams{
+		MerchantID: merchant.ID,
+		TableNo:    tableNo,
+	})
+	require.Error(t, err)
+}
+
+func TestCreateTableTxDeduplicatesSelectableTagIDs(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	tag, err := testStore.CreateMerchantSelectableTagTx(context.Background(), CreateMerchantSelectableTagTxParams{
+		MerchantID: merchant.ID,
+		Name:       "桌台标签-" + util.RandomString(8),
+		Type:       TagTypeTable,
+		SortOrder:  1,
+	})
+	require.NoError(t, err)
+
+	result, err := testStore.CreateTableTx(context.Background(), CreateTableTxParams{
+		Table: CreateTableParams{
+			MerchantID:   merchant.ID,
+			TableNo:      "TX-" + util.RandomString(8),
+			TableType:    TableTypeTable,
+			Capacity:     4,
+			Description:  pgtype.Text{String: "重复标签测试", Valid: true},
+			MinimumSpend: pgtype.Int8{Int64: 0, Valid: false},
+			Status:       TableStatusAvailable,
+		},
+		TagIDs: []int64{tag.ID, tag.ID},
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Tags, 1)
+	require.Equal(t, tag.ID, result.Tags[0].TagID)
+
+	tags, err := testStore.ListTableTags(context.Background(), result.Table.ID)
+	require.NoError(t, err)
+	require.Len(t, tags, 1)
+	require.Equal(t, tag.ID, tags[0].TagID)
+}
+
 func TestUpdateTableTxRollsBackWhenTagInsertFails(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
@@ -566,6 +638,35 @@ func TestUpdateTableTxClearsTagsWithEmptySlice(t *testing.T) {
 	tags, err := testStore.ListTableTags(context.Background(), table.ID)
 	require.NoError(t, err)
 	require.Empty(t, tags)
+}
+
+func TestUpdateTableTxDeduplicatesSelectableTagIDs(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	table := createRandomRoom(t, merchant.ID)
+	tag, err := testStore.CreateMerchantSelectableTagTx(context.Background(), CreateMerchantSelectableTagTxParams{
+		MerchantID: merchant.ID,
+		Name:       "桌台标签-" + util.RandomString(8),
+		Type:       TagTypeTable,
+		SortOrder:  1,
+	})
+	require.NoError(t, err)
+
+	tagIDs := []int64{tag.ID, tag.ID}
+	result, err := testStore.UpdateTableTx(context.Background(), UpdateTableTxParams{
+		Table: UpdateTableParams{
+			ID: table.ID,
+		},
+		TagIDs: &tagIDs,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Tags, 1)
+	require.Equal(t, tag.ID, result.Tags[0].TagID)
+
+	tags, err := testStore.ListTableTags(context.Background(), table.ID)
+	require.NoError(t, err)
+	require.Len(t, tags, 1)
+	require.Equal(t, tag.ID, tags[0].TagID)
 }
 
 func TestUpdateTableTxRejectsFutureReservationsWhenGuarded(t *testing.T) {

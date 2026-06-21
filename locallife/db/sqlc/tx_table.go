@@ -99,13 +99,18 @@ func (store *SQLStore) CreateTableTx(ctx context.Context, arg CreateTableTxParam
 	err := store.execTx(ctx, func(q *Queries) error {
 		var err error
 
+		tagIDs, err := ensureMerchantSelectableTags(ctx, q, arg.Table.MerchantID, TagTypeTable, arg.TagIDs)
+		if err != nil {
+			return err
+		}
+
 		result.Table, err = q.CreateTable(ctx, arg.Table)
 		if err != nil {
 			return fmt.Errorf("create table: %w", err)
 		}
 
-		result.Tags = make([]TableTag, 0, len(arg.TagIDs))
-		for _, tagID := range arg.TagIDs {
+		result.Tags = make([]TableTag, 0, len(tagIDs))
+		for _, tagID := range tagIDs {
 			tableTag, err := q.AddTableTag(ctx, AddTableTagParams{
 				TableID: result.Table.ID,
 				TagID:   tagID,
@@ -130,6 +135,7 @@ func (store *SQLStore) UpdateTableTx(ctx context.Context, arg UpdateTableTxParam
 		var err error
 		var table Table
 		tableLocked := false
+		var tagIDs []int64
 
 		if arg.RequireNoFutureReservations {
 			table, err = q.GetTableForUpdate(ctx, arg.Table.ID)
@@ -151,9 +157,24 @@ func (store *SQLStore) UpdateTableTx(ctx context.Context, arg UpdateTableTxParam
 				if err != nil {
 					return fmt.Errorf("lock table: %w", err)
 				}
+				tableLocked = true
 			}
 			if arg.Table.TableNo.String != table.TableNo {
 				arg.Table.QrCodeUrl = pgtype.Text{String: "", Valid: true}
+			}
+		}
+
+		if arg.TagIDs != nil && !tableLocked {
+			table, err = q.GetTableForUpdate(ctx, arg.Table.ID)
+			if err != nil {
+				return fmt.Errorf("lock table: %w", err)
+			}
+			tableLocked = true
+		}
+		if arg.TagIDs != nil {
+			tagIDs, err = ensureMerchantSelectableTags(ctx, q, table.MerchantID, TagTypeTable, *arg.TagIDs)
+			if err != nil {
+				return err
 			}
 		}
 
@@ -167,8 +188,8 @@ func (store *SQLStore) UpdateTableTx(ctx context.Context, arg UpdateTableTxParam
 				return fmt.Errorf("remove table tags: %w", err)
 			}
 
-			result.Tags = make([]TableTag, 0, len(*arg.TagIDs))
-			for _, tagID := range *arg.TagIDs {
+			result.Tags = make([]TableTag, 0, len(tagIDs))
+			for _, tagID := range tagIDs {
 				tableTag, err := q.AddTableTag(ctx, AddTableTagParams{
 					TableID: arg.Table.ID,
 					TagID:   tagID,

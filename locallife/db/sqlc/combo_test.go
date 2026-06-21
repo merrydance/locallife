@@ -236,6 +236,100 @@ func TestUpdateComboSet(t *testing.T) {
 	require.Equal(t, newComboPrice, updatedCombo.ComboPrice)
 }
 
+func TestCreateComboSetTxRejectsUnlinkedSelectableTag(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	tag := createRandomTag(t, TagTypeCombo)
+
+	_, err := testStore.CreateComboSetTx(context.Background(), CreateComboSetTxParams{
+		MerchantID:    merchant.ID,
+		Name:          "套餐-" + util.RandomString(8),
+		Description:   pgtype.Text{String: "未关联标签测试", Valid: true},
+		OriginalPrice: util.RandomMoney(),
+		ComboPrice:    util.RandomMoney(),
+		IsOnline:      true,
+		TagIDs:        []int64{tag.ID},
+	})
+	require.ErrorIs(t, err, ErrMerchantSelectableTagUnavailable)
+}
+
+func TestCreateComboSetTxDeduplicatesSelectableTagIDs(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	tag, err := testStore.CreateMerchantSelectableTagTx(context.Background(), CreateMerchantSelectableTagTxParams{
+		MerchantID: merchant.ID,
+		Name:       "套餐标签-" + util.RandomString(8),
+		Type:       TagTypeCombo,
+		SortOrder:  1,
+	})
+	require.NoError(t, err)
+
+	result, err := testStore.CreateComboSetTx(context.Background(), CreateComboSetTxParams{
+		MerchantID:    merchant.ID,
+		Name:          "套餐-" + util.RandomString(8),
+		Description:   pgtype.Text{String: "重复标签测试", Valid: true},
+		OriginalPrice: util.RandomMoney(),
+		ComboPrice:    util.RandomMoney(),
+		IsOnline:      true,
+		TagIDs:        []int64{tag.ID, tag.ID},
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Tags, 1)
+	require.Equal(t, tag.ID, result.Tags[0].TagID)
+
+	tags, err := testStore.ListComboTags(context.Background(), result.ComboSet.ID)
+	require.NoError(t, err)
+	require.Len(t, tags, 1)
+	require.Equal(t, tag.ID, tags[0].ID)
+}
+
+func TestUpdateComboSetTxRejectsWrongTypeSelectableTag(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	combo := createRandomComboSet(t, merchant.ID)
+	dishTag, err := testStore.CreateMerchantSelectableTagTx(context.Background(), CreateMerchantSelectableTagTxParams{
+		MerchantID: merchant.ID,
+		Name:       "菜品标签-" + util.RandomString(8),
+		Type:       TagTypeDish,
+		SortOrder:  1,
+	})
+	require.NoError(t, err)
+
+	tagIDs := []int64{dishTag.ID}
+	_, err = testStore.UpdateComboSetTx(context.Background(), UpdateComboSetTxParams{
+		ID:     combo.ID,
+		TagIDs: &tagIDs,
+	})
+	require.ErrorIs(t, err, ErrMerchantSelectableTagUnavailable)
+
+	tags, err := testStore.ListComboTags(context.Background(), combo.ID)
+	require.NoError(t, err)
+	require.Empty(t, tags)
+}
+
+func TestUpdateComboSetTxDeduplicatesSelectableTagIDs(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	combo := createRandomComboSet(t, merchant.ID)
+	tag, err := testStore.CreateMerchantSelectableTagTx(context.Background(), CreateMerchantSelectableTagTxParams{
+		MerchantID: merchant.ID,
+		Name:       "套餐标签-" + util.RandomString(8),
+		Type:       TagTypeCombo,
+		SortOrder:  1,
+	})
+	require.NoError(t, err)
+
+	tagIDs := []int64{tag.ID, tag.ID}
+	result, err := testStore.UpdateComboSetTx(context.Background(), UpdateComboSetTxParams{
+		ID:     combo.ID,
+		TagIDs: &tagIDs,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Tags, 1)
+	require.Equal(t, tag.ID, result.Tags[0].TagID)
+
+	tags, err := testStore.ListComboTags(context.Background(), combo.ID)
+	require.NoError(t, err)
+	require.Len(t, tags, 1)
+	require.Equal(t, tag.ID, tags[0].ID)
+}
+
 func TestUpdateComboSetOnlineStatus(t *testing.T) {
 	merchant := createRandomMerchantForDish(t)
 	combo := createRandomComboSet(t, merchant.ID)

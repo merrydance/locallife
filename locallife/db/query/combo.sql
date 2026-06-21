@@ -19,6 +19,11 @@ INSERT INTO combo_sets (
 SELECT id, merchant_id, name, description, original_price, combo_price, is_online, created_at, updated_at, deleted_at, image_media_asset_id FROM combo_sets
 WHERE id = $1 AND deleted_at IS NULL LIMIT 1;
 
+-- name: GetComboSetForUpdate :one
+SELECT id, merchant_id, name, description, original_price, combo_price, is_online, created_at, updated_at, deleted_at, image_media_asset_id FROM combo_sets
+WHERE id = $1 AND deleted_at IS NULL
+FOR UPDATE;
+
 -- name: GetComboSetWithDetails :one
 SELECT 
   cs.id, cs.merchant_id, cs.name, cs.description, cs.original_price, cs.combo_price, cs.is_online, cs.created_at, cs.updated_at, cs.deleted_at, cs.image_media_asset_id,

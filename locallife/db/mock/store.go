@@ -8261,6 +8261,21 @@ func (mr *MockStoreMockRecorder) GetComboSet(ctx, id any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetComboSet", reflect.TypeOf((*MockStore)(nil).GetComboSet), ctx, id)
 }
 
+// GetComboSetForUpdate mocks base method.
+func (m *MockStore) GetComboSetForUpdate(ctx context.Context, id int64) (db.ComboSet, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetComboSetForUpdate", ctx, id)
+	ret0, _ := ret[0].(db.ComboSet)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetComboSetForUpdate indicates an expected call of GetComboSetForUpdate.
+func (mr *MockStoreMockRecorder) GetComboSetForUpdate(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetComboSetForUpdate", reflect.TypeOf((*MockStore)(nil).GetComboSetForUpdate), ctx, id)
+}
+
 // GetComboSetWithDetails mocks base method.
 func (m *MockStore) GetComboSetWithDetails(ctx context.Context, id int64) (db.GetComboSetWithDetailsRow, error) {
 	m.ctrl.T.Helper()
@@ -18618,6 +18633,21 @@ func (m *MockStore) LockMerchantForUpdate(ctx context.Context, id int64) (int64,
 func (mr *MockStoreMockRecorder) LockMerchantForUpdate(ctx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LockMerchantForUpdate", reflect.TypeOf((*MockStore)(nil).LockMerchantForUpdate), ctx, id)
+}
+
+// LockMerchantSelectableTag mocks base method.
+func (m *MockStore) LockMerchantSelectableTag(ctx context.Context, arg db.LockMerchantSelectableTagParams) (db.LockMerchantSelectableTagRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "LockMerchantSelectableTag", ctx, arg)
+	ret0, _ := ret[0].(db.LockMerchantSelectableTagRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// LockMerchantSelectableTag indicates an expected call of LockMerchantSelectableTag.
+func (mr *MockStoreMockRecorder) LockMerchantSelectableTag(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LockMerchantSelectableTag", reflect.TypeOf((*MockStore)(nil).LockMerchantSelectableTag), ctx, arg)
 }
 
 // MarkActiveWantedMerchantMatchedByMerchant mocks base method.

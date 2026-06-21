@@ -719,6 +719,70 @@ func TestCreateDishTxRejectsUnlinkedCategory(t *testing.T) {
 	require.Equal(t, beforeCount, afterCount)
 }
 
+func TestCreateDishTxRejectsUnlinkedSelectableTag(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	category, _ := createAndLinkRandomDishCategory(t, merchant.ID)
+	tag := createRandomTag(t, TagTypeDish)
+
+	beforeCount, err := testStore.CountDishesByMerchant(context.Background(), CountDishesByMerchantParams{
+		MerchantID: merchant.ID,
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.CreateDishTx(context.Background(), CreateDishTxParams{
+		MerchantID:  merchant.ID,
+		CategoryID:  pgtype.Int8{Int64: category.ID, Valid: true},
+		Name:        util.RandomString(10),
+		Description: pgtype.Text{String: util.RandomString(20), Valid: true},
+		Price:       util.RandomMoney(),
+		IsAvailable: true,
+		IsOnline:    true,
+		SortOrder:   int16(util.RandomInt(1, 100)),
+		PrepareTime: 10,
+		TagIDs:      []int64{tag.ID},
+	})
+	require.ErrorIs(t, err, ErrMerchantSelectableTagUnavailable)
+
+	afterCount, err := testStore.CountDishesByMerchant(context.Background(), CountDishesByMerchantParams{
+		MerchantID: merchant.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount)
+}
+
+func TestCreateDishTxDeduplicatesSelectableTagIDs(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	category, _ := createAndLinkRandomDishCategory(t, merchant.ID)
+	tag, err := testStore.CreateMerchantSelectableTagTx(context.Background(), CreateMerchantSelectableTagTxParams{
+		MerchantID: merchant.ID,
+		Name:       "菜品标签-" + util.RandomString(8),
+		Type:       TagTypeDish,
+		SortOrder:  1,
+	})
+	require.NoError(t, err)
+
+	result, err := testStore.CreateDishTx(context.Background(), CreateDishTxParams{
+		MerchantID:  merchant.ID,
+		CategoryID:  pgtype.Int8{Int64: category.ID, Valid: true},
+		Name:        util.RandomString(10),
+		Description: pgtype.Text{String: util.RandomString(20), Valid: true},
+		Price:       util.RandomMoney(),
+		IsAvailable: true,
+		IsOnline:    true,
+		SortOrder:   int16(util.RandomInt(1, 100)),
+		PrepareTime: 10,
+		TagIDs:      []int64{tag.ID, tag.ID},
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Tags, 1)
+	require.Equal(t, tag.ID, result.Tags[0].TagID)
+
+	tags, err := testStore.ListDishTags(context.Background(), result.Dish.ID)
+	require.NoError(t, err)
+	require.Len(t, tags, 1)
+	require.Equal(t, tag.ID, tags[0].ID)
+}
+
 func TestGetDish(t *testing.T) {
 	merchant := createRandomMerchantForDish(t)
 	category := createRandomDishCategory(t)
@@ -946,6 +1010,57 @@ func TestUpdateDishTxRejectsUnlinkedCategory(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, reloadedDish.CategoryID.Valid)
 	require.Equal(t, category.ID, reloadedDish.CategoryID.Int64)
+}
+
+func TestUpdateDishTxRejectsWrongTypeSelectableTag(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	category, _ := createAndLinkRandomDishCategory(t, merchant.ID)
+	dish := createRandomDish(t, merchant.ID, category.ID)
+	tableTag, err := testStore.CreateMerchantSelectableTagTx(context.Background(), CreateMerchantSelectableTagTxParams{
+		MerchantID: merchant.ID,
+		Name:       "桌台标签-" + util.RandomString(8),
+		Type:       TagTypeTable,
+		SortOrder:  1,
+	})
+	require.NoError(t, err)
+
+	tagIDs := []int64{tableTag.ID}
+	_, err = testStore.UpdateDishTx(context.Background(), UpdateDishTxParams{
+		ID:     dish.ID,
+		TagIDs: &tagIDs,
+	})
+	require.ErrorIs(t, err, ErrMerchantSelectableTagUnavailable)
+
+	tags, err := testStore.ListDishTags(context.Background(), dish.ID)
+	require.NoError(t, err)
+	require.Empty(t, tags)
+}
+
+func TestUpdateDishTxDeduplicatesSelectableTagIDs(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	category, _ := createAndLinkRandomDishCategory(t, merchant.ID)
+	dish := createRandomDish(t, merchant.ID, category.ID)
+	tag, err := testStore.CreateMerchantSelectableTagTx(context.Background(), CreateMerchantSelectableTagTxParams{
+		MerchantID: merchant.ID,
+		Name:       "菜品标签-" + util.RandomString(8),
+		Type:       TagTypeDish,
+		SortOrder:  1,
+	})
+	require.NoError(t, err)
+
+	tagIDs := []int64{tag.ID, tag.ID}
+	result, err := testStore.UpdateDishTx(context.Background(), UpdateDishTxParams{
+		ID:     dish.ID,
+		TagIDs: &tagIDs,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Tags, 1)
+	require.Equal(t, tag.ID, result.Tags[0].TagID)
+
+	tags, err := testStore.ListDishTags(context.Background(), dish.ID)
+	require.NoError(t, err)
+	require.Len(t, tags, 1)
+	require.Equal(t, tag.ID, tags[0].ID)
 }
 
 func TestUpdateDishCanSetAvailability(t *testing.T) {
@@ -1403,8 +1518,8 @@ func TestSearchDishesGlobal(t *testing.T) {
 
 	// 用完整的唯一名称搜索
 	dishes, err := testStore.SearchDishesGlobal(context.Background(), SearchDishesGlobalParams{
-		UserLat:  39.9282,
-		UserLng:  116.4507,
+		UserLat: 39.9282,
+		UserLng: 116.4507,
 		RegionID: pgtype.Int8{
 			Int64: merchant.RegionID,
 			Valid: true,
@@ -1462,8 +1577,8 @@ func TestSearchDishesGlobal_OnlyApprovedMerchants(t *testing.T) {
 
 	// 全局搜索不应找到未批准商户的菜品
 	dishes, err := testStore.SearchDishesGlobal(context.Background(), SearchDishesGlobalParams{
-		UserLat:  39.9282,
-		UserLng:  116.4507,
+		UserLat: 39.9282,
+		UserLng: 116.4507,
 		RegionID: pgtype.Int8{
 			Int64: merchant.RegionID,
 			Valid: true,
@@ -1503,8 +1618,8 @@ func TestSearchDishesGlobal_ExcludesTakeoutSuspendedMerchants(t *testing.T) {
 	require.NoError(t, err)
 
 	dishes, err := testStore.SearchDishesGlobal(context.Background(), SearchDishesGlobalParams{
-		UserLat:  39.9282,
-		UserLng:  116.4507,
+		UserLat: 39.9282,
+		UserLng: 116.4507,
 		RegionID: pgtype.Int8{
 			Int64: merchant.RegionID,
 			Valid: true,
@@ -1553,8 +1668,8 @@ func TestSearchDishesGlobalExcludesUnavailable(t *testing.T) {
 	require.NoError(t, err)
 
 	dishes, err := testStore.SearchDishesGlobal(context.Background(), SearchDishesGlobalParams{
-		UserLat:  39.9282,
-		UserLng:  116.4507,
+		UserLat: 39.9282,
+		UserLng: 116.4507,
 		RegionID: pgtype.Int8{
 			Int64: merchant.RegionID,
 			Valid: true,
@@ -1616,8 +1731,8 @@ func TestSearchDishesGlobal_Pagination(t *testing.T) {
 
 	// 第一页
 	page1, err := testStore.SearchDishesGlobal(context.Background(), SearchDishesGlobalParams{
-		UserLat:  39.9282,
-		UserLng:  116.4507,
+		UserLat: 39.9282,
+		UserLng: 116.4507,
 		RegionID: pgtype.Int8{
 			Int64: merchant.RegionID,
 			Valid: true,
@@ -1633,8 +1748,8 @@ func TestSearchDishesGlobal_Pagination(t *testing.T) {
 
 	// 第二页
 	page2, err := testStore.SearchDishesGlobal(context.Background(), SearchDishesGlobalParams{
-		UserLat:  39.9282,
-		UserLng:  116.4507,
+		UserLat: 39.9282,
+		UserLng: 116.4507,
 		RegionID: pgtype.Int8{
 			Int64: merchant.RegionID,
 			Valid: true,

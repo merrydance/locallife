@@ -57,6 +57,10 @@ func (store *SQLStore) CreateDishTx(ctx context.Context, arg CreateDishTxParams)
 				return fmt.Errorf("lock merchant dish category: %w", err)
 			}
 		}
+		tagIDs, err := ensureMerchantSelectableTags(ctx, q, arg.MerchantID, TagTypeDish, arg.TagIDs)
+		if err != nil {
+			return err
+		}
 
 		// Step 1: Create dish
 		result.Dish, err = q.CreateDish(ctx, CreateDishParams{
@@ -90,8 +94,8 @@ func (store *SQLStore) CreateDishTx(ctx context.Context, arg CreateDishTxParams)
 		}
 
 		// Step 3: Add tag associations
-		result.Tags = make([]DishTag, 0, len(arg.TagIDs))
-		for _, tagID := range arg.TagIDs {
+		result.Tags = make([]DishTag, 0, len(tagIDs))
+		for _, tagID := range tagIDs {
 			dt, err := q.AddDishTag(ctx, AddDishTagParams{
 				DishID: result.Dish.ID,
 				TagID:  tagID,
@@ -159,11 +163,13 @@ func (store *SQLStore) UpdateDishTx(ctx context.Context, arg UpdateDishTxParams)
 	err := store.execTx(ctx, func(q *Queries) error {
 		var err error
 
+		currentDish, err := q.GetDishForUpdate(ctx, arg.ID)
+		if err != nil {
+			return fmt.Errorf("lock dish: %w", err)
+		}
+
+		var tagIDs []int64
 		if arg.CategoryID.Valid {
-			currentDish, err := q.GetDish(ctx, arg.ID)
-			if err != nil {
-				return fmt.Errorf("get dish: %w", err)
-			}
 			_, err = q.GetMerchantDishCategoryForUpdate(ctx, GetMerchantDishCategoryForUpdateParams{
 				MerchantID: currentDish.MerchantID,
 				CategoryID: arg.CategoryID.Int64,
@@ -175,10 +181,11 @@ func (store *SQLStore) UpdateDishTx(ctx context.Context, arg UpdateDishTxParams)
 				return fmt.Errorf("lock merchant dish category: %w", err)
 			}
 		}
-
-		_, err = q.GetDishForUpdate(ctx, arg.ID)
-		if err != nil {
-			return fmt.Errorf("lock dish: %w", err)
+		if arg.TagIDs != nil {
+			tagIDs, err = ensureMerchantSelectableTags(ctx, q, currentDish.MerchantID, TagTypeDish, *arg.TagIDs)
+			if err != nil {
+				return err
+			}
 		}
 
 		// Step 1: Update dish
@@ -231,8 +238,8 @@ func (store *SQLStore) UpdateDishTx(ctx context.Context, arg UpdateDishTxParams)
 			}
 
 			// Add new tag associations
-			result.Tags = make([]DishTag, 0, len(*arg.TagIDs))
-			for _, tagID := range *arg.TagIDs {
+			result.Tags = make([]DishTag, 0, len(tagIDs))
+			for _, tagID := range tagIDs {
 				dt, err := q.AddDishTag(ctx, AddDishTagParams{
 					DishID: arg.ID,
 					TagID:  tagID,

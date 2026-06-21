@@ -357,6 +357,56 @@ func (q *Queries) ListTags(ctx context.Context, arg ListTagsParams) ([]Tag, erro
 	return items, nil
 }
 
+const lockMerchantSelectableTag = `-- name: LockMerchantSelectableTag :one
+SELECT
+  t.id,
+  t.name,
+  t.type,
+  mst.sort_order,
+  t.status,
+  t.created_at,
+  t.icon
+FROM tags t
+INNER JOIN merchant_selectable_tags mst ON t.id = mst.tag_id
+WHERE mst.merchant_id = $1
+  AND mst.tag_id = $2
+  AND t.type = $3
+  AND t.status = 'active'
+LIMIT 1
+FOR UPDATE OF t, mst
+`
+
+type LockMerchantSelectableTagParams struct {
+	MerchantID int64  `json:"merchant_id"`
+	TagID      int64  `json:"tag_id"`
+	Type       string `json:"type"`
+}
+
+type LockMerchantSelectableTagRow struct {
+	ID        int64       `json:"id"`
+	Name      string      `json:"name"`
+	Type      string      `json:"type"`
+	SortOrder int16       `json:"sort_order"`
+	Status    string      `json:"status"`
+	CreatedAt time.Time   `json:"created_at"`
+	Icon      pgtype.Text `json:"icon"`
+}
+
+func (q *Queries) LockMerchantSelectableTag(ctx context.Context, arg LockMerchantSelectableTagParams) (LockMerchantSelectableTagRow, error) {
+	row := q.db.QueryRow(ctx, lockMerchantSelectableTag, arg.MerchantID, arg.TagID, arg.Type)
+	var i LockMerchantSelectableTagRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Type,
+		&i.SortOrder,
+		&i.Status,
+		&i.CreatedAt,
+		&i.Icon,
+	)
+	return i, err
+}
+
 const searchTags = `-- name: SearchTags :many
 SELECT id, name, type, sort_order, status, created_at, icon FROM tags
 WHERE type = $1

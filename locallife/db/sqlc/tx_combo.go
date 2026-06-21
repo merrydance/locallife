@@ -63,6 +63,11 @@ func (store *SQLStore) CreateComboSetTx(ctx context.Context, arg CreateComboSetT
 	err := store.execTx(ctx, func(q *Queries) error {
 		var err error
 
+		tagIDs, err := ensureMerchantSelectableTags(ctx, q, arg.MerchantID, TagTypeCombo, arg.TagIDs)
+		if err != nil {
+			return err
+		}
+
 		// Step 1: Create combo set
 		result.ComboSet, err = q.CreateComboSet(ctx, CreateComboSetParams{
 			MerchantID:    arg.MerchantID,
@@ -98,8 +103,8 @@ func (store *SQLStore) CreateComboSetTx(ctx context.Context, arg CreateComboSetT
 		}
 
 		// Step 3: Add tag associations
-		result.Tags = make([]ComboTag, 0, len(arg.TagIDs))
-		for _, tagID := range arg.TagIDs {
+		result.Tags = make([]ComboTag, 0, len(tagIDs))
+		for _, tagID := range tagIDs {
 			ct, err := q.AddComboTag(ctx, AddComboTagParams{
 				ComboID: result.ComboSet.ID,
 				TagID:   tagID,
@@ -122,6 +127,18 @@ func (store *SQLStore) UpdateComboSetTx(ctx context.Context, arg UpdateComboSetT
 
 	err := store.execTx(ctx, func(q *Queries) error {
 		var err error
+
+		currentCombo, err := q.GetComboSetForUpdate(ctx, arg.ID)
+		if err != nil {
+			return fmt.Errorf("lock combo set: %w", err)
+		}
+		var tagIDs []int64
+		if arg.TagIDs != nil {
+			tagIDs, err = ensureMerchantSelectableTags(ctx, q, currentCombo.MerchantID, TagTypeCombo, *arg.TagIDs)
+			if err != nil {
+				return err
+			}
+		}
 
 		result.ComboSet, err = q.UpdateComboSet(ctx, UpdateComboSetParams{
 			ID:                arg.ID,
@@ -170,8 +187,8 @@ func (store *SQLStore) UpdateComboSetTx(ctx context.Context, arg UpdateComboSetT
 				return fmt.Errorf("delete combo tags: %w", err)
 			}
 
-			result.Tags = make([]ComboTag, 0, len(*arg.TagIDs))
-			for _, tagID := range *arg.TagIDs {
+			result.Tags = make([]ComboTag, 0, len(tagIDs))
+			for _, tagID := range tagIDs {
 				comboTag, err := q.AddComboTag(ctx, AddComboTagParams{
 					ComboID: arg.ID,
 					TagID:   tagID,

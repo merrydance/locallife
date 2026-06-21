@@ -745,6 +745,7 @@ type Querier interface {
 	// 批量获取多个套餐的成员图片
 	GetComboMemberImagesByCombos(ctx context.Context, arg GetComboMemberImagesByCombosParams) ([]GetComboMemberImagesByCombosRow, error)
 	GetComboSet(ctx context.Context, id int64) (ComboSet, error)
+	GetComboSetForUpdate(ctx context.Context, id int64) (ComboSet, error)
 	GetComboSetWithDetails(ctx context.Context, id int64) (GetComboSetWithDetailsRow, error)
 	// 批量获取套餐详情
 	GetCombosByIDs(ctx context.Context, dollar_1 []int64) ([]GetCombosByIDsRow, error)
@@ -1666,6 +1667,7 @@ type Querier interface {
 	ListWechatNotificationsByOutTradeNo(ctx context.Context, outTradeNo pgtype.Text) ([]WechatNotification, error)
 	ListWithdrawalRecords(ctx context.Context, arg ListWithdrawalRecordsParams) ([]WithdrawalRecord, error)
 	LockMerchantForUpdate(ctx context.Context, id int64) (int64, error)
+	LockMerchantSelectableTag(ctx context.Context, arg LockMerchantSelectableTagParams) (LockMerchantSelectableTagRow, error)
 	MarkActiveWantedMerchantMatchedByMerchant(ctx context.Context, arg MarkActiveWantedMerchantMatchedByMerchantParams) error
 	MarkAllNotificationsAsRead(ctx context.Context, userID int64) error
 	MarkAllOperatorNotificationsAsRead(ctx context.Context, userID int64) error

@@ -297,6 +297,31 @@ func (q *Queries) GetComboSet(ctx context.Context, id int64) (ComboSet, error) {
 	return i, err
 }
 
+const getComboSetForUpdate = `-- name: GetComboSetForUpdate :one
+SELECT id, merchant_id, name, description, original_price, combo_price, is_online, created_at, updated_at, deleted_at, image_media_asset_id FROM combo_sets
+WHERE id = $1 AND deleted_at IS NULL
+FOR UPDATE
+`
+
+func (q *Queries) GetComboSetForUpdate(ctx context.Context, id int64) (ComboSet, error) {
+	row := q.db.QueryRow(ctx, getComboSetForUpdate, id)
+	var i ComboSet
+	err := row.Scan(
+		&i.ID,
+		&i.MerchantID,
+		&i.Name,
+		&i.Description,
+		&i.OriginalPrice,
+		&i.ComboPrice,
+		&i.IsOnline,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.ImageMediaAssetID,
+	)
+	return i, err
+}
+
 const getComboSetWithDetails = `-- name: GetComboSetWithDetails :one
 SELECT 
   cs.id, cs.merchant_id, cs.name, cs.description, cs.original_price, cs.combo_price, cs.is_online, cs.created_at, cs.updated_at, cs.deleted_at, cs.image_media_asset_id,

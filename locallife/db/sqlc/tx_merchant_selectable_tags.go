@@ -26,6 +26,42 @@ func isMerchantSelectableTagType(tagType string) bool {
 	}
 }
 
+func ensureMerchantSelectableTags(ctx context.Context, q *Queries, merchantID int64, tagType string, tagIDs []int64) ([]int64, error) {
+	if len(tagIDs) == 0 {
+		return []int64{}, nil
+	}
+	if !isMerchantSelectableTagType(tagType) {
+		return nil, ErrTagTypeNotSelectable
+	}
+
+	seen := make(map[int64]struct{}, len(tagIDs))
+	dedupedTagIDs := make([]int64, 0, len(tagIDs))
+	for _, tagID := range tagIDs {
+		if tagID <= 0 {
+			return nil, fmt.Errorf("%w: tag %d", ErrMerchantSelectableTagUnavailable, tagID)
+		}
+		if _, ok := seen[tagID]; ok {
+			continue
+		}
+		seen[tagID] = struct{}{}
+		dedupedTagIDs = append(dedupedTagIDs, tagID)
+
+		_, err := q.LockMerchantSelectableTag(ctx, LockMerchantSelectableTagParams{
+			MerchantID: merchantID,
+			TagID:      tagID,
+			Type:       tagType,
+		})
+		if err != nil {
+			if errors.Is(err, ErrRecordNotFound) {
+				return nil, fmt.Errorf("%w: tag %d", ErrMerchantSelectableTagUnavailable, tagID)
+			}
+			return nil, fmt.Errorf("get merchant selectable tag %d: %w", tagID, err)
+		}
+	}
+
+	return dedupedTagIDs, nil
+}
+
 // CreateMerchantSelectableTagTx creates or reuses an active global tag, then
 // idempotently links it into the merchant's selectable tag set.
 func (store *SQLStore) CreateMerchantSelectableTagTx(ctx context.Context, arg CreateMerchantSelectableTagTxParams) (Tag, error) {

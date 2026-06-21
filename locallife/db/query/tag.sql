@@ -70,6 +70,24 @@ WHERE mst.merchant_id = $1
   AND t.status = 'active'
 LIMIT 1;
 
+-- name: LockMerchantSelectableTag :one
+SELECT
+  t.id,
+  t.name,
+  t.type,
+  mst.sort_order,
+  t.status,
+  t.created_at,
+  t.icon
+FROM tags t
+INNER JOIN merchant_selectable_tags mst ON t.id = mst.tag_id
+WHERE mst.merchant_id = $1
+  AND mst.tag_id = $2
+  AND t.type = $3
+  AND t.status = 'active'
+LIMIT 1
+FOR UPDATE OF t, mst;
+
 -- name: GetTag :one
 SELECT id, name, type, sort_order, status, created_at, icon FROM tags
 WHERE id = $1 LIMIT 1;
