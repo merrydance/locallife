@@ -123,9 +123,14 @@
       </view>
 
       <view class="section-panel">
-        <view class="section-top-main section-top-main--spaced">
-          <text class="section-title">4. 套餐标签</text>
-          <text wx:if="{{availableTags.length}}" class="section-caption">已选 {{selectedTagIds.length}} 个</text>
+        <view class="section-top-action">
+          <view class="section-top-main">
+            <text class="section-title">4. 套餐标签</text>
+            <text wx:if="{{availableTags.length}}" class="section-caption">已选 {{selectedTagIds.length}} 个</text>
+          </view>
+          <view class="section-top-button">
+            <t-button size="small" theme="primary" icon="add" bind:tap="onCreateComboTag" loading="{{tagSubmitting}}">新增套餐标签</t-button>
+          </view>
         </view>
 
         <view wx:if="{{availableTags.length}}" class="tag-check-list">
@@ -175,6 +180,23 @@
         </t-button>
       </view>
     </view>
+
+    <t-dialog
+      visible="{{createTagDialogVisible}}"
+      title="新增套餐标签"
+      confirm-btn="{{ { content: '确定', loading: tagSubmitting } }}"
+      cancel-btn="取消"
+      bind:confirm="onConfirmCreateTagDialog"
+      bind:cancel="onCloseCreateTagDialog"
+    >
+      <view slot="content" class="dialog-form">
+        <t-input
+          label="标签名称"
+          value="{{createTagInputValue}}"
+          bind:change="onCreateTagInputChange"
+        />
+      </view>
+    </t-dialog>
 
   </block>
 </view>

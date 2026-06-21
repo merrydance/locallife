@@ -101,6 +101,8 @@ export interface TagInfo {
     icon?: string                                // 图标
 }
 
+type MerchantSelectableTagType = 'dish' | 'combo' | 'table' | 'customization'
+
 /**
  * 菜品分类 - 对齐 api.dishCategory
  */
@@ -479,12 +481,12 @@ export class TagService {
 
     /**
      * 获取指定类型的标签列表
-     * GET /v1/tags?type=xxx
-     * @param type 标签类型: dish, merchant, combo, table, customization
+     * GET /v1/merchant/tags?type=xxx
+     * @param type 标签类型: dish, combo, table, customization
      */
-    static async listTags(type: 'dish' | 'merchant' | 'combo' | 'table' | 'customization'): Promise<TagInfo[]> {
+    static async listTags(type: MerchantSelectableTagType): Promise<TagInfo[]> {
         const response = await request<{ tags: TagInfo[] }>({
-            url: '/v1/tags',
+            url: '/v1/merchant/tags',
             method: 'GET',
             data: { type }
         })
@@ -509,11 +511,11 @@ export class TagService {
 
     /**
      * 创建标签
-     * POST /v1/tags
+     * POST /v1/merchant/tags
      */
-    static async createTag(data: { name: string, type: string, icon?: string }): Promise<TagInfo> {
+    static async createTag(data: { name: string, type: MerchantSelectableTagType }): Promise<TagInfo> {
         return await request<TagInfo>({
-            url: '/v1/tags',
+            url: '/v1/merchant/tags',
             method: 'POST',
             data
         })
