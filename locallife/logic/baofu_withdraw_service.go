@@ -30,7 +30,7 @@ const (
 type baofuWithdrawStore interface {
 	GetBaofuAccountBindingByOwner(ctx context.Context, arg db.GetBaofuAccountBindingByOwnerParams) (db.BaofuAccountBinding, error)
 	GetBaofuWithdrawalOrderByIdempotency(ctx context.Context, arg db.GetBaofuWithdrawalOrderByIdempotencyParams) (db.BaofuWithdrawalOrder, error)
-	CreateBaofuWithdrawalOrderWithSubmittedCommandTx(ctx context.Context, arg db.CreateBaofuWithdrawalOrderWithSubmittedCommandTxParams) (db.CreateBaofuWithdrawalOrderWithSubmittedCommandTxResult, error)
+	CreateBaofuWithdrawalOrderWithReservationAndSubmittedCommandTx(ctx context.Context, arg db.CreateBaofuWithdrawalOrderWithReservationAndSubmittedCommandTxParams) (db.CreateBaofuWithdrawalOrderWithReservationAndSubmittedCommandTxResult, error)
 }
 
 type BaofuWithdrawClient interface {
@@ -199,7 +199,7 @@ func (s *BaofuWithdrawService) CreateWithdrawal(ctx context.Context, input Baofu
 		return result, ErrBaofuWithdrawInsufficientBalance
 	}
 	submittedAt := s.now().UTC()
-	submittedTxResult, err := s.store.CreateBaofuWithdrawalOrderWithSubmittedCommandTx(ctx, db.CreateBaofuWithdrawalOrderWithSubmittedCommandTxParams{
+	submittedTxResult, err := s.store.CreateBaofuWithdrawalOrderWithReservationAndSubmittedCommandTx(ctx, db.CreateBaofuWithdrawalOrderWithReservationAndSubmittedCommandTxParams{
 		WithdrawalOrder: db.CreateBaofuWithdrawalOrderParams{
 			OwnerType:        strings.TrimSpace(input.OwnerType),
 			OwnerID:          input.OwnerID,
@@ -217,10 +217,18 @@ func (s *BaofuWithdrawService) CreateWithdrawal(ctx context.Context, input Baofu
 				Valid:  true,
 			},
 		},
-		BusinessOwner: businessOwnerForBaofuWithdrawal(input.OwnerType),
-		SubmittedAt:   submittedAt,
+		BusinessOwner:              businessOwnerForBaofuWithdrawal(input.OwnerType),
+		SubmittedAt:                submittedAt,
+		ProviderAvailableAmountFen: balance.AvailableAmountFen,
+		ProviderPendingAmountFen:   balance.PendingAmountFen,
+		ProviderLedgerAmountFen:    balance.LedgerAmountFen,
+		ProviderFrozenAmountFen:    balance.FrozenAmountFen,
+		ProviderBalanceObservedAt:  submittedAt,
 	})
 	if err != nil {
+		if errors.Is(err, db.ErrBaofuWithdrawalInsufficientReservedBalance) {
+			return result, ErrBaofuWithdrawInsufficientBalance
+		}
 		if db.ErrorCode(err) == db.UniqueViolation {
 			return s.replayBaofuWithdrawalByUniqueConflict(ctx, input, idempotencyKey, requestHash, err)
 		}
