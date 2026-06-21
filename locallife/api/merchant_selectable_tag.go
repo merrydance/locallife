@@ -34,6 +34,47 @@ func buildMerchantSelectableTagResponse(tag db.ListMerchantSelectableTagsRow) ta
 	return resp
 }
 
+func merchantSelectableTagTypeAllowedForStaffRole(tagType string, staffRole string) bool {
+	switch staffRole {
+	case db.MerchantStaffRoleOwner, db.MerchantStaffRoleManager:
+		return true
+	case db.MerchantStaffRoleChef:
+		return tagType == db.TagTypeDish || tagType == db.TagTypeCombo || tagType == db.TagTypeCustomization
+	default:
+		return false
+	}
+}
+
+func (server *Server) authorizeMerchantSelectableTagType(ctx *gin.Context, merchant db.Merchant, tagType string) bool {
+	staffRole, ok := GetMerchantStaffRoleFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, errors.New("merchant staff role not loaded, ensure MerchantStaffMiddleware is applied")))
+		return false
+	}
+
+	if merchantSelectableTagTypeAllowedForStaffRole(tagType, staffRole) {
+		return true
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	server.logSecurityRejection(ctx, securityRejectionInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "merchant",
+		Action:      "merchant_selectable_tag_access_denied",
+		TargetType:  "merchant_selectable_tag_type",
+		TargetID:    merchant.ID,
+		MerchantID:  merchant.ID,
+		Reason:      "merchant_selectable_tag_type_denied",
+		Audit:       true,
+		Metadata: map[string]any{
+			"staff_role": staffRole,
+			"tag_type":   tagType,
+		},
+	})
+	ctx.JSON(http.StatusForbidden, errorResponse(ErrMerchantStaffPermissionDenied))
+	return false
+}
+
 // listMerchantSelectableTags godoc
 // @Summary 获取当前商户可选业务标签
 // @Description 获取当前商户自行维护的菜品、桌台、套餐或定制选项标签
@@ -57,6 +98,9 @@ func (server *Server) listMerchantSelectableTags(ctx *gin.Context) {
 	merchant, ok := GetMerchantFromContext(ctx)
 	if !ok {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, errors.New("merchant not loaded, ensure MerchantStaffMiddleware is applied")))
+		return
+	}
+	if !server.authorizeMerchantSelectableTagType(ctx, merchant, req.Type) {
 		return
 	}
 
@@ -107,6 +151,9 @@ func (server *Server) createMerchantSelectableTag(ctx *gin.Context) {
 	merchant, ok := GetMerchantFromContext(ctx)
 	if !ok {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, errors.New("merchant not loaded, ensure MerchantStaffMiddleware is applied")))
+		return
+	}
+	if !server.authorizeMerchantSelectableTagType(ctx, merchant, req.Type) {
 		return
 	}
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)

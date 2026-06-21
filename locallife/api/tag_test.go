@@ -214,6 +214,51 @@ func TestListMerchantSelectableTagsAPIUsesMerchantContext(t *testing.T) {
 	require.Equal(t, icon, response.Tags[0].Icon)
 }
 
+func TestListMerchantSelectableTagsAPIPermitsChefForMenuTagTypes(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID + 1000)
+
+	for _, tagType := range []string{db.TagTypeDish, db.TagTypeCombo, db.TagTypeCustomization} {
+		t.Run(tagType, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			expectResolveSingleStaffMerchant(store, user.ID, merchant)
+			store.EXPECT().
+				GetUserMerchantRole(gomock.Any(), db.GetUserMerchantRoleParams{
+					MerchantID: merchant.ID,
+					UserID:     user.ID,
+				}).
+				Times(1).
+				Return(db.MerchantStaffRoleChef, nil)
+			store.EXPECT().
+				ListMerchantSelectableTags(gomock.Any(), db.ListMerchantSelectableTagsParams{
+					MerchantID: merchant.ID,
+					Type:       tagType,
+				}).
+				Times(1).
+				Return([]db.ListMerchantSelectableTagsRow{{
+					ID:        31,
+					Name:      "招牌",
+					Type:      tagType,
+					SortOrder: 2,
+					Status:    db.TagStatusActive,
+				}}, nil)
+
+			server := newTestServer(t, store)
+			request, err := http.NewRequest(http.MethodGet, "/v1/merchant/tags?type="+tagType, nil)
+			require.NoError(t, err)
+			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+			recorder := httptest.NewRecorder()
+			server.router.ServeHTTP(recorder, request)
+
+			require.Equal(t, http.StatusOK, recorder.Code)
+		})
+	}
+}
+
 func TestCreateMerchantSelectableTagAPIUsesMerchantContext(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
@@ -266,6 +311,130 @@ func TestCreateMerchantSelectableTagAPIUsesMerchantContext(t *testing.T) {
 	require.Equal(t, tag.ID, response.ID)
 	require.Equal(t, tag.Name, response.Name)
 	require.Equal(t, tag.Type, response.Type)
+}
+
+func TestCreateMerchantSelectableTagAPIPermitsChefForMenuTagTypes(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID + 1000)
+
+	for _, tagType := range []string{db.TagTypeDish, db.TagTypeCombo, db.TagTypeCustomization} {
+		t.Run(tagType, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			expectResolveSingleStaffMerchant(store, user.ID, merchant)
+			store.EXPECT().
+				GetUserMerchantRole(gomock.Any(), db.GetUserMerchantRoleParams{
+					MerchantID: merchant.ID,
+					UserID:     user.ID,
+				}).
+				Times(1).
+				Return(db.MerchantStaffRoleChef, nil)
+			store.EXPECT().
+				CreateMerchantSelectableTagTx(gomock.Any(), gomock.AssignableToTypeOf(db.CreateMerchantSelectableTagTxParams{})).
+				Times(1).
+				DoAndReturn(func(_ any, arg db.CreateMerchantSelectableTagTxParams) (db.Tag, error) {
+					require.Equal(t, merchant.ID, arg.MerchantID)
+					require.Equal(t, tagType, arg.Type)
+					return db.Tag{
+						ID:        41,
+						Name:      "少油",
+						Type:      tagType,
+						SortOrder: 1,
+						Status:    db.TagStatusActive,
+					}, nil
+				})
+
+			server := newTestServer(t, store)
+			body, err := json.Marshal(map[string]any{
+				"name": "少油",
+				"type": tagType,
+			})
+			require.NoError(t, err)
+
+			request, err := http.NewRequest(http.MethodPost, "/v1/merchant/tags", bytes.NewReader(body))
+			require.NoError(t, err)
+			request.Header.Set("Content-Type", "application/json")
+			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+			recorder := httptest.NewRecorder()
+			server.router.ServeHTTP(recorder, request)
+
+			require.Equal(t, http.StatusCreated, recorder.Code)
+		})
+	}
+}
+
+func TestMerchantSelectableTagAPIRejectsChefForTableTags(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID + 1000)
+
+	tests := []struct {
+		name       string
+		method     string
+		path       string
+		body       map[string]any
+		assertStub func(store *mockdb.MockStore)
+	}{
+		{
+			name:   "list table tags",
+			method: http.MethodGet,
+			path:   "/v1/merchant/tags?type=table",
+			assertStub: func(store *mockdb.MockStore) {
+				store.EXPECT().ListMerchantSelectableTags(gomock.Any(), gomock.Any()).Times(0)
+			},
+		},
+		{
+			name:   "create table tag",
+			method: http.MethodPost,
+			path:   "/v1/merchant/tags",
+			body: map[string]any{
+				"name": "靠窗",
+				"type": db.TagTypeTable,
+			},
+			assertStub: func(store *mockdb.MockStore) {
+				store.EXPECT().CreateMerchantSelectableTagTx(gomock.Any(), gomock.Any()).Times(0)
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			expectResolveSingleStaffMerchant(store, user.ID, merchant)
+			store.EXPECT().
+				GetUserMerchantRole(gomock.Any(), db.GetUserMerchantRoleParams{
+					MerchantID: merchant.ID,
+					UserID:     user.ID,
+				}).
+				Times(1).
+				Return(db.MerchantStaffRoleChef, nil)
+			tc.assertStub(store)
+
+			server := newTestServer(t, store)
+			body := bytes.NewReader(nil)
+			if tc.body != nil {
+				data, err := json.Marshal(tc.body)
+				require.NoError(t, err)
+				body = bytes.NewReader(data)
+			}
+			request, err := http.NewRequest(tc.method, tc.path, body)
+			require.NoError(t, err)
+			request.Header.Set("Content-Type", "application/json")
+			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+			recorder := httptest.NewRecorder()
+			server.router.ServeHTTP(recorder, request)
+
+			require.Equal(t, http.StatusForbidden, recorder.Code)
+			requireAPIErrorCode(t, recorder, ErrMerchantStaffPermissionDenied)
+		})
+	}
 }
 
 func TestCreateMerchantSelectableTagAPIMapsInactiveNameToConflict(t *testing.T) {

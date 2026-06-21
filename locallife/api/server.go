@@ -789,8 +789,14 @@ func (server *Server) setupRouter() {
 		merchantPackagingGroup.POST("/packaging-options", server.createMerchantPackagingOption)
 		merchantPackagingGroup.PUT("/packaging-options/:id", server.updateMerchantPackagingOption)
 		merchantPackagingGroup.DELETE("/packaging-options/:id", server.deleteMerchantPackagingOption)
-		merchantPackagingGroup.GET("/tags", server.listMerchantSelectableTags)
-		merchantPackagingGroup.POST("/tags", server.createMerchantSelectableTag)
+	}
+
+	// M3.6.1: 商户可选业务标签。菜单类标签允许厨师编辑，桌台类标签在 handler 内继续限制为老板/店长。
+	merchantSelectableTagsGroup := authGroup.Group("/merchant")
+	merchantSelectableTagsGroup.Use(server.MerchantStaffMiddleware("owner", "manager", "chef"))
+	{
+		merchantSelectableTagsGroup.GET("/tags", server.listMerchantSelectableTags)
+		merchantSelectableTagsGroup.POST("/tags", server.createMerchantSelectableTag)
 	}
 
 	// M3.7: 集团入驻申请
