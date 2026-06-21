@@ -1030,8 +1030,8 @@ SQL 证据：
    - 验证：新增 suspended relation 无参、显式授权区域、非法 `region_id` API tests；现有 `rules/index` 小程序路径不受影响。
 
 4. `OP-RISK-002-B` 运营侧 helper 使用矩阵脚本化
-   - 文件：可新增 `weapp/scripts/check-operator-capability-audit` 补充项或后端轻量脚本。
-   - 内容：扫描 operator handler 中 `getOperatorRegionID()` 使用点，要求每个使用点在文档中分类为“必须单区”或“待迁移聚合”。
+   - 文件：`weapp/scripts/check-operator-backend-region-helper-contract.test.js`、`weapp/package.json`、本文档。
+   - 内容：已扫描 operator handler 中 `getOperatorRegionID()` 使用点，要求每个使用点在文档中分类为“必须单区”“兼容兜底”或“待迁移聚合”。
    - 验证：专项脚本通过。
 
 ### OPA-005 修复计划：峰时时段列表跨区域读取权限
@@ -1410,7 +1410,7 @@ SQL 证据：
 | History Batch 7 | `OPA-008`、`OPA-009`、`OPA-010` | 用户回归暴露的二轮漂移收口 | 已完成：页面成功态可见、调度区域授权一致、财务关键展示由 ViewModel 输出 |
 | Next Batch 1 | `OPA-011` | 食安案件多区域默认视图与处置授权 | 多区域列表、详情、调查、结案测试通过；非管理/suspended fail closed |
 | Next Batch 2 | `OPA-012` | 佣金明细默认聚合与财务口径统一 | overview、recent commission、bill items 同一区域集合；summary/page/count 一致 |
-| Next Batch 3 | `OP-RISK-001/002` | backend-only 和 API 直接调用残余风险加固 | 分账配置和规则无参兜底已完成；helper 使用矩阵脚本化仍需收口 |
+| Next Batch 3 | `OP-RISK-001/002` | backend-only 和 API 直接调用残余风险加固 | 已完成：分账配置、规则无参兜底和 helper 使用矩阵脚本化均有 focused tests/gate |
 
 ### 每个大问题完成后的复核模板
 
@@ -1678,6 +1678,28 @@ SQL 证据：
 | 非目标 | 未重构规则配置字段、天气系数、运费 fallback、骑手押金阈值同步；未新增小程序页面；未处理 helper 使用矩阵脚本化，留给 `OP-RISK-002-B` |
 | 剩余风险 | 当前仍依赖文档和 focused tests 约束 `getOperatorRegionID()` 使用点分类；下一小任务需要把 helper 使用矩阵脚本化，防止后续新增 operator handler 时再次出现默认语义漂移 |
 
+#### OP-RISK-002-B 完成复核：运营侧区域 helper 使用矩阵守卫
+
+| 字段 | 记录 |
+| --- | --- |
+| 完成范围 | `OP-RISK-002-B`；本次提交涉及 `weapp/scripts/check-operator-backend-region-helper-contract.test.js`、`weapp/package.json`、本文档 |
+| 设计目标 | 已达成：`getOperatorRegionID()` 剩余业务调用点必须出现在本文档矩阵中并分类；新增未分类调用点会使 `check:operator-capability-audit` 失败 |
+| 时序 | 本项不改变运行时请求顺序，只把 helper 使用分类机器化到专项 gate；业务修复仍由对应 handler tests 负责 |
+| 幂等 | 本项无写路径和副作用；脚本为只读扫描，重复执行结果稳定 |
+| 越权 | 守卫重点是防止新增 operator handler 在默认视图中误用单区 helper；矩阵要求每个调用点明确“必须单区/兼容兜底/待迁移聚合”语义 |
+| 回归 | 红灯：脚本首次运行因 `operator_realtime.go:51` 等调用点未被矩阵记录而失败；绿灯：补齐矩阵后 `PATH="$HOME/.local/bin:$PATH" node scripts/check-operator-backend-region-helper-contract.test.js`、`PATH="$HOME/.local/bin:$PATH" npm run check:operator-capability-audit` 通过 |
+| 非目标 | 不在本项迁移实时统计、区域列表或排行语义；不改变任何后端 handler 行为 |
+| 剩余风险 | 该脚本基于文本扫描和白名单分类，能防止未登记调用点，但不能自动判断业务语义是否分类正确；涉及新运营侧能力时仍需人工 review 业务默认视图 |
+
+#### 运营侧 `getOperatorRegionID()` 使用矩阵
+
+| 文件 | 函数 | 调用语句 | 分类 | 当前语义 | 后续要求 |
+| --- | --- | --- | --- | --- | --- |
+| operator_rules.go | resolveOperatorRuleRegionID | regionID, err := server.getOperatorRegionID(ctx) | 必须单区 | `/v1/operator/rules` 规则读写只面向单区域配置；无参只能解析一个 active 区域，多区域要求显式 `region_id` | 新增规则入口必须继续显式选区或复用该单区 resolver |
+| operator_realtime.go | getOperatorRealtimeStats | regionID, err = server.getOperatorRegionID(ctx) | 兼容兜底 | 实时统计支持显式 `region_id`；无参 fallback 保持单区域兼容，当前小程序默认路径会从区域选择进入或使用 operator 默认区 | 若要做运营工作台“全部区域实时统计”，需另开聚合 DTO 和页面 ViewModel，不得在此静默聚合 |
+| operator_stats.go | listOperatorRegions | regionID, err := server.getOperatorRegionID(ctx) | 兼容兜底 | `/v1/operator/regions` 展示列表在关系/legacy 读取都为空时，用旧鉴权模型补单一区域 | 只能作为区域列表 legacy fallback；不能复制到统计/财务默认视图 |
+| operator_stats.go | getOperatorRankings | regionID, err := server.getOperatorRegionID(ctx) | 必须单区 | 商户/骑手排行当前是单区域排行能力，页面应有明确区域上下文 | 若产品要求跨区域排行，需新增聚合 SQL/DTO/tests，不能直接复用该 helper |
+
 ## 后续审计工作记录
 
 后续继续在本节追加全量盘点结果。每个能力或页面至少记录：
@@ -1697,4 +1719,4 @@ SQL 证据：
 | OPA-011 | 食安案件 | `/v1/operator/food-safety/cases`、`/:id`、`/investigate`、`/resolve` 默认单区域口径 | `operator_food_safety_cases.go`, `operator_food_safety_cases_test.go`, `trust_score.sql`, sqlc/mock 生成物 | `operator/safety/report`, `operator/safety/detail`, `operator-safety.ts`, `operator-basic-management.ts`, `check-operator-food-safety-contract.test.js` | 已修复：`9e8bef7f`、`632921a8`、本次 gate 收口 | 已完成复核 |
 | OPA-012 | 财务佣金 | `/v1/operators/me/commission` 与 `/finance/overview` 默认区域口径不一致 | `operator_stats.go`, `operator_stats_test.go`, Swagger 生成物 | `operator/finance/withdraw`, `operator/finance/bills`, `operator-finance.ts`, `check-operator-finance-overview-display.test.js` | 已修复：本次 OPA-012 提交 | 已完成复核 |
 | OP-RISK-001 | 分账配置 | `/v1/operators/me/profit-sharing/configs` 默认单区域口径 | `operator_profit_sharing_config.go`, `profit_sharing_config.sql`, `profit_sharing_config_test.go` | 当前运营商小程序无入口 | 已修复 | 已完成复核 |
-| OP-RISK-002 | 区域规则 | `/v1/operator/rules` 无参 legacy 兜底 | `operator_rules.go`, `operator_deposit_rules_test.go` | `operator/rules/index` 当前显式传 `region_id` | 已修复 | 已完成复核；helper 使用矩阵脚本化待 `OP-RISK-002-B` |
+| OP-RISK-002 | 区域规则 | `/v1/operator/rules` 无参 legacy 兜底 | `operator_rules.go`, `operator_deposit_rules_test.go`, `check-operator-backend-region-helper-contract.test.js` | `operator/rules/index` 当前显式传 `region_id` | 已修复 | 已完成复核 |
