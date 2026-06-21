@@ -801,7 +801,7 @@ SQL 证据：
 
 ### OPA-012: 佣金明细仍使用单区域默认口径，和财务概览“全部区域”漂移
 
-- 状态：待修复
+- 状态：已修复（2026-06-21，本次 OPA-012 批次）
 - 风险级别：G2/G3
 - 类型：后端默认区域/多区域漂移、资金统计口径漂移、小程序财务链路不一致
 - 影响页面：`weapp/miniprogram/pages/operator/finance/withdraw/index`、`weapp/miniprogram/pages/operator/finance/bills/index`
@@ -850,6 +850,14 @@ SQL 证据：
   - suspended relation、非管理区域、无区域 operator 均 fail closed。
 - 小程序：`npm run check:operator-finance-overview-display`、`npm run check:finance-bill-pages`、`npm run compile`。
 - 人工回归：财务概览总额与最近佣金/账单日期范围口径一致，不出现总览有钱但明细加载失败或只显示单区域。
+
+#### 修复记录（2026-06-21）
+
+- 后端 `getOperatorCommission()` 已改用 `resolveOperatorRegionSelection()`：无 `region_id` 默认聚合全部 active/legacy 可管区域，显式 `region_id` 仍走单区域授权校验。
+- 佣金明细先按日期合并授权区域趋势，再计算 `summary/total/total_count` 并分页，避免“按单区域分页后拼接”或 summary/items 来源不一致。
+- suspended legacy primary region 不再进入默认聚合；新增 focused test 锁定多区域默认汇总和 suspended legacy 排除。
+- 小程序财务页和账单页继续不注入默认 `region_id`，由后端承担默认全部区域语义；专项 gate 增加断言，避免后续把 overview 和 commission 拆成不同默认区域口径。
+- Swagger 生成物已同步 `/v1/operators/me/commission` 的可选 `region_id` 查询参数说明。
 
 ### 2026-06-21 按新增方法二轮 review 记录
 
@@ -1627,6 +1635,21 @@ SQL 证据：
 | 非目标 | 未改后端财务计算公式、提现流程、宝付账户开户或佣金账单分页；未给 WXML 通用表达式安全 gate 增加全仓 formatter 禁令 |
 | 剩余风险 | 自动化脚本能锁住当前财务页 display 字段，但不能替代微信开发者工具或真机 smoke；后续新增资金展示页面必须复用 ViewModel display 字段规则 |
 
+#### OPA-012 完成复核：佣金明细默认聚合与财务口径统一
+
+| 字段 | 记录 |
+| --- | --- |
+| 完成范围 | `OPA-012-A/B/C/D/E`；本次提交涉及 `locallife/api/operator_stats.go`、`locallife/api/operator_stats_test.go`、Swagger 生成物、`weapp/scripts/check-operator-finance-overview-display.test.js`、本文档 |
+| 设计目标 | 已达成：`GET /v1/operators/me/commission` 与 `/finance/overview` 共用 `resolveOperatorRegionSelection()`；无 `region_id` 默认聚合全部 active/legacy 可管区域；显式 `region_id` 仍单区域授权；summary、total、total_count、items 都来自同一日期范围和同一区域集合 |
+| 设计修正 | 不新增小程序区域筛选 UI。当前财务页和账单页没有区域筛选，因此正确实现是保持两处请求都不传默认 `region_id`，让后端成为默认“全部区域”真值源；小程序 gate 锁定这一点，防止后续又在前端注入单一区域 |
+| 时序 | 佣金明细先解析授权区域集合，再读取趋势；多区域先按日期合并、排序，再分页和计算汇总，避免按区域分页后拼接导致 count/page 漂移。财务页 overview 与最近佣金仍并发加载，单项失败显示各自错误态 |
+| 幂等 | 本项只改读路径，不新增写入、重试或重复提交副作用；重复请求只重新读取相同授权集合的趋势数据 |
+| 越权 | 默认路径不再信任 legacy `operators.region_id` 单区；suspended legacy primary region 被排除；显式 `region_id` 仍调用 `checkOperatorManagesRegion()` fail closed；非授权区域不进入趋势查询 |
+| 小程序复核 | `operator-finance.ts` 的 overview、最近佣金、账单页均不注入默认 `region_id`；commission failure 保持显式 `commissionError`，不会吞成正常空列表；`check:operator-finance-overview-display` 新增默认聚合和错误态断言，并已纳入 `check:operator-capability-audit` |
+| 回归 | 红灯：新增 `DefaultAggregatesManagedRegions`、`DefaultAggregationExcludesSuspendedLegacyPrimaryRegion` 在旧实现上因调用 `getOperatorRegionID()` 和 `CheckOperatorManagesRegion(operator.region_id)` 失败；绿灯：`PATH=/usr/local/go/bin:$PATH go test ./api -run 'Test(GetOperatorFinanceOverviewAPI\|GetOperatorCommissionAPI)' -count=1` 通过；`PATH=/usr/local/go/bin:$PATH make swagger`、`PATH=/usr/local/go/bin:$PATH make check-generated` 通过；`PATH="$HOME/.local/bin:$PATH" npm run check:operator-finance-overview-display`、`PATH="$HOME/.local/bin:$PATH" npm run check:operator-capability-audit` 通过 |
+| 非目标 | 未改变财务计算公式、分账订单 SQL、提现/结算账户流程、账单日期范围口径；未处理 `operator_stats.go` 中商户/骑手排行仍需单区域的旧 helper；未处理 `OP-RISK-001/002` |
+| 剩余风险 | 未做微信开发者工具或真机 smoke；`parseDateRange()` 仍按既有 UTC 日期边界返回，本次未把日期日末语义纳入修复，若业务要求“包含整天”需另开时间口径任务 |
+
 ## 后续审计工作记录
 
 后续继续在本节追加全量盘点结果。每个能力或页面至少记录：
@@ -1644,6 +1667,6 @@ SQL 证据：
 | OPA-009 | 调度大厅 | `/v1/operator/regions/:region_id/delivery-pool/summary`、`/delivery-pool` 区域授权 | `operator_dispatch_monitor.go`, `delivery_fee.go`, `operator_dispatch_monitor_test.go`, `operator_stats_test.go` | `operator/dispatch-hall/index` | 已修复：`6182ade7` | 已完成复核 |
 | OPA-010 | 财务概览 | `/v1/operators/me/finance/overview`、`/commission` 金额展示适配 | `operator_stats_test.go` 覆盖默认聚合边界 | `operator/finance/withdraw/index`, `operator-finance.ts`, `check-operator-finance-overview-display.test.js` | 已修复：`6182ade7` | 已完成复核 |
 | OPA-011 | 食安案件 | `/v1/operator/food-safety/cases`、`/:id`、`/investigate`、`/resolve` 默认单区域口径 | `operator_food_safety_cases.go`, `operator_food_safety_cases_test.go`, `trust_score.sql`, sqlc/mock 生成物 | `operator/safety/report`, `operator/safety/detail`, `operator-safety.ts`, `operator-basic-management.ts`, `check-operator-food-safety-contract.test.js` | 已修复：`9e8bef7f`、`632921a8`、本次 gate 收口 | 已完成复核 |
-| OPA-012 | 财务佣金 | `/v1/operators/me/commission` 与 `/finance/overview` 默认区域口径不一致 | `operator_stats.go`, `operator_stats_test.go` | `operator/finance/withdraw`, `operator/finance/bills`, `operator-finance.ts` | 待修复 | 新增方法二轮 review 确认 |
+| OPA-012 | 财务佣金 | `/v1/operators/me/commission` 与 `/finance/overview` 默认区域口径不一致 | `operator_stats.go`, `operator_stats_test.go`, Swagger 生成物 | `operator/finance/withdraw`, `operator/finance/bills`, `operator-finance.ts`, `check-operator-finance-overview-display.test.js` | 已修复：本次 OPA-012 提交 | 已完成复核 |
 | OP-RISK-001 | 分账配置 | `/v1/operators/me/profit-sharing/configs` 默认单区域口径 | `operator_profit_sharing_config.go`, `profit_sharing_config.sql` | 当前运营商小程序无入口 | 待加固 | backend-only 残余风险 |
 | OP-RISK-002 | 区域规则 | `/v1/operator/rules` 无参 legacy 兜底 | `operator_rules.go` | `operator/rules/index` 当前显式传 `region_id` | 待加固 | API 直接调用残余风险 |

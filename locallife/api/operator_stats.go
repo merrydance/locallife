@@ -906,6 +906,23 @@ type operatorCommissionResponse struct {
 	} `json:"summary"`
 }
 
+type operatorCommissionTrend struct {
+	Date       string
+	OrderCount int32
+	TotalGMV   int64
+	Commission int64
+}
+
+func addOperatorCommissionTrend(trendByDate map[string]operatorCommissionTrend, date pgtype.Date, orderCount int32, totalGMV, commission int64) {
+	dateKey := date.Time.Format("2006-01-02")
+	aggregated := trendByDate[dateKey]
+	aggregated.Date = dateKey
+	aggregated.OrderCount += orderCount
+	aggregated.TotalGMV += totalGMV
+	aggregated.Commission += commission
+	trendByDate[dateKey] = aggregated
+}
+
 // getOperatorCommission 获取运营商佣金明细
 // @Summary 获取佣金明细
 // @Description 获取运营商的每日佣金明细，支持分页
@@ -914,6 +931,7 @@ type operatorCommissionResponse struct {
 // @Produce json
 // @Param start_date query string true "开始日期 (格式: 2025-11-01)"
 // @Param end_date query string true "结束日期 (格式: 2025-11-30)"
+// @Param region_id query int false "区域ID；不传时聚合当前运营商全部可管区域"
 // @Param page query int false "页码 (默认: 1)"
 // @Param limit query int false "每页数量 (默认: 20, 最大: 100)"
 // @Success 200 {object} operatorCommissionResponse "佣金明细"
@@ -929,10 +947,9 @@ func (server *Server) getOperatorCommission(ctx *gin.Context) {
 		return
 	}
 
-	// 获取运营商管理的区域ID
-	regionID, err := server.getOperatorRegionID(ctx)
+	selection, err := server.resolveOperatorRegionSelection(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(err))
+		server.respondOperatorRegionSelectionError(ctx, err)
 		return
 	}
 
@@ -952,16 +969,44 @@ func (server *Server) getOperatorCommission(ctx *gin.Context) {
 		limit = 20
 	}
 
-	// 获取每日佣金趋势数据
-	trends, err := server.store.GetRegionDailyTrend(ctx, db.GetRegionDailyTrendParams{
-		RegionID: regionID,
-		StartAt:  startDate,
-		EndAt:    endDate,
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
+	trendByDate := make(map[string]operatorCommissionTrend)
+	if selection.IsAllRegions {
+		trends, queryErr := server.store.GetManagedRegionsDailyTrend(ctx, db.GetManagedRegionsDailyTrendParams{
+			RegionIds: selection.RegionIDs,
+			StartAt:   startDate,
+			EndAt:     endDate,
+		})
+		if queryErr != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, queryErr))
+			return
+		}
+		for _, trend := range trends {
+			addOperatorCommissionTrend(trendByDate, trend.Date, trend.OrderCount, trend.TotalGmv, trend.Commission)
+		}
+	} else {
+		for _, regionID := range selection.RegionIDs {
+			trends, queryErr := server.store.GetRegionDailyTrend(ctx, db.GetRegionDailyTrendParams{
+				RegionID: regionID,
+				StartAt:  startDate,
+				EndAt:    endDate,
+			})
+			if queryErr != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, queryErr))
+				return
+			}
+			for _, trend := range trends {
+				addOperatorCommissionTrend(trendByDate, trend.Date, trend.OrderCount, trend.TotalGmv, trend.Commission)
+			}
+		}
 	}
+
+	trends := make([]operatorCommissionTrend, 0, len(trendByDate))
+	for _, trend := range trendByDate {
+		trends = append(trends, trend)
+	}
+	sort.Slice(trends, func(i, j int) bool {
+		return trends[i].Date < trends[j].Date
+	})
 
 	response := operatorCommissionResponse{
 		Items:      []operatorCommissionItem{},
@@ -974,7 +1019,7 @@ func (server *Server) getOperatorCommission(ctx *gin.Context) {
 	var totalGMV, totalCommission int64
 	var totalOrders int32
 	for _, trend := range trends {
-		totalGMV += trend.TotalGmv
+		totalGMV += trend.TotalGMV
 		totalCommission += trend.Commission
 		totalOrders += trend.OrderCount
 	}
@@ -998,15 +1043,15 @@ func (server *Server) getOperatorCommission(ctx *gin.Context) {
 	for _, trend := range trends[startIdx:endIdx] {
 		// 计算佣金率
 		rate := "N/A" // 没有交易时显示 N/A
-		if trend.TotalGmv > 0 {
-			actualRate := float64(trend.Commission) / float64(trend.TotalGmv) * 100
+		if trend.TotalGMV > 0 {
+			actualRate := float64(trend.Commission) / float64(trend.TotalGMV) * 100
 			rate = formatCommissionRate(actualRate)
 		}
 
 		response.Items = append(response.Items, operatorCommissionItem{
-			Date:           trend.Date.Time.Format("2006-01-02"),
+			Date:           trend.Date,
 			OrderCount:     trend.OrderCount,
-			TotalGMV:       trend.TotalGmv,
+			TotalGMV:       trend.TotalGMV,
 			CommissionRate: rate,
 			Commission:     trend.Commission,
 		})

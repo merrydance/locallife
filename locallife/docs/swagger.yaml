@@ -24675,6 +24675,10 @@ paths:
         name: end_date
         required: true
         type: string
+      - description: 区域ID；不传时聚合当前运营商全部可管区域
+        in: query
+        name: region_id
+        type: integer
       - description: '页码 (默认: 1)'
         in: query
         name: page

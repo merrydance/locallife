@@ -8,6 +8,7 @@ const read = (file) => fs.readFileSync(path.join(repoRoot, file), 'utf8')
 const pageSource = read('miniprogram/pages/operator/finance/withdraw/index.ts')
 const wxmlSource = read('miniprogram/pages/operator/finance/withdraw/index.wxml')
 const serviceSource = read('miniprogram/pages/operator/_services/operator-finance.ts')
+const normalizedServiceSource = serviceSource.replace(/\s+/g, ' ')
 
 assert(
   !wxmlSource.includes('formatFen(') && !wxmlSource.includes('formatShareRatio('),
@@ -38,5 +39,18 @@ assert(
   !pageSource.includes('formatFen(') && !pageSource.includes('formatShareRatio('),
   'operator finance page must not expose template-only formatter methods that WXML cannot call reliably'
 )
+assert(
+  normalizedServiceSource.includes('operatorBasicManagementService.getFinanceOverview().catch(() => null)') &&
+    normalizedServiceSource.includes('operatorBasicManagementService.getCommissionList({ page: 1, limit: 10 }).catch(() => null)'),
+  'operator finance overview and recent commission must both use backend default all-active-region selection when no UI region filter exists'
+)
+assert(
+  normalizedServiceSource.includes('operatorBasicManagementService.getCommissionList({ ...range, page, limit })'),
+  'operator commission bills must not inject a default region_id that drifts from finance overview aggregation'
+)
+assert(
+  serviceSource.includes("commissionError: commissionList ? '' : '佣金明细加载失败，请稍后重试'"),
+  'operator finance commission failures must render an explicit error state instead of a successful empty list'
+)
 
-console.log('check-operator-finance-overview-display: operator finance overview renders preformatted values')
+console.log('check-operator-finance-overview-display: operator finance overview renders preformatted values and default commission aggregation stays backend-owned')
