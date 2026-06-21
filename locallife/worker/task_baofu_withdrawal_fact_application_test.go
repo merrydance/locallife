@@ -20,16 +20,17 @@ func TestProcessTaskBaofuWithdrawalFactApplicationMapsReturnedState(t *testing.T
 
 	store := mockdb.NewMockStore(ctrl)
 	withdrawal := db.BaofuWithdrawalOrder{ID: 77, OutRequestNo: "WD_RETURNED", Status: db.BaofuWithdrawalStatusProcessing}
-	updated := withdrawal
-	updated.Status = db.BaofuWithdrawalStatusReturned
 
 	store.EXPECT().GetBaofuWithdrawalOrder(gomock.Any(), withdrawal.ID).Return(withdrawal, nil)
-	store.EXPECT().UpdateBaofuWithdrawalOrderStatus(gomock.Any(), db.UpdateBaofuWithdrawalOrderStatusParams{
-		ID:              withdrawal.ID,
-		Status:          db.BaofuWithdrawalStatusReturned,
-		BaofuWithdrawNo: pgtype.Text{String: "BF_RETURNED", Valid: true},
-		RawSnapshot:     []byte(`{"state":"3"}`),
-	}).Return(updated, nil)
+	store.EXPECT().ApplyBaofuWithdrawalTerminalStatusTx(gomock.Any(), db.ApplyBaofuWithdrawalTerminalStatusTxParams{
+		WithdrawalOrderID: withdrawal.ID,
+		Status:            db.BaofuWithdrawalStatusReturned,
+		BaofuWithdrawNo:   pgtype.Text{String: "BF_RETURNED", Valid: true},
+		RawSnapshot:       []byte(`{"state":"3"}`),
+	}).Return(db.ApplyBaofuWithdrawalTerminalStatusTxResult{
+		WithdrawalOrder: db.BaofuWithdrawalOrder{ID: withdrawal.ID, Status: db.BaofuWithdrawalStatusReturned},
+		Applied:         true,
+	}, nil)
 
 	processor := worker.NewTestTaskProcessor(store, nil, nil, nil)
 	payload, err := json.Marshal(worker.BaofuWithdrawalFactApplicationPayload{
@@ -44,14 +45,53 @@ func TestProcessTaskBaofuWithdrawalFactApplicationMapsReturnedState(t *testing.T
 	require.NoError(t, err)
 }
 
-func TestProcessTaskBaofuWithdrawalFactApplicationDoesNotRegressTerminalOrder(t *testing.T) {
+func TestProcessTaskBaofuWithdrawalFactApplicationConsumesSucceededReservation(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	withdrawal := db.BaofuWithdrawalOrder{ID: 78, OutRequestNo: "WD_TERMINAL", Status: db.BaofuWithdrawalStatusSucceeded}
+	withdrawal := db.BaofuWithdrawalOrder{ID: 79, OutRequestNo: "WD_SUCCEEDED", Status: db.BaofuWithdrawalStatusProcessing}
 
 	store.EXPECT().GetBaofuWithdrawalOrder(gomock.Any(), withdrawal.ID).Return(withdrawal, nil)
+	store.EXPECT().ApplyBaofuWithdrawalTerminalStatusTx(gomock.Any(), db.ApplyBaofuWithdrawalTerminalStatusTxParams{
+		WithdrawalOrderID: withdrawal.ID,
+		Status:            db.BaofuWithdrawalStatusSucceeded,
+		BaofuWithdrawNo:   pgtype.Text{String: "BF_SUCCEEDED", Valid: true},
+		RawSnapshot:       []byte(`{"state":"1"}`),
+	}).Return(db.ApplyBaofuWithdrawalTerminalStatusTxResult{
+		WithdrawalOrder: db.BaofuWithdrawalOrder{ID: withdrawal.ID, Status: db.BaofuWithdrawalStatusSucceeded},
+		Applied:         true,
+	}, nil)
+
+	processor := worker.NewTestTaskProcessor(store, nil, nil, nil)
+	payload, err := json.Marshal(worker.BaofuWithdrawalFactApplicationPayload{
+		WithdrawalOrderID: withdrawal.ID,
+		UpstreamState:     "1",
+		BaofuWithdrawNo:   "BF_SUCCEEDED",
+		RawSnapshot:       []byte(`{"state":"1"}`),
+	})
+	require.NoError(t, err)
+
+	err = processor.ProcessTaskBaofuWithdrawalFactApplication(context.Background(), asynq.NewTask(worker.TaskProcessBaofuWithdrawalFactApplication, payload))
+	require.NoError(t, err)
+}
+
+func TestProcessTaskBaofuWithdrawalFactApplicationKeepsProcessingWithoutReservationSettlement(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	withdrawal := db.BaofuWithdrawalOrder{ID: 80, OutRequestNo: "WD_PROCESSING", Status: db.BaofuWithdrawalStatusProcessing}
+	updated := withdrawal
+	updated.BaofuWithdrawNo = pgtype.Text{String: "BF_PROCESSING", Valid: true}
+
+	store.EXPECT().GetBaofuWithdrawalOrder(gomock.Any(), withdrawal.ID).Return(withdrawal, nil)
+	store.EXPECT().UpdateBaofuWithdrawalOrderToProcessing(gomock.Any(), db.UpdateBaofuWithdrawalOrderToProcessingParams{
+		ID:              withdrawal.ID,
+		BaofuWithdrawNo: pgtype.Text{String: "BF_PROCESSING", Valid: true},
+		RawSnapshot:     []byte(`{"state":"2"}`),
+	}).Return(updated, nil)
+	store.EXPECT().ApplyBaofuWithdrawalTerminalStatusTx(gomock.Any(), gomock.Any()).Times(0)
 
 	processor := worker.NewTestTaskProcessor(store, nil, nil, nil)
 	payload, err := json.Marshal(worker.BaofuWithdrawalFactApplicationPayload{
@@ -64,4 +104,64 @@ func TestProcessTaskBaofuWithdrawalFactApplicationDoesNotRegressTerminalOrder(t 
 
 	err = processor.ProcessTaskBaofuWithdrawalFactApplication(context.Background(), asynq.NewTask(worker.TaskProcessBaofuWithdrawalFactApplication, payload))
 	require.NoError(t, err)
+}
+
+func TestProcessTaskBaofuWithdrawalFactApplicationReplaysSameTerminalOrderThroughReservationTx(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	withdrawal := db.BaofuWithdrawalOrder{ID: 78, OutRequestNo: "WD_TERMINAL", Status: db.BaofuWithdrawalStatusSucceeded}
+
+	store.EXPECT().GetBaofuWithdrawalOrder(gomock.Any(), withdrawal.ID).Return(withdrawal, nil)
+	store.EXPECT().ApplyBaofuWithdrawalTerminalStatusTx(gomock.Any(), db.ApplyBaofuWithdrawalTerminalStatusTxParams{
+		WithdrawalOrderID: withdrawal.ID,
+		Status:            db.BaofuWithdrawalStatusSucceeded,
+		BaofuWithdrawNo:   pgtype.Text{String: "BF_SUCCEEDED", Valid: true},
+		RawSnapshot:       []byte(`{"state":"1"}`),
+	}).Return(db.ApplyBaofuWithdrawalTerminalStatusTxResult{
+		WithdrawalOrder: withdrawal,
+		Applied:         false,
+	}, nil)
+
+	processor := worker.NewTestTaskProcessor(store, nil, nil, nil)
+	payload, err := json.Marshal(worker.BaofuWithdrawalFactApplicationPayload{
+		WithdrawalOrderID: withdrawal.ID,
+		UpstreamState:     "1",
+		BaofuWithdrawNo:   "BF_SUCCEEDED",
+		RawSnapshot:       []byte(`{"state":"1"}`),
+	})
+	require.NoError(t, err)
+
+	err = processor.ProcessTaskBaofuWithdrawalFactApplication(context.Background(), asynq.NewTask(worker.TaskProcessBaofuWithdrawalFactApplication, payload))
+	require.NoError(t, err)
+}
+
+func TestProcessTaskBaofuWithdrawalFactApplicationSurfacesConflictingTerminalOrder(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	withdrawal := db.BaofuWithdrawalOrder{ID: 81, OutRequestNo: "WD_TERMINAL_CONFLICT", Status: db.BaofuWithdrawalStatusSucceeded}
+
+	store.EXPECT().GetBaofuWithdrawalOrder(gomock.Any(), withdrawal.ID).Return(withdrawal, nil)
+	store.EXPECT().ApplyBaofuWithdrawalTerminalStatusTx(gomock.Any(), db.ApplyBaofuWithdrawalTerminalStatusTxParams{
+		WithdrawalOrderID: withdrawal.ID,
+		Status:            db.BaofuWithdrawalStatusFailed,
+		BaofuWithdrawNo:   pgtype.Text{String: "BF_FAILED", Valid: true},
+		RawSnapshot:       []byte(`{"state":"0"}`),
+	}).Return(db.ApplyBaofuWithdrawalTerminalStatusTxResult{}, db.ErrBaofuWithdrawalTerminalReservationMismatch)
+
+	processor := worker.NewTestTaskProcessor(store, nil, nil, nil)
+	payload, err := json.Marshal(worker.BaofuWithdrawalFactApplicationPayload{
+		WithdrawalOrderID: withdrawal.ID,
+		UpstreamState:     "0",
+		BaofuWithdrawNo:   "BF_FAILED",
+		RawSnapshot:       []byte(`{"state":"0"}`),
+	})
+	require.NoError(t, err)
+
+	err = processor.ProcessTaskBaofuWithdrawalFactApplication(context.Background(), asynq.NewTask(worker.TaskProcessBaofuWithdrawalFactApplication, payload))
+	require.ErrorIs(t, err, db.ErrBaofuWithdrawalTerminalReservationMismatch)
+	require.ErrorContains(t, err, "apply baofu withdrawal terminal status")
 }

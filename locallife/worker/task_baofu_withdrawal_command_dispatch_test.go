@@ -116,8 +116,6 @@ func TestProcessTaskBaofuWithdrawalCommandDispatchMarksRejectedAcceptanceFailed(
 	command := submittedBaofuWithdrawalCommand(502, 92, "WD_ASYNC_REJECTED")
 	withdrawal := baofuWithdrawalForDispatch(92, db.BaofuAccountOwnerTypeRider, 9, "WD_ASYNC_REJECTED")
 	binding := activeBaofuWithdrawalBinding(withdrawal.OwnerType, withdrawal.OwnerID, "CM_BINDING", "RIDER_SHARE_001")
-	failedWithdrawal := withdrawal
-	failedWithdrawal.Status = db.BaofuWithdrawalStatusFailed
 
 	store.EXPECT().GetExternalPaymentCommand(gomock.Any(), command.ID).Return(command, nil)
 	store.EXPECT().GetBaofuWithdrawalOrder(gomock.Any(), withdrawal.ID).Return(withdrawal, nil)
@@ -134,12 +132,16 @@ func TestProcessTaskBaofuWithdrawalCommandDispatchMarksRejectedAcceptanceFailed(
 			return db.ExternalPaymentCommand{ID: command.ID, CommandStatus: db.ExternalPaymentCommandStatusRejected}, nil
 		},
 	)
-	store.EXPECT().UpdateBaofuWithdrawalOrderStatus(gomock.Any(), db.UpdateBaofuWithdrawalOrderStatusParams{
-		ID:              withdrawal.ID,
-		Status:          db.BaofuWithdrawalStatusFailed,
-		BaofuWithdrawNo: pgtype.Text{String: "BF_WITHDRAW_REJECTED", Valid: true},
-		RawSnapshot:     []byte(`{"state":"2","transRemark":"余额不足"}`),
-	}).Return(failedWithdrawal, nil)
+	store.EXPECT().ApplyBaofuWithdrawalTerminalStatusTx(gomock.Any(), db.ApplyBaofuWithdrawalTerminalStatusTxParams{
+		WithdrawalOrderID: withdrawal.ID,
+		Status:            db.BaofuWithdrawalStatusFailed,
+		BaofuWithdrawNo:   pgtype.Text{String: "BF_WITHDRAW_REJECTED", Valid: true},
+		RawSnapshot:       []byte(`{"state":"2","transRemark":"余额不足"}`),
+		ReleaseReason:     pgtype.Text{String: db.BaofuWithdrawalReservationReleaseReasonRejected, Valid: true},
+	}).Return(db.ApplyBaofuWithdrawalTerminalStatusTxResult{
+		WithdrawalOrder: db.BaofuWithdrawalOrder{ID: withdrawal.ID, Status: db.BaofuWithdrawalStatusFailed},
+		Applied:         true,
+	}, nil)
 
 	payloadBytes, err := json.Marshal(worker.BaofuWithdrawalCommandDispatchPayload{CommandID: command.ID})
 	require.NoError(t, err)
@@ -217,7 +219,7 @@ func TestProcessTaskBaofuWithdrawalCommandDispatchDoesNotRejectCommandBeforeOrde
 	store.EXPECT().GetBaofuWithdrawalOrder(gomock.Any(), withdrawal.ID).Return(withdrawal, nil)
 	store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), gomock.Any()).Return(binding, nil)
 	store.EXPECT().ClaimSubmittedExternalPaymentCommandForDispatch(gomock.Any(), gomock.Any()).Return(db.ExternalPaymentCommand{ID: command.ID, CommandStatus: db.ExternalPaymentCommandStatusUnknown}, nil)
-	store.EXPECT().UpdateBaofuWithdrawalOrderStatus(gomock.Any(), gomock.Any()).Return(db.BaofuWithdrawalOrder{}, errors.New("db unavailable"))
+	store.EXPECT().ApplyBaofuWithdrawalTerminalStatusTx(gomock.Any(), gomock.Any()).Return(db.ApplyBaofuWithdrawalTerminalStatusTxResult{}, errors.New("db unavailable"))
 	store.EXPECT().UpdateExternalPaymentCommandOutcome(gomock.Any(), gomock.Any()).Times(0)
 
 	payloadBytes, err := json.Marshal(worker.BaofuWithdrawalCommandDispatchPayload{CommandID: command.ID})

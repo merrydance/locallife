@@ -56,9 +56,6 @@ func (processor *RedisTaskProcessor) ProcessTaskBaofuWithdrawalFactApplication(c
 	if err != nil {
 		return fmt.Errorf("get baofu withdrawal order: %w", err)
 	}
-	if isTerminalBaofuWithdrawalStatus(withdrawalOrder.Status) {
-		return nil
-	}
 	status := baofucontracts.WithdrawStatusFromUpstream(payload.UpstreamState)
 	raw := payload.RawSnapshot
 	if len(raw) == 0 || !json.Valid(raw) {
@@ -68,25 +65,39 @@ func (processor *RedisTaskProcessor) ProcessTaskBaofuWithdrawalFactApplication(c
 	if baofuWithdrawNo == "" && withdrawalOrder.BaofuWithdrawNo.Valid {
 		baofuWithdrawNo = withdrawalOrder.BaofuWithdrawNo.String
 	}
-	if _, err := processor.store.UpdateBaofuWithdrawalOrderStatus(ctx, db.UpdateBaofuWithdrawalOrderStatusParams{
-		ID:     withdrawalOrder.ID,
-		Status: status,
-		BaofuWithdrawNo: pgtype.Text{
-			String: baofuWithdrawNo,
-			Valid:  baofuWithdrawNo != "",
-		},
-		RawSnapshot: raw,
-	}); err != nil {
-		if errors.Is(err, db.ErrRecordNotFound) {
-			current, getErr := processor.store.GetBaofuWithdrawalOrder(ctx, withdrawalOrder.ID)
-			if getErr == nil && isTerminalBaofuWithdrawalStatus(current.Status) {
-				return nil
+	baofuWithdrawNoText := pgtype.Text{
+		String: baofuWithdrawNo,
+		Valid:  baofuWithdrawNo != "",
+	}
+	if status == db.BaofuWithdrawalStatusProcessing {
+		if _, err := processor.store.UpdateBaofuWithdrawalOrderToProcessing(ctx, db.UpdateBaofuWithdrawalOrderToProcessingParams{
+			ID:              withdrawalOrder.ID,
+			BaofuWithdrawNo: baofuWithdrawNoText,
+			RawSnapshot:     raw,
+		}); err != nil {
+			if errors.Is(err, db.ErrRecordNotFound) {
+				current, getErr := processor.store.GetBaofuWithdrawalOrder(ctx, withdrawalOrder.ID)
+				if getErr == nil && isTerminalBaofuWithdrawalStatus(current.Status) {
+					return nil
+				}
+				if getErr != nil {
+					return fmt.Errorf("get baofu withdrawal order after processing update conflict: %w", getErr)
+				}
 			}
-			if getErr != nil {
-				return fmt.Errorf("get baofu withdrawal order after status update conflict: %w", getErr)
-			}
+			return fmt.Errorf("update baofu withdrawal processing reference: %w", err)
 		}
-		return fmt.Errorf("update baofu withdrawal order status: %w", err)
+		return nil
+	}
+	if !isTerminalBaofuWithdrawalStatus(status) {
+		return fmt.Errorf("unsupported baofu withdrawal fact status %q", status)
+	}
+	if _, err := processor.store.ApplyBaofuWithdrawalTerminalStatusTx(ctx, db.ApplyBaofuWithdrawalTerminalStatusTxParams{
+		WithdrawalOrderID: withdrawalOrder.ID,
+		Status:            status,
+		BaofuWithdrawNo:   baofuWithdrawNoText,
+		RawSnapshot:       raw,
+	}); err != nil {
+		return fmt.Errorf("apply baofu withdrawal terminal status: %w", err)
 	}
 	return nil
 }

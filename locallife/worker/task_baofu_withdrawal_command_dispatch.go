@@ -184,11 +184,12 @@ func (processor *RedisTaskProcessor) ProcessTaskBaofuWithdrawalCommandDispatch(c
 			Msg("baofu withdrawal create accepted")
 		return nil
 	case db.BaofuWithdrawalStatusFailed:
-		if _, err := processor.store.UpdateBaofuWithdrawalOrderStatus(ctx, db.UpdateBaofuWithdrawalOrderStatusParams{
-			ID:              withdrawal.ID,
-			Status:          db.BaofuWithdrawalStatusFailed,
-			BaofuWithdrawNo: baofuWithdrawalText(strings.TrimSpace(upstream.BaofuWithdrawNo)),
-			RawSnapshot:     raw,
+		if _, err := processor.store.ApplyBaofuWithdrawalTerminalStatusTx(ctx, db.ApplyBaofuWithdrawalTerminalStatusTxParams{
+			WithdrawalOrderID: withdrawal.ID,
+			Status:            db.BaofuWithdrawalStatusFailed,
+			BaofuWithdrawNo:   baofuWithdrawalText(strings.TrimSpace(upstream.BaofuWithdrawNo)),
+			RawSnapshot:       raw,
+			ReleaseReason:     pgtype.Text{String: db.BaofuWithdrawalReservationReleaseReasonRejected, Valid: true},
 		}); err != nil {
 			return fmt.Errorf("mark baofu withdrawal create rejected: %w", err)
 		}
