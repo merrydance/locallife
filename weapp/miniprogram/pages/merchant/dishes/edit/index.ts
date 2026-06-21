@@ -75,7 +75,6 @@ Page({
       member_price: 0,
       is_online: true,
       is_available: true,
-      is_packaging: false,
       sort_order: 0,
       prepare_time: 15,
       image_asset_id: 0,
@@ -145,6 +144,17 @@ Page({
       }
 
       const detail = this.data.isEdit && isSettledFulfilled(detailResult) ? detailResult.value : null
+      if (this.data.isEdit && detail?.is_packaging) {
+        this.setData({
+          initialLoading: false,
+          initialError: false,
+          bootstrapped: false
+        })
+        wx.showToast({ title: '包装菜品请在包装设置中维护', icon: 'none' })
+        wx.redirectTo({ url: '/pages/merchant/packaging/index' })
+        return
+      }
+
       const categoryOptions = buildCategoryOptions(categoriesResult.value || [])
       resolveCategorySelection(
         categoryOptions,
@@ -312,21 +322,6 @@ Page({
   onSwitchChange(e: WechatMiniprogram.CustomEvent<{ value: boolean }>) {
     const { field } = e.currentTarget.dataset as { field?: string }
     if (!field) {
-      return
-    }
-
-    if (field === 'is_packaging') {
-      const isPackaging = !!e.detail.value
-      this.setData({
-        'formData.is_packaging': isPackaging,
-        'formData.is_online': isPackaging ? true : this.data.formData.is_online,
-        'formData.is_available': true
-      })
-      return
-    }
-
-    if (field === 'is_online' && this.data.formData.is_packaging) {
-      this.setData({ 'formData.is_online': true })
       return
     }
 

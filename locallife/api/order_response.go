@@ -53,6 +53,7 @@ type merchantOrderFeeBreakdownResponse struct {
 	MerchantDiscountAmount    int64 `json:"merchant_discount_amount" example:"300"`
 	VoucherDiscountAmount     int64 `json:"voucher_discount_amount" example:"200"`
 	FoodPayableAmount         int64 `json:"food_payable_amount" example:"9500"`
+	PackagingFeeAmount        int64 `json:"packaging_fee_amount" example:"150"`
 	DeliveryFeeAmount         int64 `json:"delivery_fee_amount" example:"800"`
 	DeliveryFeeDiscountAmount int64 `json:"delivery_fee_discount_amount" example:"0"`
 	DeliveryPayableAmount     int64 `json:"delivery_payable_amount" example:"800"`
@@ -65,12 +66,26 @@ type merchantOrderFeeBreakdownResponse struct {
 	RiderNetEarningsAmount    int64 `json:"rider_net_earnings_amount" example:"795"`
 }
 
+type orderPackagingItemResponse struct {
+	ID                int64  `json:"id" example:"30001"`
+	PackagingOptionID *int64 `json:"packaging_option_id,omitempty" example:"1001"`
+	Name              string `json:"name" example:"环保餐盒"`
+	UnitPrice         int64  `json:"unit_price" example:"150"`
+	Quantity          int16  `json:"quantity" example:"1"`
+	Subtotal          int64  `json:"subtotal" example:"150"`
+}
+
+type createOrderResponse struct {
+	orderResponse
+}
+
 func newMerchantOrderFeeBreakdownResponse(b logic.MerchantOrderFeeBreakdown) *merchantOrderFeeBreakdownResponse {
 	return &merchantOrderFeeBreakdownResponse{
 		FoodAmount:                b.FoodAmount,
 		MerchantDiscountAmount:    b.MerchantDiscountAmount,
 		VoucherDiscountAmount:     b.VoucherDiscountAmount,
 		FoodPayableAmount:         b.FoodPayableAmount,
+		PackagingFeeAmount:        b.PackagingFeeAmount,
 		DeliveryFeeAmount:         b.DeliveryFeeAmount,
 		DeliveryFeeDiscountAmount: b.DeliveryFeeDiscountAmount,
 		DeliveryPayableAmount:     b.DeliveryPayableAmount,
@@ -82,6 +97,39 @@ func newMerchantOrderFeeBreakdownResponse(b logic.MerchantOrderFeeBreakdown) *me
 		RiderPaymentFeeAmount:     b.RiderPaymentFeeAmount,
 		RiderNetEarningsAmount:    b.RiderNetEarningsAmount,
 	}
+}
+
+func newCreateOrderResponse(result logic.CreateOrderCommandResult) (createOrderResponse, error) {
+	orderResp, err := newOrderResponse(result.Order)
+	if err != nil {
+		return createOrderResponse{}, err
+	}
+	orderResp.PackagingFee = result.Order.PackagingFee
+	orderResp.PackagingItems = newOrderPackagingItemResponses(result.PackagingItems)
+	return createOrderResponse{orderResponse: orderResp}, nil
+}
+
+func newOrderPackagingItemResponses(items []db.OrderPackagingItem) []orderPackagingItemResponse {
+	if len(items) == 0 {
+		return nil
+	}
+	resp := make([]orderPackagingItemResponse, 0, len(items))
+	for _, item := range items {
+		var packagingOptionID *int64
+		if item.PackagingOptionID.Valid {
+			value := item.PackagingOptionID.Int64
+			packagingOptionID = &value
+		}
+		resp = append(resp, orderPackagingItemResponse{
+			ID:                item.ID,
+			PackagingOptionID: packagingOptionID,
+			Name:              item.Name,
+			UnitPrice:         item.UnitPrice,
+			Quantity:          item.Quantity,
+			Subtotal:          item.Subtotal,
+		})
+	}
+	return resp
 }
 
 func (server *Server) loadMerchantOrderFeeBreakdowns(ctx context.Context, merchantID int64, orders []db.Order) (map[int64]logic.MerchantOrderFeeBreakdown, error) {

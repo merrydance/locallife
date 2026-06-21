@@ -283,10 +283,11 @@ SELECT
 FROM dishes d
 LEFT JOIN dish_categories dc ON dc.id = d.category_id
 LEFT JOIN merchant_dish_categories mdc ON mdc.category_id = dc.id AND mdc.merchant_id = d.merchant_id
-WHERE d.merchant_id = $1
+WHERE d.merchant_id = sqlc.arg('merchant_id')
   AND d.is_online = true
   AND d.is_available = true
   AND d.deleted_at IS NULL
+  AND (NOT sqlc.arg('exclude_packaging')::boolean OR d.is_packaging = false)
 ORDER BY
   COALESCE(mdc.sort_order, 999),
   CASE
@@ -335,7 +336,7 @@ SELECT
     '[]'::json
   ) as tags
 FROM combo_sets cs
-WHERE cs.merchant_id = $1
+WHERE cs.merchant_id = sqlc.arg('merchant_id')
   AND cs.is_online = true
   AND cs.deleted_at IS NULL
   AND EXISTS (
@@ -357,6 +358,7 @@ WHERE cs.merchant_id = $1
         OR d.deleted_at IS NOT NULL
         OR d.is_online IS DISTINCT FROM true
         OR d.is_available IS DISTINCT FROM true
+        OR (sqlc.arg('exclude_packaging')::boolean AND d.is_packaging = true)
       )
   )
 ORDER BY cs.id;
@@ -390,4 +392,3 @@ WHERE merchant_id = $1
   AND valid_from <= NOW()
   AND valid_until >= NOW()
 ORDER BY min_order_amount ASC;
-

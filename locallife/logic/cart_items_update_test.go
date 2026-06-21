@@ -118,6 +118,84 @@ func TestUpdateCartItem_RejectsUnavailableComboChildDish(t *testing.T) {
 	require.Contains(t, reqErr.Error(), "暂不可售菜品")
 }
 
+func TestUpdateCartItem_RejectsLegacyPackagingDishWhenFreezeEnabled(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	cartItem := db.GetCartItemRow{ID: 1, CartID: 2, DishID: pgtype.Int8{Int64: 10, Valid: true}}
+	qty := int16(2)
+
+	store.EXPECT().
+		GetCartItem(gomock.Any(), int64(1)).
+		Times(1).
+		Return(cartItem, nil)
+	store.EXPECT().
+		GetCart(gomock.Any(), int64(2)).
+		Times(1).
+		Return(db.Cart{ID: 2, UserID: 1}, nil)
+	store.EXPECT().
+		GetDish(gomock.Any(), int64(10)).
+		Times(1).
+		Return(db.Dish{ID: 10, MerchantID: 3, IsOnline: true, IsAvailable: true, IsPackaging: true}, nil)
+	store.EXPECT().
+		UpdateCartItem(gomock.Any(), gomock.Any()).
+		Times(0)
+
+	_, err := UpdateCartItem(context.Background(), store, UpdateCartItemInput{
+		UserID:                      1,
+		ItemID:                      1,
+		Quantity:                    &qty,
+		MaxQuantity:                 99,
+		RejectLegacyPackagingDishes: true,
+	})
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 400, reqErr.Status)
+	require.Equal(t, "包装已迁移到包装设置，请在包装设置中维护", reqErr.Err.Error())
+}
+
+func TestUpdateCartItem_RejectsComboWithLegacyPackagingChildWhenFreezeEnabled(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	cartItem := db.GetCartItemRow{ID: 1, CartID: 2, ComboID: pgtype.Int8{Int64: 10, Valid: true}}
+	qty := int16(2)
+
+	store.EXPECT().
+		GetCartItem(gomock.Any(), int64(1)).
+		Times(1).
+		Return(cartItem, nil)
+	store.EXPECT().
+		GetCart(gomock.Any(), int64(2)).
+		Times(1).
+		Return(db.Cart{ID: 2, UserID: 1}, nil)
+	store.EXPECT().
+		GetComboSet(gomock.Any(), int64(10)).
+		Times(1).
+		Return(db.ComboSet{ID: 10, Name: "套餐", IsOnline: true}, nil)
+	row := comboDishOrderabilityRow(20, "旧餐盒", true, true, true)
+	row.IsPackaging = true
+	store.EXPECT().
+		ListComboDishOrderability(gomock.Any(), int64(10)).
+		Times(1).
+		Return([]db.ListComboDishOrderabilityRow{row}, nil)
+	store.EXPECT().
+		UpdateCartItem(gomock.Any(), gomock.Any()).
+		Times(0)
+
+	_, err := UpdateCartItem(context.Background(), store, UpdateCartItemInput{
+		UserID:                      1,
+		ItemID:                      1,
+		Quantity:                    &qty,
+		MaxQuantity:                 99,
+		RejectLegacyPackagingDishes: true,
+	})
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 400, reqErr.Status)
+	require.Equal(t, "包装已迁移到包装设置，请在包装设置中维护", reqErr.Err.Error())
+}
+
 func TestUpdateCartItem_PropagatesComboChildOrderabilityStoreError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

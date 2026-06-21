@@ -27,6 +27,24 @@ const (
 )
 
 const (
+	orderCreatePackagingSourceNone = "none"
+	orderCreatePackagingSourceCart = "cart"
+)
+
+type orderCreatePackagingIdentity struct {
+	Source           string
+	CartID           *int64
+	OptionID         *int64
+	SelectionVersion *int64
+}
+
+type orderCreatePackagingResolution struct {
+	Identity       orderCreatePackagingIdentity
+	Fee            int64
+	SnapshotParams []db.CreateOrderPackagingItemParams
+}
+
+const (
 	printTriggerAccepted = "accepted"
 	printTriggerReady    = "ready"
 	printTriggerManual   = "manual"
@@ -95,6 +113,11 @@ func (s *OrderService) CreateOrder(ctx context.Context, input CreateOrderCommand
 	if idempotencyKey := strings.TrimSpace(input.IdempotencyKey); len(idempotencyKey) > orderCreateMaxIdempotencyKeyLength {
 		return CreateOrderCommandResult{}, NewRequestError(http.StatusBadRequest, errors.New("Idempotency-Key header is too long"))
 	}
+	if replayed, ok, err := s.replayBoundOrderCreateIdempotency(ctx, input); err != nil {
+		return CreateOrderCommandResult{}, err
+	} else if ok {
+		return replayed, nil
+	}
 
 	merchant, err := ValidateMerchantForOrder(ctx, s.store, input.MerchantID)
 	if err != nil {
@@ -153,12 +176,15 @@ func (s *OrderService) CreateOrder(ctx context.Context, input CreateOrderCommand
 	}
 
 	normalizeFn := s.buildNormalizerFunc()
-	subtotal, items, err := CalculateOrderItems(ctx, s.store, input.MerchantID, input.Items, normalizeFn)
+	subtotal, items, err := CalculateOrderItems(ctx, s.store, input.MerchantID, input.Items, normalizeFn, CalculateOrderItemsOptions{
+		RejectLegacyPackagingDishes: input.RejectLegacyPackagingDishes,
+	})
 	if err != nil {
 		return CreateOrderCommandResult{}, NewRequestError(http.StatusBadRequest, err)
 	}
-	if err := s.validatePackagingPolicy(ctx, input.MerchantID, input.OrderType, items); err != nil {
-		return CreateOrderCommandResult{}, NewRequestError(http.StatusBadRequest, err)
+	packaging, err := s.resolveOrderCreatePackaging(ctx, input)
+	if err != nil {
+		return CreateOrderCommandResult{}, err
 	}
 
 	var deliveryFee int64
@@ -253,6 +279,7 @@ func (s *OrderService) CreateOrder(ctx context.Context, input CreateOrderCommand
 		Subtotal:            subtotal,
 		DiscountAmount:      discountAmount,
 		VoucherAmount:       voucherAmount,
+		PackagingFee:        packaging.Fee,
 		DeliveryFee:         deliveryFee,
 		DeliveryFeeDiscount: deliveryFeeDiscount,
 		DepositDeduction:    depositDeduction,
@@ -286,6 +313,7 @@ func (s *OrderService) CreateOrder(ctx context.Context, input CreateOrderCommand
 		Subtotal:            subtotal,
 		DiscountAmount:      discountAmount,
 		DeliveryFeeDiscount: deliveryFeeDiscount,
+		PackagingFee:        packaging.Fee,
 		TotalAmount:         totals.TotalAmount,
 		Status:              db.OrderStatusPending,
 		FulfillmentStatus:   db.FulfillmentStatusScheduled,
@@ -328,12 +356,13 @@ func (s *OrderService) CreateOrder(ctx context.Context, input CreateOrderCommand
 	txResult, err := s.store.CreateOrderTx(ctx, db.CreateOrderTxParams{
 		CreateOrderParams:                   createParams,
 		Items:                               items,
+		PackagingItems:                      packaging.SnapshotParams,
 		BillingGroupID:                      input.BillingGroupID,
 		EnforceSingleActiveReservationOrder: reservation != nil && reservation.PaymentMode == "deposit",
 		IdempotencyOperationScope:           orderCreateIdempotencyOperationScope(input),
 		IdempotencyActorUserID:              orderCreateIdempotencyActor(input),
 		IdempotencyKey:                      strings.TrimSpace(input.IdempotencyKey),
-		IdempotencyRequestHash:              orderCreateRequestHash(input),
+		IdempotencyRequestHash:              orderCreateRequestHash(input, packaging.Identity),
 		UserVoucherID:                       userVoucherID,
 		VoucherAmount:                       voucherAmount,
 		MembershipID:                        membershipID,
@@ -403,9 +432,10 @@ func (s *OrderService) CreateOrder(ctx context.Context, input CreateOrderCommand
 	}
 
 	return CreateOrderCommandResult{
-		Order:        txResult.Order,
-		RuleDecision: ruleDecision,
-		HasRule:      hasRule,
+		Order:          txResult.Order,
+		PackagingItems: txResult.PackagingItems,
+		RuleDecision:   ruleDecision,
+		HasRule:        hasRule,
 	}, nil
 }
 
@@ -423,12 +453,202 @@ func orderCreateIdempotencyActor(input CreateOrderCommandInput) int64 {
 	return input.UserID
 }
 
-func orderCreateRequestHash(input CreateOrderCommandInput) string {
+func (s *OrderService) replayBoundOrderCreateIdempotency(ctx context.Context, input CreateOrderCommandInput) (CreateOrderCommandResult, bool, error) {
+	idempotencyKey := strings.TrimSpace(input.IdempotencyKey)
+	if idempotencyKey == "" {
+		return CreateOrderCommandResult{}, false, nil
+	}
+
+	binding, err := s.store.GetOrderRequestIdempotency(ctx, db.GetOrderRequestIdempotencyParams{
+		OperationScope: orderCreateIdempotencyScope,
+		ActorUserID:    input.UserID,
+		IdempotencyKey: idempotencyKey,
+	})
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return CreateOrderCommandResult{}, false, nil
+		}
+		return CreateOrderCommandResult{}, false, err
+	}
+
+	if binding.OrderID.Valid {
+		order, err := s.store.GetOrder(ctx, binding.OrderID.Int64)
+		if err != nil {
+			return CreateOrderCommandResult{}, false, fmt.Errorf("get idempotent order: %w", err)
+		}
+		packagingItems, err := s.store.ListOrderPackagingItems(ctx, order.ID)
+		if err != nil {
+			return CreateOrderCommandResult{}, false, fmt.Errorf("list idempotent order packaging items: %w", err)
+		}
+		return CreateOrderCommandResult{
+			Order:          order,
+			PackagingItems: packagingItems,
+		}, true, nil
+	}
+	if !orderCreateInputHasPackagingIdentity(input) {
+		return CreateOrderCommandResult{}, false, nil
+	}
+
+	identity := orderCreatePackagingIdentity{
+		Source:           orderCreatePackagingSourceNone,
+		OptionID:         input.PackagingOptionID,
+		SelectionVersion: input.PackagingSelectionVersion,
+	}
+	if allowedPackagingOrderType(input.OrderType) {
+		cart, err := s.loadOrderCreatePackagingCart(ctx, input)
+		if err != nil {
+			return CreateOrderCommandResult{}, false, err
+		}
+		cartID := cart.ID
+		identity.Source = orderCreatePackagingSourceCart
+		identity.CartID = &cartID
+	}
+	if strings.TrimSpace(binding.RequestHash) != orderCreateRequestHash(input, identity) {
+		return CreateOrderCommandResult{}, false, orderCreateStateConflict(db.ErrOrderCreateIdempotencyConflict)
+	}
+	return CreateOrderCommandResult{}, false, nil
+}
+
+func orderCreateInputHasPackagingIdentity(input CreateOrderCommandInput) bool {
+	return input.PackagingOptionID != nil || input.PackagingSelectionVersion != nil
+}
+
+func (s *OrderService) resolveOrderCreatePackaging(ctx context.Context, input CreateOrderCommandInput) (orderCreatePackagingResolution, error) {
+	result := orderCreatePackagingResolution{
+		Identity: orderCreatePackagingIdentity{Source: orderCreatePackagingSourceNone},
+	}
+	if !allowedPackagingOrderType(input.OrderType) {
+		return result, nil
+	}
+
+	settings, err := s.store.GetMerchantPackagingSettings(ctx, input.MerchantID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return result, nil
+		}
+		return result, err
+	}
+	if !settings.Enabled || !packagingAppliesToOrderType(settings.ApplicableOrderTypes, input.OrderType) {
+		return result, nil
+	}
+
+	cart, err := s.loadOrderCreatePackagingCart(ctx, input)
+	if err != nil {
+		return result, err
+	}
+	cartID := cart.ID
+
+	var selectedOptionID *int64
+	selectionVersion := int64(0)
+	selection, err := s.store.GetCartPackagingSelection(ctx, cart.ID)
+	if err != nil {
+		if !errors.Is(err, db.ErrRecordNotFound) {
+			return result, err
+		}
+	} else {
+		selectionVersion = selection.SelectionVersion
+		if selection.PackagingOptionID.Valid {
+			optionID := selection.PackagingOptionID.Int64
+			selectedOptionID = &optionID
+		}
+	}
+
+	if input.PackagingSelectionVersion == nil ||
+		*input.PackagingSelectionVersion != selectionVersion ||
+		!int64PtrValuesEqual(input.PackagingOptionID, selectedOptionID) {
+		return result, orderCreateStateConflict(errors.New("packaging selection changed"))
+	}
+	if settings.Required && selectedOptionID == nil {
+		return result, NewRequestError(http.StatusBadRequest, errors.New("请先选择包装方式"))
+	}
+
+	var selectedOption *db.MerchantPackagingOption
+	if selectedOptionID != nil {
+		option, err := s.store.GetMerchantPackagingOption(ctx, db.GetMerchantPackagingOptionParams{
+			ID:         *selectedOptionID,
+			MerchantID: input.MerchantID,
+		})
+		if err != nil {
+			if errors.Is(err, db.ErrRecordNotFound) {
+				return result, NewRequestError(http.StatusBadRequest, errors.New("包装方式不可用"))
+			}
+			return result, err
+		}
+		if option.MerchantID != input.MerchantID || !option.IsEnabled || option.DeletedAt.Valid {
+			return result, NewRequestError(http.StatusBadRequest, errors.New("包装方式不可用"))
+		}
+		selectedOption = &option
+	}
+
+	selectionVersionForHash := selectionVersion
+	result.Identity = orderCreatePackagingIdentity{
+		Source:           orderCreatePackagingSourceCart,
+		CartID:           &cartID,
+		OptionID:         selectedOptionID,
+		SelectionVersion: &selectionVersionForHash,
+	}
+	if selectedOption != nil {
+		snapshot := BuildOrderPackagingSnapshot(*selectedOption)
+		result.Fee = snapshot.Subtotal
+		result.SnapshotParams = []db.CreateOrderPackagingItemParams{orderPackagingSnapshotParam(snapshot)}
+	}
+	return result, nil
+}
+
+func (s *OrderService) loadOrderCreatePackagingCart(ctx context.Context, input CreateOrderCommandInput) (db.Cart, error) {
+	cart, err := s.store.GetCartByUserAndMerchant(ctx, db.GetCartByUserAndMerchantParams{
+		UserID:        input.UserID,
+		MerchantID:    input.MerchantID,
+		OrderType:     input.OrderType,
+		TableID:       pgInt8FromInt64Ptr(input.TableID),
+		ReservationID: pgInt8FromInt64Ptr(input.ReservationID),
+	})
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return db.Cart{}, orderCreateStateConflict(errors.New("cart not found for packaging selection"))
+		}
+		return db.Cart{}, err
+	}
+	if err := validateCartPackagingContext(cart, input.UserID, input.MerchantID, input.OrderType, input.TableID, input.ReservationID); err != nil {
+		return db.Cart{}, err
+	}
+	return cart, nil
+}
+
+func orderPackagingSnapshotParam(snapshot OrderPackagingSnapshot) db.CreateOrderPackagingItemParams {
+	return db.CreateOrderPackagingItemParams{
+		PackagingOptionID: pgInt8FromInt64Ptr(snapshot.PackagingOptionID),
+		Name:              snapshot.Name,
+		UnitPrice:         snapshot.UnitPrice,
+		Quantity:          snapshot.Quantity,
+		Subtotal:          snapshot.Subtotal,
+	}
+}
+
+func int64PtrValuesEqual(left, right *int64) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
+}
+
+func orderCreateStateConflict(cause error) error {
+	return NewRequestErrorWithCause(http.StatusConflict, errors.New("订单请求状态已变化，请刷新后重试"), cause)
+}
+
+func orderCreateRequestHash(input CreateOrderCommandInput, identities ...orderCreatePackagingIdentity) string {
 	if strings.TrimSpace(input.IdempotencyKey) == "" {
 		return ""
 	}
+	packagingIdentity := orderCreatePackagingIdentity{Source: orderCreatePackagingSourceNone}
+	if len(identities) > 0 {
+		packagingIdentity = identities[0]
+	}
+	if packagingIdentity.Source == "" {
+		packagingIdentity.Source = orderCreatePackagingSourceNone
+	}
 	parts := []string{
-		"v1",
+		"v2",
 		orderCreateIdempotencyScope,
 		strconv.FormatInt(input.UserID, 10),
 		strconv.FormatInt(input.MerchantID, 10),
@@ -441,6 +661,10 @@ func orderCreateRequestHash(input CreateOrderCommandInput) string {
 		strconv.FormatBool(input.UseBalance),
 		strings.TrimSpace(input.Notes),
 		orderItemsHashPart(input.Items),
+		packagingIdentity.Source,
+		nullableInt64HashPart(packagingIdentity.CartID),
+		nullableInt64HashPart(packagingIdentity.OptionID),
+		nullableInt64HashPart(packagingIdentity.SelectionVersion),
 	}
 	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return fmt.Sprintf("sha256:%x", sum[:])

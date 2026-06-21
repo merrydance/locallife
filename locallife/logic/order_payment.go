@@ -14,6 +14,7 @@ type OrderTotalsInput struct {
 	Subtotal            int64
 	DiscountAmount      int64
 	VoucherAmount       int64
+	PackagingFee        int64
 	DeliveryFee         int64
 	DeliveryFeeDiscount int64
 	DepositDeduction    int64
@@ -54,7 +55,7 @@ func ResolveReservationDepositDeduction(ctx context.Context, store db.Store, res
 func ComputeOrderTotals(input OrderTotalsInput) (OrderTotalsResult, error) {
 	var result OrderTotalsResult
 
-	totalAmount := input.Subtotal - input.DiscountAmount - input.VoucherAmount + input.DeliveryFee - input.DeliveryFeeDiscount
+	totalAmount := input.Subtotal - input.DiscountAmount - input.VoucherAmount + input.PackagingFee + input.DeliveryFee - input.DeliveryFeeDiscount
 	if totalAmount < 0 {
 		totalAmount = 0
 	}

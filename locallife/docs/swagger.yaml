@@ -1384,6 +1384,13 @@ definitions:
           当前前端不应依赖此字段阻止下单——订单创建服务端会再次校验。
           omitempty：值为 0 时不序列化，前端收不到 0 即视为无限制。
         type: integer
+      packaging:
+        allOf:
+        - $ref: '#/definitions/api.packagingPreviewResponse'
+        description: 包装选择状态
+      packaging_fee:
+        description: 包装费（分）
+        type: integer
       payment_assessment:
         allOf:
         - $ref: '#/definitions/logic.PaymentAssessment'
@@ -1483,6 +1490,45 @@ definitions:
       unit_price:
         type: integer
     type: object
+  api.cartPackagingOptionResponse:
+    properties:
+      description:
+        type: string
+      id:
+        type: integer
+      is_enabled:
+        type: boolean
+      name:
+        type: string
+      price:
+        type: integer
+      sort_order:
+        type: integer
+    type: object
+  api.cartPackagingResponse:
+    properties:
+      applicable:
+        type: boolean
+      enabled:
+        type: boolean
+      options:
+        items:
+          $ref: '#/definitions/api.cartPackagingOptionResponse'
+        type: array
+      required:
+        type: boolean
+      selected_option_id:
+        type: integer
+      selection_version:
+        type: integer
+    type: object
+  api.cartPackagingSelectionResponse:
+    properties:
+      selected_option_id:
+        type: integer
+      selection_version:
+        type: integer
+    type: object
   api.cartResponse:
     properties:
       id:
@@ -1495,6 +1541,8 @@ definitions:
         type: integer
       order_type:
         type: string
+      packaging:
+        $ref: '#/definitions/api.cartPackagingResponse'
       packaging_required:
         type: boolean
       reservation_id:
@@ -2288,6 +2336,16 @@ definitions:
         - reservation
         example: takeout
         type: string
+      packaging_option_id:
+        description: 包装选项ID（来自最近一次预览；不选择包装时显式传null或省略）
+        example: 3001
+        minimum: 1
+        type: integer
+      packaging_selection_version:
+        description: 包装选择版本（来自最近一次预览；包装启用时必需，防止结算状态漂移）
+        example: 7
+        minimum: 0
+        type: integer
       reservation_id:
         description: 预订ID (预定点菜时必填)
         example: 8001
@@ -2311,6 +2369,188 @@ definitions:
     - items
     - merchant_id
     - order_type
+    type: object
+  api.createOrderResponse:
+    properties:
+      actions:
+        items:
+          type: string
+        type: array
+      address_id:
+        example: 5001
+        type: integer
+      auto_user_delivered_at:
+        type: string
+      badges:
+        items:
+          $ref: '#/definitions/api.orderBadge'
+        type: array
+      cancel_reason:
+        example: 商品缺货
+        type: string
+      cancelled_at:
+        example: "2025-12-01T12:25:00Z"
+        type: string
+      claim_channel:
+        type: string
+      completed_at:
+        example: "2025-12-01T13:15:00Z"
+        type: string
+      courier_accept_at:
+        type: string
+      created_at:
+        example: "2025-12-01T12:20:00Z"
+        type: string
+      delivery_address:
+        example: 北京市朝阳区某小区1号楼
+        type: string
+      delivery_contact_name:
+        example: 张三
+        type: string
+      delivery_contact_phone:
+        example: "13800138000"
+        type: string
+      delivery_distance:
+        example: 2500
+        type: integer
+      delivery_eta_minutes:
+        example: 38
+        type: integer
+      delivery_fee:
+        example: 500
+        type: integer
+      delivery_fee_discount:
+        example: 200
+        type: integer
+      discount_amount:
+        example: 500
+        type: integer
+      dispatch_order_id:
+        type: integer
+      estimated_delivery_at:
+        example: "2025-12-01T12:30:00Z"
+        type: string
+      exception_state:
+        type: string
+      fee_breakdown:
+        $ref: '#/definitions/api.merchantOrderFeeBreakdownResponse'
+      flow_id:
+        type: integer
+      fulfillment_status:
+        enum:
+        - scheduled
+        - pending_kitchen
+        - preparing
+        - ready
+        - completed
+        - cancelled
+        example: pending_kitchen
+        type: string
+      id:
+        example: 100001
+        type: integer
+      items:
+        items:
+          $ref: '#/definitions/api.orderItemResponse'
+        type: array
+      merchant_id:
+        example: 20001
+        type: integer
+      merchant_name:
+        example: 张三餐厅
+        type: string
+      merchant_phone:
+        example: "13800138000"
+        type: string
+      notes:
+        example: 不要香菜
+        type: string
+      order_no:
+        example: ORD20251201123456
+        type: string
+      order_type:
+        enum:
+        - takeout
+        - dine_in
+        - takeaway
+        - reservation
+        example: takeout
+        type: string
+      overtime:
+        type: boolean
+      packaging_fee:
+        example: 150
+        type: integer
+      packaging_items:
+        items:
+          $ref: '#/definitions/api.orderPackagingItemResponse'
+        type: array
+      paid_at:
+        example: "2025-12-01T12:30:00Z"
+        type: string
+      payment_context:
+        $ref: '#/definitions/api.orderPaymentContextResponse'
+      payment_method:
+        enum:
+        - wechat
+        - balance
+        example: wechat
+        type: string
+      picked_at:
+        type: string
+      pickup_code:
+        type: string
+      pickup_code_masked:
+        type: string
+      prep_start_at:
+        type: string
+      ready_at:
+        type: string
+      replaced_by_order_id:
+        example: 100009
+        type: integer
+      reservation_id:
+        example: 8001
+        type: integer
+      rider_delivered_at:
+        type: string
+      status:
+        enum:
+        - pending
+        - paid
+        - preparing
+        - ready
+        - courier_accepted
+        - picked
+        - delivering
+        - rider_delivered
+        - user_delivered
+        - completed
+        - cancelled
+        example: paid
+        type: string
+      status_hint:
+        type: string
+      subtotal:
+        example: 5760
+        type: integer
+      table_id:
+        example: 301
+        type: integer
+      total_amount:
+        example: 5760
+        type: integer
+      updated_at:
+        example: "2025-12-01T12:30:00Z"
+        type: string
+      user_delivered_at:
+        type: string
+      user_id:
+        example: 10001
+        type: integer
+      wechat_transaction_id:
+        description: 微信或上游支付交易号，用于支付查询与历史兼容展示
+        type: string
     type: object
   api.createPaymentOrderRequest:
     properties:
@@ -2896,6 +3136,22 @@ definitions:
         type: integer
       total_sales:
         type: integer
+    type: object
+  api.deleteCartPackagingSelectionRequest:
+    properties:
+      merchant_id:
+        minimum: 1
+        type: integer
+      order_type:
+        type: string
+      reservation_id:
+        minimum: 1
+        type: integer
+      table_id:
+        minimum: 1
+        type: integer
+    required:
+    - merchant_id
     type: object
   api.deliveryFeeConfigResponse:
     properties:
@@ -4888,6 +5144,9 @@ definitions:
       merchant_receivable_amount:
         example: 8968
         type: integer
+      packaging_fee_amount:
+        example: 150
+        type: integer
       payment_channel_fee_amount:
         example: 57
         type: integer
@@ -5003,6 +5262,53 @@ definitions:
         type: integer
       total_sales:
         type: integer
+    type: object
+  api.merchantPackagingOptionListResponse:
+    properties:
+      limit:
+        type: integer
+      options:
+        items:
+          $ref: '#/definitions/api.merchantPackagingOptionResponse'
+        type: array
+      page:
+        type: integer
+      total:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
+  api.merchantPackagingOptionResponse:
+    properties:
+      description:
+        type: string
+      id:
+        type: integer
+      is_enabled:
+        type: boolean
+      merchant_id:
+        type: integer
+      name:
+        type: string
+      price:
+        type: integer
+      sort_order:
+        type: integer
+    type: object
+  api.merchantPackagingSettingsResponse:
+    properties:
+      applicable_order_types:
+        items:
+          type: string
+        type: array
+      default_option_id:
+        type: integer
+      enabled:
+        type: boolean
+      merchant_id:
+        type: integer
+      required:
+        type: boolean
     type: object
   api.merchantPrintAnomalyResponse:
     properties:
@@ -5195,6 +5501,13 @@ definitions:
         type: string
       overtime:
         type: boolean
+      packaging_fee:
+        example: 150
+        type: integer
+      packaging_items:
+        items:
+          $ref: '#/definitions/api.orderPackagingItemResponse'
+        type: array
       paid_at:
         example: "2025-12-01T12:30:00Z"
         type: string
@@ -6147,6 +6460,14 @@ definitions:
         items:
           $ref: '#/definitions/logic.LadderPromotion'
         type: array
+      packaging:
+        allOf:
+        - $ref: '#/definitions/api.packagingPreviewResponse'
+        description: 包装选择状态
+      packaging_fee:
+        description: 包装费 (单位：分)
+        example: 100
+        type: integer
       payment_assessment:
         allOf:
         - $ref: '#/definitions/logic.PaymentAssessment'
@@ -6270,6 +6591,27 @@ definitions:
       unit_price:
         description: 单价 (单位：分)
         example: 2880
+        type: integer
+    type: object
+  api.orderPackagingItemResponse:
+    properties:
+      id:
+        example: 30001
+        type: integer
+      name:
+        example: 环保餐盒
+        type: string
+      packaging_option_id:
+        example: 1001
+        type: integer
+      quantity:
+        example: 1
+        type: integer
+      subtotal:
+        example: 150
+        type: integer
+      unit_price:
+        example: 150
         type: integer
     type: object
   api.orderPaymentContextResponse:
@@ -6419,6 +6761,13 @@ definitions:
         type: string
       overtime:
         type: boolean
+      packaging_fee:
+        example: 150
+        type: integer
+      packaging_items:
+        items:
+          $ref: '#/definitions/api.orderPackagingItemResponse'
+        type: array
       paid_at:
         example: "2025-12-01T12:30:00Z"
         type: string
@@ -6501,6 +6850,21 @@ definitions:
       preparing_count:
         type: integer
       ready_count:
+        type: integer
+    type: object
+  api.packagingPreviewResponse:
+    properties:
+      applicable:
+        type: boolean
+      enabled:
+        type: boolean
+      fee:
+        type: integer
+      required:
+        type: boolean
+      selected_option_id:
+        type: integer
+      selection_version:
         type: integer
     type: object
   api.patchMerchantDocumentOCRFieldsRequest:
@@ -7489,6 +7853,26 @@ definitions:
         type: integer
       name:
         type: string
+    type: object
+  api.putCartPackagingSelectionRequest:
+    properties:
+      merchant_id:
+        minimum: 1
+        type: integer
+      order_type:
+        type: string
+      packaging_option_id:
+        minimum: 1
+        type: integer
+      reservation_id:
+        minimum: 1
+        type: integer
+      table_id:
+        minimum: 1
+        type: integer
+    required:
+    - merchant_id
+    - packaging_option_id
     type: object
   api.realtimeDashboardResponse:
     properties:
@@ -10319,6 +10703,45 @@ definitions:
     - pricing_mode
     - promotion_mode
     type: object
+  api.upsertMerchantPackagingOptionRequest:
+    properties:
+      description:
+        type: string
+      is_enabled:
+        type: boolean
+      name:
+        type: string
+      price:
+        maximum: 9999900
+        minimum: 0
+        type: integer
+      sort_order:
+        maximum: 999
+        minimum: 0
+        type: integer
+    required:
+    - is_enabled
+    - name
+    - price
+    - sort_order
+    type: object
+  api.upsertMerchantPackagingSettingsRequest:
+    properties:
+      applicable_order_types:
+        items:
+          type: string
+        type: array
+      default_option_id:
+        minimum: 1
+        type: integer
+      enabled:
+        type: boolean
+      required:
+        type: boolean
+    required:
+    - enabled
+    - required
+    type: object
   api.userAddressResponse:
     properties:
       contact_name:
@@ -12206,6 +12629,101 @@ paths:
       security:
       - BearerAuth: []
       summary: 更新购物车商品
+      tags:
+      - 购物车
+  /v1/cart/packaging-selection:
+    delete:
+      consumes:
+      - application/json
+      description: 清除当前用户在指定商户和订单场景下的购物车包装方式；重复清除保持同一版本
+      parameters:
+      - description: 清除包装方式请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.deleteCartPackagingSelectionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 包装方式选择状态
+          schema:
+            $ref: '#/definitions/api.cartPackagingSelectionResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 购物车不属于当前用户
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 购物车不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: 购物车状态冲突
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 清除购物车包装方式
+      tags:
+      - 购物车
+    put:
+      consumes:
+      - application/json
+      description: 为当前用户在指定商户和订单场景下的购物车选择包装方式；重复选择同一包装方式不会递增版本
+      parameters:
+      - description: 包装方式选择请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.putCartPackagingSelectionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 包装方式选择状态
+          schema:
+            $ref: '#/definitions/api.cartPackagingSelectionResponse'
+        "400":
+          description: 请求参数错误/包装方式不可用
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 购物车不属于当前用户
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 购物车不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: 购物车状态冲突
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 选择购物车包装方式
       tags:
       - 购物车
   /v1/cart/summary:
@@ -19106,6 +19624,235 @@ paths:
       summary: 获取商户订单汇总
       tags:
       - 商户订单管理
+  /v1/merchant/packaging-options:
+    get:
+      description: 获取当前商户未删除的包装选项列表
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 包装选项列表
+          schema:
+            $ref: '#/definitions/api.merchantPackagingOptionListResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取商户包装选项
+      tags:
+      - 商户包装管理
+    post:
+      consumes:
+      - application/json
+      description: 为当前商户创建一个包装选项，活动选项名称在商户内唯一
+      parameters:
+      - description: 包装选项
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.upsertMerchantPackagingOptionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: 创建成功
+          schema:
+            $ref: '#/definitions/api.merchantPackagingOptionResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: 包装选项名称重复
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 创建商户包装选项
+      tags:
+      - 商户包装管理
+  /v1/merchant/packaging-options/{id}:
+    delete:
+      description: 软删除当前商户拥有的包装选项；重复删除已删除的自有选项保持幂等成功
+      parameters:
+      - description: 包装选项ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 删除成功
+          schema:
+            $ref: '#/definitions/api.merchantPackagingOptionResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 包装选项不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 删除商户包装选项
+      tags:
+      - 商户包装管理
+    put:
+      consumes:
+      - application/json
+      description: 幂等更新当前商户拥有的包装选项
+      parameters:
+      - description: 包装选项ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 包装选项
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.upsertMerchantPackagingOptionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 更新成功
+          schema:
+            $ref: '#/definitions/api.merchantPackagingOptionResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 包装选项不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: 包装选项名称重复
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 更新商户包装选项
+      tags:
+      - 商户包装管理
+  /v1/merchant/packaging-settings:
+    get:
+      description: 获取当前商户包装启用状态、适用订单类型和默认包装选项
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 包装设置
+          schema:
+            $ref: '#/definitions/api.merchantPackagingSettingsResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取商户包装设置
+      tags:
+      - 商户包装管理
+    put:
+      consumes:
+      - application/json
+      description: 幂等更新当前商户包装启用状态、必选规则、适用订单类型和默认包装选项
+      parameters:
+      - description: 包装设置
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.upsertMerchantPackagingSettingsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 更新成功
+          schema:
+            $ref: '#/definitions/api.merchantPackagingSettingsResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 更新商户包装设置
+      tags:
+      - 商户包装管理
   /v1/merchant/recoveries/{id}:
     get:
       consumes:
@@ -24651,7 +25398,7 @@ paths:
         "201":
           description: 创建成功
           schema:
-            $ref: '#/definitions/api.orderResponse'
+            $ref: '#/definitions/api.createOrderResponse'
         "400":
           description: 请求参数错误 / 商户未激活 / 菜品下线 / 桌台不属于该商户
           schema:

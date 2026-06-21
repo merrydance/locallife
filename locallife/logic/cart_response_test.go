@@ -80,3 +80,67 @@ func TestBuildCartResponse_Customizations(t *testing.T) {
 	require.NotNil(t, resp.Items[0].Customizations)
 	require.Equal(t, float64(1), resp.Items[0].Customizations["a"])
 }
+
+func TestBuildCartResponse_HidesLegacyPackagingDishWhenRequested(t *testing.T) {
+	cart := db.Cart{ID: 1, MerchantID: 2, OrderType: "takeout"}
+	items := []db.ListCartItemsRow{
+		{
+			ID:              10,
+			Quantity:        1,
+			DishID:          pgtype.Int8{Int64: 3, Valid: true},
+			DishName:        pgtype.Text{String: "旧餐盒", Valid: true},
+			DishPrice:       pgtype.Int8{Int64: 100, Valid: true},
+			DishIsAvailable: pgtype.Bool{Bool: true, Valid: true},
+			DishIsPackaging: pgtype.Bool{Bool: true, Valid: true},
+		},
+		{
+			ID:              11,
+			Quantity:        2,
+			DishID:          pgtype.Int8{Int64: 4, Valid: true},
+			DishName:        pgtype.Text{String: "牛肉饭", Valid: true},
+			DishPrice:       pgtype.Int8{Int64: 1500, Valid: true},
+			DishIsAvailable: pgtype.Bool{Bool: true, Valid: true},
+		},
+	}
+
+	resp := BuildCartResponse(cart, items, CartResponseOptions{HideLegacyPackagingDishes: true})
+
+	require.Len(t, resp.Items, 1)
+	require.Equal(t, int64(11), resp.Items[0].ID)
+	require.Equal(t, "牛肉饭", resp.Items[0].Name)
+	require.Equal(t, 2, resp.TotalCount)
+	require.Equal(t, int64(3000), resp.Subtotal)
+}
+
+func TestBuildCartResponse_HidesComboWithLegacyPackagingChildWhenRequested(t *testing.T) {
+	cart := db.Cart{ID: 1, MerchantID: 2, OrderType: "takeout"}
+	items := []db.ListCartItemsRow{
+		{
+			ID:               10,
+			Quantity:         1,
+			ComboID:          pgtype.Int8{Int64: 30, Valid: true},
+			ComboName:        pgtype.Text{String: "含餐盒套餐", Valid: true},
+			ComboPrice:       pgtype.Int8{Int64: 2500, Valid: true},
+			ComboIsAvailable: pgtype.Bool{Bool: true, Valid: true},
+		},
+		{
+			ID:               11,
+			Quantity:         2,
+			ComboID:          pgtype.Int8{Int64: 31, Valid: true},
+			ComboName:        pgtype.Text{String: "牛肉饭套餐", Valid: true},
+			ComboPrice:       pgtype.Int8{Int64: 1800, Valid: true},
+			ComboIsAvailable: pgtype.Bool{Bool: true, Valid: true},
+		},
+	}
+
+	resp := BuildCartResponse(cart, items, CartResponseOptions{
+		HideLegacyPackagingDishes: true,
+		LegacyPackagingComboIDs:   map[int64]bool{30: true},
+	})
+
+	require.Len(t, resp.Items, 1)
+	require.Equal(t, int64(11), resp.Items[0].ID)
+	require.Equal(t, "牛肉饭套餐", resp.Items[0].Name)
+	require.Equal(t, 2, resp.TotalCount)
+	require.Equal(t, int64(3600), resp.Subtotal)
+}

@@ -197,8 +197,9 @@ func TestIsDishFavorited(t *testing.T) {
 
 	// 未收藏时
 	isFav, err := testStore.IsDishFavorited(context.Background(), IsDishFavoritedParams{
-		UserID: user.ID,
-		DishID: pgtype.Int8{Int64: dish.ID, Valid: true},
+		UserID:           user.ID,
+		DishID:           pgtype.Int8{Int64: dish.ID, Valid: true},
+		ExcludePackaging: false,
 	})
 	require.NoError(t, err)
 	require.False(t, isFav)
@@ -207,8 +208,9 @@ func TestIsDishFavorited(t *testing.T) {
 	_ = addFavoriteDishHelper(t, user.ID, dish.ID)
 
 	isFav, err = testStore.IsDishFavorited(context.Background(), IsDishFavoritedParams{
-		UserID: user.ID,
-		DishID: pgtype.Int8{Int64: dish.ID, Valid: true},
+		UserID:           user.ID,
+		DishID:           pgtype.Int8{Int64: dish.ID, Valid: true},
+		ExcludePackaging: false,
 	})
 	require.NoError(t, err)
 	require.True(t, isFav)
@@ -251,7 +253,10 @@ func TestCountFavoriteDishes(t *testing.T) {
 	user := createRandomUser(t)
 
 	// 初始计数
-	count, err := testStore.CountFavoriteDishes(context.Background(), user.ID)
+	count, err := testStore.CountFavoriteDishes(context.Background(), CountFavoriteDishesParams{
+		UserID:           user.ID,
+		ExcludePackaging: false,
+	})
 	require.NoError(t, err)
 	require.Equal(t, int64(0), count)
 
@@ -259,7 +264,10 @@ func TestCountFavoriteDishes(t *testing.T) {
 	_ = addFavoriteDishHelper(t, user.ID, dish1.ID)
 	_ = addFavoriteDishHelper(t, user.ID, dish2.ID)
 
-	count, err = testStore.CountFavoriteDishes(context.Background(), user.ID)
+	count, err = testStore.CountFavoriteDishes(context.Background(), CountFavoriteDishesParams{
+		UserID:           user.ID,
+		ExcludePackaging: false,
+	})
 	require.NoError(t, err)
 	require.Equal(t, int64(2), count)
 }
@@ -353,9 +361,10 @@ func TestListFavoriteDishes(t *testing.T) {
 	_ = addFavoriteDishHelper(t, user.ID, dish2.ID)
 
 	favorites, err := testStore.ListFavoriteDishes(context.Background(), ListFavoriteDishesParams{
-		UserID: user.ID,
-		Limit:  10,
-		Offset: 0,
+		UserID:           user.ID,
+		Limit:            10,
+		Offset:           0,
+		ExcludePackaging: false,
 	})
 	require.NoError(t, err)
 	require.Len(t, favorites, 2)
@@ -403,9 +412,10 @@ func TestFavoriteListQueriesUseIDTieBreaker(t *testing.T) {
 	require.Equal(t, merchantFavorite1.ID, merchantFavorites[1].ID)
 
 	dishFavorites, err := testStore.ListFavoriteDishes(context.Background(), ListFavoriteDishesParams{
-		UserID: user.ID,
-		Limit:  2,
-		Offset: 0,
+		UserID:           user.ID,
+		Limit:            2,
+		Offset:           0,
+		ExcludePackaging: false,
 	})
 	require.NoError(t, err)
 	require.Len(t, dishFavorites, 2)
@@ -417,9 +427,10 @@ func TestListFavoriteDishes_Empty(t *testing.T) {
 	user := createRandomUser(t)
 
 	favorites, err := testStore.ListFavoriteDishes(context.Background(), ListFavoriteDishesParams{
-		UserID: user.ID,
-		Limit:  10,
-		Offset: 0,
+		UserID:           user.ID,
+		Limit:            10,
+		Offset:           0,
+		ExcludePackaging: false,
 	})
 	require.NoError(t, err)
 	require.Empty(t, favorites)
@@ -499,11 +510,48 @@ func TestRemoveFavoriteDish(t *testing.T) {
 
 	// 验证已取消
 	isFav, err = testStore.IsDishFavorited(context.Background(), IsDishFavoritedParams{
-		UserID: user.ID,
-		DishID: pgtype.Int8{Int64: dish.ID, Valid: true},
+		UserID:           user.ID,
+		DishID:           pgtype.Int8{Int64: dish.ID, Valid: true},
+		ExcludePackaging: false,
 	})
 	require.NoError(t, err)
 	require.False(t, isFav)
+}
+
+func TestIsDishFavoritedExcludesLegacyPackagingDish(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	category := createRandomDishCategory(t)
+	packagingDish, err := testStore.CreateDish(context.Background(), CreateDishParams{
+		MerchantID:  merchant.ID,
+		CategoryID:  pgtype.Int8{Int64: category.ID, Valid: true},
+		Name:        "旧餐盒",
+		Description: pgtype.Text{String: "旧包装菜品", Valid: true},
+		Price:       100,
+		IsAvailable: true,
+		IsOnline:    true,
+		SortOrder:   1,
+		IsPackaging: true,
+	})
+	require.NoError(t, err)
+	user := createRandomUser(t)
+	_ = addFavoriteDishHelper(t, user.ID, packagingDish.ID)
+
+	legacyVisible, err := testStore.IsDishFavorited(context.Background(), IsDishFavoritedParams{
+		UserID:           user.ID,
+		DishID:           pgtype.Int8{Int64: packagingDish.ID, Valid: true},
+		ExcludePackaging: false,
+	})
+	require.NoError(t, err)
+	require.True(t, legacyVisible)
+
+	freezeVisible, err := testStore.IsDishFavorited(context.Background(), IsDishFavoritedParams{
+		UserID:           user.ID,
+		DishID:           pgtype.Int8{Int64: packagingDish.ID, Valid: true},
+		ExcludePackaging: true,
+	})
+	require.NoError(t, err)
+	require.False(t, freezeVisible)
 }
 
 // ==================== Edge Cases Tests ====================
@@ -525,7 +573,10 @@ func TestFavorite_MixedTypes(t *testing.T) {
 	require.Equal(t, int64(1), merchantCount)
 
 	// 菜品收藏计数
-	dishCount, err := testStore.CountFavoriteDishes(context.Background(), user.ID)
+	dishCount, err := testStore.CountFavoriteDishes(context.Background(), CountFavoriteDishesParams{
+		UserID:           user.ID,
+		ExcludePackaging: false,
+	})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), dishCount)
 }

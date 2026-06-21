@@ -154,16 +154,18 @@ WHERE
   AND name ILIKE '%' || $2 || '%'
   AND is_online = true
   AND is_available = true
+  AND (NOT $3::boolean OR is_packaging = false)
 `
 
 type CountSearchDishesByNameParams struct {
-	MerchantID int64       `json:"merchant_id"`
-	Column2    pgtype.Text `json:"column_2"`
+	MerchantID       int64       `json:"merchant_id"`
+	NameQuery        pgtype.Text `json:"name_query"`
+	ExcludePackaging bool        `json:"exclude_packaging"`
 }
 
 // 统计商户内菜品搜索结果总数
 func (q *Queries) CountSearchDishesByName(ctx context.Context, arg CountSearchDishesByNameParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countSearchDishesByName, arg.MerchantID, arg.Column2)
+	row := q.db.QueryRow(ctx, countSearchDishesByName, arg.MerchantID, arg.NameQuery, arg.ExcludePackaging)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -179,25 +181,32 @@ WHERE
   AND COALESCE(mp.is_takeout_suspended, false) = false
   AND m.latitude IS NOT NULL
   AND m.longitude IS NOT NULL
-  AND m.region_id = $2
+  AND m.region_id = $1
   AND d.deleted_at IS NULL
   AND d.is_online = true
   AND d.is_available = true
-  AND d.name ILIKE '%' || $1 || '%'
-  AND ($3::bigint IS NULL OR EXISTS (
-    SELECT 1 FROM dish_tags dt WHERE dt.dish_id = d.id AND dt.tag_id = $3
+  AND d.name ILIKE '%' || $2 || '%'
+  AND (NOT $3::boolean OR d.is_packaging = false)
+  AND ($4::bigint IS NULL OR EXISTS (
+    SELECT 1 FROM dish_tags dt WHERE dt.dish_id = d.id AND dt.tag_id = $4
   ))
 `
 
 type CountSearchDishesGlobalParams struct {
-	Column1  pgtype.Text `json:"column_1"`
-	RegionID pgtype.Int8 `json:"region_id"`
-	TagID    pgtype.Int8 `json:"tag_id"`
+	RegionID         pgtype.Int8 `json:"region_id"`
+	Keyword          pgtype.Text `json:"keyword"`
+	ExcludePackaging bool        `json:"exclude_packaging"`
+	TagID            pgtype.Int8 `json:"tag_id"`
 }
 
 // 统计全局菜品搜索结果总数
 func (q *Queries) CountSearchDishesGlobal(ctx context.Context, arg CountSearchDishesGlobalParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countSearchDishesGlobal, arg.Column1, arg.RegionID, arg.TagID)
+	row := q.db.QueryRow(ctx, countSearchDishesGlobal,
+		arg.RegionID,
+		arg.Keyword,
+		arg.ExcludePackaging,
+		arg.TagID,
+	)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -689,20 +698,27 @@ WHERE d.is_online = true
   AND d.deleted_at IS NULL
   AND d.price >= $1
   AND d.price <= $2
+  AND (NOT $3::boolean OR d.is_packaging = false)
 ORDER BY d.created_at DESC
-LIMIT $3
+LIMIT $4
 `
 
 type GetDishIDsByCuisinesParams struct {
-	MinPrice int64 `json:"min_price"`
-	MaxPrice int64 `json:"max_price"`
-	Limit    int32 `json:"limit"`
+	MinPrice         int64 `json:"min_price"`
+	MaxPrice         int64 `json:"max_price"`
+	ExcludePackaging bool  `json:"exclude_packaging"`
+	Limit            int32 `json:"limit"`
 }
 
 // 根据菜系获取菜品ID（用于基于偏好推荐）
 // 注：当前merchants表无cuisine_type字段，简化为按价格区间查询热门菜品
 func (q *Queries) GetDishIDsByCuisines(ctx context.Context, arg GetDishIDsByCuisinesParams) ([]int64, error) {
-	rows, err := q.db.Query(ctx, getDishIDsByCuisines, arg.MinPrice, arg.MaxPrice, arg.Limit)
+	rows, err := q.db.Query(ctx, getDishIDsByCuisines,
+		arg.MinPrice,
+		arg.MaxPrice,
+		arg.ExcludePackaging,
+		arg.Limit,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -729,11 +745,17 @@ WHERE dt.tag_id = $1
   AND d.is_online = true
   AND d.is_available = true
   AND d.deleted_at IS NULL
+  AND (NOT $2::boolean OR d.is_packaging = false)
 `
 
+type GetDishIDsByTagIDParams struct {
+	TagID            int64 `json:"tag_id"`
+	ExcludePackaging bool  `json:"exclude_packaging"`
+}
+
 // 获取带有指定标签的菜品ID列表（用于推荐过滤）
-func (q *Queries) GetDishIDsByTagID(ctx context.Context, tagID int64) ([]int64, error) {
-	rows, err := q.db.Query(ctx, getDishIDsByTagID, tagID)
+func (q *Queries) GetDishIDsByTagID(ctx context.Context, arg GetDishIDsByTagIDParams) ([]int64, error) {
+	rows, err := q.db.Query(ctx, getDishIDsByTagID, arg.TagID, arg.ExcludePackaging)
 	if err != nil {
 		return nil, err
 	}
@@ -939,7 +961,13 @@ WHERE id = ANY($1::bigint[])
   AND deleted_at IS NULL
   AND is_online = true
   AND is_available = true
+  AND (NOT $2::boolean OR is_packaging = false)
 `
+
+type GetDishesByIDsParams struct {
+	DishIds          []int64 `json:"dish_ids"`
+	ExcludePackaging bool    `json:"exclude_packaging"`
+}
 
 type GetDishesByIDsRow struct {
 	ID                int64       `json:"id"`
@@ -955,8 +983,8 @@ type GetDishesByIDsRow struct {
 }
 
 // 批量获取菜品详情（用于推荐结果）
-func (q *Queries) GetDishesByIDs(ctx context.Context, dollar_1 []int64) ([]GetDishesByIDsRow, error) {
-	rows, err := q.db.Query(ctx, getDishesByIDs, dollar_1)
+func (q *Queries) GetDishesByIDs(ctx context.Context, arg GetDishesByIDsParams) ([]GetDishesByIDsRow, error) {
+	rows, err := q.db.Query(ctx, getDishesByIDs, arg.DishIds, arg.ExcludePackaging)
 	if err != nil {
 		return nil, err
 	}
@@ -1080,8 +1108,14 @@ WHERE d.id = ANY($1::bigint[])
   AND d.deleted_at IS NULL
   AND d.is_online = true
   AND d.is_available = true
+  AND (NOT $2::boolean OR d.is_packaging = false)
   AND m.status = 'active'
 `
+
+type GetDishesWithMerchantByIDsParams struct {
+	DishIds          []int64 `json:"dish_ids"`
+	ExcludePackaging bool    `json:"exclude_packaging"`
+}
 
 type GetDishesWithMerchantByIDsRow struct {
 	ID                  int64          `json:"id"`
@@ -1104,8 +1138,8 @@ type GetDishesWithMerchantByIDsRow struct {
 
 // 批量获取菜品详情及商户信息（用于推荐流展示）
 // 返回菜品信息、商户信息、近30天销量
-func (q *Queries) GetDishesWithMerchantByIDs(ctx context.Context, dollar_1 []int64) ([]GetDishesWithMerchantByIDsRow, error) {
-	rows, err := q.db.Query(ctx, getDishesWithMerchantByIDs, dollar_1)
+func (q *Queries) GetDishesWithMerchantByIDs(ctx context.Context, arg GetDishesWithMerchantByIDsParams) ([]GetDishesWithMerchantByIDsRow, error) {
+	rows, err := q.db.Query(ctx, getDishesWithMerchantByIDs, arg.DishIds, arg.ExcludePackaging)
 	if err != nil {
 		return nil, err
 	}
@@ -1151,21 +1185,23 @@ LEFT JOIN orders o ON o.id = oi.order_id AND o.status IN ('user_delivered', 'com
 WHERE d.is_online = true 
   AND d.is_available = true
   AND d.deleted_at IS NULL
+  AND (NOT $1::boolean OR d.is_packaging = false)
   AND d.id NOT IN (
     SELECT DISTINCT oi2.dish_id 
     FROM order_items oi2
     JOIN orders o2 ON o2.id = oi2.order_id
-    WHERE o2.user_id = $1
+    WHERE o2.user_id = $2
       AND o2.status IN ('user_delivered', 'completed')
   )
 GROUP BY d.id
 ORDER BY total_sold DESC
-LIMIT $2
+LIMIT $3
 `
 
 type GetExploreDishesParams struct {
-	UserID int64 `json:"user_id"`
-	Limit  int32 `json:"limit"`
+	ExcludePackaging bool  `json:"exclude_packaging"`
+	UserID           int64 `json:"user_id"`
+	Limit            int32 `json:"limit"`
 }
 
 type GetExploreDishesRow struct {
@@ -1175,7 +1211,7 @@ type GetExploreDishesRow struct {
 
 // 获取用户未购买过的热门菜品（探索推荐）
 func (q *Queries) GetExploreDishes(ctx context.Context, arg GetExploreDishesParams) ([]GetExploreDishesRow, error) {
-	rows, err := q.db.Query(ctx, getExploreDishes, arg.UserID, arg.Limit)
+	rows, err := q.db.Query(ctx, getExploreDishes, arg.ExcludePackaging, arg.UserID, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -1256,10 +1292,16 @@ LEFT JOIN orders o ON o.id = oi.order_id AND o.status IN ('user_delivered', 'com
 WHERE d.is_online = true 
   AND d.is_available = true
   AND d.deleted_at IS NULL
+  AND (NOT $1::boolean OR d.is_packaging = false)
 GROUP BY d.id
 ORDER BY total_sold DESC, d.created_at DESC
-LIMIT $1
+LIMIT $2
 `
+
+type GetPopularDishesParams struct {
+	ExcludePackaging bool  `json:"exclude_packaging"`
+	Limit            int32 `json:"limit"`
+}
 
 type GetPopularDishesRow struct {
 	ID                int64       `json:"id"`
@@ -1276,8 +1318,8 @@ type GetPopularDishesRow struct {
 // 推荐系统查询 (Recommendation Queries)
 // ============================================
 // 获取全平台热门菜品（基于销量）
-func (q *Queries) GetPopularDishes(ctx context.Context, limit int32) ([]GetPopularDishesRow, error) {
-	rows, err := q.db.Query(ctx, getPopularDishes, limit)
+func (q *Queries) GetPopularDishes(ctx context.Context, arg GetPopularDishesParams) ([]GetPopularDishesRow, error) {
+	rows, err := q.db.Query(ctx, getPopularDishes, arg.ExcludePackaging, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -1310,13 +1352,19 @@ SELECT id FROM dishes
 WHERE is_online = true 
   AND is_available = true
   AND deleted_at IS NULL
+  AND (NOT $1::boolean OR is_packaging = false)
 ORDER BY RANDOM()
-LIMIT $1
+LIMIT $2
 `
 
+type GetRandomDishesParams struct {
+	ExcludePackaging bool  `json:"exclude_packaging"`
+	Limit            int32 `json:"limit"`
+}
+
 // 获取随机菜品（用于推荐探索）
-func (q *Queries) GetRandomDishes(ctx context.Context, limit int32) ([]int64, error) {
-	rows, err := q.db.Query(ctx, getRandomDishes, limit)
+func (q *Queries) GetRandomDishes(ctx context.Context, arg GetRandomDishesParams) ([]int64, error) {
+	rows, err := q.db.Query(ctx, getRandomDishes, arg.ExcludePackaging, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -1801,8 +1849,14 @@ WHERE d.merchant_id = $1
   AND d.is_online = true
   AND d.is_available = true
   AND d.deleted_at IS NULL
+  AND (NOT $2::boolean OR d.is_packaging = false)
 ORDER BY d.category_id, d.sort_order ASC, d.id ASC
 `
+
+type ListDishesForMenuParams struct {
+	MerchantID       int64 `json:"merchant_id"`
+	ExcludePackaging bool  `json:"exclude_packaging"`
+}
 
 type ListDishesForMenuRow struct {
 	ID                  int64       `json:"id"`
@@ -1819,8 +1873,8 @@ type ListDishesForMenuRow struct {
 }
 
 // 获取商户上架菜品（用于扫码点餐菜单展示）
-func (q *Queries) ListDishesForMenu(ctx context.Context, merchantID int64) ([]ListDishesForMenuRow, error) {
-	rows, err := q.db.Query(ctx, listDishesForMenu, merchantID)
+func (q *Queries) ListDishesForMenu(ctx context.Context, arg ListDishesForMenuParams) ([]ListDishesForMenuRow, error) {
+	rows, err := q.db.Query(ctx, listDishesForMenu, arg.MerchantID, arg.ExcludePackaging)
 	if err != nil {
 		return nil, err
 	}
@@ -1943,12 +1997,18 @@ WHERE
   AND d.is_online = true
   AND d.is_available = true
   AND d.name ILIKE '%' || $1 || '%'
+  AND (NOT $2::boolean OR d.is_packaging = false)
 ORDER BY d.sort_order ASC, d.name ASC
 `
 
+type SearchDishIDsGlobalParams struct {
+	Keyword          pgtype.Text `json:"keyword"`
+	ExcludePackaging bool        `json:"exclude_packaging"`
+}
+
 // 全局菜品搜索，只返回菜品ID（用于推荐接口的关键词过滤）
-func (q *Queries) SearchDishIDsGlobal(ctx context.Context, dollar_1 pgtype.Text) ([]int64, error) {
-	rows, err := q.db.Query(ctx, searchDishIDsGlobal, dollar_1)
+func (q *Queries) SearchDishIDsGlobal(ctx context.Context, arg SearchDishIDsGlobalParams) ([]int64, error) {
+	rows, err := q.db.Query(ctx, searchDishIDsGlobal, arg.Keyword, arg.ExcludePackaging)
 	if err != nil {
 		return nil, err
 	}
@@ -1975,23 +2035,26 @@ WHERE
   AND name ILIKE '%' || $2 || '%'
   AND is_online = true
   AND is_available = true
+  AND (NOT $3::boolean OR is_packaging = false)
 ORDER BY sort_order ASC, name ASC
-LIMIT $3 OFFSET $4
+LIMIT $5 OFFSET $4
 `
 
 type SearchDishesByNameParams struct {
-	MerchantID int64       `json:"merchant_id"`
-	Column2    pgtype.Text `json:"column_2"`
-	Limit      int32       `json:"limit"`
-	Offset     int32       `json:"offset"`
+	MerchantID       int64       `json:"merchant_id"`
+	NameQuery        pgtype.Text `json:"name_query"`
+	ExcludePackaging bool        `json:"exclude_packaging"`
+	Offset           int32       `json:"offset"`
+	Limit            int32       `json:"limit"`
 }
 
 func (q *Queries) SearchDishesByName(ctx context.Context, arg SearchDishesByNameParams) ([]Dish, error) {
 	rows, err := q.db.Query(ctx, searchDishesByName,
 		arg.MerchantID,
-		arg.Column2,
-		arg.Limit,
+		arg.NameQuery,
+		arg.ExcludePackaging,
 		arg.Offset,
+		arg.Limit,
 	)
 	if err != nil {
 		return nil, err
@@ -2039,7 +2102,7 @@ SELECT
   m.region_id AS merchant_region_id,
   m.latitude AS merchant_latitude,
   m.longitude AS merchant_longitude,
-  earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($4::float8, $5::float8))::float8 AS distance,
+  earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($1::float8, $2::float8))::float8 AS distance,
   COALESCE(
     (SELECT json_agg(t.name)
      FROM dish_tags dt
@@ -2083,31 +2146,33 @@ WHERE
   AND COALESCE(mp.is_takeout_suspended, false) = false
   AND m.latitude IS NOT NULL
   AND m.longitude IS NOT NULL
-  AND m.region_id = $6
+  AND m.region_id = $3
   AND d.deleted_at IS NULL
   AND d.is_online = true
   AND d.is_available = true
-  AND d.name ILIKE '%' || $1 || '%'
-  AND ($7::bigint IS NULL OR EXISTS (
-    SELECT 1 FROM dish_tags dt WHERE dt.dish_id = d.id AND dt.tag_id = $7
+  AND d.name ILIKE '%' || $4 || '%'
+  AND (NOT $5::boolean OR d.is_packaging = false)
+  AND ($6::bigint IS NULL OR EXISTS (
+    SELECT 1 FROM dish_tags dt WHERE dt.dish_id = d.id AND dt.tag_id = $6
   ))
 ORDER BY 
     m.is_open DESC,
     (d.monthly_sales * (1 + d.repurchase_rate)) DESC,
     distance ASC,
-    d.sort_order ASC, 
+    d.sort_order ASC,
     d.name ASC
-LIMIT $2 OFFSET $3
+LIMIT $8 OFFSET $7
 `
 
 type SearchDishesGlobalParams struct {
-	Column1  pgtype.Text `json:"column_1"`
-	Limit    int32       `json:"limit"`
-	Offset   int32       `json:"offset"`
-	Column4  float64     `json:"column_4"`
-	Column5  float64     `json:"column_5"`
-	RegionID pgtype.Int8 `json:"region_id"`
-	TagID    pgtype.Int8 `json:"tag_id"`
+	UserLat          float64     `json:"user_lat"`
+	UserLng          float64     `json:"user_lng"`
+	RegionID         pgtype.Int8 `json:"region_id"`
+	Keyword          pgtype.Text `json:"keyword"`
+	ExcludePackaging bool        `json:"exclude_packaging"`
+	TagID            pgtype.Int8 `json:"tag_id"`
+	Offset           int32       `json:"offset"`
+	Limit            int32       `json:"limit"`
 }
 
 type SearchDishesGlobalRow struct {
@@ -2143,13 +2208,14 @@ type SearchDishesGlobalRow struct {
 // 全局菜品搜索（跨商户），只搜索已激活商户的上架菜品
 func (q *Queries) SearchDishesGlobal(ctx context.Context, arg SearchDishesGlobalParams) ([]SearchDishesGlobalRow, error) {
 	rows, err := q.db.Query(ctx, searchDishesGlobal,
-		arg.Column1,
-		arg.Limit,
-		arg.Offset,
-		arg.Column4,
-		arg.Column5,
+		arg.UserLat,
+		arg.UserLng,
 		arg.RegionID,
+		arg.Keyword,
+		arg.ExcludePackaging,
 		arg.TagID,
+		arg.Offset,
+		arg.Limit,
 	)
 	if err != nil {
 		return nil, err

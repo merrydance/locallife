@@ -636,6 +636,59 @@ func TestGetUserCarts_NoCart(t *testing.T) {
 	require.Empty(t, carts)
 }
 
+func TestGetUserCartsSummaryExcludesComboWithLegacyPackagingChild(t *testing.T) {
+	ctx := context.Background()
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	user := createRandomUser(t)
+	category := createRandomDishCategory(t)
+	packagingDish, err := testStore.CreateDish(ctx, CreateDishParams{
+		MerchantID:  merchant.ID,
+		CategoryID:  pgtype.Int8{Int64: category.ID, Valid: true},
+		Name:        "旧餐盒",
+		Description: pgtype.Text{String: "旧包装菜品", Valid: true},
+		Price:       100,
+		IsAvailable: true,
+		IsOnline:    true,
+		SortOrder:   1,
+		IsPackaging: true,
+	})
+	require.NoError(t, err)
+	combo := createRandomComboSet(t, merchant.ID)
+	_, err = testStore.AddComboDish(ctx, newComboDishParams(combo.ID, packagingDish, 1))
+	require.NoError(t, err)
+	cart := createRandomCart(t, user.ID, merchant.ID)
+	_ = createRandomCartItemWithCombo(t, cart.ID, combo.ID)
+
+	visibleSummary, err := testStore.GetUserCartsSummary(ctx, GetUserCartsSummaryParams{
+		UserID:           user.ID,
+		ExcludePackaging: false,
+		OrderType:        pgtype.Text{},
+	})
+	require.NoError(t, err)
+	require.Equal(t, int32(1), visibleSummary.CartCount)
+	require.Equal(t, int32(1), visibleSummary.TotalItems)
+	require.Equal(t, combo.ComboPrice, visibleSummary.TotalAmount)
+
+	hiddenSummary, err := testStore.GetUserCartsSummary(ctx, GetUserCartsSummaryParams{
+		UserID:           user.ID,
+		ExcludePackaging: true,
+		OrderType:        pgtype.Text{},
+	})
+	require.NoError(t, err)
+	require.Equal(t, int32(0), hiddenSummary.CartCount)
+	require.Equal(t, int32(0), hiddenSummary.TotalItems)
+	require.Equal(t, int64(0), hiddenSummary.TotalAmount)
+
+	hiddenDetails, err := testStore.GetUserCartsWithDetails(ctx, GetUserCartsWithDetailsParams{
+		UserID:           user.ID,
+		ExcludePackaging: true,
+		OrderType:        pgtype.Text{},
+	})
+	require.NoError(t, err)
+	require.Empty(t, hiddenDetails)
+}
+
 // ==================== Edge Cases Tests ====================
 
 func TestCart_LargeQuantity(t *testing.T) {

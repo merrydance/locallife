@@ -104,14 +104,11 @@
         </view>
 
         <t-cell-group theme="card">
-          <t-cell title="包装菜品" description="{{formData.is_packaging ? '当前会固定用于外卖与自取包装方式选择，并保持上架、可售' : '开启后，该菜品会作为包装方式参与外卖与自取下单校验'}}">
-            <t-switch slot="note" value="{{formData.is_packaging}}" bind:change="onSwitchChange" data-field="is_packaging" />
-          </t-cell>
           <t-cell title="是否上架">
-            <t-switch slot="note" value="{{formData.is_online}}" disabled="{{formData.is_packaging}}" bind:change="onSwitchChange" data-field="is_online" />
+            <t-switch slot="note" value="{{formData.is_online}}" bind:change="onSwitchChange" data-field="is_online" />
           </t-cell>
           <t-cell title="是否可售">
-            <t-switch slot="note" value="{{formData.is_available}}" disabled="{{formData.is_packaging}}" bind:change="onSwitchChange" data-field="is_available" />
+            <t-switch slot="note" value="{{formData.is_available}}" bind:change="onSwitchChange" data-field="is_available" />
           </t-cell>
           <t-input
             label="预估出餐"

@@ -435,6 +435,12 @@ type dishResponse struct {
 	CustomizationGroups []customizationGroup `json:"customization_groups,omitempty"`
 }
 
+const legacyPackagingDishFrozenMessage = "包装已迁移到包装设置，请在包装设置中维护"
+
+func (server *Server) legacyPackagingDishFreezeEnabled() bool {
+	return server != nil && server.config.PackagingLegacyDishFreezeEnabled
+}
+
 func normalizePackagingDishCreate(req createDishRequest) (bool, bool, bool) {
 	isPackaging := req.IsPackaging
 	isAvailable := req.IsAvailable
@@ -530,6 +536,11 @@ func (server *Server) createDish(ctx *gin.Context) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get merchant by owner: %w", err)))
+		return
+	}
+
+	if server.legacyPackagingDishFreezeEnabled() && req.IsPackaging {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New(legacyPackagingDishFrozenMessage)))
 		return
 	}
 
@@ -935,7 +946,7 @@ func (server *Server) getPublicDishDetail(ctx *gin.Context) {
 	}
 
 	// 检查菜品是否上架且可用
-	if !dish.IsOnline || !dish.IsAvailable {
+	if !dish.IsOnline || !dish.IsAvailable || (server.legacyPackagingDishFreezeEnabled() && dish.IsPackaging) {
 		ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish is not available")))
 		return
 	}
@@ -1103,6 +1114,10 @@ func (server *Server) updateDish(ctx *gin.Context) {
 	var isOnline pgtype.Bool
 	var isPackaging pgtype.Bool
 	nextIsPackaging, nextIsAvailable, nextIsOnline := resolvePackagingDishUpdate(dish, req)
+	if server.legacyPackagingDishFreezeEnabled() && nextIsPackaging {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New(legacyPackagingDishFrozenMessage)))
+		return
+	}
 	if req.IsAvailable != nil || nextIsPackaging != dish.IsPackaging {
 		isAvailable = pgtype.Bool{Bool: nextIsAvailable, Valid: true}
 	}

@@ -15,17 +15,18 @@ type NormalizeCustomizationsFunc func(ctx context.Context, dishID int64, customi
 
 // AddCartItemInput defines cart item creation parameters.
 type AddCartItemInput struct {
-	UserID                int64
-	MerchantID            int64
-	OrderType             string
-	TableID               *int64
-	ReservationID         *int64
-	DishID                *int64
-	ComboID               *int64
-	Quantity              int16
-	Customizations        map[string]interface{}
-	MaxQuantity           int16
-	NormalizeCustomizings NormalizeCustomizationsFunc
+	UserID                      int64
+	MerchantID                  int64
+	OrderType                   string
+	TableID                     *int64
+	ReservationID               *int64
+	DishID                      *int64
+	ComboID                     *int64
+	Quantity                    int16
+	Customizations              map[string]interface{}
+	MaxQuantity                 int16
+	RejectLegacyPackagingDishes bool
+	NormalizeCustomizings       NormalizeCustomizationsFunc
 }
 
 // AddCartItemResult returns the cart updated by the add flow.
@@ -35,11 +36,12 @@ type AddCartItemResult struct {
 
 // UpdateCartItemInput defines cart item update parameters.
 type UpdateCartItemInput struct {
-	UserID         int64
-	ItemID         int64
-	Quantity       *int16
-	Customizations map[string]interface{}
-	MaxQuantity    int16
+	UserID                      int64
+	ItemID                      int64
+	Quantity                    *int16
+	Customizations              map[string]interface{}
+	MaxQuantity                 int16
+	RejectLegacyPackagingDishes bool
 }
 
 // UpdateCartItemResult returns the cart updated by the update flow.
@@ -101,6 +103,9 @@ func AddCartItem(ctx context.Context, store db.Store, input AddCartItemInput) (A
 		if dish.MerchantID != input.MerchantID {
 			return result, NewRequestError(http.StatusBadRequest, errors.New("dish does not belong to this merchant"))
 		}
+		if input.RejectLegacyPackagingDishes && dish.IsPackaging {
+			return result, NewRequestError(http.StatusBadRequest, errors.New("包装已迁移到包装设置，请在包装设置中维护"))
+		}
 		if !dish.IsOnline || !dish.IsAvailable {
 			return result, NewRequestError(http.StatusBadRequest, errors.New("dish is not available"))
 		}
@@ -120,7 +125,7 @@ func AddCartItem(ctx context.Context, store db.Store, input AddCartItemInput) (A
 		if !combo.IsOnline {
 			return result, NewRequestError(http.StatusBadRequest, errors.New("combo is not available"))
 		}
-		if err := validateComboChildDishesOrderable(ctx, store, combo.ID, combo.Name); err != nil {
+		if err := validateComboChildDishesOrderable(ctx, store, combo.ID, combo.Name, input.RejectLegacyPackagingDishes); err != nil {
 			return result, err
 		}
 	}
@@ -286,6 +291,9 @@ func UpdateCartItem(ctx context.Context, store db.Store, input UpdateCartItemInp
 		if err != nil {
 			return result, err
 		}
+		if input.RejectLegacyPackagingDishes && dish.IsPackaging {
+			return result, NewRequestError(http.StatusBadRequest, errors.New("包装已迁移到包装设置，请在包装设置中维护"))
+		}
 		if !dish.IsOnline || !dish.IsAvailable {
 			return result, NewRequestError(http.StatusBadRequest, errors.New("dish is not available"))
 		}
@@ -298,7 +306,7 @@ func UpdateCartItem(ctx context.Context, store db.Store, input UpdateCartItemInp
 		if !combo.IsOnline {
 			return result, NewRequestError(http.StatusBadRequest, errors.New("combo is not available"))
 		}
-		if err := validateComboChildDishesOrderable(ctx, store, combo.ID, combo.Name); err != nil {
+		if err := validateComboChildDishesOrderable(ctx, store, combo.ID, combo.Name, input.RejectLegacyPackagingDishes); err != nil {
 			return result, err
 		}
 	}

@@ -12,11 +12,12 @@ import (
 
 // CartPreviewInput holds the inputs for cart price preview calculation.
 type CartPreviewInput struct {
-	UserID        int64
-	MerchantID    int64
-	OrderType     string
-	TableID       *int64
-	ReservationID *int64
+	UserID                      int64
+	MerchantID                  int64
+	OrderType                   string
+	TableID                     *int64
+	ReservationID               *int64
+	RejectLegacyPackagingDishes bool
 	// AddressID is used to fetch the delivery address; takes precedence over Latitude/Longitude.
 	AddressID *int64
 	// Latitude / Longitude are used when no AddressID is provided.
@@ -25,9 +26,15 @@ type CartPreviewInput struct {
 	VoucherID *int64
 }
 
+type CartItemsSubtotalOptions struct {
+	RejectLegacyPackagingDishes bool
+}
+
 // CartPreviewResult holds the fully computed cart preview.
 type CartPreviewResult struct {
 	Subtotal            int64
+	PackagingFee        int64
+	Packaging           CartPackagingState
 	DeliveryFee         int64
 	DeliveryFeeDiscount int64
 	DeliveryDistance    int32
@@ -85,16 +92,11 @@ func CalculateCartPreview(
 		return result, NewRequestError(http.StatusBadRequest, errors.New("购物车为空"))
 	}
 
-	// Calculate order subtotal from cart items.
-	var subtotal int64
-	for _, item := range items {
-		var unitPrice int64
-		if item.DishID.Valid {
-			unitPrice = item.DishPrice.Int64
-		} else if item.ComboID.Valid {
-			unitPrice = item.ComboPrice.Int64
-		}
-		subtotal += unitPrice * int64(item.Quantity)
+	subtotal, err := CalculateCartItemsSubtotal(ctx, store, items, CartItemsSubtotalOptions{
+		RejectLegacyPackagingDishes: input.RejectLegacyPackagingDishes,
+	})
+	if err != nil {
+		return result, err
 	}
 	result.Subtotal = subtotal
 
@@ -133,6 +135,20 @@ func CalculateCartPreview(
 		result.ETA = ComputeDeliveryETA(ctx, store, merchant.ID, result.DeliveryDistance, result.RouteDurationSec)
 	}
 
+	packagingRequirement, err := NewPackagingService(store).ResolvePackagingRequirement(ctx, ResolvePackagingInput{
+		UserID:     input.UserID,
+		MerchantID: input.MerchantID,
+		OrderType:  input.OrderType,
+		CartID:     &cart.ID,
+	})
+	if err != nil {
+		return result, err
+	}
+	result.Packaging = cartPackagingStateFromRequirement(packagingRequirement)
+	if packagingRequirement.SelectedOption != nil {
+		result.PackagingFee = packagingRequirement.SelectedOption.Price
+	}
+
 	// Run the promotion engine for discounts, vouchers, and payment assessment.
 	engine := NewPromotionEngine(store)
 	calcResult, err := engine.CalculateFinalPrice(ctx, OrderContext{
@@ -140,6 +156,7 @@ func CalculateCartPreview(
 		UserID:              input.UserID,
 		OrderType:           input.OrderType,
 		Subtotal:            subtotal,
+		PackagingFee:        result.PackagingFee,
 		VoucherID:           input.VoucherID,
 		DeliveryFee:         result.DeliveryFee,
 		DeliveryFeeDiscount: result.DeliveryFeeDiscount,
@@ -156,6 +173,32 @@ func CalculateCartPreview(
 	result.MeetsMinOrder = result.Subtotal >= result.MinOrderAmount // 0 时恒为 true
 
 	return result, nil
+}
+
+func CalculateCartItemsSubtotal(ctx context.Context, store db.Store, items []db.ListCartItemsRow, options CartItemsSubtotalOptions) (int64, error) {
+	var subtotal int64
+	for _, item := range items {
+		var unitPrice int64
+		if item.DishID.Valid {
+			if options.RejectLegacyPackagingDishes && item.DishIsPackaging.Bool {
+				return 0, NewRequestError(http.StatusBadRequest, errors.New("包装已迁移到包装设置，请在包装设置中维护"))
+			}
+			unitPrice = item.DishPrice.Int64
+		} else if item.ComboID.Valid {
+			if options.RejectLegacyPackagingDishes {
+				comboName := item.ComboName.String
+				if comboName == "" {
+					comboName = "套餐"
+				}
+				if err := validateComboChildDishesOrderable(ctx, store, item.ComboID.Int64, comboName, true); err != nil {
+					return 0, err
+				}
+			}
+			unitPrice = item.ComboPrice.Int64
+		}
+		subtotal += unitPrice * int64(item.Quantity)
+	}
+	return subtotal, nil
 }
 
 // resolveRouteAndFee computes the cycling route between merchant and the delivery

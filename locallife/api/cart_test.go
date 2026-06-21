@@ -68,6 +68,13 @@ func randomListCartItemsRow(cartItem db.CartItem, dish db.Dish) db.ListCartItems
 	}
 }
 
+func expectCartPackagingNotConfigured(store *mockdb.MockStore, merchantID int64) {
+	store.EXPECT().
+		GetMerchantPackagingSettings(gomock.Any(), merchantID).
+		Times(1).
+		Return(db.MerchantPackagingSetting{}, db.ErrRecordNotFound)
+}
+
 type combinedCheckoutMapClientStub struct {
 	route *maps.RouteResult
 	err   error
@@ -220,7 +227,7 @@ func TestGetCartAPI(t *testing.T) {
 	}
 }
 
-func TestGetCartAPIIncludesPackagingCheckoutState(t *testing.T) {
+func TestGetCartAPIIncludesPackagingOptionsAndSelectedOption(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
 	cart := randomCart(user.ID, merchant.ID)
@@ -231,6 +238,15 @@ func TestGetCartAPIIncludesPackagingCheckoutState(t *testing.T) {
 	cart.OrderType = db.OrderTypeTakeout
 	cartItem := randomCartItem(cart.ID, dish)
 	listRow := randomListCartItemsRow(cartItem, dish)
+	option := db.MerchantPackagingOption{
+		ID:          util.RandomInt(1000, 2000),
+		MerchantID:  merchant.ID,
+		Name:        "普通餐盒",
+		Description: pgtype.Text{String: "环保纸盒", Valid: true},
+		Price:       100,
+		IsEnabled:   true,
+		SortOrder:   2,
+	}
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -249,9 +265,26 @@ func TestGetCartAPIIncludesPackagingCheckoutState(t *testing.T) {
 		Times(1).
 		Return([]db.ListCartItemsRow{listRow}, nil)
 	store.EXPECT().
-		CountActivePackagingDishesByMerchant(gomock.Any(), merchant.ID).
+		GetMerchantPackagingSettings(gomock.Any(), merchant.ID).
 		Times(1).
-		Return(int64(1), nil)
+		Return(db.MerchantPackagingSetting{
+			MerchantID:           merchant.ID,
+			Enabled:              true,
+			Required:             true,
+			ApplicableOrderTypes: []string{db.OrderTypeTakeout},
+		}, nil)
+	store.EXPECT().
+		ListEnabledMerchantPackagingOptions(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.MerchantPackagingOption{option}, nil)
+	store.EXPECT().
+		GetCartPackagingSelection(gomock.Any(), cart.ID).
+		Times(1).
+		Return(db.CartPackagingSelection{
+			CartID:            cart.ID,
+			PackagingOptionID: pgtype.Int8{Int64: option.ID, Valid: true},
+			SelectionVersion:  3,
+		}, nil)
 
 	server := newTestServer(t, store)
 	recorder := httptest.NewRecorder()
@@ -266,8 +299,423 @@ func TestGetCartAPIIncludesPackagingCheckoutState(t *testing.T) {
 	var response cartResponse
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 	require.True(t, response.PackagingRequired)
+	require.True(t, response.Packaging.Enabled)
+	require.True(t, response.Packaging.Required)
+	require.True(t, response.Packaging.Applicable)
+	require.NotNil(t, response.Packaging.SelectedOptionID)
+	require.Equal(t, option.ID, *response.Packaging.SelectedOptionID)
+	require.Equal(t, int64(3), response.Packaging.SelectionVersion)
+	require.Len(t, response.Packaging.Options, 1)
+	require.Equal(t, option.ID, response.Packaging.Options[0].ID)
+	require.Equal(t, option.Name, response.Packaging.Options[0].Name)
+	require.Equal(t, option.Price, response.Packaging.Options[0].Price)
 	require.Len(t, response.Items, 1)
 	require.True(t, response.Items[0].IsPackaging)
+}
+
+func TestGetCartAPIHidesComboWithLegacyPackagingChildWhenFreezeEnabled(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	cart := randomCart(user.ID, merchant.ID)
+	cart.OrderType = db.OrderTypeDineIn
+	comboID := util.RandomInt(1000, 2000)
+	comboItem := db.ListCartItemsRow{
+		ID:               util.RandomInt(2000, 3000),
+		CartID:           cart.ID,
+		ComboID:          pgtype.Int8{Int64: comboID, Valid: true},
+		Quantity:         1,
+		Customizations:   []byte(`{}`),
+		ComboName:        pgtype.Text{String: "含餐盒套餐", Valid: true},
+		ComboPrice:       pgtype.Int8{Int64: 2800, Valid: true},
+		ComboIsAvailable: pgtype.Bool{Bool: true, Valid: true},
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetCartByUserAndMerchant(gomock.Any(), gomock.Eq(db.GetCartByUserAndMerchantParams{
+			UserID:     user.ID,
+			MerchantID: merchant.ID,
+			OrderType:  db.OrderTypeDineIn,
+		})).
+		Times(1).
+		Return(cart, nil)
+	store.EXPECT().
+		ListCartItems(gomock.Any(), gomock.Eq(cart.ID)).
+		Times(1).
+		Return([]db.ListCartItemsRow{comboItem}, nil)
+	store.EXPECT().
+		ListComboDishOrderability(gomock.Any(), comboID).
+		Times(1).
+		Return([]db.ListComboDishOrderabilityRow{
+			{
+				DishID:      101,
+				DishName:    "旧餐盒",
+				DishExists:  pgtype.Bool{Bool: true, Valid: true},
+				IsOnline:    true,
+				IsAvailable: true,
+				IsPackaging: true,
+			},
+		}, nil)
+
+	server := newTestServer(t, store)
+	server.config.PackagingLegacyDishFreezeEnabled = true
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, fmt.Sprintf("/v1/cart?merchant_id=%d&order_type=%s", merchant.ID, db.OrderTypeDineIn), nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response cartResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.Empty(t, response.Items)
+	require.Equal(t, 0, response.TotalCount)
+	require.Equal(t, int64(0), response.Subtotal)
+}
+
+func TestPutCartPackagingSelectionRejectsForeignCart(t *testing.T) {
+	user, _ := randomUser(t)
+	otherUser, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	cart := randomCart(otherUser.ID, merchant.ID)
+	cart.OrderType = db.OrderTypeTakeout
+	optionID := util.RandomInt(1000, 2000)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetCartByUserAndMerchant(gomock.Any(), gomock.Eq(db.GetCartByUserAndMerchantParams{
+			UserID:     user.ID,
+			MerchantID: merchant.ID,
+			OrderType:  db.OrderTypeTakeout,
+		})).
+		Times(1).
+		Return(cart, nil)
+	store.EXPECT().
+		GetMerchantPackagingSettings(gomock.Any(), gomock.Any()).
+		Times(0)
+	store.EXPECT().
+		GetMerchantPackagingOption(gomock.Any(), gomock.Any()).
+		Times(0)
+	store.EXPECT().
+		UpsertCartPackagingSelection(gomock.Any(), gomock.Any()).
+		Times(0)
+
+	server := newTestServer(t, store)
+	body := gin.H{
+		"merchant_id":         merchant.ID,
+		"order_type":          db.OrderTypeTakeout,
+		"packaging_option_id": optionID,
+	}
+	recorder := performCartPackagingSelectionRequest(t, server, http.MethodPut, body, user.ID)
+
+	require.Equal(t, http.StatusForbidden, recorder.Code)
+}
+
+func TestPutCartPackagingSelectionRejectsForeignOption(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	cart := randomCart(user.ID, merchant.ID)
+	cart.OrderType = db.OrderTypeTakeout
+	optionID := util.RandomInt(1000, 2000)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectCartPackagingSelectionCartLookup(store, user.ID, merchant.ID, cart)
+	expectEnabledCartPackagingSettings(store, merchant.ID)
+	store.EXPECT().
+		GetMerchantPackagingOption(gomock.Any(), gomock.Eq(db.GetMerchantPackagingOptionParams{
+			ID:         optionID,
+			MerchantID: merchant.ID,
+		})).
+		Times(1).
+		Return(db.MerchantPackagingOption{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		UpsertCartPackagingSelection(gomock.Any(), gomock.Any()).
+		Times(0)
+
+	server := newTestServer(t, store)
+	body := gin.H{
+		"merchant_id":         merchant.ID,
+		"order_type":          db.OrderTypeTakeout,
+		"packaging_option_id": optionID,
+	}
+	recorder := performCartPackagingSelectionRequest(t, server, http.MethodPut, body, user.ID)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+}
+
+func TestPutCartPackagingSelectionRejectsDisabledOrDeletedOption(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	cart := randomCart(user.ID, merchant.ID)
+	cart.OrderType = db.OrderTypeTakeout
+	optionID := util.RandomInt(1000, 2000)
+
+	testCases := []struct {
+		name      string
+		option    db.MerchantPackagingOption
+		optionErr error
+	}{
+		{
+			name: "DisabledOption",
+			option: db.MerchantPackagingOption{
+				ID:         optionID,
+				MerchantID: merchant.ID,
+				Name:       "普通餐盒",
+				Price:      100,
+				IsEnabled:  false,
+			},
+		},
+		{
+			name:      "DeletedOption",
+			optionErr: db.ErrRecordNotFound,
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			expectCartPackagingSelectionCartLookup(store, user.ID, merchant.ID, cart)
+			expectEnabledCartPackagingSettings(store, merchant.ID)
+			store.EXPECT().
+				GetMerchantPackagingOption(gomock.Any(), gomock.Eq(db.GetMerchantPackagingOptionParams{
+					ID:         optionID,
+					MerchantID: merchant.ID,
+				})).
+				Times(1).
+				Return(tc.option, tc.optionErr)
+			store.EXPECT().
+				UpsertCartPackagingSelection(gomock.Any(), gomock.Any()).
+				Times(0)
+
+			server := newTestServer(t, store)
+			body := gin.H{
+				"merchant_id":         merchant.ID,
+				"order_type":          db.OrderTypeTakeout,
+				"packaging_option_id": optionID,
+			}
+			recorder := performCartPackagingSelectionRequest(t, server, http.MethodPut, body, user.ID)
+
+			require.Equal(t, http.StatusBadRequest, recorder.Code)
+		})
+	}
+}
+
+func TestDeleteCartPackagingSelectionClearsIdempotently(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	cart := randomCart(user.ID, merchant.ID)
+	cart.OrderType = db.OrderTypeTakeout
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectCartPackagingSelectionCartLookup(store, user.ID, merchant.ID, cart)
+	store.EXPECT().
+		ClearCartPackagingSelection(gomock.Any(), cart.ID).
+		Times(1).
+		Return(db.CartPackagingSelection{
+			CartID:           cart.ID,
+			SelectionVersion: 2,
+		}, nil)
+	expectCartPackagingSelectionCartLookup(store, user.ID, merchant.ID, cart)
+	store.EXPECT().
+		ClearCartPackagingSelection(gomock.Any(), cart.ID).
+		Times(1).
+		Return(db.CartPackagingSelection{
+			CartID:           cart.ID,
+			SelectionVersion: 2,
+		}, nil)
+
+	server := newTestServer(t, store)
+	body := gin.H{
+		"merchant_id": merchant.ID,
+		"order_type":  db.OrderTypeTakeout,
+	}
+
+	firstRecorder := performCartPackagingSelectionRequest(t, server, http.MethodDelete, body, user.ID)
+	require.Equal(t, http.StatusOK, firstRecorder.Code)
+	require.Contains(t, firstRecorder.Body.String(), `"selected_option_id":null`)
+	var firstResp cartPackagingSelectionResponse
+	requireUnmarshalAPIResponseData(t, firstRecorder.Body.Bytes(), &firstResp)
+	require.Nil(t, firstResp.SelectedOptionID)
+	require.Equal(t, int64(2), firstResp.SelectionVersion)
+
+	secondRecorder := performCartPackagingSelectionRequest(t, server, http.MethodDelete, body, user.ID)
+	require.Equal(t, http.StatusOK, secondRecorder.Code)
+	var secondResp cartPackagingSelectionResponse
+	requireUnmarshalAPIResponseData(t, secondRecorder.Body.Bytes(), &secondResp)
+	require.Nil(t, secondResp.SelectedOptionID)
+	require.Equal(t, firstResp.SelectionVersion, secondResp.SelectionVersion)
+}
+
+func TestPutCartPackagingSelectionRepeatingSameOptionKeepsVersion(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	cart := randomCart(user.ID, merchant.ID)
+	cart.OrderType = db.OrderTypeTakeout
+	option := db.MerchantPackagingOption{
+		ID:         util.RandomInt(1000, 2000),
+		MerchantID: merchant.ID,
+		Name:       "普通餐盒",
+		Price:      100,
+		IsEnabled:  true,
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectSuccessfulCartPackagingSelectionPut(store, user.ID, merchant.ID, cart, option, 4)
+	expectSuccessfulCartPackagingSelectionPut(store, user.ID, merchant.ID, cart, option, 4)
+
+	server := newTestServer(t, store)
+	body := gin.H{
+		"merchant_id":         merchant.ID,
+		"order_type":          db.OrderTypeTakeout,
+		"packaging_option_id": option.ID,
+	}
+
+	firstRecorder := performCartPackagingSelectionRequest(t, server, http.MethodPut, body, user.ID)
+	require.Equal(t, http.StatusOK, firstRecorder.Code)
+	var firstResp cartPackagingSelectionResponse
+	requireUnmarshalAPIResponseData(t, firstRecorder.Body.Bytes(), &firstResp)
+
+	secondRecorder := performCartPackagingSelectionRequest(t, server, http.MethodPut, body, user.ID)
+	require.Equal(t, http.StatusOK, secondRecorder.Code)
+	var secondResp cartPackagingSelectionResponse
+	requireUnmarshalAPIResponseData(t, secondRecorder.Body.Bytes(), &secondResp)
+
+	require.NotNil(t, secondResp.SelectedOptionID)
+	require.Equal(t, option.ID, *secondResp.SelectedOptionID)
+	require.Equal(t, firstResp.SelectionVersion, secondResp.SelectionVersion)
+}
+
+func TestPutCartPackagingSelectionChangingOptionIncrementsVersion(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	cart := randomCart(user.ID, merchant.ID)
+	cart.OrderType = db.OrderTypeTakeout
+	firstOption := db.MerchantPackagingOption{
+		ID:         util.RandomInt(1000, 2000),
+		MerchantID: merchant.ID,
+		Name:       "普通餐盒",
+		Price:      100,
+		IsEnabled:  true,
+	}
+	secondOption := firstOption
+	secondOption.ID = firstOption.ID + 1
+	secondOption.Name = "保温餐盒"
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectSuccessfulCartPackagingSelectionPut(store, user.ID, merchant.ID, cart, firstOption, 2)
+	expectSuccessfulCartPackagingSelectionPut(store, user.ID, merchant.ID, cart, secondOption, 3)
+
+	server := newTestServer(t, store)
+	firstBody := gin.H{
+		"merchant_id":         merchant.ID,
+		"order_type":          db.OrderTypeTakeout,
+		"packaging_option_id": firstOption.ID,
+	}
+	secondBody := gin.H{
+		"merchant_id":         merchant.ID,
+		"order_type":          db.OrderTypeTakeout,
+		"packaging_option_id": secondOption.ID,
+	}
+
+	firstRecorder := performCartPackagingSelectionRequest(t, server, http.MethodPut, firstBody, user.ID)
+	require.Equal(t, http.StatusOK, firstRecorder.Code)
+	var firstResp cartPackagingSelectionResponse
+	requireUnmarshalAPIResponseData(t, firstRecorder.Body.Bytes(), &firstResp)
+
+	secondRecorder := performCartPackagingSelectionRequest(t, server, http.MethodPut, secondBody, user.ID)
+	require.Equal(t, http.StatusOK, secondRecorder.Code)
+	var secondResp cartPackagingSelectionResponse
+	requireUnmarshalAPIResponseData(t, secondRecorder.Body.Bytes(), &secondResp)
+
+	require.NotNil(t, secondResp.SelectedOptionID)
+	require.Equal(t, secondOption.ID, *secondResp.SelectedOptionID)
+	require.Equal(t, firstResp.SelectionVersion+1, secondResp.SelectionVersion)
+}
+
+func performCartPackagingSelectionRequest(t *testing.T, server *Server, method string, body gin.H, userID int64) *httptest.ResponseRecorder {
+	t.Helper()
+
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(method, "/v1/cart/packaging-selection", bytes.NewReader(data))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, userID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	return recorder
+}
+
+func expectCartPackagingSelectionCartLookup(store *mockdb.MockStore, userID, merchantID int64, cart db.Cart) {
+	store.EXPECT().
+		GetCartByUserAndMerchant(gomock.Any(), gomock.Eq(db.GetCartByUserAndMerchantParams{
+			UserID:     userID,
+			MerchantID: merchantID,
+			OrderType:  db.OrderTypeTakeout,
+		})).
+		Times(1).
+		Return(cart, nil)
+}
+
+func expectEnabledCartPackagingSettings(store *mockdb.MockStore, merchantID int64) {
+	store.EXPECT().
+		GetMerchantPackagingSettings(gomock.Any(), merchantID).
+		Times(1).
+		Return(db.MerchantPackagingSetting{
+			MerchantID:           merchantID,
+			Enabled:              true,
+			Required:             true,
+			ApplicableOrderTypes: []string{db.OrderTypeTakeout},
+		}, nil)
+}
+
+func expectSuccessfulCartPackagingSelectionPut(store *mockdb.MockStore, userID, merchantID int64, cart db.Cart, option db.MerchantPackagingOption, version int64) {
+	expectCartPackagingSelectionCartLookup(store, userID, merchantID, cart)
+	expectEnabledCartPackagingSettings(store, merchantID)
+	store.EXPECT().
+		GetMerchantPackagingOption(gomock.Any(), gomock.Eq(db.GetMerchantPackagingOptionParams{
+			ID:         option.ID,
+			MerchantID: merchantID,
+		})).
+		Times(1).
+		Return(option, nil)
+	store.EXPECT().
+		UpsertCartPackagingSelection(gomock.Any(), gomock.Eq(db.UpsertCartPackagingSelectionParams{
+			CartID:            cart.ID,
+			PackagingOptionID: pgtype.Int8{Int64: option.ID, Valid: true},
+		})).
+		Times(1).
+		Return(db.CartPackagingSelection{
+			CartID:            cart.ID,
+			PackagingOptionID: pgtype.Int8{Int64: option.ID, Valid: true},
+			SelectionVersion:  version,
+		}, nil)
 }
 
 // ==================== AddCartItem Tests ====================
@@ -853,9 +1301,23 @@ func TestClearCartAPI(t *testing.T) {
 					ClearCart(gomock.Any(), cart.ID).
 					Times(1).
 					Return(nil)
+
+				store.EXPECT().
+					ClearCartPackagingSelection(gomock.Any(), cart.ID).
+					Times(1).
+					Return(db.CartPackagingSelection{
+						CartID:           cart.ID,
+						SelectionVersion: 4,
+					}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var response cartResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Nil(t, response.Packaging.SelectedOptionID)
+				require.Equal(t, int64(4), response.Packaging.SelectionVersion)
+				require.Contains(t, recorder.Body.String(), `"selected_option_id":null`)
 			},
 		},
 		{
@@ -980,6 +1442,8 @@ func TestCalculateCartAPI(t *testing.T) {
 					Times(1).
 					Return([]db.ListCartItemsRow{listRow}, nil)
 
+				expectCartPackagingNotConfigured(store, merchant.ID)
+
 				store.EXPECT().
 					ListUserAvailableVouchersForMerchant(gomock.Any(), db.ListUserAvailableVouchersForMerchantParams{
 						UserID:         user.ID,
@@ -1077,6 +1541,139 @@ func TestCalculateCartAPI(t *testing.T) {
 	}
 }
 
+func TestCalculateCartAPIIncludesPackagingFee(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	merchant.Status = "active"
+	merchant.IsOpen = true
+	cart := randomCart(user.ID, merchant.ID)
+	cart.OrderType = db.OrderTypeTakeaway
+	dish := randomDish(merchant.ID, nil)
+	dish.Price = 1000
+	cartItem := randomCartItem(cart.ID, dish)
+	cartItem.Quantity = 1
+	listRow := randomListCartItemsRow(cartItem, dish)
+	option := db.MerchantPackagingOption{
+		ID:         util.RandomInt(1000, 2000),
+		MerchantID: merchant.ID,
+		Name:       "普通餐盒",
+		Price:      100,
+		IsEnabled:  true,
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(merchant, nil)
+	store.EXPECT().
+		GetCartByUserAndMerchant(gomock.Any(), db.GetCartByUserAndMerchantParams{
+			UserID:     user.ID,
+			MerchantID: merchant.ID,
+			OrderType:  db.OrderTypeTakeaway,
+		}).
+		Times(1).
+		Return(cart, nil)
+	store.EXPECT().
+		ListCartItems(gomock.Any(), cart.ID).
+		Times(1).
+		Return([]db.ListCartItemsRow{listRow}, nil)
+	store.EXPECT().
+		GetMerchantPackagingSettings(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(db.MerchantPackagingSetting{
+			MerchantID:           merchant.ID,
+			Enabled:              true,
+			Required:             true,
+			ApplicableOrderTypes: []string{db.OrderTypeTakeaway},
+		}, nil)
+	store.EXPECT().
+		GetCart(gomock.Any(), cart.ID).
+		Times(1).
+		Return(cart, nil)
+	store.EXPECT().
+		GetCartPackagingSelection(gomock.Any(), cart.ID).
+		Times(1).
+		Return(db.CartPackagingSelection{
+			CartID:            cart.ID,
+			PackagingOptionID: pgtype.Int8{Int64: option.ID, Valid: true},
+			SelectionVersion:  7,
+		}, nil)
+	store.EXPECT().
+		ListEnabledMerchantPackagingOptions(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.MerchantPackagingOption{option}, nil)
+	store.EXPECT().
+		GetMerchantPackagingOption(gomock.Any(), db.GetMerchantPackagingOptionParams{
+			ID:         option.ID,
+			MerchantID: merchant.ID,
+		}).
+		Times(1).
+		Return(option, nil)
+	store.EXPECT().
+		ListActiveDiscountRules(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.DiscountRule{}, nil)
+	store.EXPECT().
+		ListUserAvailableVouchersForMerchant(gomock.Any(), db.ListUserAvailableVouchersForMerchantParams{
+			UserID:         user.ID,
+			MerchantID:     merchant.ID,
+			MinOrderAmount: int64(1000),
+		}).
+		Times(1).
+		Return([]db.ListUserAvailableVouchersForMerchantRow{}, nil)
+	store.EXPECT().
+		GetMembershipByMerchantAndUser(gomock.Any(), db.GetMembershipByMerchantAndUserParams{
+			MerchantID: merchant.ID,
+			UserID:     user.ID,
+		}).
+		Times(1).
+		Return(db.MerchantMembership{}, db.ErrRecordNotFound)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	body, err := json.Marshal(gin.H{
+		"merchant_id": merchant.ID,
+		"order_type":  db.OrderTypeTakeaway,
+	})
+	require.NoError(t, err)
+	request, err := http.NewRequest(http.MethodPost, "/v1/cart/calculate", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response struct {
+		Subtotal     int64 `json:"subtotal"`
+		PackagingFee int64 `json:"packaging_fee"`
+		TotalAmount  int64 `json:"total_amount"`
+		Packaging    struct {
+			Enabled          bool   `json:"enabled"`
+			Required         bool   `json:"required"`
+			Applicable       bool   `json:"applicable"`
+			SelectedOptionID *int64 `json:"selected_option_id"`
+			SelectionVersion int64  `json:"selection_version"`
+			Fee              int64  `json:"fee"`
+		} `json:"packaging"`
+	}
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.Equal(t, int64(1000), response.Subtotal)
+	require.Equal(t, int64(100), response.PackagingFee)
+	require.Equal(t, int64(1100), response.TotalAmount)
+	require.True(t, response.Packaging.Enabled)
+	require.True(t, response.Packaging.Required)
+	require.True(t, response.Packaging.Applicable)
+	require.NotNil(t, response.Packaging.SelectedOptionID)
+	require.Equal(t, option.ID, *response.Packaging.SelectedOptionID)
+	require.Equal(t, int64(7), response.Packaging.SelectionVersion)
+	require.Equal(t, int64(100), response.Packaging.Fee)
+}
+
 // ==================== GetAllCarts Tests (多商户购物车汇总) ====================
 
 func TestGetAllCartsAPI(t *testing.T) {
@@ -1084,14 +1681,16 @@ func TestGetAllCartsAPI(t *testing.T) {
 	merchant1 := randomMerchant(user.ID)
 	merchant2 := randomMerchant(user.ID)
 	summaryArg := db.GetUserCartsSummaryParams{
-		UserID: user.ID,
+		UserID:           user.ID,
+		ExcludePackaging: false,
 		OrderType: pgtype.Text{
 			String: "",
 			Valid:  false,
 		},
 	}
 	detailsArg := db.GetUserCartsWithDetailsParams{
-		UserID: user.ID,
+		UserID:           user.ID,
+		ExcludePackaging: false,
 		OrderType: pgtype.Text{
 			String: "",
 			Valid:  false,
@@ -1289,6 +1888,42 @@ func TestGetAllCartsAPI(t *testing.T) {
 			tc.checkResponse(t, recorder)
 		})
 	}
+}
+
+func TestGetAllCartsAPIExcludesLegacyPackagingWhenFreezeEnabled(t *testing.T) {
+	user, _ := randomUser(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetUserCartsSummary(gomock.Any(), gomock.Eq(db.GetUserCartsSummaryParams{
+			UserID:           user.ID,
+			ExcludePackaging: true,
+			OrderType:        pgtype.Text{Valid: false},
+		})).
+		Times(1).
+		Return(db.GetUserCartsSummaryRow{}, nil)
+	store.EXPECT().
+		GetUserCartsWithDetails(gomock.Any(), gomock.Eq(db.GetUserCartsWithDetailsParams{
+			UserID:           user.ID,
+			ExcludePackaging: true,
+			OrderType:        pgtype.Text{Valid: false},
+		})).
+		Times(1).
+		Return([]db.GetUserCartsWithDetailsRow{}, nil)
+
+	server := newTestServer(t, store)
+	server.config.PackagingLegacyDishFreezeEnabled = true
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/cart/summary", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
 }
 
 // ==================== CombinedCheckout Tests (合单结算预览) ====================
@@ -1607,6 +2242,60 @@ func TestCombinedCheckoutAPI_TakeoutAppliesDeliveryFeeDiscount(t *testing.T) {
 	require.Equal(t, int64(2320), response.Data.TotalAmount)
 }
 
+func TestCombinedCheckoutAPIRejectsLegacyPackagingDishWhenFreezeEnabled(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	cartID := int64(13)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetUserCartsByCartIDs(gomock.Any(), db.GetUserCartsByCartIDsParams{
+			UserID:  user.ID,
+			Column2: []int64{cartID},
+		}).
+		Times(1).
+		Return([]db.GetUserCartsByCartIDsRow{{
+			ID:             cartID,
+			UserID:         user.ID,
+			MerchantID:     merchant.ID,
+			MerchantName:   merchant.Name,
+			RegionID:       merchant.RegionID,
+			SubMchid:       pgtype.Text{String: "sub_mch_001", Valid: true},
+			MerchantStatus: "active",
+		}}, nil)
+	store.EXPECT().
+		GetCart(gomock.Any(), cartID).
+		Times(1).
+		Return(db.Cart{ID: cartID, UserID: user.ID, MerchantID: merchant.ID, OrderType: db.OrderTypeDineIn}, nil)
+	store.EXPECT().
+		ListCartItems(gomock.Any(), cartID).
+		Times(1).
+		Return([]db.ListCartItemsRow{{
+			DishID:          pgtype.Int8{Int64: 5, Valid: true},
+			DishName:        pgtype.Text{String: "旧餐盒", Valid: true},
+			DishPrice:       pgtype.Int8{Int64: 100, Valid: true},
+			DishIsPackaging: pgtype.Bool{Bool: true, Valid: true},
+			Quantity:        1,
+		}}, nil)
+
+	server := newTestServer(t, store)
+	server.config.PackagingLegacyDishFreezeEnabled = true
+	recorder := httptest.NewRecorder()
+	body, err := json.Marshal(gin.H{"cart_ids": []int64{cartID}})
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/cart/combined-checkout/preview", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+}
+
 func TestCombinedCheckoutAPI_TakeoutFallsBackWhenMapUnavailable(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
@@ -1726,4 +2415,67 @@ func TestCombinedCheckoutAPI_TakeoutFallsBackWhenMapUnavailable(t *testing.T) {
 	require.Equal(t, int64(2500), response.Data.Items[0].TotalAmount)
 	require.Equal(t, int64(500), response.Data.TotalDeliveryFee)
 	require.Equal(t, int64(2500), response.Data.TotalAmount)
+}
+
+func TestListBrowseHistorySkipsLegacyPackagingDishWhenFreezeEnabled(t *testing.T) {
+	user, _ := randomUser(t)
+	visibleDishID := int64(102)
+	now := time.Now()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		ListBrowseHistoryByTypeFiltered(gomock.Any(), gomock.Eq(db.ListBrowseHistoryByTypeFilteredParams{
+			UserID:           user.ID,
+			TargetType:       "dish",
+			ExcludePackaging: true,
+			Limit:            20,
+			Offset:           0,
+		})).
+		Times(1).
+		Return([]db.BrowseHistory{
+			{ID: 2, UserID: user.ID, TargetType: "dish", TargetID: visibleDishID, LastViewedAt: now, ViewCount: 2},
+		}, nil)
+	store.EXPECT().
+		CountBrowseHistoryByTypeFiltered(gomock.Any(), gomock.Eq(db.CountBrowseHistoryByTypeFilteredParams{
+			UserID:           user.ID,
+			TargetType:       "dish",
+			ExcludePackaging: true,
+		})).
+		Times(1).
+		Return(int64(1), nil)
+	store.EXPECT().
+		GetDishesByIDs(gomock.Any(), gomock.Eq(db.GetDishesByIDsParams{
+			DishIds:          []int64{visibleDishID},
+			ExcludePackaging: true,
+		})).
+		Times(1).
+		Return([]db.GetDishesByIDsRow{{
+			ID:          visibleDishID,
+			MerchantID:  10,
+			Name:        "牛肉饭",
+			Price:       1800,
+			IsAvailable: true,
+			IsOnline:    true,
+		}}, nil)
+
+	server := newTestServer(t, store)
+	server.config.PackagingLegacyDishFreezeEnabled = true
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/history/browse?type=dish&page=1&page_size=20", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var response listBrowseHistoryResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.Len(t, response.Items, 1)
+	require.Equal(t, visibleDishID, response.Items[0].TargetID)
+	require.Equal(t, "牛肉饭", response.Items[0].Name)
+	require.Equal(t, int64(1), response.Total)
 }

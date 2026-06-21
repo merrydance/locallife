@@ -4,8 +4,10 @@ const path = require('path')
 const ts = require('typescript')
 const vm = require('vm')
 
+const root = path.join(__dirname, '..')
+
 function loadModule(relativePath, stubs = {}) {
-  const sourcePath = path.join(__dirname, '..', 'miniprogram', ...relativePath.split('/'))
+  const sourcePath = path.join(root, 'miniprogram', ...relativePath.split('/'))
   const source = fs.readFileSync(sourcePath, 'utf8')
   const compiled = ts.transpileModule(source, {
     compilerOptions: {
@@ -58,7 +60,6 @@ const unavailablePatch = view.buildDishEditLoadPatch({
     member_price: 0,
     is_online: true,
     is_available: false,
-    is_packaging: false,
     prepare_time: 15,
     tags: []
   },
@@ -86,7 +87,6 @@ const payload = view.buildDishSubmitPayload({
     member_price: 0,
     is_online: true,
     is_available: false,
-    is_packaging: false,
     sort_order: 0,
     prepare_time: 15,
     image_asset_id: 0,
@@ -102,29 +102,10 @@ assert.strictEqual(
   'dish edit submit should send the merchant-selected is_available value'
 )
 
-const packagingPayload = view.buildDishSubmitPayload({
-  formData: {
-    name: '包装费',
-    description: '',
-    category_id: 2,
-    price: 100,
-    member_price: 0,
-    is_online: true,
-    is_available: false,
-    is_packaging: true,
-    sort_order: 0,
-    prepare_time: 1,
-    image_asset_id: 0,
-    image_preview_url: ''
-  },
-  selectedDishTagIds: [],
-  isEdit: true
-})
-
 assert.strictEqual(
-  packagingPayload.is_available,
-  true,
-  'packaging dish submit should keep packaging dishes available'
+  Object.prototype.hasOwnProperty.call(payload, 'is_packaging'),
+  false,
+  'dish edit submit should not send legacy is_packaging'
 )
 
 const wxmlPath = path.join(__dirname, '..', 'miniprogram/pages/merchant/dishes/edit/index.wxml')
@@ -134,6 +115,31 @@ assert(
     wxmlSource.includes('value="{{formData.is_available}}"') &&
     wxmlSource.includes('data-field="is_available"'),
   'dish edit page should render a TDesign switch bound to is_available'
+)
+
+const dishEditTs = fs.readFileSync(path.join(root, 'miniprogram/pages/merchant/dishes/edit/index.ts'), 'utf8')
+assert(
+  dishEditTs.includes('包装菜品请在包装设置中维护') &&
+    dishEditTs.includes("wx.redirectTo({ url: '/pages/merchant/packaging/index' })"),
+  'dish edit page should redirect legacy packaging dishes to packaging settings'
+)
+
+const dishListTs = fs.readFileSync(path.join(root, 'miniprogram/pages/merchant/dishes/index.ts'), 'utf8')
+const dishListWxml = fs.readFileSync(path.join(root, 'miniprogram/pages/merchant/dishes/index.wxml'), 'utf8')
+assert(
+  dishListTs.includes('if (targetDish?.is_packaging) {') &&
+    dishListTs.includes('/pages/merchant/packaging/index'),
+  'dish list should route legacy packaging dishes to packaging settings instead of legacy dish edit'
+)
+assert(
+  dishListTs.includes('targetDish.is_packaging') &&
+    dishListTs.includes('onRequestDeleteDish'),
+  'dish list should guard legacy packaging dishes before opening the delete flow'
+)
+assert(
+    dishListWxml.includes("item.is_packaging ? '包装设置' : '编辑'") &&
+    dishListWxml.includes('disabled="{{item.deletePending || item.statusPending || item.is_packaging}}"'),
+  'dish list should not expose edit/delete affordances that send legacy packaging dishes into dish management'
 )
 
 console.log('check-merchant-dish-availability-contract: merchant dish availability is preserved and editable')

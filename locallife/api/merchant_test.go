@@ -853,7 +853,10 @@ func TestPublicMerchantCombos_ReturnsInternalServerErrorOnInvalidTagsJSON(t *tes
 		Times(1).
 		Return(merchant, nil)
 	store.EXPECT().
-		GetMerchantOnlineCombos(gomock.Any(), merchant.ID).
+		GetMerchantOnlineCombos(gomock.Any(), db.GetMerchantOnlineCombosParams{
+			MerchantID:       merchant.ID,
+			ExcludePackaging: false,
+		}).
 		Times(1).
 		Return([]db.GetMerchantOnlineCombosRow{{
 			ID:            81,
@@ -879,6 +882,37 @@ func TestPublicMerchantCombos_ReturnsInternalServerErrorOnInvalidTagsJSON(t *tes
 	require.Equal(t, "internal server error", resp.Message)
 }
 
+func TestPublicMerchantCombos_ExcludesLegacyPackagingWhenFreezeEnabled(t *testing.T) {
+	merchant := randomMerchant(util.RandomInt(1, 1000))
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(merchant, nil)
+	store.EXPECT().
+		GetMerchantOnlineCombos(gomock.Any(), db.GetMerchantOnlineCombosParams{
+			MerchantID:       merchant.ID,
+			ExcludePackaging: true,
+		}).
+		Times(1).
+		Return([]db.GetMerchantOnlineCombosRow{}, nil)
+
+	server := newTestServer(t, store)
+	server.config.PackagingLegacyDishFreezeEnabled = true
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, fmt.Sprintf("/v1/public/merchants/%d/combos", merchant.ID), nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, merchant.OwnerUserID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+}
+
 func TestGetPublicMerchantDishes_ReturnsInternalServerErrorOnInvalidCustomizationGroupsJSON(t *testing.T) {
 	merchant := randomMerchant(util.RandomInt(1, 1000))
 
@@ -891,7 +925,10 @@ func TestGetPublicMerchantDishes_ReturnsInternalServerErrorOnInvalidCustomizatio
 		Times(1).
 		Return(merchant, nil)
 	store.EXPECT().
-		GetMerchantDishesWithCategory(gomock.Any(), merchant.ID).
+		GetMerchantDishesWithCategory(gomock.Any(), db.GetMerchantDishesWithCategoryParams{
+			MerchantID:       merchant.ID,
+			ExcludePackaging: false,
+		}).
 		Times(1).
 		Return([]db.GetMerchantDishesWithCategoryRow{{
 			ID:                  71,
@@ -918,6 +955,37 @@ func TestGetPublicMerchantDishes_ReturnsInternalServerErrorOnInvalidCustomizatio
 	var resp APIResponse
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
 	require.Equal(t, "internal server error", resp.Message)
+}
+
+func TestGetPublicMerchantDishes_ExcludesLegacyPackagingWhenFreezeEnabled(t *testing.T) {
+	merchant := randomMerchant(util.RandomInt(1, 1000))
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(merchant, nil)
+	store.EXPECT().
+		GetMerchantDishesWithCategory(gomock.Any(), db.GetMerchantDishesWithCategoryParams{
+			MerchantID:       merchant.ID,
+			ExcludePackaging: true,
+		}).
+		Times(1).
+		Return([]db.GetMerchantDishesWithCategoryRow{}, nil)
+
+	server := newTestServer(t, store)
+	server.config.PackagingLegacyDishFreezeEnabled = true
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, fmt.Sprintf("/v1/public/merchants/%d/dishes", merchant.ID), nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, merchant.OwnerUserID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
 }
 
 func TestUpdateCurrentMerchantShopImages_ReturnsInternalServerErrorOnInvalidStoredStorefrontImages(t *testing.T) {

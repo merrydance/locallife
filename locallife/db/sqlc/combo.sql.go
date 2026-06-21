@@ -119,7 +119,7 @@ WHERE
     m.status = 'active'
     AND m.deleted_at IS NULL
   AND COALESCE(mp.is_takeout_suspended, false) = false
-  AND m.region_id = $2
+  AND m.region_id = $1
     AND cs.deleted_at IS NULL
     AND cs.is_online = true
     AND EXISTS (
@@ -141,23 +141,25 @@ WHERE
               OR d.deleted_at IS NOT NULL
               OR d.is_online IS DISTINCT FROM true
               OR d.is_available IS DISTINCT FROM true
+              OR ($2::boolean AND d.is_packaging = true)
           )
     )
     AND (
-        $1::text = '' OR 
-        cs.name ILIKE '%' || $1 || '%' OR 
-        m.name ILIKE '%' || $1 || '%'
+        $3::text = '' OR
+        cs.name ILIKE '%' || $3 || '%' OR
+        m.name ILIKE '%' || $3 || '%'
     )
 `
 
 type CountSearchCombosGlobalParams struct {
-	Column1  string      `json:"column_1"`
-	RegionID pgtype.Int8 `json:"region_id"`
+	RegionID         pgtype.Int8 `json:"region_id"`
+	ExcludePackaging bool        `json:"exclude_packaging"`
+	Keyword          string      `json:"keyword"`
 }
 
 // Count for pagination
 func (q *Queries) CountSearchCombosGlobal(ctx context.Context, arg CountSearchCombosGlobalParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countSearchCombosGlobal, arg.Column1, arg.RegionID)
+	row := q.db.QueryRow(ctx, countSearchCombosGlobal, arg.RegionID, arg.ExcludePackaging, arg.Keyword)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -236,8 +238,14 @@ WHERE cd.combo_id = ANY($1::bigint[])
   AND d.deleted_at IS NULL
   AND d.is_online = true
   AND d.is_available = true
+  AND (NOT $2::boolean OR d.is_packaging = false)
 ORDER BY cd.combo_id, cd.id ASC
 `
+
+type GetComboMemberImagesByCombosParams struct {
+	Column1          []int64 `json:"column_1"`
+	ExcludePackaging bool    `json:"exclude_packaging"`
+}
 
 type GetComboMemberImagesByCombosRow struct {
 	ComboID           int64       `json:"combo_id"`
@@ -245,8 +253,8 @@ type GetComboMemberImagesByCombosRow struct {
 }
 
 // 批量获取多个套餐的成员图片
-func (q *Queries) GetComboMemberImagesByCombos(ctx context.Context, dollar_1 []int64) ([]GetComboMemberImagesByCombosRow, error) {
-	rows, err := q.db.Query(ctx, getComboMemberImagesByCombos, dollar_1)
+func (q *Queries) GetComboMemberImagesByCombos(ctx context.Context, arg GetComboMemberImagesByCombosParams) ([]GetComboMemberImagesByCombosRow, error) {
+	rows, err := q.db.Query(ctx, getComboMemberImagesByCombos, arg.Column1, arg.ExcludePackaging)
 	if err != nil {
 		return nil, err
 	}
@@ -502,9 +510,15 @@ WHERE cs.id = ANY($1::bigint[])
             OR d.deleted_at IS NOT NULL
             OR d.is_online IS DISTINCT FROM true
             OR d.is_available IS DISTINCT FROM true
+            OR ($2::boolean AND d.is_packaging = true)
         )
   )
 `
+
+type GetCombosWithMerchantByIDsParams struct {
+	Column1          []int64 `json:"column_1"`
+	ExcludePackaging bool    `json:"exclude_packaging"`
+}
 
 type GetCombosWithMerchantByIDsRow struct {
 	ID                       int64          `json:"id"`
@@ -526,8 +540,8 @@ type GetCombosWithMerchantByIDsRow struct {
 
 // 批量获取套餐详情及商户信息（用于推荐流展示）
 // 当套餐没有专属图片时，使用套餐内第一个菜品的图片作为展示图
-func (q *Queries) GetCombosWithMerchantByIDs(ctx context.Context, dollar_1 []int64) ([]GetCombosWithMerchantByIDsRow, error) {
-	rows, err := q.db.Query(ctx, getCombosWithMerchantByIDs, dollar_1)
+func (q *Queries) GetCombosWithMerchantByIDs(ctx context.Context, arg GetCombosWithMerchantByIDsParams) ([]GetCombosWithMerchantByIDsRow, error) {
+	rows, err := q.db.Query(ctx, getCombosWithMerchantByIDs, arg.Column1, arg.ExcludePackaging)
 	if err != nil {
 		return nil, err
 	}
@@ -664,7 +678,8 @@ SELECT
   COALESCE(d.name, '') AS dish_name,
   (d.id IS NOT NULL AND d.deleted_at IS NULL) AS dish_exists,
   COALESCE(d.is_online, false)::boolean AS is_online,
-  COALESCE(d.is_available, false)::boolean AS is_available
+  COALESCE(d.is_available, false)::boolean AS is_available,
+  COALESCE(d.is_packaging, false)::boolean AS is_packaging
 FROM combo_dishes cd
 LEFT JOIN dishes d ON d.id = cd.dish_id
 WHERE cd.combo_id = $1
@@ -677,6 +692,7 @@ type ListComboDishOrderabilityRow struct {
 	DishExists  pgtype.Bool `json:"dish_exists"`
 	IsOnline    bool        `json:"is_online"`
 	IsAvailable bool        `json:"is_available"`
+	IsPackaging bool        `json:"is_packaging"`
 }
 
 func (q *Queries) ListComboDishOrderability(ctx context.Context, comboID int64) ([]ListComboDishOrderabilityRow, error) {
@@ -694,6 +710,7 @@ func (q *Queries) ListComboDishOrderability(ctx context.Context, comboID int64) 
 			&i.DishExists,
 			&i.IsOnline,
 			&i.IsAvailable,
+			&i.IsPackaging,
 		); err != nil {
 			return nil, err
 		}
@@ -966,10 +983,16 @@ WHERE cs.merchant_id = $1
             OR d.deleted_at IS NOT NULL
             OR d.is_online IS DISTINCT FROM true
             OR d.is_available IS DISTINCT FROM true
+            OR ($2::boolean AND d.is_packaging = true)
         )
   )
 ORDER BY created_at DESC
 `
+
+type ListOnlineCombosByMerchantParams struct {
+	MerchantID       int64 `json:"merchant_id"`
+	ExcludePackaging bool  `json:"exclude_packaging"`
+}
 
 type ListOnlineCombosByMerchantRow struct {
 	ID                int64       `json:"id"`
@@ -984,8 +1007,8 @@ type ListOnlineCombosByMerchantRow struct {
 }
 
 // 获取商户上架套餐（用于扫码点餐菜单展示）
-func (q *Queries) ListOnlineCombosByMerchant(ctx context.Context, merchantID int64) ([]ListOnlineCombosByMerchantRow, error) {
-	rows, err := q.db.Query(ctx, listOnlineCombosByMerchant, merchantID)
+func (q *Queries) ListOnlineCombosByMerchant(ctx context.Context, arg ListOnlineCombosByMerchantParams) ([]ListOnlineCombosByMerchantRow, error) {
+	rows, err := q.db.Query(ctx, listOnlineCombosByMerchant, arg.MerchantID, arg.ExcludePackaging)
 	if err != nil {
 		return nil, err
 	}
@@ -1156,7 +1179,7 @@ SELECT
         ), 0
     )::int AS monthly_sales,
     -- Distance Calculation
-    COALESCE(earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($4::float8, $5::float8)), 9999999)::float8 AS distance,
+    COALESCE(earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($1::float8, $2::float8)), 9999999)::float8 AS distance,
     COALESCE(
       (SELECT json_agg(t.name)
        FROM combo_tags ct
@@ -1176,6 +1199,7 @@ LEFT JOIN LATERAL (
       AND d.deleted_at IS NULL
       AND d.is_online = true
       AND d.is_available = true
+      AND (NOT $3::boolean OR d.is_packaging = false)
     ORDER BY cd.id ASC
     LIMIT 1
 ) AS dish_img ON TRUE
@@ -1183,7 +1207,7 @@ WHERE
     m.status = 'active'
     AND m.deleted_at IS NULL
   AND COALESCE(mp.is_takeout_suspended, false) = false
-  AND m.region_id = $6
+  AND m.region_id = $4
     AND cs.deleted_at IS NULL
     AND cs.is_online = true
     AND EXISTS (
@@ -1205,27 +1229,29 @@ WHERE
               OR d.deleted_at IS NOT NULL
               OR d.is_online IS DISTINCT FROM true
               OR d.is_available IS DISTINCT FROM true
+              OR ($3::boolean AND d.is_packaging = true)
           )
     )
     AND (
-        $1::text = '' OR 
-        cs.name ILIKE '%' || $1 || '%' OR 
-        m.name ILIKE '%' || $1 || '%'
+        $5::text = '' OR
+        cs.name ILIKE '%' || $5 || '%' OR
+        m.name ILIKE '%' || $5 || '%'
     )
 ORDER BY 
     m.is_open DESC, 
     monthly_sales DESC,
     distance ASC
-LIMIT $2 OFFSET $3
+LIMIT $7 OFFSET $6
 `
 
 type SearchCombosGlobalParams struct {
-	Column1  string      `json:"column_1"`
-	Limit    int32       `json:"limit"`
-	Offset   int32       `json:"offset"`
-	Column4  float64     `json:"column_4"`
-	Column5  float64     `json:"column_5"`
-	RegionID pgtype.Int8 `json:"region_id"`
+	UserLat          float64     `json:"user_lat"`
+	UserLng          float64     `json:"user_lng"`
+	ExcludePackaging bool        `json:"exclude_packaging"`
+	RegionID         pgtype.Int8 `json:"region_id"`
+	Keyword          string      `json:"keyword"`
+	Offset           int32       `json:"offset"`
+	Limit            int32       `json:"limit"`
 }
 
 type SearchCombosGlobalRow struct {
@@ -1255,12 +1281,13 @@ type SearchCombosGlobalRow struct {
 // Sorting: Open Merchants First > Sales (Weighted) > Distance.
 func (q *Queries) SearchCombosGlobal(ctx context.Context, arg SearchCombosGlobalParams) ([]SearchCombosGlobalRow, error) {
 	rows, err := q.db.Query(ctx, searchCombosGlobal,
-		arg.Column1,
-		arg.Limit,
-		arg.Offset,
-		arg.Column4,
-		arg.Column5,
+		arg.UserLat,
+		arg.UserLng,
+		arg.ExcludePackaging,
 		arg.RegionID,
+		arg.Keyword,
+		arg.Offset,
+		arg.Limit,
 	)
 	if err != nil {
 		return nil, err

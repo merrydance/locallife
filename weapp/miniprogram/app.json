@@ -329,6 +329,7 @@
         "dishes/index",
         "dishes/categories/index",
         "dishes/edit/index",
+        "packaging/index",
         "combos/index",
         "combos/edit/index",
         "inventory/index",

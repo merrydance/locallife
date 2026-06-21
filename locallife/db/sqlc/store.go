@@ -34,6 +34,10 @@ type Store interface {
 	ApproveMerchantApplicationTx(ctx context.Context, arg ApproveMerchantApplicationTxParams) (ApproveMerchantApplicationTxResult, error)
 	ResetMerchantApplicationTx(ctx context.Context, arg ResetMerchantApplicationTxParams) (ResetMerchantApplicationTxResult, error)
 	VoteWantedMerchantTx(ctx context.Context, arg WantedMerchantVoteTxParams) (WantedMerchantVoteTxResult, error)
+	// Merchant packaging transactions
+	UpsertMerchantPackagingSettingsTx(ctx context.Context, arg UpsertMerchantPackagingSettingsParams) (MerchantPackagingSetting, error)
+	UpdateMerchantPackagingOptionTx(ctx context.Context, arg UpdateMerchantPackagingOptionParams) (MerchantPackagingOption, error)
+	SoftDeleteMerchantPackagingOptionTx(ctx context.Context, arg SoftDeleteMerchantPackagingOptionParams) (MerchantPackagingOption, error)
 	// Rider application approval transaction
 	ApproveRiderApplicationTx(ctx context.Context, arg ApproveRiderApplicationTxParams) (ApproveRiderApplicationTxResult, error)
 	ApproveRiderApplicationWithReviewTx(ctx context.Context, arg ApproveRiderApplicationWithReviewTxParams) (ApproveRiderApplicationWithReviewTxResult, error)

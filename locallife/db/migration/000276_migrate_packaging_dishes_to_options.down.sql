@@ -1,0 +1,8 @@
+-- Intentionally no-op.
+--
+-- This migration copies legacy packaging dishes into the new packaging domain.
+-- Once copied, those rows may become real merchant configuration, cart state, or
+-- order snapshot references. A version-276 rollback must not delete merchant data
+-- or break those references. Version 275 owns the additive table lifecycle; its
+-- down migration drops the packaging-domain tables when a full schema rollback is
+-- explicitly required.

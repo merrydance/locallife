@@ -193,7 +193,10 @@ func (server *Server) buildScanTableResponse(ctx context.Context, merchant db.Me
 		return scanTableResponse{}, err
 	}
 
-	dishes, err := server.store.ListDishesForMenu(ctx, merchant.ID)
+	dishes, err := server.store.ListDishesForMenu(ctx, db.ListDishesForMenuParams{
+		MerchantID:       merchant.ID,
+		ExcludePackaging: server.legacyPackagingDishFreezeEnabled(),
+	})
 	if err != nil {
 		return scanTableResponse{}, err
 	}
@@ -286,7 +289,10 @@ func (server *Server) buildScanTableResponse(ctx context.Context, merchant db.Me
 		}
 	}
 
-	combos, err := server.store.ListOnlineCombosByMerchant(ctx, merchant.ID)
+	combos, err := server.store.ListOnlineCombosByMerchant(ctx, db.ListOnlineCombosByMerchantParams{
+		MerchantID:       merchant.ID,
+		ExcludePackaging: server.legacyPackagingDishFreezeEnabled(),
+	})
 	if err != nil {
 		return scanTableResponse{}, err
 	}

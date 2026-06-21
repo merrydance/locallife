@@ -144,6 +144,22 @@ func TestComputeOrderTotals(t *testing.T) {
 			},
 		},
 		{
+			name: "PackagingFeeIncludedSeparately",
+			input: OrderTotalsInput{
+				Subtotal:            1000,
+				DiscountAmount:      100,
+				VoucherAmount:       200,
+				PackagingFee:        150,
+				DeliveryFee:         50,
+				DeliveryFeeDiscount: 10,
+			},
+			check: func(t *testing.T, result OrderTotalsResult, err error) {
+				require.NoError(t, err)
+				require.Equal(t, int64(890), result.TotalAmount)
+				require.Equal(t, int64(0), result.BalancePaid)
+			},
+		},
+		{
 			name: "TotalNegative",
 			input: OrderTotalsInput{
 				Subtotal:       100,

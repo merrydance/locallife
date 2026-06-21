@@ -25,6 +25,7 @@ var ErrCustomizationTagUnavailable = errors.New("customization tag is unavailabl
 var ErrDuplicateCustomizationOption = errors.New("duplicate customization option")
 var ErrMerchantDishCategoryHasActiveDishes = errors.New("merchant dish category has active dishes")
 var ErrMerchantDishCategoryNotLinked = errors.New("merchant dish category is not linked")
+var ErrMerchantPackagingDefaultOptionUnavailable = errors.New("merchant packaging default option is unavailable")
 var ErrTableDisabledForReservation = errors.New("table is disabled and cannot be reserved")
 var ErrTableMerchantMismatchForReservation = errors.New("table merchant mismatch for reservation")
 var ErrTableNotFoundForReservation = errors.New("table not found for reservation")

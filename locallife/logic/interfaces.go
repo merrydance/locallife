@@ -173,18 +173,21 @@ type OrderPolicy interface {
 }
 
 type CreateOrderCommandInput struct {
-	UserID         int64
-	MerchantID     int64
-	OrderType      string
-	AddressID      *int64
-	TableID        *int64
-	ReservationID  *int64
-	BillingGroupID *int64
-	Items          []OrderItemInput
-	Notes          string
-	UserVoucherID  *int64
-	UseBalance     bool
-	IdempotencyKey string
+	UserID                      int64
+	MerchantID                  int64
+	OrderType                   string
+	AddressID                   *int64
+	TableID                     *int64
+	ReservationID               *int64
+	BillingGroupID              *int64
+	Items                       []OrderItemInput
+	Notes                       string
+	UserVoucherID               *int64
+	UseBalance                  bool
+	IdempotencyKey              string
+	PackagingOptionID           *int64
+	PackagingSelectionVersion   *int64
+	RejectLegacyPackagingDishes bool
 
 	RulesEngine        rules.Engine
 	RulesEngineEnabled bool
@@ -199,9 +202,10 @@ type CreateOrderCommandInput struct {
 }
 
 type CreateOrderCommandResult struct {
-	Order        db.Order
-	RuleDecision rules.Decision
-	HasRule      bool
+	Order          db.Order
+	PackagingItems []db.OrderPackagingItem
+	RuleDecision   rules.Decision
+	HasRule        bool
 }
 
 type CreateRefundOrderInput struct {
@@ -254,6 +258,7 @@ type GetUserOrderQueryInput struct {
 type GetUserOrderQueryResult struct {
 	Order               db.GetOrderWithDetailsRow
 	Items               []db.ListOrderItemsWithDishByOrderRow
+	PackagingItems      []db.OrderPackagingItem
 	DeliveryEtaMinutes  *int32
 	EstimatedDeliveryAt *time.Time
 	WechatTransactionID *string
@@ -280,8 +285,9 @@ type ListUserOrdersQueryInput struct {
 }
 
 type ListUserOrdersQueryResult struct {
-	Orders     []db.ListOrdersByUserWithFiltersRow
-	TotalCount int64
+	Orders                  []db.ListOrdersByUserWithFiltersRow
+	PackagingItemsByOrderID map[int64][]db.OrderPackagingItem
+	TotalCount              int64
 }
 
 type GetMerchantOrderQueryInput struct {
@@ -290,8 +296,9 @@ type GetMerchantOrderQueryInput struct {
 }
 
 type GetMerchantOrderQueryResult struct {
-	Order db.Order
-	Items []db.ListOrderItemsWithDishByOrderRow
+	Order          db.Order
+	Items          []db.ListOrderItemsWithDishByOrderRow
+	PackagingItems []db.OrderPackagingItem
 }
 
 type ListMerchantOrdersQueryInput struct {
@@ -303,9 +310,10 @@ type ListMerchantOrdersQueryInput struct {
 }
 
 type ListMerchantOrdersQueryResult struct {
-	Orders         []db.Order
-	ItemsByOrderID map[int64][]db.ListOrderItemsWithDishByOrderIDsRow
-	TotalCount     int64
+	Orders                  []db.Order
+	ItemsByOrderID          map[int64][]db.ListOrderItemsWithDishByOrderIDsRow
+	PackagingItemsByOrderID map[int64][]db.OrderPackagingItem
+	TotalCount              int64
 }
 
 type GetMerchantOrderStatsQueryInput struct {

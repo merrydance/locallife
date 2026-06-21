@@ -16,6 +16,13 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+func expectPackagingNotConfigured(store *mockdb.MockStore, merchantID int64) {
+	store.EXPECT().
+		GetMerchantPackagingSettings(gomock.Any(), merchantID).
+		Times(1).
+		Return(db.MerchantPackagingSetting{}, db.ErrRecordNotFound)
+}
+
 func TestCalculateOrderPreview_EmptyCart(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -72,6 +79,41 @@ func TestCalculateOrderPreview_InvalidCustomizations(t *testing.T) {
 	require.Equal(t, "invalid customizations in cart", reqErr.Err.Error())
 }
 
+func TestCalculateOrderPreview_RejectsLegacyPackagingDishWhenFreezeEnabled(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetCartByUserAndMerchant(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.Cart{ID: 10}, nil)
+	store.EXPECT().
+		ListCartItems(gomock.Any(), int64(10)).
+		Times(1).
+		Return([]db.ListCartItemsRow{{
+			DishID:          pgtype.Int8{Int64: 1, Valid: true},
+			DishName:        pgtype.Text{String: "旧餐盒", Valid: true},
+			DishPrice:       pgtype.Int8{Int64: 100, Valid: true},
+			DishIsPackaging: pgtype.Bool{Bool: true, Valid: true},
+			Quantity:        1,
+		}}, nil)
+
+	_, err := CalculateOrderPreview(
+		context.Background(),
+		store,
+		nil,
+		OrderCalculationInput{UserID: 1, MerchantID: 2, OrderType: "takeout", RejectLegacyPackagingDishes: true},
+		func(context.Context, int64, map[string]interface{}) ([]byte, int64, error) { return nil, 0, nil },
+		func(context.Context, int64, int64, int32, int64) (DeliveryFeeComputation, error) {
+			return DeliveryFeeComputation{}, nil
+		},
+	)
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 400, reqErr.Status)
+	require.Equal(t, "包装已迁移到包装设置，请在包装设置中维护", reqErr.Err.Error())
+}
+
 func TestCalculateOrderPreview_WithVoucher(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -95,6 +137,7 @@ func TestCalculateOrderPreview_WithVoucher(t *testing.T) {
 		GetMerchant(gomock.Any(), merchantID).
 		Times(1).
 		Return(db.Merchant{ID: merchantID, RegionID: 9}, nil)
+	expectPackagingNotConfigured(store, merchantID)
 	store.EXPECT().
 		GetUserVoucher(gomock.Any(), voucherID).
 		Times(1).
@@ -194,6 +237,7 @@ func TestCalculateCartPreview_TakeawayIgnoresDeliveryLocation(t *testing.T) {
 			DishPrice: pgtype.Int8{Int64: 1000, Valid: true},
 			Quantity:  2,
 		}}, nil)
+	expectPackagingNotConfigured(store, merchantID)
 	store.EXPECT().
 		ListActiveDiscountRules(gomock.Any(), merchantID).
 		Times(1).
@@ -246,6 +290,374 @@ func TestCalculateCartPreview_TakeawayIgnoresDeliveryLocation(t *testing.T) {
 	require.Equal(t, int64(2000), result.Promotion.TotalAmount)
 }
 
+func TestCalculateCartPreview_RejectsLegacyPackagingDishWhenFreezeEnabled(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	userID := int64(1)
+	merchantID := int64(2)
+	cartID := int64(30)
+
+	store.EXPECT().
+		GetCartByUserAndMerchant(gomock.Any(), db.GetCartByUserAndMerchantParams{
+			UserID:     userID,
+			MerchantID: merchantID,
+			OrderType:  db.OrderTypeTakeaway,
+		}).
+		Times(1).
+		Return(db.Cart{ID: cartID}, nil)
+	store.EXPECT().
+		ListCartItems(gomock.Any(), cartID).
+		Times(1).
+		Return([]db.ListCartItemsRow{{
+			DishID:          pgtype.Int8{Int64: 5, Valid: true},
+			DishName:        pgtype.Text{String: "旧餐盒", Valid: true},
+			DishPrice:       pgtype.Int8{Int64: 100, Valid: true},
+			DishIsPackaging: pgtype.Bool{Bool: true, Valid: true},
+			Quantity:        1,
+		}}, nil)
+
+	_, err := CalculateCartPreview(
+		context.Background(),
+		store,
+		nil,
+		db.Merchant{ID: merchantID, RegionID: 9},
+		func(context.Context, int64, int64, int32, int64) (DeliveryFeeComputation, error) {
+			t.Fatal("delivery fee should not be called for rejected cart item")
+			return DeliveryFeeComputation{}, nil
+		},
+		CartPreviewInput{
+			UserID:                      userID,
+			MerchantID:                  merchantID,
+			OrderType:                   db.OrderTypeTakeaway,
+			RejectLegacyPackagingDishes: true,
+		},
+	)
+
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 400, reqErr.Status)
+	require.Equal(t, "包装已迁移到包装设置，请在包装设置中维护", reqErr.Err.Error())
+}
+
+func TestCalculateCartPreview_RejectsComboWithLegacyPackagingChildWhenFreezeEnabled(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	userID := int64(1)
+	merchantID := int64(2)
+	cartID := int64(30)
+	comboID := int64(50)
+
+	store.EXPECT().
+		GetCartByUserAndMerchant(gomock.Any(), db.GetCartByUserAndMerchantParams{
+			UserID:     userID,
+			MerchantID: merchantID,
+			OrderType:  db.OrderTypeTakeaway,
+		}).
+		Times(1).
+		Return(db.Cart{ID: cartID}, nil)
+	store.EXPECT().
+		ListCartItems(gomock.Any(), cartID).
+		Times(1).
+		Return([]db.ListCartItemsRow{{
+			ComboID:    pgtype.Int8{Int64: comboID, Valid: true},
+			ComboName:  pgtype.Text{String: "多人套餐", Valid: true},
+			ComboPrice: pgtype.Int8{Int64: 6800, Valid: true},
+			Quantity:   1,
+		}}, nil)
+	store.EXPECT().
+		ListComboDishOrderability(gomock.Any(), comboID).
+		Times(1).
+		Return([]db.ListComboDishOrderabilityRow{
+			comboDishOrderabilityRow(60, "旧餐盒", true, true, true, true),
+		}, nil)
+
+	_, err := CalculateCartPreview(
+		context.Background(),
+		store,
+		nil,
+		db.Merchant{ID: merchantID, RegionID: 9},
+		func(context.Context, int64, int64, int32, int64) (DeliveryFeeComputation, error) {
+			t.Fatal("delivery fee should not be called for rejected cart item")
+			return DeliveryFeeComputation{}, nil
+		},
+		CartPreviewInput{
+			UserID:                      userID,
+			MerchantID:                  merchantID,
+			OrderType:                   db.OrderTypeTakeaway,
+			RejectLegacyPackagingDishes: true,
+		},
+	)
+
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 400, reqErr.Status)
+	require.Equal(t, "包装已迁移到包装设置，请在包装设置中维护", reqErr.Err.Error())
+}
+
+func TestCalculateCartPreview_SelectedPackagingAddsFeeAndKeepsFoodSubtotalForPromotions(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	userID := int64(1)
+	merchantID := int64(2)
+	cartID := int64(30)
+	optionID := int64(1001)
+	now := time.Now()
+	cart := db.Cart{ID: cartID, UserID: userID, MerchantID: merchantID, OrderType: db.OrderTypeTakeaway}
+	option := enabledPackagingOption(optionID, merchantID)
+
+	store.EXPECT().
+		GetCartByUserAndMerchant(gomock.Any(), db.GetCartByUserAndMerchantParams{
+			UserID:     userID,
+			MerchantID: merchantID,
+			OrderType:  db.OrderTypeTakeaway,
+		}).
+		Times(1).
+		Return(cart, nil)
+	store.EXPECT().
+		ListCartItems(gomock.Any(), cartID).
+		Times(1).
+		Return([]db.ListCartItemsRow{{
+			DishID:    pgtype.Int8{Int64: 5, Valid: true},
+			DishName:  pgtype.Text{String: "Dish", Valid: true},
+			DishPrice: pgtype.Int8{Int64: 3000, Valid: true},
+			Quantity:  1,
+		}}, nil)
+	store.EXPECT().
+		GetMerchantPackagingSettings(gomock.Any(), merchantID).
+		Times(1).
+		Return(db.MerchantPackagingSetting{
+			MerchantID:           merchantID,
+			Enabled:              true,
+			Required:             true,
+			ApplicableOrderTypes: []string{db.OrderTypeTakeaway},
+		}, nil)
+	store.EXPECT().
+		GetCart(gomock.Any(), cartID).
+		Times(1).
+		Return(cart, nil)
+	store.EXPECT().
+		GetCartPackagingSelection(gomock.Any(), cartID).
+		Times(1).
+		Return(db.CartPackagingSelection{
+			CartID:            cartID,
+			PackagingOptionID: pgtype.Int8{Int64: optionID, Valid: true},
+			SelectionVersion:  5,
+		}, nil)
+	store.EXPECT().
+		ListEnabledMerchantPackagingOptions(gomock.Any(), merchantID).
+		Times(1).
+		Return([]db.MerchantPackagingOption{option}, nil)
+	store.EXPECT().
+		GetMerchantPackagingOption(gomock.Any(), db.GetMerchantPackagingOptionParams{
+			ID:         optionID,
+			MerchantID: merchantID,
+		}).
+		Times(1).
+		Return(option, nil)
+	store.EXPECT().
+		ListActiveDiscountRules(gomock.Any(), merchantID).
+		Times(1).
+		Return([]db.DiscountRule{{
+			ID:             1,
+			Name:           "满30减5",
+			MinOrderAmount: 3000,
+			DiscountAmount: 500,
+			ValidFrom:      now.Add(-time.Hour),
+			ValidUntil:     now.Add(time.Hour),
+		}}, nil)
+	store.EXPECT().
+		ListUserAvailableVouchersForMerchant(gomock.Any(), db.ListUserAvailableVouchersForMerchantParams{
+			UserID:         userID,
+			MerchantID:     merchantID,
+			MinOrderAmount: 3000,
+		}).
+		Times(1).
+		Return([]db.ListUserAvailableVouchersForMerchantRow{}, nil)
+	store.EXPECT().
+		GetMembershipByMerchantAndUser(gomock.Any(), db.GetMembershipByMerchantAndUserParams{
+			MerchantID: merchantID,
+			UserID:     userID,
+		}).
+		Times(1).
+		Return(db.MerchantMembership{}, db.ErrRecordNotFound)
+
+	result, err := CalculateCartPreview(
+		context.Background(),
+		store,
+		nil,
+		db.Merchant{ID: merchantID, RegionID: 9},
+		func(context.Context, int64, int64, int32, int64) (DeliveryFeeComputation, error) {
+			t.Fatal("delivery fee should not be called for takeaway")
+			return DeliveryFeeComputation{}, nil
+		},
+		CartPreviewInput{
+			UserID:     userID,
+			MerchantID: merchantID,
+			OrderType:  db.OrderTypeTakeaway,
+		},
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, int64(3000), result.Subtotal)
+	require.Equal(t, int64(100), result.PackagingFee)
+	require.NotNil(t, result.Packaging.SelectedOptionID)
+	require.Equal(t, optionID, *result.Packaging.SelectedOptionID)
+	require.Equal(t, int64(5), result.Packaging.SelectionVersion)
+	require.Equal(t, int64(500), result.Promotion.MerchantDiscount)
+	require.Equal(t, int64(2600), result.Promotion.TotalAmount)
+
+	totals, err := ComputeOrderTotals(OrderTotalsInput{
+		Subtotal:            result.Subtotal,
+		DiscountAmount:      result.Promotion.MerchantDiscount,
+		VoucherAmount:       result.Promotion.VoucherDiscount,
+		PackagingFee:        result.PackagingFee,
+		DeliveryFee:         result.DeliveryFee,
+		DeliveryFeeDiscount: result.DeliveryFeeDiscount,
+	})
+	require.NoError(t, err)
+	require.Equal(t, totals.TotalAmount, result.Promotion.TotalAmount)
+}
+
+func TestCalculateCartPreview_RequiredMissingPackagingFails(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	userID := int64(1)
+	merchantID := int64(2)
+	cartID := int64(30)
+	cart := db.Cart{ID: cartID, UserID: userID, MerchantID: merchantID, OrderType: db.OrderTypeTakeaway}
+
+	store.EXPECT().
+		GetCartByUserAndMerchant(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(cart, nil)
+	store.EXPECT().
+		ListCartItems(gomock.Any(), cartID).
+		Times(1).
+		Return([]db.ListCartItemsRow{{
+			DishID:    pgtype.Int8{Int64: 5, Valid: true},
+			DishName:  pgtype.Text{String: "Dish", Valid: true},
+			DishPrice: pgtype.Int8{Int64: 1000, Valid: true},
+			Quantity:  1,
+		}}, nil)
+	store.EXPECT().
+		GetMerchantPackagingSettings(gomock.Any(), merchantID).
+		Times(1).
+		Return(db.MerchantPackagingSetting{
+			MerchantID:           merchantID,
+			Enabled:              true,
+			Required:             true,
+			ApplicableOrderTypes: []string{db.OrderTypeTakeaway},
+		}, nil)
+	store.EXPECT().
+		GetCart(gomock.Any(), cartID).
+		Times(1).
+		Return(cart, nil)
+	store.EXPECT().
+		GetCartPackagingSelection(gomock.Any(), cartID).
+		Times(1).
+		Return(db.CartPackagingSelection{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		ListEnabledMerchantPackagingOptions(gomock.Any(), merchantID).
+		Times(1).
+		Return([]db.MerchantPackagingOption{enabledPackagingOption(1001, merchantID)}, nil)
+
+	_, err := CalculateCartPreview(
+		context.Background(),
+		store,
+		nil,
+		db.Merchant{ID: merchantID, RegionID: 9},
+		func(context.Context, int64, int64, int32, int64) (DeliveryFeeComputation, error) {
+			t.Fatal("delivery fee should not be called for takeaway")
+			return DeliveryFeeComputation{}, nil
+		},
+		CartPreviewInput{UserID: userID, MerchantID: merchantID, OrderType: db.OrderTypeTakeaway},
+	)
+
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 400, reqErr.Status)
+	require.Equal(t, "请先选择包装方式", reqErr.Err.Error())
+}
+
+func TestCalculateCartPreview_DisabledSelectedPackagingFailsClosed(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	userID := int64(1)
+	merchantID := int64(2)
+	cartID := int64(30)
+	optionID := int64(1001)
+	cart := db.Cart{ID: cartID, UserID: userID, MerchantID: merchantID, OrderType: db.OrderTypeTakeaway}
+
+	store.EXPECT().
+		GetCartByUserAndMerchant(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(cart, nil)
+	store.EXPECT().
+		ListCartItems(gomock.Any(), cartID).
+		Times(1).
+		Return([]db.ListCartItemsRow{{
+			DishID:    pgtype.Int8{Int64: 5, Valid: true},
+			DishName:  pgtype.Text{String: "Dish", Valid: true},
+			DishPrice: pgtype.Int8{Int64: 1000, Valid: true},
+			Quantity:  1,
+		}}, nil)
+	store.EXPECT().
+		GetMerchantPackagingSettings(gomock.Any(), merchantID).
+		Times(1).
+		Return(db.MerchantPackagingSetting{
+			MerchantID:           merchantID,
+			Enabled:              true,
+			Required:             true,
+			ApplicableOrderTypes: []string{db.OrderTypeTakeaway},
+		}, nil)
+	store.EXPECT().
+		GetCart(gomock.Any(), cartID).
+		Times(1).
+		Return(cart, nil)
+	store.EXPECT().
+		GetCartPackagingSelection(gomock.Any(), cartID).
+		Times(1).
+		Return(db.CartPackagingSelection{
+			CartID:            cartID,
+			PackagingOptionID: pgtype.Int8{Int64: optionID, Valid: true},
+			SelectionVersion:  4,
+		}, nil)
+	store.EXPECT().
+		ListEnabledMerchantPackagingOptions(gomock.Any(), merchantID).
+		Times(1).
+		Return([]db.MerchantPackagingOption{}, nil)
+	store.EXPECT().
+		GetMerchantPackagingOption(gomock.Any(), db.GetMerchantPackagingOptionParams{
+			ID:         optionID,
+			MerchantID: merchantID,
+		}).
+		Times(1).
+		Return(db.MerchantPackagingOption{ID: optionID, MerchantID: merchantID, Name: "普通餐盒", IsEnabled: false}, nil)
+
+	_, err := CalculateCartPreview(
+		context.Background(),
+		store,
+		nil,
+		db.Merchant{ID: merchantID, RegionID: 9},
+		func(context.Context, int64, int64, int32, int64) (DeliveryFeeComputation, error) {
+			t.Fatal("delivery fee should not be called for takeaway")
+			return DeliveryFeeComputation{}, nil
+		},
+		CartPreviewInput{UserID: userID, MerchantID: merchantID, OrderType: db.OrderTypeTakeaway},
+	)
+
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 400, reqErr.Status)
+	require.Equal(t, "包装方式不可用", reqErr.Err.Error())
+}
+
 func TestCalculateCartPreview_ClampsRouteDistanceToMinimum(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -288,6 +700,7 @@ func TestCalculateCartPreview_ClampsRouteDistanceToMinimum(t *testing.T) {
 			Latitude:  numericFromFloat(30.01),
 			Longitude: numericFromFloat(120.01),
 		}, nil)
+	expectPackagingNotConfigured(store, merchantID)
 	store.EXPECT().
 		ListActiveDiscountRules(gomock.Any(), merchantID).
 		Times(1).
@@ -360,6 +773,7 @@ func TestCalculateOrderPreview_RejectsVoucherWhenMerchantDiscountCannotStack(t *
 		GetMerchant(gomock.Any(), merchantID).
 		Times(1).
 		Return(db.Merchant{ID: merchantID, RegionID: 9}, nil)
+	expectPackagingNotConfigured(store, merchantID)
 	store.EXPECT().
 		GetUserVoucher(gomock.Any(), voucherID).
 		Times(1).
@@ -427,6 +841,7 @@ func TestCalculateOrderPreview_SuggestsVoucher(t *testing.T) {
 		GetMerchant(gomock.Any(), merchantID).
 		Times(1).
 		Return(db.Merchant{ID: merchantID, RegionID: 9}, nil)
+	expectPackagingNotConfigured(store, merchantID)
 	store.EXPECT().
 		ListActiveDiscountRules(gomock.Any(), merchantID).
 		Times(1).
@@ -466,6 +881,104 @@ func TestCalculateOrderPreview_SuggestsVoucher(t *testing.T) {
 	require.Equal(t, int64(11), result.SuggestedVoucher.ID)
 	require.Len(t, result.VoucherTrials, 1)
 	require.Equal(t, int64(1700), result.VoucherTrials[0].TrialPayable)
+}
+
+func TestCalculateOrderPreview_SelectedPackagingAddsFee(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	userID := int64(1)
+	merchantID := int64(2)
+	cartID := int64(21)
+	optionID := int64(1001)
+	cart := db.Cart{ID: cartID, UserID: userID, MerchantID: merchantID, OrderType: db.OrderTypeTakeaway}
+	option := enabledPackagingOption(optionID, merchantID)
+
+	store.EXPECT().
+		GetCartByUserAndMerchant(gomock.Any(), db.GetCartByUserAndMerchantParams{
+			UserID:     userID,
+			MerchantID: merchantID,
+			OrderType:  db.OrderTypeTakeaway,
+		}).
+		Times(1).
+		Return(cart, nil)
+	store.EXPECT().
+		ListCartItems(gomock.Any(), cartID).
+		Times(1).
+		Return([]db.ListCartItemsRow{
+			{DishID: pgtype.Int8{Int64: 5, Valid: true}, DishName: pgtype.Text{String: "Dish", Valid: true}, DishPrice: pgtype.Int8{Int64: 1000, Valid: true}, Quantity: 1},
+		}, nil)
+	store.EXPECT().
+		GetMerchantPackagingSettings(gomock.Any(), merchantID).
+		Times(1).
+		Return(db.MerchantPackagingSetting{
+			MerchantID:           merchantID,
+			Enabled:              true,
+			Required:             true,
+			ApplicableOrderTypes: []string{db.OrderTypeTakeaway},
+		}, nil)
+	store.EXPECT().
+		GetCart(gomock.Any(), cartID).
+		Times(1).
+		Return(cart, nil)
+	store.EXPECT().
+		GetCartPackagingSelection(gomock.Any(), cartID).
+		Times(1).
+		Return(db.CartPackagingSelection{
+			CartID:            cartID,
+			PackagingOptionID: pgtype.Int8{Int64: optionID, Valid: true},
+			SelectionVersion:  6,
+		}, nil)
+	store.EXPECT().
+		ListEnabledMerchantPackagingOptions(gomock.Any(), merchantID).
+		Times(1).
+		Return([]db.MerchantPackagingOption{option}, nil)
+	store.EXPECT().
+		GetMerchantPackagingOption(gomock.Any(), db.GetMerchantPackagingOptionParams{
+			ID:         optionID,
+			MerchantID: merchantID,
+		}).
+		Times(1).
+		Return(option, nil)
+	store.EXPECT().
+		ListActiveDiscountRules(gomock.Any(), merchantID).
+		Times(1).
+		Return([]db.DiscountRule{}, nil)
+	store.EXPECT().
+		ListUserAvailableVouchersForMerchant(gomock.Any(), db.ListUserAvailableVouchersForMerchantParams{
+			UserID:         userID,
+			MerchantID:     merchantID,
+			MinOrderAmount: 1000,
+		}).
+		Times(1).
+		Return([]db.ListUserAvailableVouchersForMerchantRow{}, nil)
+	store.EXPECT().
+		GetMembershipByMerchantAndUser(gomock.Any(), db.GetMembershipByMerchantAndUserParams{MerchantID: merchantID, UserID: userID}).
+		Times(1).
+		Return(db.MerchantMembership{}, db.ErrRecordNotFound)
+
+	result, err := CalculateOrderPreview(
+		context.Background(),
+		store,
+		nil,
+		OrderCalculationInput{UserID: userID, MerchantID: merchantID, OrderType: db.OrderTypeTakeaway},
+		func(context.Context, int64, map[string]interface{}) ([]byte, int64, error) {
+			return json.RawMessage{}, 0, nil
+		},
+		func(context.Context, int64, int64, int32, int64) (DeliveryFeeComputation, error) {
+			t.Fatal("delivery fee should not be called for takeaway")
+			return DeliveryFeeComputation{}, nil
+		},
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, int64(1000), result.Subtotal)
+	require.Equal(t, int64(100), result.PackagingFee)
+	require.NotNil(t, result.Packaging.SelectedOptionID)
+	require.Equal(t, optionID, *result.Packaging.SelectedOptionID)
+	require.Equal(t, int64(6), result.Packaging.SelectionVersion)
+	require.Equal(t, int64(1100), result.TotalAmount)
 }
 
 func TestCalculateOrderPreview_RejectsForeignAddress(t *testing.T) {
@@ -627,6 +1140,7 @@ func TestCalculateOrderPreview_UsesRouteDistanceFallback(t *testing.T) {
 		GetMerchant(gomock.Any(), merchantID).
 		Times(1).
 		Return(merchant, nil)
+	expectPackagingNotConfigured(store, merchantID)
 	store.EXPECT().
 		ListActiveDiscountRules(gomock.Any(), merchantID).
 		Times(1).
@@ -709,6 +1223,7 @@ func TestCalculateOrderPreview_FallsBackToRouteDistanceEstimateWhenMapFails(t *t
 		GetMerchant(gomock.Any(), merchantID).
 		Times(1).
 		Return(merchant, nil)
+	expectPackagingNotConfigured(store, merchantID)
 	store.EXPECT().
 		ListActiveDiscountRules(gomock.Any(), merchantID).
 		Times(1).
@@ -791,6 +1306,7 @@ func TestCalculateOrderPreview_ClampsRouteDistanceToMinimum(t *testing.T) {
 		GetMerchant(gomock.Any(), merchantID).
 		Times(1).
 		Return(merchant, nil)
+	expectPackagingNotConfigured(store, merchantID)
 	store.EXPECT().
 		ListActiveDiscountRules(gomock.Any(), merchantID).
 		Times(1).
@@ -1119,6 +1635,7 @@ func TestCalculateOrderPreview_UsesMerchantRegionForDeliveryFeeConfig(t *testing
 			Latitude:  numericFromFloat(30.01),
 			Longitude: numericFromFloat(120.01),
 		}, nil)
+	expectPackagingNotConfigured(store, merchantID)
 	store.EXPECT().
 		ListActiveDiscountRules(gomock.Any(), merchantID).
 		Times(1).

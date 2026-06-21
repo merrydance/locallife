@@ -17,11 +17,15 @@ type OrderItemInput struct {
 	Customizations map[string]interface{}
 }
 
+type CalculateOrderItemsOptions struct {
+	RejectLegacyPackagingDishes bool
+}
+
 // NormalizeDishCustomizationsFunc normalizes customizations and returns JSON plus extra price.
 type NormalizeDishCustomizationsFunc func(ctx context.Context, dishID int64, customizations map[string]interface{}) ([]byte, int64, error)
 
 // CalculateOrderItems builds order items and computes subtotal.
-func CalculateOrderItems(ctx context.Context, store db.Store, merchantID int64, items []OrderItemInput, normalize NormalizeDishCustomizationsFunc) (int64, []db.CreateOrderItemParams, error) {
+func CalculateOrderItems(ctx context.Context, store db.Store, merchantID int64, items []OrderItemInput, normalize NormalizeDishCustomizationsFunc, options CalculateOrderItemsOptions) (int64, []db.CreateOrderItemParams, error) {
 	var subtotal int64
 	orderItems := make([]db.CreateOrderItemParams, 0, len(items))
 
@@ -49,6 +53,9 @@ func CalculateOrderItems(ctx context.Context, store db.Store, merchantID int64, 
 			}
 			if dish.MerchantID != merchantID {
 				return 0, nil, fmt.Errorf("dish %d does not belong to this merchant", *item.DishID)
+			}
+			if options.RejectLegacyPackagingDishes && dish.IsPackaging {
+				return 0, nil, fmt.Errorf("包装已迁移到包装设置，请在包装设置中维护")
 			}
 			if !dish.IsOnline {
 				return 0, nil, fmt.Errorf("dish %s is offline", dish.Name)
@@ -85,7 +92,7 @@ func CalculateOrderItems(ctx context.Context, store db.Store, merchantID int64, 
 			if !combo.IsOnline {
 				return 0, nil, fmt.Errorf("combo %s is offline", combo.Name)
 			}
-			if err := validateComboChildDishesOrderable(ctx, store, combo.ID, combo.Name); err != nil {
+			if err := validateComboChildDishesOrderable(ctx, store, combo.ID, combo.Name, options.RejectLegacyPackagingDishes); err != nil {
 				return 0, nil, err
 			}
 

@@ -2030,6 +2030,154 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/cart/packaging-selection": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "为当前用户在指定商户和订单场景下的购物车选择包装方式；重复选择同一包装方式不会递增版本",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "购物车"
+                ],
+                "summary": "选择购物车包装方式",
+                "parameters": [
+                    {
+                        "description": "包装方式选择请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.putCartPackagingSelectionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "包装方式选择状态",
+                        "schema": {
+                            "$ref": "#/definitions/api.cartPackagingSelectionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误/包装方式不可用",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "购物车不属于当前用户",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "购物车不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "购物车状态冲突",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "清除当前用户在指定商户和订单场景下的购物车包装方式；重复清除保持同一版本",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "购物车"
+                ],
+                "summary": "清除购物车包装方式",
+                "parameters": [
+                    {
+                        "description": "清除包装方式请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.deleteCartPackagingSelectionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "包装方式选择状态",
+                        "schema": {
+                            "$ref": "#/definitions/api.cartPackagingSelectionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "购物车不属于当前用户",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "购物车不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "购物车状态冲突",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/cart/summary": {
             "get": {
                 "security": [
@@ -12586,6 +12734,364 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/merchant/packaging-options": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取当前商户未删除的包装选项列表",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户包装管理"
+                ],
+                "summary": "获取商户包装选项",
+                "responses": {
+                    "200": {
+                        "description": "包装选项列表",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantPackagingOptionListResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "为当前商户创建一个包装选项，活动选项名称在商户内唯一",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户包装管理"
+                ],
+                "summary": "创建商户包装选项",
+                "parameters": [
+                    {
+                        "description": "包装选项",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.upsertMerchantPackagingOptionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "创建成功",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantPackagingOptionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "包装选项名称重复",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchant/packaging-options/{id}": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "幂等更新当前商户拥有的包装选项",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户包装管理"
+                ],
+                "summary": "更新商户包装选项",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "包装选项ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "包装选项",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.upsertMerchantPackagingOptionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "更新成功",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantPackagingOptionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "包装选项不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "包装选项名称重复",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "软删除当前商户拥有的包装选项；重复删除已删除的自有选项保持幂等成功",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户包装管理"
+                ],
+                "summary": "删除商户包装选项",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "包装选项ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "删除成功",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantPackagingOptionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "包装选项不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchant/packaging-settings": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取当前商户包装启用状态、适用订单类型和默认包装选项",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户包装管理"
+                ],
+                "summary": "获取商户包装设置",
+                "responses": {
+                    "200": {
+                        "description": "包装设置",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantPackagingSettingsResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "幂等更新当前商户包装启用状态、必选规则、适用订单类型和默认包装选项",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户包装管理"
+                ],
+                "summary": "更新商户包装设置",
+                "parameters": [
+                    {
+                        "description": "包装设置",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.upsertMerchantPackagingSettingsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "更新成功",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantPackagingSettingsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/merchant/recoveries/{id}": {
             "get": {
                 "security": [
@@ -21127,7 +21633,7 @@ const docTemplate = `{
                     "201": {
                         "description": "创建成功",
                         "schema": {
-                            "$ref": "#/definitions/api.orderResponse"
+                            "$ref": "#/definitions/api.createOrderResponse"
                         }
                     },
                     "400": {
@@ -34038,6 +34544,18 @@ const docTemplate = `{
                     "description": "最小起送金额（分）。0 表示无起送限制，或该商户尚未配置起送金额。\n商户级起送金额配置上线后此字段将从商户配置读取；\n当前前端不应依赖此字段阻止下单——订单创建服务端会再次校验。\nomitempty：值为 0 时不序列化，前端收不到 0 即视为无限制。",
                     "type": "integer"
                 },
+                "packaging": {
+                    "description": "包装选择状态",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/api.packagingPreviewResponse"
+                        }
+                    ]
+                },
+                "packaging_fee": {
+                    "description": "包装费（分）",
+                    "type": "integer"
+                },
                 "payment_assessment": {
                     "description": "会员余额支付能力评估",
                     "allOf": [
@@ -34184,6 +34702,66 @@ const docTemplate = `{
                 }
             }
         },
+        "api.cartPackagingOptionResponse": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "is_enabled": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "price": {
+                    "type": "integer"
+                },
+                "sort_order": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.cartPackagingResponse": {
+            "type": "object",
+            "properties": {
+                "applicable": {
+                    "type": "boolean"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "options": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.cartPackagingOptionResponse"
+                    }
+                },
+                "required": {
+                    "type": "boolean"
+                },
+                "selected_option_id": {
+                    "type": "integer"
+                },
+                "selection_version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.cartPackagingSelectionResponse": {
+            "type": "object",
+            "properties": {
+                "selected_option_id": {
+                    "type": "integer"
+                },
+                "selection_version": {
+                    "type": "integer"
+                }
+            }
+        },
         "api.cartResponse": {
             "type": "object",
             "properties": {
@@ -34201,6 +34779,9 @@ const docTemplate = `{
                 },
                 "order_type": {
                     "type": "string"
+                },
+                "packaging": {
+                    "$ref": "#/definitions/api.cartPackagingResponse"
                 },
                 "packaging_required": {
                     "type": "boolean"
@@ -35342,6 +35923,18 @@ const docTemplate = `{
                     ],
                     "example": "takeout"
                 },
+                "packaging_option_id": {
+                    "description": "包装选项ID（来自最近一次预览；不选择包装时显式传null或省略）",
+                    "type": "integer",
+                    "minimum": 1,
+                    "example": 3001
+                },
+                "packaging_selection_version": {
+                    "description": "包装选择版本（来自最近一次预览；包装启用时必需，防止结算状态漂移）",
+                    "type": "integer",
+                    "minimum": 0,
+                    "example": 7
+                },
                 "reservation_id": {
                     "description": "预订ID (预定点菜时必填)",
                     "type": "integer",
@@ -35364,6 +35957,253 @@ const docTemplate = `{
                     "type": "integer",
                     "minimum": 1,
                     "example": 9001
+                }
+            }
+        },
+        "api.createOrderResponse": {
+            "type": "object",
+            "properties": {
+                "actions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "address_id": {
+                    "type": "integer",
+                    "example": 5001
+                },
+                "auto_user_delivered_at": {
+                    "type": "string"
+                },
+                "badges": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.orderBadge"
+                    }
+                },
+                "cancel_reason": {
+                    "type": "string",
+                    "example": "商品缺货"
+                },
+                "cancelled_at": {
+                    "type": "string",
+                    "example": "2025-12-01T12:25:00Z"
+                },
+                "claim_channel": {
+                    "type": "string"
+                },
+                "completed_at": {
+                    "type": "string",
+                    "example": "2025-12-01T13:15:00Z"
+                },
+                "courier_accept_at": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string",
+                    "example": "2025-12-01T12:20:00Z"
+                },
+                "delivery_address": {
+                    "type": "string",
+                    "example": "北京市朝阳区某小区1号楼"
+                },
+                "delivery_contact_name": {
+                    "type": "string",
+                    "example": "张三"
+                },
+                "delivery_contact_phone": {
+                    "type": "string",
+                    "example": "13800138000"
+                },
+                "delivery_distance": {
+                    "type": "integer",
+                    "example": 2500
+                },
+                "delivery_eta_minutes": {
+                    "type": "integer",
+                    "example": 38
+                },
+                "delivery_fee": {
+                    "type": "integer",
+                    "example": 500
+                },
+                "delivery_fee_discount": {
+                    "type": "integer",
+                    "example": 200
+                },
+                "discount_amount": {
+                    "type": "integer",
+                    "example": 500
+                },
+                "dispatch_order_id": {
+                    "type": "integer"
+                },
+                "estimated_delivery_at": {
+                    "type": "string",
+                    "example": "2025-12-01T12:30:00Z"
+                },
+                "exception_state": {
+                    "type": "string"
+                },
+                "fee_breakdown": {
+                    "$ref": "#/definitions/api.merchantOrderFeeBreakdownResponse"
+                },
+                "flow_id": {
+                    "type": "integer"
+                },
+                "fulfillment_status": {
+                    "type": "string",
+                    "enum": [
+                        "scheduled",
+                        "pending_kitchen",
+                        "preparing",
+                        "ready",
+                        "completed",
+                        "cancelled"
+                    ],
+                    "example": "pending_kitchen"
+                },
+                "id": {
+                    "type": "integer",
+                    "example": 100001
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.orderItemResponse"
+                    }
+                },
+                "merchant_id": {
+                    "type": "integer",
+                    "example": 20001
+                },
+                "merchant_name": {
+                    "type": "string",
+                    "example": "张三餐厅"
+                },
+                "merchant_phone": {
+                    "type": "string",
+                    "example": "13800138000"
+                },
+                "notes": {
+                    "type": "string",
+                    "example": "不要香菜"
+                },
+                "order_no": {
+                    "type": "string",
+                    "example": "ORD20251201123456"
+                },
+                "order_type": {
+                    "type": "string",
+                    "enum": [
+                        "takeout",
+                        "dine_in",
+                        "takeaway",
+                        "reservation"
+                    ],
+                    "example": "takeout"
+                },
+                "overtime": {
+                    "type": "boolean"
+                },
+                "packaging_fee": {
+                    "type": "integer",
+                    "example": 150
+                },
+                "packaging_items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.orderPackagingItemResponse"
+                    }
+                },
+                "paid_at": {
+                    "type": "string",
+                    "example": "2025-12-01T12:30:00Z"
+                },
+                "payment_context": {
+                    "$ref": "#/definitions/api.orderPaymentContextResponse"
+                },
+                "payment_method": {
+                    "type": "string",
+                    "enum": [
+                        "wechat",
+                        "balance"
+                    ],
+                    "example": "wechat"
+                },
+                "picked_at": {
+                    "type": "string"
+                },
+                "pickup_code": {
+                    "type": "string"
+                },
+                "pickup_code_masked": {
+                    "type": "string"
+                },
+                "prep_start_at": {
+                    "type": "string"
+                },
+                "ready_at": {
+                    "type": "string"
+                },
+                "replaced_by_order_id": {
+                    "type": "integer",
+                    "example": 100009
+                },
+                "reservation_id": {
+                    "type": "integer",
+                    "example": 8001
+                },
+                "rider_delivered_at": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "pending",
+                        "paid",
+                        "preparing",
+                        "ready",
+                        "courier_accepted",
+                        "picked",
+                        "delivering",
+                        "rider_delivered",
+                        "user_delivered",
+                        "completed",
+                        "cancelled"
+                    ],
+                    "example": "paid"
+                },
+                "status_hint": {
+                    "type": "string"
+                },
+                "subtotal": {
+                    "type": "integer",
+                    "example": 5760
+                },
+                "table_id": {
+                    "type": "integer",
+                    "example": 301
+                },
+                "total_amount": {
+                    "type": "integer",
+                    "example": 5760
+                },
+                "updated_at": {
+                    "type": "string",
+                    "example": "2025-12-01T12:30:00Z"
+                },
+                "user_delivered_at": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "integer",
+                    "example": 10001
+                },
+                "wechat_transaction_id": {
+                    "description": "微信或上游支付交易号，用于支付查询与历史兼容展示",
+                    "type": "string"
                 }
             }
         },
@@ -36184,6 +37024,29 @@ const docTemplate = `{
                 },
                 "total_sales": {
                     "type": "integer"
+                }
+            }
+        },
+        "api.deleteCartPackagingSelectionRequest": {
+            "type": "object",
+            "required": [
+                "merchant_id"
+            ],
+            "properties": {
+                "merchant_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "order_type": {
+                    "type": "string"
+                },
+                "reservation_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "table_id": {
+                    "type": "integer",
+                    "minimum": 1
                 }
             }
         },
@@ -39158,6 +40021,10 @@ const docTemplate = `{
                     "type": "integer",
                     "example": 8968
                 },
+                "packaging_fee_amount": {
+                    "type": "integer",
+                    "example": 150
+                },
                 "payment_channel_fee_amount": {
                     "type": "integer",
                     "example": 57
@@ -39329,6 +40196,78 @@ const docTemplate = `{
                 },
                 "total_sales": {
                     "type": "integer"
+                }
+            }
+        },
+        "api.merchantPackagingOptionListResponse": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer"
+                },
+                "options": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.merchantPackagingOptionResponse"
+                    }
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "total_pages": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.merchantPackagingOptionResponse": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "is_enabled": {
+                    "type": "boolean"
+                },
+                "merchant_id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "price": {
+                    "type": "integer"
+                },
+                "sort_order": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.merchantPackagingSettingsResponse": {
+            "type": "object",
+            "properties": {
+                "applicable_order_types": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "default_option_id": {
+                    "type": "integer"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "merchant_id": {
+                    "type": "integer"
+                },
+                "required": {
+                    "type": "boolean"
                 }
             }
         },
@@ -39598,6 +40537,16 @@ const docTemplate = `{
                 },
                 "overtime": {
                     "type": "boolean"
+                },
+                "packaging_fee": {
+                    "type": "integer",
+                    "example": 150
+                },
+                "packaging_items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.orderPackagingItemResponse"
+                    }
                 },
                 "paid_at": {
                     "type": "string",
@@ -41016,6 +41965,19 @@ const docTemplate = `{
                         "$ref": "#/definitions/logic.LadderPromotion"
                     }
                 },
+                "packaging": {
+                    "description": "包装选择状态",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/api.packagingPreviewResponse"
+                        }
+                    ]
+                },
+                "packaging_fee": {
+                    "description": "包装费 (单位：分)",
+                    "type": "integer",
+                    "example": 100
+                },
                 "payment_assessment": {
                     "description": "会员余额支付能力评估",
                     "allOf": [
@@ -41182,6 +42144,35 @@ const docTemplate = `{
                     "description": "单价 (单位：分)",
                     "type": "integer",
                     "example": 2880
+                }
+            }
+        },
+        "api.orderPackagingItemResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer",
+                    "example": 30001
+                },
+                "name": {
+                    "type": "string",
+                    "example": "环保餐盒"
+                },
+                "packaging_option_id": {
+                    "type": "integer",
+                    "example": 1001
+                },
+                "quantity": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "subtotal": {
+                    "type": "integer",
+                    "example": 150
+                },
+                "unit_price": {
+                    "type": "integer",
+                    "example": 150
                 }
             }
         },
@@ -41386,6 +42377,16 @@ const docTemplate = `{
                 "overtime": {
                     "type": "boolean"
                 },
+                "packaging_fee": {
+                    "type": "integer",
+                    "example": 150
+                },
+                "packaging_items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.orderPackagingItemResponse"
+                    }
+                },
                 "paid_at": {
                     "type": "string",
                     "example": "2025-12-01T12:30:00Z"
@@ -41498,6 +42499,29 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "ready_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.packagingPreviewResponse": {
+            "type": "object",
+            "properties": {
+                "applicable": {
+                    "type": "boolean"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "fee": {
+                    "type": "integer"
+                },
+                "required": {
+                    "type": "boolean"
+                },
+                "selected_option_id": {
+                    "type": "integer"
+                },
+                "selection_version": {
                     "type": "integer"
                 }
             }
@@ -42986,6 +44010,34 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                }
+            }
+        },
+        "api.putCartPackagingSelectionRequest": {
+            "type": "object",
+            "required": [
+                "merchant_id",
+                "packaging_option_id"
+            ],
+            "properties": {
+                "merchant_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "order_type": {
+                    "type": "string"
+                },
+                "packaging_option_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "reservation_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "table_id": {
+                    "type": "integer",
+                    "minimum": 1
                 }
             }
         },
@@ -47160,6 +48212,61 @@ const docTemplate = `{
                 },
                 "promotion_mode": {
                     "type": "string"
+                }
+            }
+        },
+        "api.upsertMerchantPackagingOptionRequest": {
+            "type": "object",
+            "required": [
+                "is_enabled",
+                "name",
+                "price",
+                "sort_order"
+            ],
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "is_enabled": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "price": {
+                    "type": "integer",
+                    "maximum": 9999900,
+                    "minimum": 0
+                },
+                "sort_order": {
+                    "type": "integer",
+                    "maximum": 999,
+                    "minimum": 0
+                }
+            }
+        },
+        "api.upsertMerchantPackagingSettingsRequest": {
+            "type": "object",
+            "required": [
+                "enabled",
+                "required"
+            ],
+            "properties": {
+                "applicable_order_types": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "default_option_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "required": {
+                    "type": "boolean"
                 }
             }
         },

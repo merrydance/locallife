@@ -17,6 +17,7 @@ type MerchantOrderFeeBreakdown struct {
 	MerchantDiscountAmount    int64 `json:"merchant_discount_amount"`
 	VoucherDiscountAmount     int64 `json:"voucher_discount_amount"`
 	FoodPayableAmount         int64 `json:"food_payable_amount"`
+	PackagingFeeAmount        int64 `json:"packaging_fee_amount"`
 	DeliveryFeeAmount         int64 `json:"delivery_fee_amount"`
 	DeliveryFeeDiscountAmount int64 `json:"delivery_fee_discount_amount"`
 	DeliveryPayableAmount     int64 `json:"delivery_payable_amount"`
@@ -44,6 +45,7 @@ func BuildMerchantOrderFeeBreakdown(input BuildMerchantOrderFeeBreakdownInput) (
 	if order.Subtotal < 0 ||
 		order.DiscountAmount < 0 ||
 		order.VoucherAmount < 0 ||
+		order.PackagingFee < 0 ||
 		order.DeliveryFee < 0 ||
 		order.DeliveryFeeDiscount < 0 ||
 		order.TotalAmount < 0 ||
@@ -61,7 +63,7 @@ func BuildMerchantOrderFeeBreakdown(input BuildMerchantOrderFeeBreakdownInput) (
 	if foodPayable < 0 || deliveryPayable < 0 {
 		return MerchantOrderFeeBreakdown{}, fmt.Errorf("%w: payable amount negative for order_id=%d profit_sharing_order_id=%d", ErrMerchantFeeBreakdownInconsistent, order.ID, profitSharingOrder.ID)
 	}
-	if foodPayable+deliveryPayable != order.TotalAmount {
+	if foodPayable+order.PackagingFee+deliveryPayable != order.TotalAmount {
 		return MerchantOrderFeeBreakdown{}, fmt.Errorf("%w: customer payable mismatch for order_id=%d profit_sharing_order_id=%d", ErrMerchantFeeBreakdownInconsistent, order.ID, profitSharingOrder.ID)
 	}
 	if profitSharingOrder.TotalAmount != order.TotalAmount {
@@ -81,6 +83,7 @@ func BuildMerchantOrderFeeBreakdown(input BuildMerchantOrderFeeBreakdownInput) (
 		MerchantDiscountAmount:    order.DiscountAmount,
 		VoucherDiscountAmount:     order.VoucherAmount,
 		FoodPayableAmount:         foodPayable,
+		PackagingFeeAmount:        order.PackagingFee,
 		DeliveryFeeAmount:         order.DeliveryFee,
 		DeliveryFeeDiscountAmount: order.DeliveryFeeDiscount,
 		DeliveryPayableAmount:     deliveryPayable,

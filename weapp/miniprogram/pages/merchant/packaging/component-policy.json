@@ -1,0 +1,16 @@
+{
+  "purpose": "Merchant packaging settings page owns the low-frequency packaging rules and option draft editor without introducing a reusable component.",
+  "tdesignGroup": "form",
+  "tdesignCandidates": [
+    "cell",
+    "cell-group",
+    "input",
+    "switch",
+    "check-tag",
+    "button",
+    "notice-bar",
+    "empty"
+  ],
+  "decision": "tdesign-wrapper",
+  "rationale": "The page uses TDesign controls directly and only adds page-local layout containers for draft option rows, state grouping, and safe page rhythm. No shared local component is introduced."
+}

@@ -48,6 +48,62 @@ func (q *Queries) CountBrowseHistoryByType(ctx context.Context, arg CountBrowseH
 	return count, err
 }
 
+const countBrowseHistoryByTypeFiltered = `-- name: CountBrowseHistoryByTypeFiltered :one
+SELECT COUNT(*) FROM browse_history bh
+WHERE bh.user_id = $1
+  AND bh.target_type = $2
+  AND (
+    NOT $3::boolean
+    OR bh.target_type <> 'dish'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM dishes d
+      WHERE d.id = bh.target_id
+        AND d.is_packaging = true
+    )
+  )
+`
+
+type CountBrowseHistoryByTypeFilteredParams struct {
+	UserID           int64  `json:"user_id"`
+	TargetType       string `json:"target_type"`
+	ExcludePackaging bool   `json:"exclude_packaging"`
+}
+
+func (q *Queries) CountBrowseHistoryByTypeFiltered(ctx context.Context, arg CountBrowseHistoryByTypeFilteredParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countBrowseHistoryByTypeFiltered, arg.UserID, arg.TargetType, arg.ExcludePackaging)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countBrowseHistoryFiltered = `-- name: CountBrowseHistoryFiltered :one
+SELECT COUNT(*) FROM browse_history bh
+WHERE bh.user_id = $1
+  AND (
+    NOT $2::boolean
+    OR bh.target_type <> 'dish'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM dishes d
+      WHERE d.id = bh.target_id
+        AND d.is_packaging = true
+    )
+  )
+`
+
+type CountBrowseHistoryFilteredParams struct {
+	UserID           int64 `json:"user_id"`
+	ExcludePackaging bool  `json:"exclude_packaging"`
+}
+
+func (q *Queries) CountBrowseHistoryFiltered(ctx context.Context, arg CountBrowseHistoryFilteredParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countBrowseHistoryFiltered, arg.UserID, arg.ExcludePackaging)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const deleteBrowseHistory = `-- name: DeleteBrowseHistory :exec
 DELETE FROM browse_history
 WHERE user_id = $1 AND target_type = $2 AND target_id = $3
@@ -124,6 +180,123 @@ func (q *Queries) ListBrowseHistoryByType(ctx context.Context, arg ListBrowseHis
 		arg.TargetType,
 		arg.Limit,
 		arg.Offset,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []BrowseHistory{}
+	for rows.Next() {
+		var i BrowseHistory
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.TargetType,
+			&i.TargetID,
+			&i.LastViewedAt,
+			&i.ViewCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBrowseHistoryByTypeFiltered = `-- name: ListBrowseHistoryByTypeFiltered :many
+SELECT bh.id, bh.user_id, bh.target_type, bh.target_id, bh.last_viewed_at, bh.view_count
+FROM browse_history bh
+WHERE bh.user_id = $1
+  AND bh.target_type = $2
+  AND (
+    NOT $3::boolean
+    OR bh.target_type <> 'dish'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM dishes d
+      WHERE d.id = bh.target_id
+        AND d.is_packaging = true
+    )
+  )
+ORDER BY bh.last_viewed_at DESC
+LIMIT $5 OFFSET $4
+`
+
+type ListBrowseHistoryByTypeFilteredParams struct {
+	UserID           int64  `json:"user_id"`
+	TargetType       string `json:"target_type"`
+	ExcludePackaging bool   `json:"exclude_packaging"`
+	Offset           int32  `json:"offset"`
+	Limit            int32  `json:"limit"`
+}
+
+func (q *Queries) ListBrowseHistoryByTypeFiltered(ctx context.Context, arg ListBrowseHistoryByTypeFilteredParams) ([]BrowseHistory, error) {
+	rows, err := q.db.Query(ctx, listBrowseHistoryByTypeFiltered,
+		arg.UserID,
+		arg.TargetType,
+		arg.ExcludePackaging,
+		arg.Offset,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []BrowseHistory{}
+	for rows.Next() {
+		var i BrowseHistory
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.TargetType,
+			&i.TargetID,
+			&i.LastViewedAt,
+			&i.ViewCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBrowseHistoryFiltered = `-- name: ListBrowseHistoryFiltered :many
+SELECT bh.id, bh.user_id, bh.target_type, bh.target_id, bh.last_viewed_at, bh.view_count
+FROM browse_history bh
+WHERE bh.user_id = $1
+  AND (
+    NOT $2::boolean
+    OR bh.target_type <> 'dish'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM dishes d
+      WHERE d.id = bh.target_id
+        AND d.is_packaging = true
+    )
+  )
+ORDER BY bh.last_viewed_at DESC
+LIMIT $4 OFFSET $3
+`
+
+type ListBrowseHistoryFilteredParams struct {
+	UserID           int64 `json:"user_id"`
+	ExcludePackaging bool  `json:"exclude_packaging"`
+	Offset           int32 `json:"offset"`
+	Limit            int32 `json:"limit"`
+}
+
+func (q *Queries) ListBrowseHistoryFiltered(ctx context.Context, arg ListBrowseHistoryFilteredParams) ([]BrowseHistory, error) {
+	rows, err := q.db.Query(ctx, listBrowseHistoryFiltered,
+		arg.UserID,
+		arg.ExcludePackaging,
+		arg.Offset,
+		arg.Limit,
 	)
 	if err != nil {
 		return nil, err

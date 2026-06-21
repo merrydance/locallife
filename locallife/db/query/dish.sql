@@ -187,23 +187,25 @@ LIMIT $2 OFFSET $3;
 -- name: SearchDishesByName :many
 SELECT id, merchant_id, category_id, name, description, price, member_price, is_available, is_online, sort_order, created_at, updated_at, prepare_time, deleted_at, monthly_sales, repurchase_rate, image_media_asset_id, is_packaging FROM dishes
 WHERE 
-  merchant_id = $1
+  merchant_id = sqlc.arg('merchant_id')
   AND deleted_at IS NULL
-  AND name ILIKE '%' || $2 || '%'
+  AND name ILIKE '%' || sqlc.arg('name_query') || '%'
   AND is_online = true
   AND is_available = true
+  AND (NOT sqlc.arg('exclude_packaging')::boolean OR is_packaging = false)
 ORDER BY sort_order ASC, name ASC
-LIMIT $3 OFFSET $4;
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: CountSearchDishesByName :one
 -- 统计商户内菜品搜索结果总数
 SELECT COUNT(*) FROM dishes
 WHERE 
-  merchant_id = $1
+  merchant_id = sqlc.arg('merchant_id')
   AND deleted_at IS NULL
-  AND name ILIKE '%' || $2 || '%'
+  AND name ILIKE '%' || sqlc.arg('name_query') || '%'
   AND is_online = true
-  AND is_available = true;
+  AND is_available = true
+  AND (NOT sqlc.arg('exclude_packaging')::boolean OR is_packaging = false);
 
 -- name: SearchDishesGlobal :many
 -- 全局菜品搜索（跨商户），只搜索已激活商户的上架菜品
@@ -215,7 +217,7 @@ SELECT
   m.region_id AS merchant_region_id,
   m.latitude AS merchant_latitude,
   m.longitude AS merchant_longitude,
-  earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($4::float8, $5::float8))::float8 AS distance,
+  earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth(sqlc.arg('user_lat')::float8, sqlc.arg('user_lng')::float8))::float8 AS distance,
   COALESCE(
     (SELECT json_agg(t.name)
      FROM dish_tags dt
@@ -263,7 +265,8 @@ WHERE
   AND d.deleted_at IS NULL
   AND d.is_online = true
   AND d.is_available = true
-  AND d.name ILIKE '%' || $1 || '%'
+  AND d.name ILIKE '%' || sqlc.arg('keyword') || '%'
+  AND (NOT sqlc.arg('exclude_packaging')::boolean OR d.is_packaging = false)
   AND (sqlc.narg('tag_id')::bigint IS NULL OR EXISTS (
     SELECT 1 FROM dish_tags dt WHERE dt.dish_id = d.id AND dt.tag_id = sqlc.narg('tag_id')
   ))
@@ -271,9 +274,9 @@ ORDER BY
     m.is_open DESC,
     (d.monthly_sales * (1 + d.repurchase_rate)) DESC,
     distance ASC,
-    d.sort_order ASC, 
+    d.sort_order ASC,
     d.name ASC
-LIMIT $2 OFFSET $3;
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: UpdateDishStats :exec
 UPDATE dishes
@@ -301,7 +304,8 @@ WHERE
   AND d.deleted_at IS NULL
   AND d.is_online = true
   AND d.is_available = true
-  AND d.name ILIKE '%' || $1 || '%'
+  AND d.name ILIKE '%' || sqlc.arg('keyword') || '%'
+  AND (NOT sqlc.arg('exclude_packaging')::boolean OR d.is_packaging = false)
   AND (sqlc.narg('tag_id')::bigint IS NULL OR EXISTS (
     SELECT 1 FROM dish_tags dt WHERE dt.dish_id = d.id AND dt.tag_id = sqlc.narg('tag_id')
   ));
@@ -316,7 +320,8 @@ WHERE
   AND d.deleted_at IS NULL
   AND d.is_online = true
   AND d.is_available = true
-  AND d.name ILIKE '%' || $1 || '%'
+  AND d.name ILIKE '%' || sqlc.arg('keyword') || '%'
+  AND (NOT sqlc.arg('exclude_packaging')::boolean OR d.is_packaging = false)
 ORDER BY d.sort_order ASC, d.name ASC;
 
 -- name: UpdateDish :one
@@ -602,9 +607,10 @@ LEFT JOIN orders o ON o.id = oi.order_id AND o.status IN ('user_delivered', 'com
 WHERE d.is_online = true 
   AND d.is_available = true
   AND d.deleted_at IS NULL
+  AND (NOT sqlc.arg('exclude_packaging')::boolean OR d.is_packaging = false)
 GROUP BY d.id
 ORDER BY total_sold DESC, d.created_at DESC
-LIMIT $1;
+LIMIT sqlc.arg('limit');
 
 -- name: GetRandomDishes :many
 -- 获取随机菜品（用于推荐探索）
@@ -612,8 +618,9 @@ SELECT id FROM dishes
 WHERE is_online = true 
   AND is_available = true
   AND deleted_at IS NULL
+  AND (NOT sqlc.arg('exclude_packaging')::boolean OR is_packaging = false)
 ORDER BY RANDOM()
-LIMIT $1;
+LIMIT sqlc.arg('limit');
 
 -- name: GetDishIDsByCuisines :many
 -- 根据菜系获取菜品ID（用于基于偏好推荐）
@@ -624,6 +631,7 @@ WHERE d.is_online = true
   AND d.deleted_at IS NULL
   AND d.price >= sqlc.arg('min_price')
   AND d.price <= sqlc.arg('max_price')
+  AND (NOT sqlc.arg('exclude_packaging')::boolean OR d.is_packaging = false)
 ORDER BY d.created_at DESC
 LIMIT sqlc.arg('limit');
 
@@ -647,16 +655,17 @@ LEFT JOIN orders o ON o.id = oi.order_id AND o.status IN ('user_delivered', 'com
 WHERE d.is_online = true 
   AND d.is_available = true
   AND d.deleted_at IS NULL
+  AND (NOT sqlc.arg('exclude_packaging')::boolean OR d.is_packaging = false)
   AND d.id NOT IN (
     SELECT DISTINCT oi2.dish_id 
     FROM order_items oi2
     JOIN orders o2 ON o2.id = oi2.order_id
-    WHERE o2.user_id = $1
+    WHERE o2.user_id = sqlc.arg('user_id')
       AND o2.status IN ('user_delivered', 'completed')
   )
 GROUP BY d.id
 ORDER BY total_sold DESC
-LIMIT $2;
+LIMIT sqlc.arg('limit');
 
 -- name: GetDishesByIDs :many
 -- 批量获取菜品详情（用于推荐结果）
@@ -672,10 +681,11 @@ SELECT
   is_online,
   is_packaging
 FROM dishes
-WHERE id = ANY($1::bigint[])
+WHERE id = ANY(sqlc.arg('dish_ids')::bigint[])
   AND deleted_at IS NULL
   AND is_online = true
-  AND is_available = true;
+  AND is_available = true
+  AND (NOT sqlc.arg('exclude_packaging')::boolean OR is_packaging = false);
 
 -- name: GetDishesWithMerchantByIDs :many
 -- 批量获取菜品详情及商户信息（用于推荐流展示）
@@ -707,10 +717,11 @@ SELECT
     )::int AS monthly_sales
 FROM dishes d
 JOIN merchants m ON m.id = d.merchant_id
-WHERE d.id = ANY($1::bigint[])
+WHERE d.id = ANY(sqlc.arg('dish_ids')::bigint[])
   AND d.deleted_at IS NULL
   AND d.is_online = true
   AND d.is_available = true
+  AND (NOT sqlc.arg('exclude_packaging')::boolean OR d.is_packaging = false)
   AND m.status = 'active';
 
 -- name: GetDishesByIDsAll :many
@@ -786,10 +797,11 @@ SELECT
       '[]'
     ) as customization_groups
 FROM dishes d
-WHERE d.merchant_id = $1
+WHERE d.merchant_id = sqlc.arg('merchant_id')
   AND d.is_online = true
   AND d.is_available = true
   AND d.deleted_at IS NULL
+  AND (NOT sqlc.arg('exclude_packaging')::boolean OR d.is_packaging = false)
 ORDER BY d.category_id, d.sort_order ASC, d.id ASC;
 
 -- name: GetDishIDsByTagID :many
@@ -797,10 +809,11 @@ ORDER BY d.category_id, d.sort_order ASC, d.id ASC;
 SELECT DISTINCT d.id
 FROM dishes d
 JOIN dish_tags dt ON d.id = dt.dish_id
-WHERE dt.tag_id = $1
+WHERE dt.tag_id = sqlc.arg('tag_id')
   AND d.is_online = true
   AND d.is_available = true
-  AND d.deleted_at IS NULL;
+  AND d.deleted_at IS NULL
+  AND (NOT sqlc.arg('exclude_packaging')::boolean OR d.is_packaging = false);
 
 -- name: GetCustomizationDetailsByIDs :many
 -- 根据自定义选项ID列表获取详细信息

@@ -409,6 +409,13 @@ type CartItem struct {
 	UpdatedAt      time.Time `json:"updated_at"`
 }
 
+type CartPackagingSelection struct {
+	CartID            int64       `json:"cart_id"`
+	PackagingOptionID pgtype.Int8 `json:"packaging_option_id"`
+	SelectionVersion  int64       `json:"selection_version"`
+	UpdatedAt         time.Time   `json:"updated_at"`
+}
+
 // 索赔记录表 - 信用驱动免证索赔
 type Claim struct {
 	ID             int64       `json:"id"`
@@ -1402,6 +1409,31 @@ type MerchantOfflineCustomer struct {
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
+type MerchantPackagingOption struct {
+	ID           int64              `json:"id"`
+	MerchantID   int64              `json:"merchant_id"`
+	LegacyDishID pgtype.Int8        `json:"legacy_dish_id"`
+	Name         string             `json:"name"`
+	Description  pgtype.Text        `json:"description"`
+	Price        int64              `json:"price"`
+	IsEnabled    bool               `json:"is_enabled"`
+	SortOrder    int16              `json:"sort_order"`
+	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
+	CreatedAt    time.Time          `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
+type MerchantPackagingSetting struct {
+	ID                   int64              `json:"id"`
+	MerchantID           int64              `json:"merchant_id"`
+	Enabled              bool               `json:"enabled"`
+	Required             bool               `json:"required"`
+	ApplicableOrderTypes []string           `json:"applicable_order_types"`
+	DefaultOptionID      pgtype.Int8        `json:"default_option_id"`
+	CreatedAt            time.Time          `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
 // 商户微信支付配置（平台收付通）
 type MerchantPaymentConfig struct {
 	ID         int64 `json:"id"`
@@ -1778,6 +1810,7 @@ type Order struct {
 	DeliveryAddressSnapshot      pgtype.Text    `json:"delivery_address_snapshot"`
 	DeliveryLongitudeSnapshot    pgtype.Numeric `json:"delivery_longitude_snapshot"`
 	DeliveryLatitudeSnapshot     pgtype.Numeric `json:"delivery_latitude_snapshot"`
+	PackagingFee                 int64          `json:"packaging_fee"`
 }
 
 type OrderCreateRequestIdempotency struct {
@@ -1821,6 +1854,17 @@ type OrderItem struct {
 	Subtotal       int64       `json:"subtotal"`
 	Customizations []byte      `json:"customizations"`
 	CreatedAt      time.Time   `json:"created_at"`
+}
+
+type OrderPackagingItem struct {
+	ID                int64       `json:"id"`
+	OrderID           int64       `json:"order_id"`
+	PackagingOptionID pgtype.Int8 `json:"packaging_option_id"`
+	Name              string      `json:"name"`
+	UnitPrice         int64       `json:"unit_price"`
+	Quantity          int16       `json:"quantity"`
+	Subtotal          int64       `json:"subtotal"`
+	CreatedAt         time.Time   `json:"created_at"`
 }
 
 type OrderPaymentFeeLedger struct {

@@ -130,60 +130,122 @@ WHERE cart_id = $1 AND combo_id = $2;
 
 -- name: GetUserCartsSummary :one
 -- 获取用户所有购物车的汇总统计
+WITH visible_cart_items AS (
+    SELECT
+        c.id AS cart_id,
+        ci.id AS item_id,
+        ci.dish_id,
+        ci.combo_id,
+        ci.quantity,
+        d.price AS dish_price,
+        cs.combo_price,
+        CASE
+            WHEN NOT sqlc.arg('exclude_packaging')::boolean THEN true
+            WHEN ci.id IS NULL THEN false
+            WHEN ci.dish_id IS NOT NULL THEN COALESCE(d.is_packaging, false) = false
+            WHEN ci.combo_id IS NOT NULL THEN NOT EXISTS (
+                SELECT 1
+                FROM combo_dishes cd
+                JOIN dishes child_d ON child_d.id = cd.dish_id
+                WHERE cd.combo_id = ci.combo_id
+                  AND child_d.is_packaging = true
+            )
+            ELSE false
+        END AS is_visible_item
+    FROM carts c
+    LEFT JOIN cart_items ci ON ci.cart_id = c.id
+    LEFT JOIN dishes d ON d.id = ci.dish_id AND d.deleted_at IS NULL
+    LEFT JOIN combo_sets cs ON cs.id = ci.combo_id AND cs.deleted_at IS NULL
+    WHERE c.user_id = sqlc.arg('user_id')
+      AND (c.order_type = sqlc.narg('order_type') OR sqlc.narg('order_type') IS NULL)
+)
 SELECT 
-    COUNT(DISTINCT c.id)::int AS cart_count,
-    COUNT(ci.id)::int AS total_items,
+    COUNT(DISTINCT cart_id) FILTER (WHERE is_visible_item)::int AS cart_count,
+    COUNT(item_id) FILTER (WHERE is_visible_item)::int AS total_items,
     COALESCE(SUM(
         CASE 
-            WHEN ci.dish_id IS NOT NULL THEN d.price * ci.quantity
-            WHEN ci.combo_id IS NOT NULL THEN cs.combo_price * ci.quantity
+            WHEN is_visible_item AND dish_id IS NOT NULL THEN dish_price * quantity
+            WHEN is_visible_item AND combo_id IS NOT NULL THEN combo_price * quantity
             ELSE 0
         END
     ), 0)::bigint AS total_amount
-FROM carts c
-LEFT JOIN cart_items ci ON ci.cart_id = c.id
-LEFT JOIN dishes d ON d.id = ci.dish_id AND d.deleted_at IS NULL
-LEFT JOIN combo_sets cs ON cs.id = ci.combo_id AND cs.deleted_at IS NULL
-WHERE c.user_id = $1 AND (c.order_type = sqlc.narg('order_type') OR sqlc.narg('order_type') IS NULL);
+FROM visible_cart_items;
 
 -- name: GetUserCartsWithDetails :many
 -- 获取用户所有购物车及其商品详情（用于合单结算）
+WITH visible_cart_items AS (
+    SELECT
+        c.id AS cart_id,
+        c.merchant_id,
+        c.order_type,
+        c.table_id,
+        c.reservation_id,
+        c.updated_at,
+        m.id AS merchant_row_id,
+        m.name AS merchant_name,
+        m.logo_media_asset_id AS merchant_logo_media_asset_id,
+        mpc.sub_mch_id AS sub_mchid,
+        ci.id AS item_id,
+        ci.dish_id,
+        ci.combo_id,
+        ci.quantity,
+        d.price AS dish_price,
+        d.is_available AS dish_is_available,
+        d.is_online AS dish_is_online,
+        cs.combo_price,
+        cs.is_online AS combo_is_online,
+        CASE
+            WHEN NOT sqlc.arg('exclude_packaging')::boolean THEN true
+            WHEN ci.id IS NULL THEN false
+            WHEN ci.dish_id IS NOT NULL THEN COALESCE(d.is_packaging, false) = false
+            WHEN ci.combo_id IS NOT NULL THEN NOT EXISTS (
+                SELECT 1
+                FROM combo_dishes cd
+                JOIN dishes child_d ON child_d.id = cd.dish_id
+                WHERE cd.combo_id = ci.combo_id
+                  AND child_d.is_packaging = true
+            )
+            ELSE false
+        END AS is_visible_item
+    FROM carts c
+    JOIN merchants m ON m.id = c.merchant_id
+    LEFT JOIN merchant_payment_configs mpc ON mpc.merchant_id = m.id
+    LEFT JOIN cart_items ci ON ci.cart_id = c.id
+    LEFT JOIN dishes d ON d.id = ci.dish_id AND d.deleted_at IS NULL
+    LEFT JOIN combo_sets cs ON cs.id = ci.combo_id AND cs.deleted_at IS NULL
+    WHERE c.user_id = sqlc.arg('user_id')
+      AND (c.order_type = sqlc.narg('order_type') OR sqlc.narg('order_type') IS NULL)
+)
 SELECT 
-    c.id AS cart_id,
-    c.merchant_id,
-    c.order_type,
-    c.table_id,
-    c.reservation_id,
-    m.name AS merchant_name,
-    m.logo_media_asset_id AS merchant_logo_media_asset_id,
-    mpc.sub_mch_id AS sub_mchid,
-    COUNT(ci.id)::int AS item_count,
+    cart_id,
+    merchant_id,
+    order_type,
+    table_id,
+    reservation_id,
+    merchant_name,
+    merchant_logo_media_asset_id,
+    sub_mchid,
+    COUNT(item_id) FILTER (WHERE is_visible_item)::int AS item_count,
     COALESCE(SUM(
         CASE 
-            WHEN ci.dish_id IS NOT NULL THEN d.price * ci.quantity
-            WHEN ci.combo_id IS NOT NULL THEN cs.combo_price * ci.quantity
+            WHEN is_visible_item AND dish_id IS NOT NULL THEN dish_price * quantity
+            WHEN is_visible_item AND combo_id IS NOT NULL THEN combo_price * quantity
             ELSE 0
         END
     ), 0)::bigint AS subtotal,
     -- 检查商品可用性
     BOOL_AND(
         CASE 
-            WHEN ci.dish_id IS NOT NULL THEN d.is_available AND d.is_online
-            WHEN ci.combo_id IS NOT NULL THEN cs.is_online
+            WHEN is_visible_item AND dish_id IS NOT NULL THEN dish_is_available AND dish_is_online
+            WHEN is_visible_item AND combo_id IS NOT NULL THEN combo_is_online
             ELSE true
         END
     ) AS all_available,
-    c.updated_at
-FROM carts c
-JOIN merchants m ON m.id = c.merchant_id
-LEFT JOIN merchant_payment_configs mpc ON mpc.merchant_id = m.id
-LEFT JOIN cart_items ci ON ci.cart_id = c.id
-LEFT JOIN dishes d ON d.id = ci.dish_id AND d.deleted_at IS NULL
-LEFT JOIN combo_sets cs ON cs.id = ci.combo_id AND cs.deleted_at IS NULL
-WHERE c.user_id = $1 AND (c.order_type = sqlc.narg('order_type') OR sqlc.narg('order_type') IS NULL)
-GROUP BY c.id, c.merchant_id, c.order_type, c.table_id, c.reservation_id, m.id, mpc.sub_mch_id
-HAVING COUNT(ci.id) > 0  -- 只返回有商品的购物车
-ORDER BY c.updated_at DESC;
+    updated_at
+FROM visible_cart_items
+GROUP BY cart_id, merchant_id, order_type, table_id, reservation_id, merchant_row_id, merchant_name, merchant_logo_media_asset_id, sub_mchid, updated_at
+HAVING COUNT(item_id) FILTER (WHERE is_visible_item) > 0  -- 只返回有可见商品的购物车
+ORDER BY updated_at DESC;
 
 -- name: GetUserCartsByMerchantIDs :many
 -- 根据商户ID列表获取用户购物车（用于合单结算时验证）

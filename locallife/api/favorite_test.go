@@ -539,6 +539,37 @@ func TestAddFavoriteDishAPI(t *testing.T) {
 	}
 }
 
+func TestAddFavoriteDishAPIRejectsLegacyPackagingWhenFreezeEnabled(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	dish := randomDish(merchant.ID, nil)
+	dish.IsPackaging = true
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetDish(gomock.Any(), dish.ID).
+		Times(1).
+		Return(dish, nil)
+
+	server := newTestServer(t, store)
+	server.config.PackagingLegacyDishFreezeEnabled = true
+	recorder := httptest.NewRecorder()
+
+	data, err := json.Marshal(map[string]interface{}{"dish_id": dish.ID})
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/favorites/dishes", bytes.NewReader(data))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusNotFound, recorder.Code)
+}
+
 func TestListFavoriteDishesAPI(t *testing.T) {
 	user, _ := randomUser(t)
 
@@ -562,7 +593,10 @@ func TestListFavoriteDishesAPI(t *testing.T) {
 					Return([]db.ListFavoriteDishesRow{}, nil)
 
 				store.EXPECT().
-					CountFavoriteDishes(gomock.Any(), gomock.Eq(user.ID)).
+					CountFavoriteDishes(gomock.Any(), gomock.Eq(db.CountFavoriteDishesParams{
+						UserID:           user.ID,
+						ExcludePackaging: false,
+					})).
 					Times(1).
 					Return(int64(0), nil)
 			},
@@ -583,7 +617,10 @@ func TestListFavoriteDishesAPI(t *testing.T) {
 					Return([]db.ListFavoriteDishesRow{}, nil)
 
 				store.EXPECT().
-					CountFavoriteDishes(gomock.Any(), gomock.Eq(user.ID)).
+					CountFavoriteDishes(gomock.Any(), gomock.Eq(db.CountFavoriteDishesParams{
+						UserID:           user.ID,
+						ExcludePackaging: false,
+					})).
 					Times(1).
 					Return(int64(0), nil)
 			},
@@ -627,6 +664,107 @@ func TestListFavoriteDishesAPI(t *testing.T) {
 			tc.setupAuth(t, request, server.tokenMaker)
 			server.router.ServeHTTP(recorder, request)
 			tc.checkResponse(t, recorder)
+		})
+	}
+}
+
+func TestListFavoriteDishesAPIExcludesLegacyPackagingWhenFreezeEnabled(t *testing.T) {
+	user, _ := randomUser(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		ListFavoriteDishes(gomock.Any(), gomock.Eq(db.ListFavoriteDishesParams{
+			UserID:           user.ID,
+			Limit:            20,
+			Offset:           0,
+			ExcludePackaging: true,
+		})).
+		Times(1).
+		Return([]db.ListFavoriteDishesRow{}, nil)
+	store.EXPECT().
+		CountFavoriteDishes(gomock.Any(), gomock.Eq(db.CountFavoriteDishesParams{
+			UserID:           user.ID,
+			ExcludePackaging: true,
+		})).
+		Times(1).
+		Return(int64(0), nil)
+
+	server := newTestServer(t, store)
+	server.config.PackagingLegacyDishFreezeEnabled = true
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/favorites/dishes?page=1&page_size=20", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+}
+
+func TestGetFavoriteDishStatusAPIUsesLegacyPackagingFreeze(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	dish := randomDish(merchant.ID, nil)
+
+	testCases := []struct {
+		name             string
+		freezeEnabled    bool
+		storeExists      bool
+		expectedExists   bool
+		expectedExclude  bool
+		expectedHTTPCode int
+	}{
+		{
+			name:             "FreezeDisabledPreservesLegacyFavoriteStatus",
+			freezeEnabled:    false,
+			storeExists:      true,
+			expectedExists:   true,
+			expectedExclude:  false,
+			expectedHTTPCode: http.StatusOK,
+		},
+		{
+			name:             "FreezeEnabledHidesLegacyPackagingFavoriteStatus",
+			freezeEnabled:    true,
+			storeExists:      false,
+			expectedExists:   false,
+			expectedExclude:  true,
+			expectedHTTPCode: http.StatusOK,
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			store.EXPECT().
+				IsDishFavorited(gomock.Any(), gomock.Eq(db.IsDishFavoritedParams{
+					UserID:           user.ID,
+					DishID:           pgtype.Int8{Int64: dish.ID, Valid: true},
+					ExcludePackaging: tc.expectedExclude,
+				})).
+				Times(1).
+				Return(tc.storeExists, nil)
+
+			server := newTestServer(t, store)
+			server.config.PackagingLegacyDishFreezeEnabled = tc.freezeEnabled
+			recorder := httptest.NewRecorder()
+
+			request, err := http.NewRequest(http.MethodGet, fmt.Sprintf("/v1/favorites/dishes/%d", dish.ID), nil)
+			require.NoError(t, err)
+			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+			server.router.ServeHTTP(recorder, request)
+			require.Equal(t, tc.expectedHTTPCode, recorder.Code)
+
+			var response favoriteStatusResponse
+			requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+			require.Equal(t, tc.expectedExists, response.Exists)
 		})
 	}
 }

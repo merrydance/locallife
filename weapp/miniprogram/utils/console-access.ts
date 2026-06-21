@@ -1,6 +1,7 @@
 import { getUserInfo, type UserResponse, type UserWorkbenchResponse } from '../api/auth'
 import {
   getMerchantDeviceAccess,
+  type MerchantDeviceAccessRequestContext,
   type MerchantDeviceAccessResponse
 } from '../api/table-device-management'
 
@@ -26,9 +27,11 @@ const TEMP_DISABLE_USER_CENTER_ROLE_VALIDATION = false
 let cachedUserInfo: UserResponse | null = null
 let cachedUserInfoFetchedAt = 0
 let userInfoPromise: Promise<UserResponse> | null = null
-let cachedMerchantDeviceAccess: MerchantDeviceAccessResponse | null = null
-let cachedMerchantDeviceAccessFetchedAt = 0
-let merchantDeviceAccessPromise: Promise<MerchantDeviceAccessResponse> | null = null
+let cachedMerchantDeviceAccessByKey = new Map<string, {
+  capability: MerchantDeviceAccessResponse
+  fetchedAt: number
+}>()
+let merchantDeviceAccessPromiseByKey = new Map<string, Promise<MerchantDeviceAccessResponse>>()
 let userInfoCacheGeneration = 0
 
 export function invalidateConsoleAccessUserInfoCache() {
@@ -36,9 +39,8 @@ export function invalidateConsoleAccessUserInfoCache() {
   cachedUserInfo = null
   cachedUserInfoFetchedAt = 0
   userInfoPromise = null
-  cachedMerchantDeviceAccess = null
-  cachedMerchantDeviceAccessFetchedAt = 0
-  merchantDeviceAccessPromise = null
+  cachedMerchantDeviceAccessByKey = new Map()
+  merchantDeviceAccessPromiseByKey = new Map()
 }
 
 const ALL_CONSOLE_WORKBENCHES: ConsoleWorkbench[] = [
@@ -102,6 +104,14 @@ export function canManageMerchantReviews(roles: string[]) {
   return normalizedRoles.some((role) => MERCHANT_REVIEW_MANAGER_ROLES.includes(role))
 }
 
+export function canManageMerchantPackaging(roles: string[], capability?: MerchantDeviceAccessResponse | null) {
+  if (capability) {
+    return capability.can_manage
+  }
+
+  return normalizeConsoleRoles(roles).some((role) => ['merchant', 'merchant_owner'].includes(role))
+}
+
 export type MerchantConsoleAccessResult =
   | { status: 'granted', user?: UserResponse }
   | { status: 'denied', message: string }
@@ -156,16 +166,22 @@ function getFreshCachedUserInfo() {
   return cachedUserInfo
 }
 
-function getFreshCachedMerchantDeviceAccess() {
-  if (!cachedMerchantDeviceAccess) {
+function getMerchantDeviceAccessCacheKey(context?: MerchantDeviceAccessRequestContext) {
+  const merchantId = Number(context?.merchantId || 0)
+  return merchantId > 0 ? `merchant:${merchantId}` : 'default'
+}
+
+function getFreshCachedMerchantDeviceAccess(context?: MerchantDeviceAccessRequestContext) {
+  const cachedAccess = cachedMerchantDeviceAccessByKey.get(getMerchantDeviceAccessCacheKey(context))
+  if (!cachedAccess) {
     return null
   }
 
-  if (Date.now() - cachedMerchantDeviceAccessFetchedAt > MERCHANT_DEVICE_ACCESS_CACHE_FRESHNESS_MS) {
+  if (Date.now() - cachedAccess.fetchedAt > MERCHANT_DEVICE_ACCESS_CACHE_FRESHNESS_MS) {
     return null
   }
 
-  return cachedMerchantDeviceAccess
+  return cachedAccess.capability
 }
 
 function getRecentUserInfo() {
@@ -198,28 +214,52 @@ function getRecentUserInfo() {
   return requestPromise
 }
 
-export async function getRecentMerchantDeviceAccess(force = false) {
-  if (!force) {
-    const cachedAccess = getFreshCachedMerchantDeviceAccess()
+export function getMerchantPackagingAccessDeniedMessage() {
+  return '包装设置仅支持老板或店长管理'
+}
+
+function normalizeMerchantDeviceAccessOptions(options?: boolean | ({ force?: boolean } & MerchantDeviceAccessRequestContext)) {
+  if (typeof options === 'boolean') {
+    return {
+      force: options,
+      context: {} as MerchantDeviceAccessRequestContext
+    }
+  }
+
+  return {
+    force: Boolean(options?.force),
+    context: { merchantId: Number(options?.merchantId || 0) } as MerchantDeviceAccessRequestContext
+  }
+}
+
+export async function getRecentMerchantDeviceAccess(options?: boolean | ({ force?: boolean } & MerchantDeviceAccessRequestContext)) {
+  const normalizedOptions = normalizeMerchantDeviceAccessOptions(options)
+  const cacheKey = getMerchantDeviceAccessCacheKey(normalizedOptions.context)
+
+  if (!normalizedOptions.force) {
+    const cachedAccess = getFreshCachedMerchantDeviceAccess(normalizedOptions.context)
     if (cachedAccess) {
       return cachedAccess
     }
   }
 
-  if (merchantDeviceAccessPromise) {
-    return merchantDeviceAccessPromise
+  const existingPromise = merchantDeviceAccessPromiseByKey.get(cacheKey)
+  if (existingPromise) {
+    return existingPromise
   }
 
-  const requestPromise = getMerchantDeviceAccess().then((capability) => {
-    cachedMerchantDeviceAccess = capability
-    cachedMerchantDeviceAccessFetchedAt = Date.now()
+  const requestPromise = getMerchantDeviceAccess(normalizedOptions.context).then((capability) => {
+    cachedMerchantDeviceAccessByKey.set(cacheKey, {
+      capability,
+      fetchedAt: Date.now()
+    })
     return capability
   })
 
-  merchantDeviceAccessPromise = requestPromise
+  merchantDeviceAccessPromiseByKey.set(cacheKey, requestPromise)
   const clearMerchantDeviceAccessPromise = () => {
-    if (merchantDeviceAccessPromise === requestPromise) {
-      merchantDeviceAccessPromise = null
+    if (merchantDeviceAccessPromiseByKey.get(cacheKey) === requestPromise) {
+      merchantDeviceAccessPromiseByKey.delete(cacheKey)
     }
   }
   void requestPromise.then(clearMerchantDeviceAccessPromise, clearMerchantDeviceAccessPromise)
@@ -328,7 +368,7 @@ export async function ensureMerchantReviewManagementAccess() {
   }
 }
 
-export async function ensureMerchantDeviceManagementAccess(options?: { force?: boolean }) {
+export async function ensureMerchantDeviceManagementAccess(options?: { force?: boolean } & MerchantDeviceAccessRequestContext) {
   if (shouldBypassConsoleRoleValidation()) {
     return { status: 'granted', message: '', capability: { merchant_id: 0, merchant_name: '', staff_role: 'owner', can_manage: true, allowed_roles: ['owner', 'manager'] } } as MerchantDeviceManagementAccessResult
   }
@@ -342,7 +382,7 @@ export async function ensureMerchantDeviceManagementAccess(options?: { force?: b
   }
 
   try {
-    const capability = await getRecentMerchantDeviceAccess(Boolean(options?.force))
+    const capability = await getRecentMerchantDeviceAccess(options)
     if (capability.can_manage) {
       return {
         status: 'granted',
@@ -362,6 +402,45 @@ export async function ensureMerchantDeviceManagementAccess(options?: { force?: b
     return {
       status: 'error',
       message: '设备管理权限校验失败，请检查网络后重试',
+      user: consoleAccess.user
+    } as MerchantDeviceManagementAccessResult
+  }
+}
+
+export async function ensureMerchantPackagingManagementAccess(options?: { force?: boolean } & MerchantDeviceAccessRequestContext) {
+  if (shouldBypassConsoleRoleValidation()) {
+    return { status: 'granted', message: '', capability: { merchant_id: 0, merchant_name: '', staff_role: 'owner', can_manage: true, allowed_roles: ['owner', 'manager'] } } as MerchantDeviceManagementAccessResult
+  }
+
+  const consoleAccess = await ensureMerchantConsoleAccess()
+  if (consoleAccess.status !== 'granted') {
+    return {
+      status: consoleAccess.status,
+      message: consoleAccess.status === 'error' ? consoleAccess.message : '当前账号无商户权限，请返回“我的”切换身份'
+    } as MerchantDeviceManagementAccessResult
+  }
+
+  try {
+    const capability = await getRecentMerchantDeviceAccess(options)
+    if (canManageMerchantPackaging(consoleAccess.user?.roles || [], capability)) {
+      return {
+        status: 'granted',
+        message: '',
+        capability,
+        user: consoleAccess.user
+      } as MerchantDeviceManagementAccessResult
+    }
+
+    return {
+      status: 'denied',
+      message: capability.block_reason || getMerchantPackagingAccessDeniedMessage(),
+      capability,
+      user: consoleAccess.user
+    } as MerchantDeviceManagementAccessResult
+  } catch (_error) {
+    return {
+      status: 'error',
+      message: '包装设置权限校验失败，请检查网络后重试',
       user: consoleAccess.user
     } as MerchantDeviceManagementAccessResult
   }

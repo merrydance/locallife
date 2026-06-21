@@ -846,10 +846,11 @@ func TestSearchDishesByName(t *testing.T) {
 	searchTerm := dish.Name[:3]
 
 	arg := SearchDishesByNameParams{
-		MerchantID: merchant.ID,
-		Column2:    pgtype.Text{String: searchTerm, Valid: true},
-		Limit:      10,
-		Offset:     0,
+		MerchantID:       merchant.ID,
+		NameQuery:        pgtype.Text{String: searchTerm, Valid: true},
+		ExcludePackaging: false,
+		Limit:            10,
+		Offset:           0,
 	}
 
 	dishes, err := testStore.SearchDishesByName(context.Background(), arg)
@@ -883,17 +884,19 @@ func TestSearchDishesByNameExcludesUnavailable(t *testing.T) {
 	require.NoError(t, err)
 
 	dishes, err := testStore.SearchDishesByName(context.Background(), SearchDishesByNameParams{
-		MerchantID: merchant.ID,
-		Column2:    pgtype.Text{String: uniqueName, Valid: true},
-		Limit:      10,
-		Offset:     0,
+		MerchantID:       merchant.ID,
+		NameQuery:        pgtype.Text{String: uniqueName, Valid: true},
+		ExcludePackaging: false,
+		Limit:            10,
+		Offset:           0,
 	})
 	require.NoError(t, err)
 	require.Empty(t, dishes, "不可售菜品不应出现在商户内搜索结果")
 
 	count, err := testStore.CountSearchDishesByName(context.Background(), CountSearchDishesByNameParams{
-		MerchantID: merchant.ID,
-		Column2:    pgtype.Text{String: uniqueName, Valid: true},
+		MerchantID:       merchant.ID,
+		NameQuery:        pgtype.Text{String: uniqueName, Valid: true},
+		ExcludePackaging: false,
 	})
 	require.NoError(t, err)
 	require.Zero(t, count)
@@ -1400,16 +1403,17 @@ func TestSearchDishesGlobal(t *testing.T) {
 
 	// 用完整的唯一名称搜索
 	dishes, err := testStore.SearchDishesGlobal(context.Background(), SearchDishesGlobalParams{
-		Column1: pgtype.Text{String: uniqueName, Valid: true},
-		Limit:   10,
-		Offset:  0,
-		Column4: 39.9282,
-		Column5: 116.4507,
+		UserLat:  39.9282,
+		UserLng:  116.4507,
 		RegionID: pgtype.Int8{
 			Int64: merchant.RegionID,
 			Valid: true,
 		},
-		TagID: pgtype.Int8{Valid: false},
+		Keyword:          pgtype.Text{String: uniqueName, Valid: true},
+		ExcludePackaging: false,
+		TagID:            pgtype.Int8{Valid: false},
+		Limit:            10,
+		Offset:           0,
 	})
 	require.NoError(t, err)
 	require.NotEmpty(t, dishes)
@@ -1458,16 +1462,17 @@ func TestSearchDishesGlobal_OnlyApprovedMerchants(t *testing.T) {
 
 	// 全局搜索不应找到未批准商户的菜品
 	dishes, err := testStore.SearchDishesGlobal(context.Background(), SearchDishesGlobalParams{
-		Column1: pgtype.Text{String: uniqueName, Valid: true},
-		Limit:   10,
-		Offset:  0,
-		Column4: 39.9282,
-		Column5: 116.4507,
+		UserLat:  39.9282,
+		UserLng:  116.4507,
 		RegionID: pgtype.Int8{
 			Int64: merchant.RegionID,
 			Valid: true,
 		},
-		TagID: pgtype.Int8{Valid: false},
+		Keyword:          pgtype.Text{String: uniqueName, Valid: true},
+		ExcludePackaging: false,
+		TagID:            pgtype.Int8{Valid: false},
+		Limit:            10,
+		Offset:           0,
 	})
 	require.NoError(t, err)
 	require.Empty(t, dishes, "Dishes from pending merchant should not appear in global search")
@@ -1498,27 +1503,29 @@ func TestSearchDishesGlobal_ExcludesTakeoutSuspendedMerchants(t *testing.T) {
 	require.NoError(t, err)
 
 	dishes, err := testStore.SearchDishesGlobal(context.Background(), SearchDishesGlobalParams{
-		Column1: pgtype.Text{String: uniqueName, Valid: true},
-		Limit:   10,
-		Offset:  0,
-		Column4: 39.9282,
-		Column5: 116.4507,
+		UserLat:  39.9282,
+		UserLng:  116.4507,
 		RegionID: pgtype.Int8{
 			Int64: merchant.RegionID,
 			Valid: true,
 		},
-		TagID: pgtype.Int8{Valid: false},
+		Keyword:          pgtype.Text{String: uniqueName, Valid: true},
+		ExcludePackaging: false,
+		TagID:            pgtype.Int8{Valid: false},
+		Limit:            10,
+		Offset:           0,
 	})
 	require.NoError(t, err)
 	require.Empty(t, dishes)
 
 	count, err := testStore.CountSearchDishesGlobal(context.Background(), CountSearchDishesGlobalParams{
-		Column1: pgtype.Text{String: uniqueName, Valid: true},
 		RegionID: pgtype.Int8{
 			Int64: merchant.RegionID,
 			Valid: true,
 		},
-		TagID: pgtype.Int8{Valid: false},
+		Keyword:          pgtype.Text{String: uniqueName, Valid: true},
+		ExcludePackaging: false,
+		TagID:            pgtype.Int8{Valid: false},
 	})
 	require.NoError(t, err)
 	require.Zero(t, count)
@@ -1546,32 +1553,37 @@ func TestSearchDishesGlobalExcludesUnavailable(t *testing.T) {
 	require.NoError(t, err)
 
 	dishes, err := testStore.SearchDishesGlobal(context.Background(), SearchDishesGlobalParams{
-		Column1: pgtype.Text{String: uniqueName, Valid: true},
-		Limit:   10,
-		Offset:  0,
-		Column4: 39.9282,
-		Column5: 116.4507,
+		UserLat:  39.9282,
+		UserLng:  116.4507,
 		RegionID: pgtype.Int8{
 			Int64: merchant.RegionID,
 			Valid: true,
 		},
-		TagID: pgtype.Int8{Valid: false},
+		Keyword:          pgtype.Text{String: uniqueName, Valid: true},
+		ExcludePackaging: false,
+		TagID:            pgtype.Int8{Valid: false},
+		Limit:            10,
+		Offset:           0,
 	})
 	require.NoError(t, err)
 	require.Empty(t, dishes, "不可售菜品不应出现在全局搜索结果")
 
 	count, err := testStore.CountSearchDishesGlobal(context.Background(), CountSearchDishesGlobalParams{
-		Column1: pgtype.Text{String: uniqueName, Valid: true},
 		RegionID: pgtype.Int8{
 			Int64: merchant.RegionID,
 			Valid: true,
 		},
-		TagID: pgtype.Int8{Valid: false},
+		Keyword:          pgtype.Text{String: uniqueName, Valid: true},
+		ExcludePackaging: false,
+		TagID:            pgtype.Int8{Valid: false},
 	})
 	require.NoError(t, err)
 	require.Zero(t, count)
 
-	ids, err := testStore.SearchDishIDsGlobal(context.Background(), pgtype.Text{String: uniqueName, Valid: true})
+	ids, err := testStore.SearchDishIDsGlobal(context.Background(), SearchDishIDsGlobalParams{
+		Keyword:          pgtype.Text{String: uniqueName, Valid: true},
+		ExcludePackaging: false,
+	})
 	require.NoError(t, err)
 	require.NotContains(t, ids, dish.ID, "不可售菜品不应出现在推荐关键词过滤ID结果")
 }
@@ -1604,32 +1616,34 @@ func TestSearchDishesGlobal_Pagination(t *testing.T) {
 
 	// 第一页
 	page1, err := testStore.SearchDishesGlobal(context.Background(), SearchDishesGlobalParams{
-		Column1: pgtype.Text{String: prefix, Valid: true},
-		Limit:   2,
-		Offset:  0,
-		Column4: 39.9282,
-		Column5: 116.4507,
+		UserLat:  39.9282,
+		UserLng:  116.4507,
 		RegionID: pgtype.Int8{
 			Int64: merchant.RegionID,
 			Valid: true,
 		},
-		TagID: pgtype.Int8{Valid: false},
+		Keyword:          pgtype.Text{String: prefix, Valid: true},
+		ExcludePackaging: false,
+		TagID:            pgtype.Int8{Valid: false},
+		Limit:            2,
+		Offset:           0,
 	})
 	require.NoError(t, err)
 	require.Len(t, page1, 2)
 
 	// 第二页
 	page2, err := testStore.SearchDishesGlobal(context.Background(), SearchDishesGlobalParams{
-		Column1: pgtype.Text{String: prefix, Valid: true},
-		Limit:   2,
-		Offset:  2,
-		Column4: 39.9282,
-		Column5: 116.4507,
+		UserLat:  39.9282,
+		UserLng:  116.4507,
 		RegionID: pgtype.Int8{
 			Int64: merchant.RegionID,
 			Valid: true,
 		},
-		TagID: pgtype.Int8{Valid: false},
+		Keyword:          pgtype.Text{String: prefix, Valid: true},
+		ExcludePackaging: false,
+		TagID:            pgtype.Int8{Valid: false},
+		Limit:            2,
+		Offset:           2,
 	})
 	require.NoError(t, err)
 	require.Len(t, page2, 2)
@@ -1671,12 +1685,13 @@ func TestCountSearchDishesGlobal(t *testing.T) {
 
 	// 计数
 	count, err := testStore.CountSearchDishesGlobal(context.Background(), CountSearchDishesGlobalParams{
-		Column1: pgtype.Text{String: prefix, Valid: true},
 		RegionID: pgtype.Int8{
 			Int64: merchant.RegionID,
 			Valid: true,
 		},
-		TagID: pgtype.Int8{Valid: false},
+		Keyword:          pgtype.Text{String: prefix, Valid: true},
+		ExcludePackaging: false,
+		TagID:            pgtype.Int8{Valid: false},
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(3), count)
@@ -1703,8 +1718,9 @@ func TestCountSearchDishesByName(t *testing.T) {
 
 	// 计数
 	count, err := testStore.CountSearchDishesByName(context.Background(), CountSearchDishesByNameParams{
-		MerchantID: merchant.ID,
-		Column2:    pgtype.Text{String: prefix, Valid: true},
+		MerchantID:       merchant.ID,
+		NameQuery:        pgtype.Text{String: prefix, Valid: true},
+		ExcludePackaging: false,
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(4), count)
@@ -1714,8 +1730,9 @@ func TestCountSearchDishesByName_EmptyResult(t *testing.T) {
 	merchant := createRandomMerchantForDish(t)
 
 	count, err := testStore.CountSearchDishesByName(context.Background(), CountSearchDishesByNameParams{
-		MerchantID: merchant.ID,
-		Column2:    pgtype.Text{String: "NonExistentDishName12345", Valid: true},
+		MerchantID:       merchant.ID,
+		NameQuery:        pgtype.Text{String: "NonExistentDishName12345", Valid: true},
+		ExcludePackaging: false,
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(0), count)
@@ -1734,7 +1751,10 @@ func TestGetDishesWithMerchantByIDs(t *testing.T) {
 
 	// 批量查询
 	dishIDs := []int64{dish1.ID, dish2.ID}
-	results, err := testStore.GetDishesWithMerchantByIDs(context.Background(), dishIDs)
+	results, err := testStore.GetDishesWithMerchantByIDs(context.Background(), GetDishesWithMerchantByIDsParams{
+		DishIds:          dishIDs,
+		ExcludePackaging: false,
+	})
 	require.NoError(t, err)
 	require.Len(t, results, 2)
 
@@ -1770,7 +1790,10 @@ func TestGetDishesWithMerchantByIDs_WithMemberPrice(t *testing.T) {
 	require.NoError(t, err)
 
 	// 查询
-	results, err := testStore.GetDishesWithMerchantByIDs(context.Background(), []int64{dish.ID})
+	results, err := testStore.GetDishesWithMerchantByIDs(context.Background(), GetDishesWithMerchantByIDsParams{
+		DishIds:          []int64{dish.ID},
+		ExcludePackaging: false,
+	})
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 
@@ -1781,14 +1804,20 @@ func TestGetDishesWithMerchantByIDs_WithMemberPrice(t *testing.T) {
 
 func TestGetDishesWithMerchantByIDs_EmptyIDs(t *testing.T) {
 	// 空ID列表应该返回空结果
-	results, err := testStore.GetDishesWithMerchantByIDs(context.Background(), []int64{})
+	results, err := testStore.GetDishesWithMerchantByIDs(context.Background(), GetDishesWithMerchantByIDsParams{
+		DishIds:          []int64{},
+		ExcludePackaging: false,
+	})
 	require.NoError(t, err)
 	require.Empty(t, results)
 }
 
 func TestGetDishesWithMerchantByIDs_NonExistentIDs(t *testing.T) {
 	// 不存在的ID应该返回空结果
-	results, err := testStore.GetDishesWithMerchantByIDs(context.Background(), []int64{999999999})
+	results, err := testStore.GetDishesWithMerchantByIDs(context.Background(), GetDishesWithMerchantByIDsParams{
+		DishIds:          []int64{999999999},
+		ExcludePackaging: false,
+	})
 	require.NoError(t, err)
 	require.Empty(t, results)
 }
@@ -1810,7 +1839,10 @@ func TestGetDishesWithMerchantByIDs_FilterOffline(t *testing.T) {
 	require.NoError(t, err)
 
 	// 查询应该过滤掉下架菜品
-	results, err := testStore.GetDishesWithMerchantByIDs(context.Background(), []int64{offlineDish.ID})
+	results, err := testStore.GetDishesWithMerchantByIDs(context.Background(), GetDishesWithMerchantByIDsParams{
+		DishIds:          []int64{offlineDish.ID},
+		ExcludePackaging: false,
+	})
 	require.NoError(t, err)
 	require.Empty(t, results, "下架菜品不应被返回")
 }
@@ -1829,7 +1861,10 @@ func TestGetDishesByIDsFiltersUnavailable(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	results, err := testStore.GetDishesByIDs(context.Background(), []int64{unavailableDish.ID})
+	results, err := testStore.GetDishesByIDs(context.Background(), GetDishesByIDsParams{
+		DishIds:          []int64{unavailableDish.ID},
+		ExcludePackaging: false,
+	})
 	require.NoError(t, err)
 	require.Empty(t, results, "不可售菜品不应被推荐详情批量查询返回")
 }
@@ -1848,7 +1883,10 @@ func TestGetDishesWithMerchantByIDsFilterUnavailable(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	results, err := testStore.GetDishesWithMerchantByIDs(context.Background(), []int64{unavailableDish.ID})
+	results, err := testStore.GetDishesWithMerchantByIDs(context.Background(), GetDishesWithMerchantByIDsParams{
+		DishIds:          []int64{unavailableDish.ID},
+		ExcludePackaging: false,
+	})
 	require.NoError(t, err)
 	require.Empty(t, results, "不可售菜品不应被推荐流返回")
 }
@@ -1876,7 +1914,10 @@ func TestListDishesForMenuFiltersUnavailable(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	menuDishes, err := testStore.ListDishesForMenu(context.Background(), merchant.ID)
+	menuDishes, err := testStore.ListDishesForMenu(context.Background(), ListDishesForMenuParams{
+		MerchantID:       merchant.ID,
+		ExcludePackaging: false,
+	})
 	require.NoError(t, err)
 
 	menuIDs := make([]int64, 0, len(menuDishes))

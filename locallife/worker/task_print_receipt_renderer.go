@@ -20,19 +20,20 @@ func buildReceiptForProvider(
 	providerType string,
 	order db.GetOrderWithDetailsRow,
 	items []db.ListOrderItemsWithDishByOrderRow,
+	packagingItems []db.OrderPackagingItem,
 	user db.User,
 	slip string,
 	settlementBill *printSettlementBill,
 ) string {
 	switch providerType {
 	case printerTypeShangpeng:
-		return buildShangpengReceipt(order, items, user, slip, settlementBill)
+		return buildShangpengReceipt(order, items, packagingItems, user, slip, settlementBill)
 	default:
-		return buildFeieReceipt(order, items, user, slip, settlementBill)
+		return buildFeieReceipt(order, items, packagingItems, user, slip, settlementBill)
 	}
 }
 
-func buildFeieReceipt(order db.GetOrderWithDetailsRow, items []db.ListOrderItemsWithDishByOrderRow, user db.User, slip string, settlementBill *printSettlementBill) string {
+func buildFeieReceipt(order db.GetOrderWithDetailsRow, items []db.ListOrderItemsWithDishByOrderRow, packagingItems []db.OrderPackagingItem, user db.User, slip string, settlementBill *printSettlementBill) string {
 	var builder strings.Builder
 	title := "乐客来福"
 	if order.PickupCode.Valid && order.PickupCode.String != "" {
@@ -57,6 +58,9 @@ func buildFeieReceipt(order db.GetOrderWithDetailsRow, items []db.ListOrderItems
 
 	builder.WriteString("--------------------------------<BR>")
 	builder.WriteString("菜品小计：" + fenToYuan(order.Subtotal) + "<BR>")
+	if slip == printSlipFull {
+		writeFeiePackagingLines(&builder, order.PackagingFee, packagingItems)
+	}
 	if order.DiscountAmount > 0 {
 		builder.WriteString("优惠：-" + fenToYuan(order.DiscountAmount) + "<BR>")
 	}
@@ -85,6 +89,19 @@ func buildFeieReceipt(order db.GetOrderWithDetailsRow, items []db.ListOrderItems
 	return builder.String()
 }
 
+func writeFeiePackagingLines(builder *strings.Builder, packagingFee int64, packagingItems []db.OrderPackagingItem) {
+	if packagingFee <= 0 && len(packagingItems) == 0 {
+		return
+	}
+	if packagingFee > 0 {
+		builder.WriteString("包装费：" + fenToYuan(packagingFee) + "<BR>")
+	}
+	for _, item := range packagingItems {
+		builder.WriteString("包装：" + formatPrintItemLine(item.Name, item.Quantity, item.Subtotal))
+		builder.WriteString("<BR>")
+	}
+}
+
 func writeFeieSettlementBill(builder *strings.Builder, settlementBill *printSettlementBill) {
 	breakdown := settlementBill.breakdown
 	profitSharingOrder := settlementBill.profitSharingOrder
@@ -105,7 +122,7 @@ func writeFeieSettlementBill(builder *strings.Builder, settlementBill *printSett
 	}
 }
 
-func buildShangpengReceipt(order db.GetOrderWithDetailsRow, items []db.ListOrderItemsWithDishByOrderRow, user db.User, slip string, settlementBill *printSettlementBill) string {
+func buildShangpengReceipt(order db.GetOrderWithDetailsRow, items []db.ListOrderItemsWithDishByOrderRow, packagingItems []db.OrderPackagingItem, user db.User, slip string, settlementBill *printSettlementBill) string {
 	var builder strings.Builder
 	title := "乐客来福"
 	if order.PickupCode.Valid && order.PickupCode.String != "" {
@@ -129,6 +146,9 @@ func buildShangpengReceipt(order db.GetOrderWithDetailsRow, items []db.ListOrder
 
 	writeReceiptLine(&builder, "--------------------------------")
 	writeReceiptLine(&builder, "菜品小计："+fenToYuan(order.Subtotal))
+	if slip == printSlipFull {
+		writePlainPackagingLines(&builder, order.PackagingFee, packagingItems)
+	}
 	if order.DiscountAmount > 0 {
 		writeReceiptLine(&builder, "优惠：-"+fenToYuan(order.DiscountAmount))
 	}
@@ -155,6 +175,18 @@ func buildShangpengReceipt(order db.GetOrderWithDetailsRow, items []db.ListOrder
 	writeReceiptLine(&builder, "")
 	writeReceiptLine(&builder, "取餐码："+order.OrderNo)
 	return builder.String()
+}
+
+func writePlainPackagingLines(builder *strings.Builder, packagingFee int64, packagingItems []db.OrderPackagingItem) {
+	if packagingFee <= 0 && len(packagingItems) == 0 {
+		return
+	}
+	if packagingFee > 0 {
+		writeReceiptLine(builder, "包装费："+fenToYuan(packagingFee))
+	}
+	for _, item := range packagingItems {
+		writeReceiptLine(builder, "包装："+formatPrintItemLine(item.Name, item.Quantity, item.Subtotal))
+	}
 }
 
 func writePlainSettlementBill(builder *strings.Builder, settlementBill *printSettlementBill) {

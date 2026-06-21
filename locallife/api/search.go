@@ -269,10 +269,11 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 	// The requirement is mostly for Global Search (Home Feed). Keeping Merchant Search as is for now but we need to match response type.)
 	if req.MerchantID != nil {
 		dishes, err := server.store.SearchDishesByName(ctx, db.SearchDishesByNameParams{
-			MerchantID: *req.MerchantID,
-			Column2:    pgtype.Text{String: req.Keyword, Valid: true},
-			Limit:      req.PageSize,
-			Offset:     offset,
+			MerchantID:       *req.MerchantID,
+			NameQuery:        pgtype.Text{String: req.Keyword, Valid: true},
+			ExcludePackaging: server.legacyPackagingDishFreezeEnabled(),
+			Limit:            req.PageSize,
+			Offset:           offset,
 		})
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -281,8 +282,9 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 
 		// 获取总数用于分页
 		total, err := server.store.CountSearchDishesByName(ctx, db.CountSearchDishesByNameParams{
-			MerchantID: *req.MerchantID,
-			Column2:    pgtype.Text{String: req.Keyword, Valid: true},
+			MerchantID:       *req.MerchantID,
+			NameQuery:        pgtype.Text{String: req.Keyword, Valid: true},
+			ExcludePackaging: server.legacyPackagingDishFreezeEnabled(),
 		})
 		if err != nil {
 			total = int64(len(dishes))
@@ -335,13 +337,14 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 
 	// 全局搜索 - 使用高效的单次数据库查询（仅搜索已批准商户的上架菜品）
 	dishes, err := server.store.SearchDishesGlobal(ctx, db.SearchDishesGlobalParams{
-		Column1:  pgtype.Text{String: req.Keyword, Valid: true},
-		Limit:    req.PageSize,
-		Offset:   int32(offset),
-		Column4:  userLat,
-		Column5:  userLng,
-		TagID:    pgtype.Int8{Int64: tagIDVal, Valid: req.TagID != nil},
-		RegionID: regionID,
+		UserLat:          userLat,
+		UserLng:          userLng,
+		RegionID:         regionID,
+		Keyword:          pgtype.Text{String: req.Keyword, Valid: true},
+		ExcludePackaging: server.legacyPackagingDishFreezeEnabled(),
+		TagID:            pgtype.Int8{Int64: tagIDVal, Valid: req.TagID != nil},
+		Limit:            req.PageSize,
+		Offset:           int32(offset),
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -350,9 +353,10 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 
 	// 获取总数用于分页
 	total, err := server.store.CountSearchDishesGlobal(ctx, db.CountSearchDishesGlobalParams{
-		Column1:  pgtype.Text{String: req.Keyword, Valid: true},
-		TagID:    pgtype.Int8{Int64: tagIDVal, Valid: req.TagID != nil},
-		RegionID: regionID,
+		RegionID:         regionID,
+		Keyword:          pgtype.Text{String: req.Keyword, Valid: true},
+		ExcludePackaging: server.legacyPackagingDishFreezeEnabled(),
+		TagID:            pgtype.Int8{Int64: tagIDVal, Valid: req.TagID != nil},
 	})
 	if err != nil {
 		total = int64(len(dishes))
@@ -656,12 +660,13 @@ func (server *Server) searchCombos(ctx *gin.Context) {
 
 	// 执行搜索
 	combos, err := server.store.SearchCombosGlobal(ctx, db.SearchCombosGlobalParams{
-		Column1:  req.Keyword,
-		Limit:    req.PageSize,
-		Offset:   offset,
-		Column4:  userLat,
-		Column5:  userLng,
-		RegionID: comboRegionID,
+		UserLat:          userLat,
+		UserLng:          userLng,
+		ExcludePackaging: server.legacyPackagingDishFreezeEnabled(),
+		RegionID:         comboRegionID,
+		Keyword:          req.Keyword,
+		Limit:            req.PageSize,
+		Offset:           offset,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -670,8 +675,9 @@ func (server *Server) searchCombos(ctx *gin.Context) {
 
 	// 获取总数
 	total, err := server.store.CountSearchCombosGlobal(ctx, db.CountSearchCombosGlobalParams{
-		Column1:  req.Keyword,
-		RegionID: comboRegionID,
+		RegionID:         comboRegionID,
+		ExcludePackaging: server.legacyPackagingDishFreezeEnabled(),
+		Keyword:          req.Keyword,
 	})
 	if err != nil {
 		total = int64(len(combos))

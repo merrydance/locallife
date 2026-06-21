@@ -18,14 +18,15 @@ const (
 
 // OrderCalculationInput defines the input for order preview calculation.
 type OrderCalculationInput struct {
-	UserID        int64
-	MerchantID    int64
-	OrderType     string
-	Latitude      *float64
-	Longitude     *float64
-	AddressID     *int64
-	UserVoucherID *int64
-	VoucherCode   string
+	UserID                      int64
+	MerchantID                  int64
+	OrderType                   string
+	Latitude                    *float64
+	Longitude                   *float64
+	AddressID                   *int64
+	UserVoucherID               *int64
+	VoucherCode                 string
+	RejectLegacyPackagingDishes bool
 }
 
 // OrderCalculationItem describes a cart item for preview.
@@ -48,6 +49,8 @@ type OrderPromotion struct {
 // OrderCalculationResult contains computed preview totals.
 type OrderCalculationResult struct {
 	Subtotal            int64
+	PackagingFee        int64
+	Packaging           CartPackagingState
 	DeliveryFee         int64
 	DeliveryFeeDiscount int64
 	DiscountAmount      int64
@@ -98,6 +101,9 @@ func CalculateOrderPreview(
 		if item.DishID.Valid {
 			name = item.DishName.String
 			price = item.DishPrice.Int64
+			if input.RejectLegacyPackagingDishes && item.DishIsPackaging.Bool {
+				return result, NewRequestError(http.StatusBadRequest, errors.New("包装已迁移到包装设置，请在包装设置中维护"))
+			}
 
 			var customizationMap map[string]interface{}
 			if len(item.Customizations) > 0 {
@@ -116,6 +122,11 @@ func CalculateOrderPreview(
 		} else if item.ComboID.Valid {
 			name = item.ComboName.String
 			price = item.ComboPrice.Int64
+			if input.RejectLegacyPackagingDishes {
+				if err := validateComboChildDishesOrderable(ctx, store, item.ComboID.Int64, name, true); err != nil {
+					return result, err
+				}
+			}
 			if len(item.Customizations) > 0 {
 				return result, NewRequestError(http.StatusBadRequest, errors.New("customizations not supported for combo items"))
 			}
@@ -222,6 +233,20 @@ func CalculateOrderPreview(
 		}
 	}
 
+	packagingRequirement, err := NewPackagingService(store).ResolvePackagingRequirement(ctx, ResolvePackagingInput{
+		UserID:     input.UserID,
+		MerchantID: input.MerchantID,
+		OrderType:  input.OrderType,
+		CartID:     &cart.ID,
+	})
+	if err != nil {
+		return result, err
+	}
+	result.Packaging = cartPackagingStateFromRequirement(packagingRequirement)
+	if packagingRequirement.SelectedOption != nil {
+		result.PackagingFee = packagingRequirement.SelectedOption.Price
+	}
+
 	if input.VoucherCode != "" {
 		return result, NewRequestError(http.StatusBadRequest, errors.New("请使用 user_voucher_id 进行金额预览"))
 	}
@@ -251,6 +276,7 @@ func CalculateOrderPreview(
 		UserID:              input.UserID,
 		OrderType:           input.OrderType,
 		Subtotal:            result.Subtotal,
+		PackagingFee:        result.PackagingFee,
 		VoucherID:           input.UserVoucherID,
 		DeliveryFee:         result.DeliveryFee,
 		DeliveryFeeDiscount: result.DeliveryFeeDiscount,
@@ -262,6 +288,7 @@ func CalculateOrderPreview(
 	result.DeliveryFee = calcResult.DeliveryFee
 	result.DeliveryFeeDiscount = calcResult.DeliveryFeeDiscount
 	result.DiscountAmount = calcResult.MerchantDiscount + calcResult.VoucherDiscount
+	result.PackagingFee = calcResult.PackagingFee
 	result.TotalAmount = calcResult.TotalAmount
 	result.SuggestedVoucher = calcResult.SuggestedVoucher
 	result.LadderPromotions = calcResult.LadderPromotions

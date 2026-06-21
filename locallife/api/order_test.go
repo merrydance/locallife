@@ -55,9 +55,9 @@ func dishWithCustomizationsFromDish(dish db.Dish) db.GetDishWithCustomizationsRo
 
 func expectNoPackagingPolicy(store *mockdb.MockStore) {
 	store.EXPECT().
-		CountActivePackagingDishesByMerchant(gomock.Any(), gomock.Any()).
+		GetMerchantPackagingSettings(gomock.Any(), gomock.Any()).
 		AnyTimes().
-		Return(int64(0), nil)
+		Return(db.MerchantPackagingSetting{}, db.ErrRecordNotFound)
 }
 
 func TestNewOrderResponseKeepsFourDigitPickupCodeVisible(t *testing.T) {
@@ -216,6 +216,42 @@ type replaceOrderCaptureCommandService struct {
 	input logic.ReplaceOrderInput
 }
 
+type createOrderCaptureCommandService struct {
+	replaceOrderErrorCommandService
+	input logic.CreateOrderCommandInput
+}
+
+func (s *createOrderCaptureCommandService) CreateOrder(_ context.Context, input logic.CreateOrderCommandInput) (logic.CreateOrderCommandResult, error) {
+	s.input = input
+	packagingOptionID := pgtype.Int8{}
+	if input.PackagingOptionID != nil {
+		packagingOptionID = pgtype.Int8{Int64: *input.PackagingOptionID, Valid: true}
+	}
+	return logic.CreateOrderCommandResult{
+		Order: db.Order{
+			ID:                123,
+			OrderNo:           "ORD-CREATE-PACKAGING",
+			UserID:            input.UserID,
+			MerchantID:        input.MerchantID,
+			OrderType:         input.OrderType,
+			PackagingFee:      150,
+			TotalAmount:       2150,
+			Status:            db.OrderStatusPending,
+			FulfillmentStatus: db.FulfillmentStatusScheduled,
+			CreatedAt:         time.Now(),
+		},
+		PackagingItems: []db.OrderPackagingItem{{
+			ID:                321,
+			OrderID:           123,
+			PackagingOptionID: packagingOptionID,
+			Name:              "环保餐盒",
+			UnitPrice:         150,
+			Quantity:          1,
+			Subtotal:          150,
+		}},
+	}, nil
+}
+
 func (s *replaceOrderCaptureCommandService) ReplaceOrder(_ context.Context, input logic.ReplaceOrderInput) (logic.ReplaceOrderResult, error) {
 	s.input = input
 	return logic.ReplaceOrderResult{
@@ -279,6 +315,70 @@ func TestReplaceOrderPassesClientIPToLogic(t *testing.T) {
 	require.Equal(t, "203.0.113.77", captureSvc.input.ClientIP)
 	require.Equal(t, user.ID, captureSvc.input.UserID)
 	require.Equal(t, int64(123), captureSvc.input.OrderID)
+}
+
+func TestReplaceOrderPassesLegacyPackagingFreezeToLogic(t *testing.T) {
+	user, _ := randomUser(t)
+	server := newTestServer(t, nil)
+	server.config.PackagingLegacyDishFreezeEnabled = true
+	captureSvc := &replaceOrderCaptureCommandService{}
+	server.orderCommandSvc = captureSvc
+
+	body := `{"items":[{"dish_id":1001,"quantity":1}]}`
+	req, err := http.NewRequest(http.MethodPost, "/v1/orders/123/replace", strings.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.True(t, captureSvc.input.RejectLegacyPackagingDishes)
+}
+
+func TestCreateOrderAPIPassesPackagingIdentityToLogic(t *testing.T) {
+	user, _ := randomUser(t)
+	server := newTestServer(t, nil)
+	captureSvc := &createOrderCaptureCommandService{}
+	server.orderCommandSvc = captureSvc
+
+	body := `{"merchant_id":456,"order_type":"takeaway","packaging_option_id":789,"packaging_selection_version":12,"items":[{"dish_id":1001,"quantity":1}]}`
+	req, err := http.NewRequest(http.MethodPost, "/v1/orders", strings.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Idempotency-Key", " create-packaging-api ")
+	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusCreated, recorder.Code)
+	require.Equal(t, user.ID, captureSvc.input.UserID)
+	require.Equal(t, int64(456), captureSvc.input.MerchantID)
+	require.NotNil(t, captureSvc.input.PackagingOptionID)
+	require.Equal(t, int64(789), *captureSvc.input.PackagingOptionID)
+	require.NotNil(t, captureSvc.input.PackagingSelectionVersion)
+	require.Equal(t, int64(12), *captureSvc.input.PackagingSelectionVersion)
+	require.Equal(t, "create-packaging-api", captureSvc.input.IdempotencyKey)
+
+	var resp struct {
+		PackagingFee   int64 `json:"packaging_fee"`
+		PackagingItems []struct {
+			ID                int64  `json:"id"`
+			PackagingOptionID int64  `json:"packaging_option_id"`
+			Name              string `json:"name"`
+			UnitPrice         int64  `json:"unit_price"`
+			Quantity          int16  `json:"quantity"`
+			Subtotal          int64  `json:"subtotal"`
+		} `json:"packaging_items"`
+	}
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, int64(150), resp.PackagingFee)
+	require.Len(t, resp.PackagingItems, 1)
+	require.Equal(t, int64(789), resp.PackagingItems[0].PackagingOptionID)
+	require.Equal(t, "环保餐盒", resp.PackagingItems[0].Name)
+	require.Equal(t, int64(150), resp.PackagingItems[0].Subtotal)
 }
 
 func TestReplaceOrderInvalidRequestReturnsActionableChinese(t *testing.T) {
@@ -373,6 +473,7 @@ func orderWithDetailsFromOrder(order db.Order) db.GetOrderWithDetailsRow {
 		RiderDeliveredAt:     order.RiderDeliveredAt,
 		UserDeliveredAt:      order.UserDeliveredAt,
 		AutoUserDeliveredAt:  order.AutoUserDeliveredAt,
+		PackagingFee:         order.PackagingFee,
 		MerchantName:         "",
 		MerchantPhone:        "",
 		MerchantAddress:      "",
@@ -442,6 +543,14 @@ func TestCreateOrderAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetOrderRequestIdempotency(gomock.Any(), db.GetOrderRequestIdempotencyParams{
+						OperationScope: "customer_order_create",
+						ActorUserID:    user.ID,
+						IdempotencyKey: "order-create-api-1",
+					}).
+					Times(1).
+					Return(db.OrderCreateRequestIdempotency{}, db.ErrRecordNotFound)
 				store.EXPECT().
 					GetMerchant(gomock.Any(), merchant.ID).
 					Times(1).
@@ -1295,6 +1404,10 @@ func TestGetOrderAPI(t *testing.T) {
 					ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).
 					Times(1).
 					Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				store.EXPECT().
+					ListOrderPackagingItems(gomock.Any(), order.ID).
+					Times(1).
+					Return([]db.OrderPackagingItem{}, nil)
 
 				store.EXPECT().
 					GetLatestPaymentOrderByOrder(gomock.Any(), gomock.Any()).
@@ -1324,10 +1437,20 @@ func TestGetOrderAPI(t *testing.T) {
 				paidOrder.Subtotal = 10000
 				paidOrder.DiscountAmount = 300
 				paidOrder.VoucherAmount = 200
+				paidOrder.PackagingFee = 150
 				paidOrder.DeliveryFee = 500
 				paidOrder.DeliveryFeeDiscount = 0
-				paidOrder.TotalAmount = 10000
+				paidOrder.TotalAmount = 10150
 				orderWithDetails := orderWithDetailsFromOrder(paidOrder)
+				packagingItems := []db.OrderPackagingItem{{
+					ID:                9401,
+					OrderID:           order.ID,
+					PackagingOptionID: pgtype.Int8{Int64: 9301, Valid: true},
+					Name:              "环保餐盒",
+					UnitPrice:         150,
+					Quantity:          1,
+					Subtotal:          150,
+				}}
 
 				store.EXPECT().
 					GetOrderWithDetails(gomock.Any(), order.ID).
@@ -1338,6 +1461,10 @@ func TestGetOrderAPI(t *testing.T) {
 					ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).
 					Times(1).
 					Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				store.EXPECT().
+					ListOrderPackagingItems(gomock.Any(), order.ID).
+					Times(1).
+					Return(packagingItems, nil)
 
 				store.EXPECT().
 					GetLatestPaymentOrderByOrder(gomock.Any(), gomock.Eq(db.GetLatestPaymentOrderByOrderParams{
@@ -1375,6 +1502,12 @@ func TestGetOrderAPI(t *testing.T) {
 				var response orderResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.NotNil(t, response.FeeBreakdown)
+				require.Equal(t, int64(150), response.PackagingFee)
+				require.Len(t, response.PackagingItems, 1)
+				require.Equal(t, int64(9301), *response.PackagingItems[0].PackagingOptionID)
+				require.Equal(t, "环保餐盒", response.PackagingItems[0].Name)
+				require.Equal(t, int64(150), response.PackagingItems[0].Subtotal)
+				require.Equal(t, int64(150), response.FeeBreakdown.PackagingFeeAmount)
 				require.Equal(t, int64(8968), response.FeeBreakdown.MerchantReceivableAmount)
 				require.Equal(t, int64(497), response.FeeBreakdown.RiderNetEarningsAmount)
 			},
@@ -1421,6 +1554,10 @@ func TestGetOrderAPI(t *testing.T) {
 						Subtotal:       1000,
 						Customizations: []byte("not-json"),
 					}}, nil)
+				store.EXPECT().
+					ListOrderPackagingItems(gomock.Any(), order.ID).
+					Times(1).
+					Return([]db.OrderPackagingItem{}, nil)
 
 				store.EXPECT().
 					GetLatestPaymentOrderByOrder(gomock.Any(), gomock.Any()).
@@ -1453,6 +1590,10 @@ func TestGetOrderAPI(t *testing.T) {
 					ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).
 					Times(1).
 					Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				store.EXPECT().
+					ListOrderPackagingItems(gomock.Any(), order.ID).
+					Times(1).
+					Return([]db.OrderPackagingItem{}, nil)
 
 				store.EXPECT().
 					GetLatestPaymentOrderByOrder(gomock.Any(), gomock.Any()).
@@ -1561,6 +1702,7 @@ func TestCancelOrderAPI(t *testing.T) {
 							OrderNo:      order.OrderNo,
 							UserID:       order.UserID,
 							MerchantID:   order.MerchantID,
+							PackagingFee: 150,
 							Status:       "cancelled",
 							CancelledAt:  pgtype.Timestamptz{Time: time.Now(), Valid: true},
 							CancelReason: pgtype.Text{String: "不想要了", Valid: true},
@@ -1569,6 +1711,9 @@ func TestCancelOrderAPI(t *testing.T) {
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
+				var response orderResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Equal(t, int64(150), response.PackagingFee)
 			},
 		},
 		{
@@ -1679,15 +1824,23 @@ func randomOrder(userID, merchantID int64) db.Order {
 	}
 }
 
+func expectNoOrderPackagingItems(store *mockdb.MockStore, orderID int64) {
+	store.EXPECT().
+		ListOrderPackagingItems(gomock.Any(), orderID).
+		Times(1).
+		Return([]db.OrderPackagingItem{}, nil)
+}
+
 func merchantFeeBreakdownTestOrder(userID, merchantID int64, offset int64) db.Order {
 	order := randomOrder(userID, merchantID)
 	order.Status = db.OrderStatusPaid
 	order.Subtotal = 10000 + offset
 	order.DiscountAmount = 300
 	order.VoucherAmount = 200
+	order.PackagingFee = 150
 	order.DeliveryFee = 800
 	order.DeliveryFeeDiscount = 0
-	order.TotalAmount = order.Subtotal - order.DiscountAmount - order.VoucherAmount + order.DeliveryFee
+	order.TotalAmount = order.Subtotal - order.DiscountAmount - order.VoucherAmount + order.PackagingFee + order.DeliveryFee
 	return order
 }
 
@@ -1771,6 +1924,18 @@ func TestListMerchantOrdersAPI(t *testing.T) {
 						Customizations:        listItemCustomizations,
 						DishImageMediaAssetID: pgtype.Int8{Int64: 9901, Valid: true},
 					}}, nil)
+				store.EXPECT().
+					ListOrderPackagingItemsByOrderIDs(gomock.Any(), gomock.Eq([]int64{orders[0].ID, orders[1].ID})).
+					Times(1).
+					Return([]db.OrderPackagingItem{{
+						ID:                8101,
+						OrderID:           orders[0].ID,
+						PackagingOptionID: pgtype.Int8{Int64: 9101, Valid: true},
+						Name:              "环保餐盒",
+						UnitPrice:         150,
+						Quantity:          1,
+						Subtotal:          150,
+					}}, nil)
 
 				store.EXPECT().
 					ListProfitSharingOrdersByOrderIDsForMerchant(gomock.Any(), gomock.Eq(db.ListProfitSharingOrdersByOrderIDsForMerchantParams{
@@ -1793,6 +1958,11 @@ func TestListMerchantOrdersAPI(t *testing.T) {
 				require.Empty(t, resp.Orders[0].Items[0].ImageURL)
 				require.NotNil(t, resp.Orders[0].FeeBreakdown)
 				require.Equal(t, int64(10000), resp.Orders[0].FeeBreakdown.FoodAmount)
+				require.Equal(t, int64(150), resp.Orders[0].PackagingFee)
+				require.Len(t, resp.Orders[0].PackagingItems, 1)
+				require.Equal(t, "环保餐盒", resp.Orders[0].PackagingItems[0].Name)
+				require.Equal(t, int64(150), resp.Orders[0].PackagingItems[0].Subtotal)
+				require.Equal(t, int64(150), resp.Orders[0].FeeBreakdown.PackagingFeeAmount)
 				require.Equal(t, int64(475), resp.Orders[0].FeeBreakdown.PlatformServiceFeeAmount)
 				require.Equal(t, int64(31), resp.Orders[0].FeeBreakdown.PaymentChannelFeeAmount)
 			},
@@ -1872,6 +2042,10 @@ func TestListMerchantOrdersAPI(t *testing.T) {
 					ListOrderItemsWithDishByOrderIDs(gomock.Any(), gomock.Eq([]int64{orders[0].ID, orders[1].ID})).
 					Times(1).
 					Return([]db.ListOrderItemsWithDishByOrderIDsRow{}, nil)
+				store.EXPECT().
+					ListOrderPackagingItemsByOrderIDs(gomock.Any(), gomock.Eq([]int64{orders[0].ID, orders[1].ID})).
+					Times(1).
+					Return([]db.OrderPackagingItem{}, nil)
 
 				store.EXPECT().
 					ListProfitSharingOrdersByOrderIDsForMerchant(gomock.Any(), gomock.Eq(db.ListProfitSharingOrdersByOrderIDsForMerchantParams{
@@ -1910,6 +2084,10 @@ func TestListMerchantOrdersAPI(t *testing.T) {
 					Times(1).
 					Return([]db.ListOrderItemsWithDishByOrderIDsRow{}, nil)
 				store.EXPECT().
+					ListOrderPackagingItemsByOrderIDs(gomock.Any(), gomock.Eq([]int64{orders[0].ID, orders[1].ID})).
+					Times(1).
+					Return([]db.OrderPackagingItem{}, nil)
+				store.EXPECT().
 					ListProfitSharingOrdersByOrderIDsForMerchant(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return([]db.ListProfitSharingOrdersByOrderIDsForMerchantRow{}, nil)
@@ -1946,12 +2124,26 @@ func TestListMerchantOrdersAPI(t *testing.T) {
 					ListOrderItemsWithDishByOrderIDs(gomock.Any(), gomock.Eq([]int64{cancelledOrders[0].ID, cancelledOrders[1].ID})).
 					Times(1).
 					Return([]db.ListOrderItemsWithDishByOrderIDsRow{}, nil)
+				store.EXPECT().
+					ListOrderPackagingItemsByOrderIDs(gomock.Any(), gomock.Eq([]int64{cancelledOrders[0].ID, cancelledOrders[1].ID})).
+					Times(1).
+					Return([]db.OrderPackagingItem{{
+						ID:        8201,
+						OrderID:   cancelledOrders[0].ID,
+						Name:      "历史餐盒",
+						UnitPrice: 150,
+						Quantity:  1,
+						Subtotal:  150,
+					}}, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var resp listMerchantOrdersResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Len(t, resp.Orders, 2)
+				require.Equal(t, int64(150), resp.Orders[0].PackagingFee)
+				require.Len(t, resp.Orders[0].PackagingItems, 1)
+				require.Equal(t, "历史餐盒", resp.Orders[0].PackagingItems[0].Name)
 				require.Nil(t, resp.Orders[0].FeeBreakdown)
 				require.Nil(t, resp.Orders[1].FeeBreakdown)
 			},
@@ -2869,6 +3061,18 @@ func TestGetMerchantOrderAPI(t *testing.T) {
 						DishImageMediaAssetID: pgtype.Int8{Int64: 9902, Valid: true},
 					}}, nil)
 				store.EXPECT().
+					ListOrderPackagingItems(gomock.Any(), order.ID).
+					Times(1).
+					Return([]db.OrderPackagingItem{{
+						ID:                8301,
+						OrderID:           order.ID,
+						PackagingOptionID: pgtype.Int8{Int64: 9301, Valid: true},
+						Name:              "环保餐盒",
+						UnitPrice:         150,
+						Quantity:          1,
+						Subtotal:          150,
+					}}, nil)
+				store.EXPECT().
 					ListProfitSharingOrdersByOrderIDsForMerchant(gomock.Any(), gomock.Eq(db.ListProfitSharingOrdersByOrderIDsForMerchantParams{
 						MerchantID: merchant.ID,
 						OrderIds:   []int64{order.ID},
@@ -2887,6 +3091,11 @@ func TestGetMerchantOrderAPI(t *testing.T) {
 				require.Empty(t, resp.Items[0].ImageURL)
 				require.NotNil(t, resp.FeeBreakdown)
 				require.Equal(t, int64(10000), resp.FeeBreakdown.FoodAmount)
+				require.Equal(t, int64(150), resp.PackagingFee)
+				require.Len(t, resp.PackagingItems, 1)
+				require.Equal(t, int64(9301), *resp.PackagingItems[0].PackagingOptionID)
+				require.Equal(t, "环保餐盒", resp.PackagingItems[0].Name)
+				require.Equal(t, int64(150), resp.FeeBreakdown.PackagingFeeAmount)
 				require.Equal(t, int64(475), resp.FeeBreakdown.PlatformServiceFeeAmount)
 				require.Equal(t, int64(31), resp.FeeBreakdown.PaymentChannelFeeAmount)
 			},
@@ -2907,6 +3116,10 @@ func TestGetMerchantOrderAPI(t *testing.T) {
 					ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).
 					Times(1).
 					Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				store.EXPECT().
+					ListOrderPackagingItems(gomock.Any(), order.ID).
+					Times(1).
+					Return([]db.OrderPackagingItem{}, nil)
 				store.EXPECT().
 					ListProfitSharingOrdersByOrderIDsForMerchant(gomock.Any(), gomock.Any()).
 					Times(1).
@@ -2938,11 +3151,25 @@ func TestGetMerchantOrderAPI(t *testing.T) {
 					ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).
 					Times(1).
 					Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				store.EXPECT().
+					ListOrderPackagingItems(gomock.Any(), order.ID).
+					Times(1).
+					Return([]db.OrderPackagingItem{{
+						ID:        8302,
+						OrderID:   order.ID,
+						Name:      "历史餐盒",
+						UnitPrice: 150,
+						Quantity:  1,
+						Subtotal:  150,
+					}}, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var resp orderResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, int64(150), resp.PackagingFee)
+				require.Len(t, resp.PackagingItems, 1)
+				require.Equal(t, "历史餐盒", resp.PackagingItems[0].Name)
 				require.Nil(t, resp.FeeBreakdown)
 			},
 		},
@@ -2987,6 +3214,10 @@ func TestGetMerchantOrderAPI(t *testing.T) {
 						Subtotal:       1000,
 						Customizations: []byte("not-json"),
 					}}, nil)
+				store.EXPECT().
+					ListOrderPackagingItems(gomock.Any(), order.ID).
+					Times(1).
+					Return([]db.OrderPackagingItem{}, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusInternalServerError, recorder.Code)
@@ -3014,6 +3245,10 @@ func TestGetMerchantOrderAPI(t *testing.T) {
 					ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).
 					Times(1).
 					Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				store.EXPECT().
+					ListOrderPackagingItems(gomock.Any(), order.ID).
+					Times(1).
+					Return([]db.OrderPackagingItem{}, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusInternalServerError, recorder.Code)
@@ -3616,6 +3851,7 @@ func TestListMerchantOrderPrintJobsAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
 				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
 				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				expectNoOrderPackagingItems(store, order.ID)
 				store.EXPECT().ListPrintLogsByOrder(gomock.Any(), order.ID).Times(1).Return(printLogs, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -3712,6 +3948,7 @@ func TestGetMerchantOrderPrintJobStatusAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
 				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
 				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				expectNoOrderPackagingItems(store, order.ID)
 				store.EXPECT().GetPrintLog(gomock.Any(), printLog.ID).Times(1).Return(printLog, nil)
 				store.EXPECT().GetCloudPrinterIncludingDeleted(gomock.Any(), printer.ID).Times(1).Return(printer, nil)
 			},
@@ -3743,6 +3980,7 @@ func TestGetMerchantOrderPrintJobStatusAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
 				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
 				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				expectNoOrderPackagingItems(store, order.ID)
 				store.EXPECT().GetPrintLog(gomock.Any(), printLog.ID).Times(1).Return(printLog, nil)
 				store.EXPECT().GetCloudPrinterIncludingDeleted(gomock.Any(), printer.ID).Times(1).Return(shangpengPrinter, nil)
 			},
@@ -3776,6 +4014,7 @@ func TestGetMerchantOrderPrintJobStatusAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
 				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
 				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				expectNoOrderPackagingItems(store, order.ID)
 				noVendorLog := printLog
 				noVendorLog.VendorOrderID = pgtype.Text{}
 				store.EXPECT().GetPrintLog(gomock.Any(), printLog.ID).Times(1).Return(noVendorLog, nil)
@@ -3806,6 +4045,7 @@ func TestGetMerchantOrderPrintJobStatusAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
 				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
 				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				expectNoOrderPackagingItems(store, order.ID)
 				store.EXPECT().GetPrintLog(gomock.Any(), printLog.ID).Times(1).Return(printLog, nil)
 				store.EXPECT().GetCloudPrinterIncludingDeleted(gomock.Any(), printer.ID).Times(1).Return(deletedPrinter, nil)
 			},
@@ -3838,6 +4078,7 @@ func TestGetMerchantOrderPrintJobStatusAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
 				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
 				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				expectNoOrderPackagingItems(store, order.ID)
 				store.EXPECT().GetPrintLog(gomock.Any(), printLog.ID).Times(1).Return(printLog, nil)
 				store.EXPECT().GetCloudPrinterIncludingDeleted(gomock.Any(), printer.ID).Times(1).Return(foreignPrinter, nil)
 			},
@@ -4113,6 +4354,7 @@ func TestRetryMerchantOrderPrintJobAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
 				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
 				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				expectNoOrderPackagingItems(store, order.ID)
 				store.EXPECT().GetPrintLog(gomock.Any(), currentPrintLog.ID).Times(1).Return(currentPrintLog, nil)
 				store.EXPECT().GetLatestPrintLogByOrderAndPrinter(gomock.Any(), db.GetLatestPrintLogByOrderAndPrinterParams{OrderID: order.ID, PrinterID: printer.ID}).Times(1).Return(currentPrintLog, nil)
 				store.EXPECT().GetCloudPrinterIncludingDeleted(gomock.Any(), printer.ID).Times(1).Return(printer, nil)
@@ -4147,6 +4389,7 @@ func TestRetryMerchantOrderPrintJobAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
 				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
 				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				expectNoOrderPackagingItems(store, order.ID)
 				store.EXPECT().GetPrintLog(gomock.Any(), currentPrintLog.ID).Times(1).Return(currentPrintLog, nil)
 				store.EXPECT().GetLatestPrintLogByOrderAndPrinter(gomock.Any(), db.GetLatestPrintLogByOrderAndPrinterParams{OrderID: order.ID, PrinterID: printer.ID}).Times(1).Return(currentPrintLog, nil)
 				store.EXPECT().GetCloudPrinterIncludingDeleted(gomock.Any(), printer.ID).Times(1).Return(shangpengPrinter, nil)
@@ -4181,6 +4424,7 @@ func TestRetryMerchantOrderPrintJobAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
 				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
 				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				expectNoOrderPackagingItems(store, order.ID)
 				store.EXPECT().GetPrintLog(gomock.Any(), currentPrintLog.ID).Times(1).Return(currentPrintLog, nil)
 				store.EXPECT().GetLatestPrintLogByOrderAndPrinter(gomock.Any(), db.GetLatestPrintLogByOrderAndPrinterParams{OrderID: order.ID, PrinterID: printer.ID}).Times(1).Return(currentPrintLog, nil)
 				store.EXPECT().GetCloudPrinterIncludingDeleted(gomock.Any(), printer.ID).Times(1).Return(inactivePrinter, nil)
@@ -4200,6 +4444,7 @@ func TestRetryMerchantOrderPrintJobAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
 				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
 				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				expectNoOrderPackagingItems(store, order.ID)
 				store.EXPECT().GetPrintLog(gomock.Any(), currentPrintLog.ID).Times(1).Return(currentPrintLog, nil)
 				store.EXPECT().GetLatestPrintLogByOrderAndPrinter(gomock.Any(), db.GetLatestPrintLogByOrderAndPrinterParams{OrderID: order.ID, PrinterID: printer.ID}).Times(1).Return(currentPrintLog, nil)
 				store.EXPECT().GetCloudPrinterIncludingDeleted(gomock.Any(), printer.ID).Times(1).Return(deletedPrinter, nil)
@@ -4220,6 +4465,7 @@ func TestRetryMerchantOrderPrintJobAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
 				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
 				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				expectNoOrderPackagingItems(store, order.ID)
 				store.EXPECT().GetPrintLog(gomock.Any(), currentPrintLog.ID).Times(1).Return(currentPrintLog, nil)
 				distributor.EXPECT().DistributeTaskPrintOrder(gomock.Any(), gomock.Any()).Times(0)
 			},
@@ -4237,6 +4483,7 @@ func TestRetryMerchantOrderPrintJobAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
 				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
 				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				expectNoOrderPackagingItems(store, order.ID)
 				store.EXPECT().GetPrintLog(gomock.Any(), currentPrintLog.ID).Times(1).Return(currentPrintLog, nil)
 				store.EXPECT().GetLatestPrintLogByOrderAndPrinter(gomock.Any(), db.GetLatestPrintLogByOrderAndPrinterParams{OrderID: order.ID, PrinterID: printer.ID}).Times(1).Return(latestPrintLog, nil)
 				distributor.EXPECT().DistributeTaskPrintOrder(gomock.Any(), gomock.Any()).Times(0)
@@ -4466,13 +4713,23 @@ func TestListOrdersAPI(t *testing.T) {
 			MerchantName:      "测试商户",
 			OrderType:         "takeaway",
 			Subtotal:          1000,
-			TotalAmount:       1000,
+			PackagingFee:      150,
+			TotalAmount:       1150,
 			Status:            "pending",
 			CreatedAt:         time.Now(),
 			CombinedPaymentID: pgtype.Int8{Int64: 9002, Valid: true},
 			CombineOutTradeNo: "CP202604061234560002",
 		},
 	}
+	packagingItems := []db.OrderPackagingItem{{
+		ID:                9101,
+		OrderID:           orders[0].ID,
+		PackagingOptionID: pgtype.Int8{Int64: 9201, Valid: true},
+		Name:              "环保餐盒",
+		UnitPrice:         150,
+		Quantity:          1,
+		Subtotal:          150,
+	}}
 
 	testCases := []struct {
 		name          string
@@ -4496,6 +4753,10 @@ func TestListOrdersAPI(t *testing.T) {
 					CountOrdersByUserWithFilters(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(int64(21), nil)
+				store.EXPECT().
+					ListOrderPackagingItemsByOrderIDs(gomock.Any(), gomock.Eq([]int64{orders[0].ID})).
+					Times(1).
+					Return(packagingItems, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -4504,6 +4765,11 @@ func TestListOrdersAPI(t *testing.T) {
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Len(t, response.Orders, 1)
 				require.Equal(t, int64(21), response.Total)
+				require.Equal(t, int64(150), response.Orders[0].PackagingFee)
+				require.Len(t, response.Orders[0].PackagingItems, 1)
+				require.Equal(t, int64(9201), *response.Orders[0].PackagingItems[0].PackagingOptionID)
+				require.Equal(t, "环保餐盒", response.Orders[0].PackagingItems[0].Name)
+				require.Equal(t, int64(150), response.Orders[0].PackagingItems[0].Subtotal)
 				require.NotNil(t, response.Orders[0].PaymentContext)
 				require.Equal(t, int64(9002), response.Orders[0].PaymentContext.CombinedPaymentID)
 				require.Equal(t, "CP202604061234560002", response.Orders[0].PaymentContext.CombineOutTradeNo)

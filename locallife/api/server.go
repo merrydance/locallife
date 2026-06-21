@@ -779,7 +779,19 @@ func (server *Server) setupRouter() {
 		merchantStaffOwnerGroup.DELETE("/:id", server.deleteMerchantStaff)
 	}
 
-	// M3.6: 集团入驻申请
+	// M3.6: 商户包装设置（老板/店长）
+	merchantPackagingGroup := authGroup.Group("/merchant")
+	merchantPackagingGroup.Use(server.MerchantStaffMiddleware("owner", "manager"))
+	{
+		merchantPackagingGroup.GET("/packaging-settings", server.getMerchantPackagingSettings)
+		merchantPackagingGroup.PUT("/packaging-settings", server.upsertMerchantPackagingSettings)
+		merchantPackagingGroup.GET("/packaging-options", server.listMerchantPackagingOptions)
+		merchantPackagingGroup.POST("/packaging-options", server.createMerchantPackagingOption)
+		merchantPackagingGroup.PUT("/packaging-options/:id", server.updateMerchantPackagingOption)
+		merchantPackagingGroup.DELETE("/packaging-options/:id", server.deleteMerchantPackagingOption)
+	}
+
+	// M3.7: 集团入驻申请
 	groupAppGroup := authGroup.Group("/groups/applications")
 	{
 		groupAppGroup.POST("", server.createGroupApplicationDraft)
@@ -790,7 +802,7 @@ func (server *Server) setupRouter() {
 		groupAppGroup.POST("/:id/review", server.CasbinRoleMiddleware(RoleAdmin), server.reviewGroupApplication)
 	}
 
-	// M3.7: 集团/品牌管理
+	// M3.8: 集团/品牌管理
 	groupsGroup := authGroup.Group("/groups")
 	{
 		groupsGroup.GET("", server.searchGroups)
@@ -1549,6 +1561,8 @@ func (server *Server) setupRouter() {
 		cartGroup.POST("/items", server.addCartItem)
 		cartGroup.PATCH("/items/:id", server.updateCartItem)
 		cartGroup.DELETE("/items/:id", server.deleteCartItem)
+		cartGroup.PUT("/packaging-selection", server.putCartPackagingSelection)
+		cartGroup.DELETE("/packaging-selection", server.deleteCartPackagingSelection)
 		cartGroup.POST("/clear", server.clearCart)
 		cartGroup.POST("/calculate", server.calculateCart)
 	}

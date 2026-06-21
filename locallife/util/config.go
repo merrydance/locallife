@@ -167,6 +167,10 @@ type Config struct {
 	// Rules engine toggle
 	RulesEngineEnabled bool `mapstructure:"RULES_ENGINE_ENABLED"`
 
+	// Legacy packaging dish freeze rollout. Defaults off until customer and
+	// merchant clients are fully cut over to the packaging domain.
+	PackagingLegacyDishFreezeEnabled bool `mapstructure:"PACKAGING_LEGACY_DISH_FREEZE_ENABLED"`
+
 	// Claim final adjudicator rollout toggle. Region scope is still controlled
 	// by platform_configs so rollout can be changed without restarting.
 	ClaimFinalAdjudicatorEnabled bool `mapstructure:"CLAIM_FINAL_ADJUDICATOR_ENABLED"`
@@ -511,6 +515,7 @@ func LoadConfig(path string) (config Config, err error) {
 	v.SetDefault("WS_RELIABLE_ENABLED", true)
 	v.SetDefault("WS_RELIABLE_PERCENT", 100)
 	v.SetDefault("RULES_ENGINE_ENABLED", false)
+	v.SetDefault("PACKAGING_LEGACY_DISH_FREEZE_ENABLED", false)
 	// Geofence defaults
 	v.SetDefault("GEOFENCE_RADIUS_M", 80)
 	v.SetDefault("GEOFENCE_DWELL_MIN_SECONDS", 60)

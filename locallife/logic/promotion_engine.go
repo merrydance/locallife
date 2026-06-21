@@ -12,6 +12,7 @@ import (
 // PriceCalculationResult describes the result of promotion calculation.
 type PriceCalculationResult struct {
 	Subtotal            int64              `json:"subtotal"`
+	PackagingFee        int64              `json:"packaging_fee"`
 	DeliveryFee         int64              `json:"delivery_fee"`
 	DeliveryFeeDiscount int64              `json:"delivery_fee_discount"`
 	VoucherDiscount     int64              `json:"voucher_discount"`
@@ -71,6 +72,7 @@ type OrderContext struct {
 	UserID              int64
 	OrderType           string
 	Subtotal            int64
+	PackagingFee        int64
 	VoucherID           *int64
 	DeliveryFee         int64
 	DeliveryFeeDiscount int64
@@ -91,6 +93,7 @@ func NewPromotionEngine(store db.Store) *PromotionEngine {
 func (engine *PromotionEngine) CalculateFinalPrice(ctx context.Context, opt OrderContext) (*PriceCalculationResult, error) {
 	res := &PriceCalculationResult{
 		Subtotal:            opt.Subtotal,
+		PackagingFee:        opt.PackagingFee,
 		DeliveryFee:         opt.DeliveryFee,
 		DeliveryFeeDiscount: opt.DeliveryFeeDiscount,
 		AppliedPromotions:   []AppliedPromotion{},
@@ -157,7 +160,7 @@ func (engine *PromotionEngine) CalculateFinalPrice(ctx context.Context, opt Orde
 	}
 
 	// Final total
-	res.TotalAmount = res.Subtotal + res.DeliveryFee - res.DeliveryFeeDiscount - res.VoucherDiscount - res.MerchantDiscount
+	res.TotalAmount = res.Subtotal + res.PackagingFee + res.DeliveryFee - res.DeliveryFeeDiscount - res.VoucherDiscount - res.MerchantDiscount
 	if res.TotalAmount < 0 {
 		res.TotalAmount = 0
 	}
@@ -315,7 +318,7 @@ func buildVoucherTrials(vouchers []db.ListUserAvailableVouchersForMerchantRow, o
 	if len(vouchers) == 0 {
 		return []VoucherTrial{}
 	}
-	base := calc.Subtotal + calc.DeliveryFee - calc.DeliveryFeeDiscount - calc.MerchantDiscount
+	base := calc.Subtotal + calc.PackagingFee + calc.DeliveryFee - calc.DeliveryFeeDiscount - calc.MerchantDiscount
 	if base < 0 {
 		base = 0
 	}

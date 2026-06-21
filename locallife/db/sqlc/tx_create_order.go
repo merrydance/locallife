@@ -18,6 +18,7 @@ var ErrReservationActiveOrderConflict = errors.New("reservation already has an a
 type CreateOrderTxParams struct {
 	CreateOrderParams                   CreateOrderParams
 	Items                               []CreateOrderItemParams
+	PackagingItems                      []CreateOrderPackagingItemParams
 	BillingGroupID                      *int64
 	EnforceSingleActiveReservationOrder bool
 	IdempotencyOperationScope           string
@@ -47,6 +48,7 @@ type CreateOrderTxParams struct {
 type CreateOrderTxResult struct {
 	Order               Order
 	Items               []OrderItem
+	PackagingItems      []OrderPackagingItem
 	UserVoucher         *UserVoucher           // 如果使用了优惠券
 	Membership          *MerchantMembership    // 如果使用了余额
 	Transaction         *MembershipTransaction // 余额消费记录
@@ -77,8 +79,13 @@ func (store *SQLStore) CreateOrderTx(ctx context.Context, arg CreateOrderTxParam
 				if listErr != nil {
 					return fmt.Errorf("list idempotent order items: %w", listErr)
 				}
+				packagingItems, listPackagingErr := q.ListOrderPackagingItems(ctx, order.ID)
+				if listPackagingErr != nil {
+					return fmt.Errorf("list idempotent order packaging items: %w", listPackagingErr)
+				}
 				result.Order = order
 				result.Items = items
+				result.PackagingItems = packagingItems
 				result.IdempotencyReplayed = true
 				return nil
 			}
@@ -174,6 +181,17 @@ func (store *SQLStore) CreateOrderTx(ctx context.Context, arg CreateOrderTxParam
 				return fmt.Errorf("create order item: %w", err)
 			}
 			result.Items = append(result.Items, orderItem)
+		}
+
+		// 4.1 创建订单包装快照（可选）
+		result.PackagingItems = make([]OrderPackagingItem, 0, len(arg.PackagingItems))
+		for _, item := range arg.PackagingItems {
+			item.OrderID = result.Order.ID
+			packagingItem, err := q.CreateOrderPackagingItem(ctx, item)
+			if err != nil {
+				return fmt.Errorf("create order packaging item: %w", err)
+			}
+			result.PackagingItems = append(result.PackagingItems, packagingItem)
 		}
 
 		// 4.1 账单组订单关联（可选）
@@ -332,6 +350,9 @@ func ensureOrderCreateIdempotencyBinding(ctx context.Context, q *Queries, arg Cr
 	})
 	if err != nil {
 		return nil, fmt.Errorf("get order request idempotency: %w", err)
+	}
+	if existing.OrderID.Valid {
+		return &existing, nil
 	}
 	if strings.TrimSpace(existing.RequestHash) != createParams.RequestHash {
 		return nil, &requestError{statusCode: http.StatusConflict, err: fmt.Errorf("idempotency key already used by a different order create request: %w", ErrOrderCreateIdempotencyConflict)}

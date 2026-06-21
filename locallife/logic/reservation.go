@@ -111,20 +111,21 @@ type ValidatedReservationItem struct {
 
 // CreateReservationInput contains required data to create a reservation.
 type CreateReservationInput struct {
-	UserID              int64
-	TableID             int64
-	ReservationDate     time.Time
-	ReservationTime     time.Time
-	GuestCount          int16
-	ContactName         string
-	ContactPhone        string
-	PaymentMode         string
-	Notes               string
-	Items               []ReservationItemInput
-	Now                 time.Time
-	PaymentTimeoutMins  int
-	RefundDeadlineHours int
-	DefaultDeposit      int64
+	UserID                      int64
+	TableID                     int64
+	ReservationDate             time.Time
+	ReservationTime             time.Time
+	GuestCount                  int16
+	ContactName                 string
+	ContactPhone                string
+	PaymentMode                 string
+	Notes                       string
+	Items                       []ReservationItemInput
+	RejectLegacyPackagingDishes bool
+	Now                         time.Time
+	PaymentTimeoutMins          int
+	RefundDeadlineHours         int
+	DefaultDeposit              int64
 }
 
 // CreateReservationResult returns the created reservation.
@@ -265,7 +266,9 @@ func CreateReservation(ctx context.Context, store db.Store, input CreateReservat
 		}
 	case paymentModeFull:
 		if len(input.Items) > 0 {
-			validatedItems, prepaidAmount, err = ValidateReservationItems(ctx, store, table.MerchantID, input.Items)
+			validatedItems, prepaidAmount, err = ValidateReservationItems(ctx, store, table.MerchantID, input.Items, ValidateReservationItemsOptions{
+				RejectLegacyPackagingDishes: input.RejectLegacyPackagingDishes,
+			})
 			if err != nil {
 				return result, err
 			}
@@ -866,10 +869,18 @@ func StartCookingReservation(ctx context.Context, store db.Store, userID, reserv
 	return ReservationStatusUpdateResult{Reservation: updated, PreviousStatus: reservation.Status}, nil
 }
 
+type ValidateReservationItemsOptions struct {
+	RejectLegacyPackagingDishes bool
+}
+
 // ValidateReservationItems validates reservation items and returns pricing totals.
-func ValidateReservationItems(ctx context.Context, store db.Store, merchantID int64, items []ReservationItemInput) ([]ValidatedReservationItem, int64, error) {
+func ValidateReservationItems(ctx context.Context, store db.Store, merchantID int64, items []ReservationItemInput, options ...ValidateReservationItemsOptions) ([]ValidatedReservationItem, int64, error) {
 	var total int64
 	validated := make([]ValidatedReservationItem, 0, len(items))
+	opts := ValidateReservationItemsOptions{}
+	if len(options) > 0 {
+		opts = options[0]
+	}
 
 	for _, item := range items {
 		if item.DishID == nil && item.ComboID == nil {
@@ -890,6 +901,9 @@ func ValidateReservationItems(ctx context.Context, store db.Store, merchantID in
 			}
 			if dish.MerchantID != merchantID {
 				return nil, 0, NewRequestError(http.StatusBadRequest, fmt.Errorf("菜品 %s 不属于该商户", dish.Name))
+			}
+			if opts.RejectLegacyPackagingDishes && dish.IsPackaging {
+				return nil, 0, NewRequestError(http.StatusBadRequest, errors.New("包装已迁移到包装设置，请在包装设置中维护"))
 			}
 			if !dish.IsOnline {
 				return nil, 0, NewRequestError(http.StatusBadRequest, fmt.Errorf("菜品 %s 已下架", dish.Name))
@@ -914,7 +928,7 @@ func ValidateReservationItems(ctx context.Context, store db.Store, merchantID in
 			if !combo.IsOnline {
 				return nil, 0, NewRequestError(http.StatusBadRequest, fmt.Errorf("套餐 %s 已下架", combo.Name))
 			}
-			if err := validateComboChildDishesOrderable(ctx, store, combo.ID, combo.Name); err != nil {
+			if err := validateComboChildDishesOrderable(ctx, store, combo.ID, combo.Name, opts.RejectLegacyPackagingDishes); err != nil {
 				return nil, 0, err
 			}
 			unitPrice = combo.ComboPrice

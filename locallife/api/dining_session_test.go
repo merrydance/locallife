@@ -585,11 +585,17 @@ func TestGetDiningSessionMenuAPI(t *testing.T) {
 		Times(1).
 		Return([]db.ListDishCategoriesRow{}, nil)
 	store.EXPECT().
-		ListDishesForMenu(gomock.Any(), merchant.ID).
+		ListDishesForMenu(gomock.Any(), db.ListDishesForMenuParams{
+			MerchantID:       merchant.ID,
+			ExcludePackaging: false,
+		}).
 		Times(1).
 		Return([]db.ListDishesForMenuRow{}, nil)
 	store.EXPECT().
-		ListOnlineCombosByMerchant(gomock.Any(), merchant.ID).
+		ListOnlineCombosByMerchant(gomock.Any(), db.ListOnlineCombosByMerchantParams{
+			MerchantID:       merchant.ID,
+			ExcludePackaging: false,
+		}).
 		Times(1).
 		Return([]db.ListOnlineCombosByMerchantRow{}, nil)
 	store.EXPECT().

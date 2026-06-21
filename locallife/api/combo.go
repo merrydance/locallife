@@ -194,7 +194,7 @@ func validateComboDishOrderable(dishName string, isOnline bool, isAvailable bool
 	return nil
 }
 
-func (server *Server) validateExistingComboDishesOrderable(ctx context.Context, comboID int64, requireNonEmpty bool) (int, error) {
+func (server *Server) validateExistingComboDishesOrderable(ctx context.Context, comboID int64, requireNonEmpty bool, rejectLegacyPackaging bool) (int, error) {
 	dishes, err := server.store.ListComboDishOrderability(ctx, comboID)
 	if err != nil {
 		return http.StatusInternalServerError, err
@@ -212,6 +212,9 @@ func (server *Server) validateExistingComboDishesOrderable(ctx context.Context, 
 		}
 		if err := validateComboDishOrderable(dishName, dish.IsOnline, dish.IsAvailable); err != nil {
 			return http.StatusBadRequest, err
+		}
+		if rejectLegacyPackaging && dish.IsPackaging {
+			return http.StatusNotFound, fmt.Errorf("dish %s is unavailable", dishName)
 		}
 	}
 	return 0, nil
@@ -509,7 +512,7 @@ func (server *Server) getComboSet(ctx *gin.Context) {
 		IsOpen:        isOpen,
 	}
 
-	server.enrichSingleComboImages(ctx, &resp)
+	server.enrichSingleComboImages(ctx, &resp, false)
 	ctx.JSON(http.StatusOK, resp)
 }
 
@@ -549,7 +552,7 @@ func (server *Server) getPublicComboDetail(ctx *gin.Context) {
 		return
 	}
 
-	statusCode, err := server.validateExistingComboDishesOrderable(ctx, result.ID, true)
+	statusCode, err := server.validateExistingComboDishesOrderable(ctx, result.ID, true, server.legacyPackagingDishFreezeEnabled())
 	if err != nil {
 		if statusCode == http.StatusInternalServerError {
 			ctx.JSON(statusCode, internalError(ctx, err))
@@ -586,7 +589,7 @@ func (server *Server) getPublicComboDetail(ctx *gin.Context) {
 		IsOpen:        isOpen,
 	}
 
-	server.enrichSingleComboImages(ctx, &resp)
+	server.enrichSingleComboImages(ctx, &resp, server.legacyPackagingDishFreezeEnabled())
 
 	ctx.JSON(http.StatusOK, resp)
 }
@@ -821,7 +824,7 @@ func (server *Server) updateComboSet(ctx *gin.Context) {
 		dishesWithQty = &resolvedSummary.Dishes
 		params.OriginalPrice = pgtype.Int8{Int64: resolvedSummary.OriginalPrice, Valid: true}
 	} else if params.IsOnline.Bool {
-		statusCode, err := server.validateExistingComboDishesOrderable(ctx, existingCombo.ID, true)
+		statusCode, err := server.validateExistingComboDishesOrderable(ctx, existingCombo.ID, true, false)
 		if err != nil {
 			if statusCode == http.StatusInternalServerError {
 				ctx.JSON(statusCode, internalError(ctx, err))
@@ -923,7 +926,7 @@ func (server *Server) toggleComboOnline(ctx *gin.Context) {
 	}
 
 	if *bodyReq.IsOnline {
-		statusCode, err := server.validateExistingComboDishesOrderable(ctx, combo.ID, true)
+		statusCode, err := server.validateExistingComboDishesOrderable(ctx, combo.ID, true, false)
 		if err != nil {
 			if statusCode == http.StatusInternalServerError {
 				ctx.JSON(statusCode, internalError(ctx, err))
@@ -1046,7 +1049,10 @@ func (server *Server) enrichComboSetImages(ctx context.Context, combos []comboSe
 	}
 
 	// 批量查询成员图片
-	memberImages, err := server.store.GetComboMemberImagesByCombos(ctx, comboIDs)
+	memberImages, err := server.store.GetComboMemberImagesByCombos(ctx, db.GetComboMemberImagesByCombosParams{
+		Column1:          comboIDs,
+		ExcludePackaging: false,
+	})
 	if err != nil {
 		log.Error().Err(err).Msg("enrichComboListImages: failed to get combo member images")
 		return
@@ -1082,9 +1088,12 @@ func (server *Server) enrichComboSetImages(ctx context.Context, combos []comboSe
 }
 
 // enrichSingleComboImages 辅助函数：填充单个套餐的图片
-func (server *Server) enrichSingleComboImages(ctx context.Context, combo *comboSetWithDetailsResponse) {
+func (server *Server) enrichSingleComboImages(ctx context.Context, combo *comboSetWithDetailsResponse, excludePackaging bool) {
 	// 批量查询成员图片
-	memberImages, err := server.store.GetComboMemberImagesByCombos(ctx, []int64{combo.ID})
+	memberImages, err := server.store.GetComboMemberImagesByCombos(ctx, db.GetComboMemberImagesByCombosParams{
+		Column1:          []int64{combo.ID},
+		ExcludePackaging: excludePackaging,
+	})
 	if err != nil {
 		log.Error().Err(err).Int64("combo_id", combo.ID).Msg("enrichSingleComboImages: failed to get combo member images")
 		return

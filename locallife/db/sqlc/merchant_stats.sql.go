@@ -435,6 +435,7 @@ WHERE d.merchant_id = $1
   AND d.is_online = true
   AND d.is_available = true
   AND d.deleted_at IS NULL
+  AND (NOT $2::boolean OR d.is_packaging = false)
 ORDER BY
   COALESCE(mdc.sort_order, 999),
   CASE
@@ -445,6 +446,11 @@ ORDER BY
   d.sort_order,
   d.id
 `
+
+type GetMerchantDishesWithCategoryParams struct {
+	MerchantID       int64 `json:"merchant_id"`
+	ExcludePackaging bool  `json:"exclude_packaging"`
+}
 
 type GetMerchantDishesWithCategoryRow struct {
 	ID                  int64       `json:"id"`
@@ -465,8 +471,8 @@ type GetMerchantDishesWithCategoryRow struct {
 }
 
 // 获取商户所有在线菜品（含分类信息）- 消费者端使用
-func (q *Queries) GetMerchantDishesWithCategory(ctx context.Context, merchantID int64) ([]GetMerchantDishesWithCategoryRow, error) {
-	rows, err := q.db.Query(ctx, getMerchantDishesWithCategory, merchantID)
+func (q *Queries) GetMerchantDishesWithCategory(ctx context.Context, arg GetMerchantDishesWithCategoryParams) ([]GetMerchantDishesWithCategoryRow, error) {
+	rows, err := q.db.Query(ctx, getMerchantDishesWithCategory, arg.MerchantID, arg.ExcludePackaging)
 	if err != nil {
 		return nil, err
 	}
@@ -614,10 +620,16 @@ WHERE cs.merchant_id = $1
         OR d.deleted_at IS NOT NULL
         OR d.is_online IS DISTINCT FROM true
         OR d.is_available IS DISTINCT FROM true
+        OR ($2::boolean AND d.is_packaging = true)
       )
   )
 ORDER BY cs.id
 `
+
+type GetMerchantOnlineCombosParams struct {
+	MerchantID       int64 `json:"merchant_id"`
+	ExcludePackaging bool  `json:"exclude_packaging"`
+}
 
 type GetMerchantOnlineCombosRow struct {
 	ID                int64       `json:"id"`
@@ -632,8 +644,8 @@ type GetMerchantOnlineCombosRow struct {
 }
 
 // 获取商户所有在线套餐 - 消费者端使用
-func (q *Queries) GetMerchantOnlineCombos(ctx context.Context, merchantID int64) ([]GetMerchantOnlineCombosRow, error) {
-	rows, err := q.db.Query(ctx, getMerchantOnlineCombos, merchantID)
+func (q *Queries) GetMerchantOnlineCombos(ctx context.Context, arg GetMerchantOnlineCombosParams) ([]GetMerchantOnlineCombosRow, error) {
+	rows, err := q.db.Query(ctx, getMerchantOnlineCombos, arg.MerchantID, arg.ExcludePackaging)
 	if err != nil {
 		return nil, err
 	}
