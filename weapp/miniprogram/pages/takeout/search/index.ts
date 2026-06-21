@@ -141,11 +141,18 @@ Page({
       return
     }
 
-    // 有输入 → 切到建议态（清除上一次的建议失败状态）
-    this.setData({ showInitial: false, showSuggestions: true, showResults: false, suggestionsError: false, suggestionsErrorMessage: '' })
+    this.setData({
+      showInitial: false,
+      showSuggestions: false,
+      showResults: true,
+      resultsError: false,
+      resultsErrorMessage: '',
+      suggestionsError: false,
+      suggestionsErrorMessage: ''
+    })
 
     if (debounceTimer) clearTimeout(debounceTimer)
-    debounceTimer = setTimeout(() => this.fetchSuggestions(keyword), DEBOUNCE_MS)
+    debounceTimer = setTimeout(() => this.doSearch(keyword.trim()), DEBOUNCE_MS)
   },
 
   async fetchSuggestions(keyword: string) {

@@ -55,5 +55,13 @@ assert(
   pageSource.includes('activeResultTab: chooseTakeoutSearchResultTab({'),
   'takeout search page should set activeResultTab from result counts after each search'
 )
+assert(
+  pageSource.includes('debounceTimer = setTimeout(() => this.doSearch(keyword.trim()), DEBOUNCE_MS)'),
+  'typing in takeout search should debounce the real combined search instead of stopping in suggestions state'
+)
+assert(
+  !pageSource.includes('showSuggestions: true'),
+  'takeout search should not switch typed input into a suggestions-only state'
+)
 
 console.log('takeout search result tab tests passed')
