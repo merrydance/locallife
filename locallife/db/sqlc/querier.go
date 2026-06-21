@@ -152,6 +152,8 @@ type Querier interface {
 	// 确认提现完成（冻结余额转为已提现）
 	ConfirmUserWithdraw(ctx context.Context, arg ConfirmUserWithdrawParams) (UserBalance, error)
 	ConfirmWebLoginSession(ctx context.Context, arg ConfirmWebLoginSessionParams) (WebLoginSession, error)
+	ConsumeBaofuWithdrawalAccountGuardAmount(ctx context.Context, arg ConsumeBaofuWithdrawalAccountGuardAmountParams) (BaofuWithdrawalAccountGuard, error)
+	ConsumeBaofuWithdrawalReservation(ctx context.Context, arg ConsumeBaofuWithdrawalReservationParams) (BaofuWithdrawalReservation, error)
 	ConsumeCloudPrinterAuthorizationSession(ctx context.Context, arg ConsumeCloudPrinterAuthorizationSessionParams) (CloudPrinterAuthorizationSession, error)
 	ConsumeRiderDepositCredit(ctx context.Context, arg ConsumeRiderDepositCreditParams) (RiderDepositCredit, error)
 	ConsumeWebLoginSession(ctx context.Context, id int64) (WebLoginSession, error)
@@ -323,6 +325,7 @@ type Querier interface {
 	CreateBaofuAccountOpeningFlow(ctx context.Context, arg CreateBaofuAccountOpeningFlowParams) (BaofuAccountOpeningFlow, error)
 	CreateBaofuFeeLedger(ctx context.Context, arg CreateBaofuFeeLedgerParams) (BaofuFeeLedger, error)
 	CreateBaofuWithdrawalOrder(ctx context.Context, arg CreateBaofuWithdrawalOrderParams) (BaofuWithdrawalOrder, error)
+	CreateBaofuWithdrawalReservation(ctx context.Context, arg CreateBaofuWithdrawalReservationParams) (BaofuWithdrawalReservation, error)
 	// ==============================
 	// behavior_actions
 	// ==============================
@@ -687,9 +690,14 @@ type Querier interface {
 	GetBaofuMerchantReportByReportNo(ctx context.Context, reportNo string) (BaofuMerchantReport, error)
 	GetBaofuPaymentOrderRefundGuardForUpdate(ctx context.Context, id int64) (GetBaofuPaymentOrderRefundGuardForUpdateRow, error)
 	GetBaofuVerifyFeePaymentByAttach(ctx context.Context, attach pgtype.Text) (PaymentOrder, error)
+	GetBaofuWithdrawalAccountGuardByOwner(ctx context.Context, arg GetBaofuWithdrawalAccountGuardByOwnerParams) (BaofuWithdrawalAccountGuard, error)
+	GetBaofuWithdrawalAccountGuardByOwnerForUpdate(ctx context.Context, arg GetBaofuWithdrawalAccountGuardByOwnerForUpdateParams) (BaofuWithdrawalAccountGuard, error)
 	GetBaofuWithdrawalOrder(ctx context.Context, id int64) (BaofuWithdrawalOrder, error)
 	GetBaofuWithdrawalOrderByIdempotency(ctx context.Context, arg GetBaofuWithdrawalOrderByIdempotencyParams) (BaofuWithdrawalOrder, error)
 	GetBaofuWithdrawalOrderByOutRequestNo(ctx context.Context, outRequestNo string) (BaofuWithdrawalOrder, error)
+	GetBaofuWithdrawalOrderForUpdate(ctx context.Context, id int64) (BaofuWithdrawalOrder, error)
+	GetBaofuWithdrawalReservationByOrderID(ctx context.Context, withdrawalOrderID int64) (BaofuWithdrawalReservation, error)
+	GetBaofuWithdrawalReservationByOrderIDForUpdate(ctx context.Context, withdrawalOrderID int64) (BaofuWithdrawalReservation, error)
 	GetBehaviorAction(ctx context.Context, id int64) (BehaviorAction, error)
 	GetBehaviorDecision(ctx context.Context, id int64) (BehaviorDecision, error)
 	GetBehaviorEffectSummary(ctx context.Context, arg GetBehaviorEffectSummaryParams) (GetBehaviorEffectSummaryRow, error)
@@ -1739,6 +1747,8 @@ type Querier interface {
 	// 审批拒绝区域扩展申请
 	RejectOperatorRegionApplication(ctx context.Context, arg RejectOperatorRegionApplicationParams) (OperatorRegionApplication, error)
 	RejectPendingGroupJoinRequest(ctx context.Context, arg RejectPendingGroupJoinRequestParams) (MerchantGroupJoinRequest, error)
+	ReleaseBaofuWithdrawalAccountGuardAmount(ctx context.Context, arg ReleaseBaofuWithdrawalAccountGuardAmountParams) (BaofuWithdrawalAccountGuard, error)
+	ReleaseBaofuWithdrawalReservation(ctx context.Context, arg ReleaseBaofuWithdrawalReservationParams) (BaofuWithdrawalReservation, error)
 	ReleaseMerchantTakeoutSuspensionIfOwned(ctx context.Context, arg ReleaseMerchantTakeoutSuspensionIfOwnedParams) (int64, error)
 	ReleaseReservedInventory(ctx context.Context, arg ReleaseReservedInventoryParams) (DailyInventory, error)
 	ReleaseRiderSuspensionIfOwned(ctx context.Context, arg ReleaseRiderSuspensionIfOwnedParams) (int64, error)
@@ -1764,6 +1774,7 @@ type Querier interface {
 	RemoveTableTag(ctx context.Context, arg RemoveTableTagParams) error
 	// 续约运营商合同
 	RenewOperatorContract(ctx context.Context, arg RenewOperatorContractParams) (Operator, error)
+	ReserveBaofuWithdrawalAccountGuardAmount(ctx context.Context, arg ReserveBaofuWithdrawalAccountGuardAmountParams) (BaofuWithdrawalAccountGuard, error)
 	ReserveInventory(ctx context.Context, arg ReserveInventoryParams) (DailyInventory, error)
 	ResetGroupApplicationToDraft(ctx context.Context, id int64) (MerchantGroupApplication, error)
 	// 重置申请为草稿状态（允许用户重新编辑，支持从待审核、被拒绝或已通过状态重置）
@@ -2073,6 +2084,7 @@ type Querier interface {
 	UpsertBaofuAccountBinding(ctx context.Context, arg UpsertBaofuAccountBindingParams) (BaofuAccountBinding, error)
 	UpsertBaofuAccountOpeningProfile(ctx context.Context, arg UpsertBaofuAccountOpeningProfileParams) (BaofuAccountOpeningProfile, error)
 	UpsertBaofuMerchantReportProcessing(ctx context.Context, arg UpsertBaofuMerchantReportProcessingParams) (BaofuMerchantReport, error)
+	UpsertBaofuWithdrawalAccountGuardBalance(ctx context.Context, arg UpsertBaofuWithdrawalAccountGuardBalanceParams) (BaofuWithdrawalAccountGuard, error)
 	UpsertCartPackagingSelection(ctx context.Context, arg UpsertCartPackagingSelectionParams) (CartPackagingSelection, error)
 	UpsertCloudPrinterProviderAuthorization(ctx context.Context, arg UpsertCloudPrinterProviderAuthorizationParams) (CloudPrinterProviderAuthorization, error)
 	UpsertCloudPrinterReconciliationJob(ctx context.Context, arg UpsertCloudPrinterReconciliationJobParams) (CloudPrinterReconciliationJob, error)

@@ -203,6 +203,22 @@ type BaofuMerchantReport struct {
 	UpdatedAt       time.Time   `json:"updated_at"`
 }
 
+type BaofuWithdrawalAccountGuard struct {
+	ID                         int64              `json:"id"`
+	OwnerType                  string             `json:"owner_type"`
+	OwnerID                    int64              `json:"owner_id"`
+	AccountBindingID           int64              `json:"account_binding_id"`
+	ProviderAvailableAmountFen int64              `json:"provider_available_amount_fen"`
+	ProviderPendingAmountFen   int64              `json:"provider_pending_amount_fen"`
+	ProviderLedgerAmountFen    int64              `json:"provider_ledger_amount_fen"`
+	ProviderFrozenAmountFen    int64              `json:"provider_frozen_amount_fen"`
+	ProviderBalanceObservedAt  pgtype.Timestamptz `json:"provider_balance_observed_at"`
+	ReservedAmountFen          int64              `json:"reserved_amount_fen"`
+	ConsumedWithdrawAmountFen  int64              `json:"consumed_withdraw_amount_fen"`
+	CreatedAt                  time.Time          `json:"created_at"`
+	UpdatedAt                  time.Time          `json:"updated_at"`
+}
+
 type BaofuWithdrawalOrder struct {
 	ID                     int64              `json:"id"`
 	OwnerType              string             `json:"owner_type"`
@@ -218,6 +234,22 @@ type BaofuWithdrawalOrder struct {
 	UpdatedAt              time.Time          `json:"updated_at"`
 	IdempotencyKey         pgtype.Text        `json:"idempotency_key"`
 	IdempotencyRequestHash pgtype.Text        `json:"idempotency_request_hash"`
+}
+
+type BaofuWithdrawalReservation struct {
+	ID                int64              `json:"id"`
+	WithdrawalOrderID int64              `json:"withdrawal_order_id"`
+	OwnerType         string             `json:"owner_type"`
+	OwnerID           int64              `json:"owner_id"`
+	AccountBindingID  int64              `json:"account_binding_id"`
+	AmountFen         int64              `json:"amount_fen"`
+	Status            string             `json:"status"`
+	ReleaseReason     pgtype.Text        `json:"release_reason"`
+	ReservedAt        time.Time          `json:"reserved_at"`
+	ConsumedAt        pgtype.Timestamptz `json:"consumed_at"`
+	ReleasedAt        pgtype.Timestamptz `json:"released_at"`
+	CreatedAt         time.Time          `json:"created_at"`
+	UpdatedAt         time.Time          `json:"updated_at"`
 }
 
 type BehaviorAction struct {

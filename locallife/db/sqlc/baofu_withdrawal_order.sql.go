@@ -12,6 +12,80 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const consumeBaofuWithdrawalAccountGuardAmount = `-- name: ConsumeBaofuWithdrawalAccountGuardAmount :one
+UPDATE baofu_withdrawal_account_guards
+SET
+    reserved_amount_fen = reserved_amount_fen - $1,
+    consumed_withdraw_amount_fen = consumed_withdraw_amount_fen + $1,
+    updated_at = now()
+WHERE id = $2
+  AND reserved_amount_fen >= $1
+RETURNING id, owner_type, owner_id, account_binding_id, provider_available_amount_fen, provider_pending_amount_fen, provider_ledger_amount_fen, provider_frozen_amount_fen, provider_balance_observed_at, reserved_amount_fen, consumed_withdraw_amount_fen, created_at, updated_at
+`
+
+type ConsumeBaofuWithdrawalAccountGuardAmountParams struct {
+	AmountFen int64 `json:"amount_fen"`
+	ID        int64 `json:"id"`
+}
+
+func (q *Queries) ConsumeBaofuWithdrawalAccountGuardAmount(ctx context.Context, arg ConsumeBaofuWithdrawalAccountGuardAmountParams) (BaofuWithdrawalAccountGuard, error) {
+	row := q.db.QueryRow(ctx, consumeBaofuWithdrawalAccountGuardAmount, arg.AmountFen, arg.ID)
+	var i BaofuWithdrawalAccountGuard
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerType,
+		&i.OwnerID,
+		&i.AccountBindingID,
+		&i.ProviderAvailableAmountFen,
+		&i.ProviderPendingAmountFen,
+		&i.ProviderLedgerAmountFen,
+		&i.ProviderFrozenAmountFen,
+		&i.ProviderBalanceObservedAt,
+		&i.ReservedAmountFen,
+		&i.ConsumedWithdrawAmountFen,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const consumeBaofuWithdrawalReservation = `-- name: ConsumeBaofuWithdrawalReservation :one
+UPDATE baofu_withdrawal_reservations
+SET
+    status = 'consumed',
+    consumed_at = $1,
+    updated_at = now()
+WHERE id = $2
+  AND status = 'reserved'
+RETURNING id, withdrawal_order_id, owner_type, owner_id, account_binding_id, amount_fen, status, release_reason, reserved_at, consumed_at, released_at, created_at, updated_at
+`
+
+type ConsumeBaofuWithdrawalReservationParams struct {
+	ConsumedAt pgtype.Timestamptz `json:"consumed_at"`
+	ID         int64              `json:"id"`
+}
+
+func (q *Queries) ConsumeBaofuWithdrawalReservation(ctx context.Context, arg ConsumeBaofuWithdrawalReservationParams) (BaofuWithdrawalReservation, error) {
+	row := q.db.QueryRow(ctx, consumeBaofuWithdrawalReservation, arg.ConsumedAt, arg.ID)
+	var i BaofuWithdrawalReservation
+	err := row.Scan(
+		&i.ID,
+		&i.WithdrawalOrderID,
+		&i.OwnerType,
+		&i.OwnerID,
+		&i.AccountBindingID,
+		&i.AmountFen,
+		&i.Status,
+		&i.ReleaseReason,
+		&i.ReservedAt,
+		&i.ConsumedAt,
+		&i.ReleasedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const countBaofuWithdrawalOrdersByOwner = `-- name: CountBaofuWithdrawalOrdersByOwner :one
 SELECT COUNT(*)::bigint
 FROM baofu_withdrawal_orders
@@ -95,6 +169,137 @@ func (q *Queries) CreateBaofuWithdrawalOrder(ctx context.Context, arg CreateBaof
 		&i.UpdatedAt,
 		&i.IdempotencyKey,
 		&i.IdempotencyRequestHash,
+	)
+	return i, err
+}
+
+const createBaofuWithdrawalReservation = `-- name: CreateBaofuWithdrawalReservation :one
+INSERT INTO baofu_withdrawal_reservations (
+    withdrawal_order_id,
+    owner_type,
+    owner_id,
+    account_binding_id,
+    amount_fen,
+    status,
+    reserved_at
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    'reserved',
+    $6
+)
+RETURNING id, withdrawal_order_id, owner_type, owner_id, account_binding_id, amount_fen, status, release_reason, reserved_at, consumed_at, released_at, created_at, updated_at
+`
+
+type CreateBaofuWithdrawalReservationParams struct {
+	WithdrawalOrderID int64     `json:"withdrawal_order_id"`
+	OwnerType         string    `json:"owner_type"`
+	OwnerID           int64     `json:"owner_id"`
+	AccountBindingID  int64     `json:"account_binding_id"`
+	AmountFen         int64     `json:"amount_fen"`
+	ReservedAt        time.Time `json:"reserved_at"`
+}
+
+func (q *Queries) CreateBaofuWithdrawalReservation(ctx context.Context, arg CreateBaofuWithdrawalReservationParams) (BaofuWithdrawalReservation, error) {
+	row := q.db.QueryRow(ctx, createBaofuWithdrawalReservation,
+		arg.WithdrawalOrderID,
+		arg.OwnerType,
+		arg.OwnerID,
+		arg.AccountBindingID,
+		arg.AmountFen,
+		arg.ReservedAt,
+	)
+	var i BaofuWithdrawalReservation
+	err := row.Scan(
+		&i.ID,
+		&i.WithdrawalOrderID,
+		&i.OwnerType,
+		&i.OwnerID,
+		&i.AccountBindingID,
+		&i.AmountFen,
+		&i.Status,
+		&i.ReleaseReason,
+		&i.ReservedAt,
+		&i.ConsumedAt,
+		&i.ReleasedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getBaofuWithdrawalAccountGuardByOwner = `-- name: GetBaofuWithdrawalAccountGuardByOwner :one
+SELECT id, owner_type, owner_id, account_binding_id, provider_available_amount_fen, provider_pending_amount_fen, provider_ledger_amount_fen, provider_frozen_amount_fen, provider_balance_observed_at, reserved_amount_fen, consumed_withdraw_amount_fen, created_at, updated_at
+FROM baofu_withdrawal_account_guards
+WHERE owner_type = $1
+  AND owner_id = $2
+  AND account_binding_id = $3
+LIMIT 1
+`
+
+type GetBaofuWithdrawalAccountGuardByOwnerParams struct {
+	OwnerType        string `json:"owner_type"`
+	OwnerID          int64  `json:"owner_id"`
+	AccountBindingID int64  `json:"account_binding_id"`
+}
+
+func (q *Queries) GetBaofuWithdrawalAccountGuardByOwner(ctx context.Context, arg GetBaofuWithdrawalAccountGuardByOwnerParams) (BaofuWithdrawalAccountGuard, error) {
+	row := q.db.QueryRow(ctx, getBaofuWithdrawalAccountGuardByOwner, arg.OwnerType, arg.OwnerID, arg.AccountBindingID)
+	var i BaofuWithdrawalAccountGuard
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerType,
+		&i.OwnerID,
+		&i.AccountBindingID,
+		&i.ProviderAvailableAmountFen,
+		&i.ProviderPendingAmountFen,
+		&i.ProviderLedgerAmountFen,
+		&i.ProviderFrozenAmountFen,
+		&i.ProviderBalanceObservedAt,
+		&i.ReservedAmountFen,
+		&i.ConsumedWithdrawAmountFen,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getBaofuWithdrawalAccountGuardByOwnerForUpdate = `-- name: GetBaofuWithdrawalAccountGuardByOwnerForUpdate :one
+SELECT id, owner_type, owner_id, account_binding_id, provider_available_amount_fen, provider_pending_amount_fen, provider_ledger_amount_fen, provider_frozen_amount_fen, provider_balance_observed_at, reserved_amount_fen, consumed_withdraw_amount_fen, created_at, updated_at
+FROM baofu_withdrawal_account_guards
+WHERE owner_type = $1
+  AND owner_id = $2
+  AND account_binding_id = $3
+LIMIT 1
+FOR UPDATE
+`
+
+type GetBaofuWithdrawalAccountGuardByOwnerForUpdateParams struct {
+	OwnerType        string `json:"owner_type"`
+	OwnerID          int64  `json:"owner_id"`
+	AccountBindingID int64  `json:"account_binding_id"`
+}
+
+func (q *Queries) GetBaofuWithdrawalAccountGuardByOwnerForUpdate(ctx context.Context, arg GetBaofuWithdrawalAccountGuardByOwnerForUpdateParams) (BaofuWithdrawalAccountGuard, error) {
+	row := q.db.QueryRow(ctx, getBaofuWithdrawalAccountGuardByOwnerForUpdate, arg.OwnerType, arg.OwnerID, arg.AccountBindingID)
+	var i BaofuWithdrawalAccountGuard
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerType,
+		&i.OwnerID,
+		&i.AccountBindingID,
+		&i.ProviderAvailableAmountFen,
+		&i.ProviderPendingAmountFen,
+		&i.ProviderLedgerAmountFen,
+		&i.ProviderFrozenAmountFen,
+		&i.ProviderBalanceObservedAt,
+		&i.ReservedAmountFen,
+		&i.ConsumedWithdrawAmountFen,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -190,6 +395,93 @@ func (q *Queries) GetBaofuWithdrawalOrderByOutRequestNo(ctx context.Context, out
 		&i.UpdatedAt,
 		&i.IdempotencyKey,
 		&i.IdempotencyRequestHash,
+	)
+	return i, err
+}
+
+const getBaofuWithdrawalOrderForUpdate = `-- name: GetBaofuWithdrawalOrderForUpdate :one
+SELECT id, owner_type, owner_id, account_binding_id, out_request_no, baofu_withdraw_no, amount, status, raw_snapshot, finished_at, created_at, updated_at, idempotency_key, idempotency_request_hash
+FROM baofu_withdrawal_orders
+WHERE id = $1
+LIMIT 1
+FOR UPDATE
+`
+
+func (q *Queries) GetBaofuWithdrawalOrderForUpdate(ctx context.Context, id int64) (BaofuWithdrawalOrder, error) {
+	row := q.db.QueryRow(ctx, getBaofuWithdrawalOrderForUpdate, id)
+	var i BaofuWithdrawalOrder
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerType,
+		&i.OwnerID,
+		&i.AccountBindingID,
+		&i.OutRequestNo,
+		&i.BaofuWithdrawNo,
+		&i.Amount,
+		&i.Status,
+		&i.RawSnapshot,
+		&i.FinishedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.IdempotencyKey,
+		&i.IdempotencyRequestHash,
+	)
+	return i, err
+}
+
+const getBaofuWithdrawalReservationByOrderID = `-- name: GetBaofuWithdrawalReservationByOrderID :one
+SELECT id, withdrawal_order_id, owner_type, owner_id, account_binding_id, amount_fen, status, release_reason, reserved_at, consumed_at, released_at, created_at, updated_at
+FROM baofu_withdrawal_reservations
+WHERE withdrawal_order_id = $1
+LIMIT 1
+`
+
+func (q *Queries) GetBaofuWithdrawalReservationByOrderID(ctx context.Context, withdrawalOrderID int64) (BaofuWithdrawalReservation, error) {
+	row := q.db.QueryRow(ctx, getBaofuWithdrawalReservationByOrderID, withdrawalOrderID)
+	var i BaofuWithdrawalReservation
+	err := row.Scan(
+		&i.ID,
+		&i.WithdrawalOrderID,
+		&i.OwnerType,
+		&i.OwnerID,
+		&i.AccountBindingID,
+		&i.AmountFen,
+		&i.Status,
+		&i.ReleaseReason,
+		&i.ReservedAt,
+		&i.ConsumedAt,
+		&i.ReleasedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getBaofuWithdrawalReservationByOrderIDForUpdate = `-- name: GetBaofuWithdrawalReservationByOrderIDForUpdate :one
+SELECT id, withdrawal_order_id, owner_type, owner_id, account_binding_id, amount_fen, status, release_reason, reserved_at, consumed_at, released_at, created_at, updated_at
+FROM baofu_withdrawal_reservations
+WHERE withdrawal_order_id = $1
+LIMIT 1
+FOR UPDATE
+`
+
+func (q *Queries) GetBaofuWithdrawalReservationByOrderIDForUpdate(ctx context.Context, withdrawalOrderID int64) (BaofuWithdrawalReservation, error) {
+	row := q.db.QueryRow(ctx, getBaofuWithdrawalReservationByOrderIDForUpdate, withdrawalOrderID)
+	var i BaofuWithdrawalReservation
+	err := row.Scan(
+		&i.ID,
+		&i.WithdrawalOrderID,
+		&i.OwnerType,
+		&i.OwnerID,
+		&i.AccountBindingID,
+		&i.AmountFen,
+		&i.Status,
+		&i.ReleaseReason,
+		&i.ReservedAt,
+		&i.ConsumedAt,
+		&i.ReleasedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -300,6 +592,117 @@ func (q *Queries) ListProcessingBaofuWithdrawalOrdersForRecovery(ctx context.Con
 	return items, nil
 }
 
+const releaseBaofuWithdrawalAccountGuardAmount = `-- name: ReleaseBaofuWithdrawalAccountGuardAmount :one
+UPDATE baofu_withdrawal_account_guards
+SET
+    reserved_amount_fen = reserved_amount_fen - $1,
+    updated_at = now()
+WHERE id = $2
+  AND reserved_amount_fen >= $1
+RETURNING id, owner_type, owner_id, account_binding_id, provider_available_amount_fen, provider_pending_amount_fen, provider_ledger_amount_fen, provider_frozen_amount_fen, provider_balance_observed_at, reserved_amount_fen, consumed_withdraw_amount_fen, created_at, updated_at
+`
+
+type ReleaseBaofuWithdrawalAccountGuardAmountParams struct {
+	AmountFen int64 `json:"amount_fen"`
+	ID        int64 `json:"id"`
+}
+
+func (q *Queries) ReleaseBaofuWithdrawalAccountGuardAmount(ctx context.Context, arg ReleaseBaofuWithdrawalAccountGuardAmountParams) (BaofuWithdrawalAccountGuard, error) {
+	row := q.db.QueryRow(ctx, releaseBaofuWithdrawalAccountGuardAmount, arg.AmountFen, arg.ID)
+	var i BaofuWithdrawalAccountGuard
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerType,
+		&i.OwnerID,
+		&i.AccountBindingID,
+		&i.ProviderAvailableAmountFen,
+		&i.ProviderPendingAmountFen,
+		&i.ProviderLedgerAmountFen,
+		&i.ProviderFrozenAmountFen,
+		&i.ProviderBalanceObservedAt,
+		&i.ReservedAmountFen,
+		&i.ConsumedWithdrawAmountFen,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const releaseBaofuWithdrawalReservation = `-- name: ReleaseBaofuWithdrawalReservation :one
+UPDATE baofu_withdrawal_reservations
+SET
+    status = 'released',
+    release_reason = $1,
+    released_at = $2,
+    updated_at = now()
+WHERE id = $3
+  AND status = 'reserved'
+RETURNING id, withdrawal_order_id, owner_type, owner_id, account_binding_id, amount_fen, status, release_reason, reserved_at, consumed_at, released_at, created_at, updated_at
+`
+
+type ReleaseBaofuWithdrawalReservationParams struct {
+	ReleaseReason pgtype.Text        `json:"release_reason"`
+	ReleasedAt    pgtype.Timestamptz `json:"released_at"`
+	ID            int64              `json:"id"`
+}
+
+func (q *Queries) ReleaseBaofuWithdrawalReservation(ctx context.Context, arg ReleaseBaofuWithdrawalReservationParams) (BaofuWithdrawalReservation, error) {
+	row := q.db.QueryRow(ctx, releaseBaofuWithdrawalReservation, arg.ReleaseReason, arg.ReleasedAt, arg.ID)
+	var i BaofuWithdrawalReservation
+	err := row.Scan(
+		&i.ID,
+		&i.WithdrawalOrderID,
+		&i.OwnerType,
+		&i.OwnerID,
+		&i.AccountBindingID,
+		&i.AmountFen,
+		&i.Status,
+		&i.ReleaseReason,
+		&i.ReservedAt,
+		&i.ConsumedAt,
+		&i.ReleasedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const reserveBaofuWithdrawalAccountGuardAmount = `-- name: ReserveBaofuWithdrawalAccountGuardAmount :one
+UPDATE baofu_withdrawal_account_guards
+SET
+    reserved_amount_fen = reserved_amount_fen + $1,
+    updated_at = now()
+WHERE id = $2
+  AND provider_available_amount_fen >= reserved_amount_fen + $1
+RETURNING id, owner_type, owner_id, account_binding_id, provider_available_amount_fen, provider_pending_amount_fen, provider_ledger_amount_fen, provider_frozen_amount_fen, provider_balance_observed_at, reserved_amount_fen, consumed_withdraw_amount_fen, created_at, updated_at
+`
+
+type ReserveBaofuWithdrawalAccountGuardAmountParams struct {
+	AmountFen int64 `json:"amount_fen"`
+	ID        int64 `json:"id"`
+}
+
+func (q *Queries) ReserveBaofuWithdrawalAccountGuardAmount(ctx context.Context, arg ReserveBaofuWithdrawalAccountGuardAmountParams) (BaofuWithdrawalAccountGuard, error) {
+	row := q.db.QueryRow(ctx, reserveBaofuWithdrawalAccountGuardAmount, arg.AmountFen, arg.ID)
+	var i BaofuWithdrawalAccountGuard
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerType,
+		&i.OwnerID,
+		&i.AccountBindingID,
+		&i.ProviderAvailableAmountFen,
+		&i.ProviderPendingAmountFen,
+		&i.ProviderLedgerAmountFen,
+		&i.ProviderFrozenAmountFen,
+		&i.ProviderBalanceObservedAt,
+		&i.ReservedAmountFen,
+		&i.ConsumedWithdrawAmountFen,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateBaofuWithdrawalOrderStatus = `-- name: UpdateBaofuWithdrawalOrderStatus :one
 UPDATE baofu_withdrawal_orders
 SET
@@ -383,6 +786,102 @@ func (q *Queries) UpdateBaofuWithdrawalOrderToProcessing(ctx context.Context, ar
 		&i.UpdatedAt,
 		&i.IdempotencyKey,
 		&i.IdempotencyRequestHash,
+	)
+	return i, err
+}
+
+const upsertBaofuWithdrawalAccountGuardBalance = `-- name: UpsertBaofuWithdrawalAccountGuardBalance :one
+INSERT INTO baofu_withdrawal_account_guards (
+    owner_type,
+    owner_id,
+    account_binding_id,
+    provider_available_amount_fen,
+    provider_pending_amount_fen,
+    provider_ledger_amount_fen,
+    provider_frozen_amount_fen,
+    provider_balance_observed_at
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7,
+    $8
+)
+ON CONFLICT (owner_type, owner_id, account_binding_id) DO UPDATE SET
+    provider_available_amount_fen = CASE
+        WHEN baofu_withdrawal_account_guards.provider_balance_observed_at IS NULL
+             OR EXCLUDED.provider_balance_observed_at >= baofu_withdrawal_account_guards.provider_balance_observed_at
+        THEN EXCLUDED.provider_available_amount_fen
+        ELSE baofu_withdrawal_account_guards.provider_available_amount_fen
+    END,
+    provider_pending_amount_fen = CASE
+        WHEN baofu_withdrawal_account_guards.provider_balance_observed_at IS NULL
+             OR EXCLUDED.provider_balance_observed_at >= baofu_withdrawal_account_guards.provider_balance_observed_at
+        THEN EXCLUDED.provider_pending_amount_fen
+        ELSE baofu_withdrawal_account_guards.provider_pending_amount_fen
+    END,
+    provider_ledger_amount_fen = CASE
+        WHEN baofu_withdrawal_account_guards.provider_balance_observed_at IS NULL
+             OR EXCLUDED.provider_balance_observed_at >= baofu_withdrawal_account_guards.provider_balance_observed_at
+        THEN EXCLUDED.provider_ledger_amount_fen
+        ELSE baofu_withdrawal_account_guards.provider_ledger_amount_fen
+    END,
+    provider_frozen_amount_fen = CASE
+        WHEN baofu_withdrawal_account_guards.provider_balance_observed_at IS NULL
+             OR EXCLUDED.provider_balance_observed_at >= baofu_withdrawal_account_guards.provider_balance_observed_at
+        THEN EXCLUDED.provider_frozen_amount_fen
+        ELSE baofu_withdrawal_account_guards.provider_frozen_amount_fen
+    END,
+    provider_balance_observed_at = CASE
+        WHEN baofu_withdrawal_account_guards.provider_balance_observed_at IS NULL
+             OR EXCLUDED.provider_balance_observed_at >= baofu_withdrawal_account_guards.provider_balance_observed_at
+        THEN EXCLUDED.provider_balance_observed_at
+        ELSE baofu_withdrawal_account_guards.provider_balance_observed_at
+    END,
+    updated_at = now()
+RETURNING id, owner_type, owner_id, account_binding_id, provider_available_amount_fen, provider_pending_amount_fen, provider_ledger_amount_fen, provider_frozen_amount_fen, provider_balance_observed_at, reserved_amount_fen, consumed_withdraw_amount_fen, created_at, updated_at
+`
+
+type UpsertBaofuWithdrawalAccountGuardBalanceParams struct {
+	OwnerType                  string             `json:"owner_type"`
+	OwnerID                    int64              `json:"owner_id"`
+	AccountBindingID           int64              `json:"account_binding_id"`
+	ProviderAvailableAmountFen int64              `json:"provider_available_amount_fen"`
+	ProviderPendingAmountFen   int64              `json:"provider_pending_amount_fen"`
+	ProviderLedgerAmountFen    int64              `json:"provider_ledger_amount_fen"`
+	ProviderFrozenAmountFen    int64              `json:"provider_frozen_amount_fen"`
+	ProviderBalanceObservedAt  pgtype.Timestamptz `json:"provider_balance_observed_at"`
+}
+
+func (q *Queries) UpsertBaofuWithdrawalAccountGuardBalance(ctx context.Context, arg UpsertBaofuWithdrawalAccountGuardBalanceParams) (BaofuWithdrawalAccountGuard, error) {
+	row := q.db.QueryRow(ctx, upsertBaofuWithdrawalAccountGuardBalance,
+		arg.OwnerType,
+		arg.OwnerID,
+		arg.AccountBindingID,
+		arg.ProviderAvailableAmountFen,
+		arg.ProviderPendingAmountFen,
+		arg.ProviderLedgerAmountFen,
+		arg.ProviderFrozenAmountFen,
+		arg.ProviderBalanceObservedAt,
+	)
+	var i BaofuWithdrawalAccountGuard
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerType,
+		&i.OwnerID,
+		&i.AccountBindingID,
+		&i.ProviderAvailableAmountFen,
+		&i.ProviderPendingAmountFen,
+		&i.ProviderLedgerAmountFen,
+		&i.ProviderFrozenAmountFen,
+		&i.ProviderBalanceObservedAt,
+		&i.ReservedAmountFen,
+		&i.ConsumedWithdrawAmountFen,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }

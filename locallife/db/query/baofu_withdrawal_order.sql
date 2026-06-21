@@ -21,6 +21,13 @@ INSERT INTO baofu_withdrawal_orders (
     sqlc.narg(idempotency_request_hash)
 ) RETURNING *;
 
+-- name: GetBaofuWithdrawalOrderForUpdate :one
+SELECT id, owner_type, owner_id, account_binding_id, out_request_no, baofu_withdraw_no, amount, status, raw_snapshot, finished_at, created_at, updated_at, idempotency_key, idempotency_request_hash
+FROM baofu_withdrawal_orders
+WHERE id = $1
+LIMIT 1
+FOR UPDATE;
+
 -- name: GetBaofuWithdrawalOrder :one
 SELECT id, owner_type, owner_id, account_binding_id, out_request_no, baofu_withdraw_no, amount, status, raw_snapshot, finished_at, created_at, updated_at, idempotency_key, idempotency_request_hash
 FROM baofu_withdrawal_orders
@@ -86,3 +93,156 @@ SET
 WHERE id = sqlc.arg(id)
   AND status = 'processing'
 RETURNING *;
+
+-- name: UpsertBaofuWithdrawalAccountGuardBalance :one
+INSERT INTO baofu_withdrawal_account_guards (
+    owner_type,
+    owner_id,
+    account_binding_id,
+    provider_available_amount_fen,
+    provider_pending_amount_fen,
+    provider_ledger_amount_fen,
+    provider_frozen_amount_fen,
+    provider_balance_observed_at
+) VALUES (
+    sqlc.arg(owner_type),
+    sqlc.arg(owner_id),
+    sqlc.arg(account_binding_id),
+    sqlc.arg(provider_available_amount_fen),
+    sqlc.arg(provider_pending_amount_fen),
+    sqlc.arg(provider_ledger_amount_fen),
+    sqlc.arg(provider_frozen_amount_fen),
+    sqlc.arg(provider_balance_observed_at)
+)
+ON CONFLICT (owner_type, owner_id, account_binding_id) DO UPDATE SET
+    provider_available_amount_fen = CASE
+        WHEN baofu_withdrawal_account_guards.provider_balance_observed_at IS NULL
+             OR EXCLUDED.provider_balance_observed_at >= baofu_withdrawal_account_guards.provider_balance_observed_at
+        THEN EXCLUDED.provider_available_amount_fen
+        ELSE baofu_withdrawal_account_guards.provider_available_amount_fen
+    END,
+    provider_pending_amount_fen = CASE
+        WHEN baofu_withdrawal_account_guards.provider_balance_observed_at IS NULL
+             OR EXCLUDED.provider_balance_observed_at >= baofu_withdrawal_account_guards.provider_balance_observed_at
+        THEN EXCLUDED.provider_pending_amount_fen
+        ELSE baofu_withdrawal_account_guards.provider_pending_amount_fen
+    END,
+    provider_ledger_amount_fen = CASE
+        WHEN baofu_withdrawal_account_guards.provider_balance_observed_at IS NULL
+             OR EXCLUDED.provider_balance_observed_at >= baofu_withdrawal_account_guards.provider_balance_observed_at
+        THEN EXCLUDED.provider_ledger_amount_fen
+        ELSE baofu_withdrawal_account_guards.provider_ledger_amount_fen
+    END,
+    provider_frozen_amount_fen = CASE
+        WHEN baofu_withdrawal_account_guards.provider_balance_observed_at IS NULL
+             OR EXCLUDED.provider_balance_observed_at >= baofu_withdrawal_account_guards.provider_balance_observed_at
+        THEN EXCLUDED.provider_frozen_amount_fen
+        ELSE baofu_withdrawal_account_guards.provider_frozen_amount_fen
+    END,
+    provider_balance_observed_at = CASE
+        WHEN baofu_withdrawal_account_guards.provider_balance_observed_at IS NULL
+             OR EXCLUDED.provider_balance_observed_at >= baofu_withdrawal_account_guards.provider_balance_observed_at
+        THEN EXCLUDED.provider_balance_observed_at
+        ELSE baofu_withdrawal_account_guards.provider_balance_observed_at
+    END,
+    updated_at = now()
+RETURNING id, owner_type, owner_id, account_binding_id, provider_available_amount_fen, provider_pending_amount_fen, provider_ledger_amount_fen, provider_frozen_amount_fen, provider_balance_observed_at, reserved_amount_fen, consumed_withdraw_amount_fen, created_at, updated_at;
+
+-- name: GetBaofuWithdrawalAccountGuardByOwner :one
+SELECT id, owner_type, owner_id, account_binding_id, provider_available_amount_fen, provider_pending_amount_fen, provider_ledger_amount_fen, provider_frozen_amount_fen, provider_balance_observed_at, reserved_amount_fen, consumed_withdraw_amount_fen, created_at, updated_at
+FROM baofu_withdrawal_account_guards
+WHERE owner_type = sqlc.arg(owner_type)
+  AND owner_id = sqlc.arg(owner_id)
+  AND account_binding_id = sqlc.arg(account_binding_id)
+LIMIT 1;
+
+-- name: GetBaofuWithdrawalAccountGuardByOwnerForUpdate :one
+SELECT id, owner_type, owner_id, account_binding_id, provider_available_amount_fen, provider_pending_amount_fen, provider_ledger_amount_fen, provider_frozen_amount_fen, provider_balance_observed_at, reserved_amount_fen, consumed_withdraw_amount_fen, created_at, updated_at
+FROM baofu_withdrawal_account_guards
+WHERE owner_type = sqlc.arg(owner_type)
+  AND owner_id = sqlc.arg(owner_id)
+  AND account_binding_id = sqlc.arg(account_binding_id)
+LIMIT 1
+FOR UPDATE;
+
+-- name: ReserveBaofuWithdrawalAccountGuardAmount :one
+UPDATE baofu_withdrawal_account_guards
+SET
+    reserved_amount_fen = reserved_amount_fen + sqlc.arg(amount_fen),
+    updated_at = now()
+WHERE id = sqlc.arg(id)
+  AND provider_available_amount_fen >= reserved_amount_fen + sqlc.arg(amount_fen)
+RETURNING id, owner_type, owner_id, account_binding_id, provider_available_amount_fen, provider_pending_amount_fen, provider_ledger_amount_fen, provider_frozen_amount_fen, provider_balance_observed_at, reserved_amount_fen, consumed_withdraw_amount_fen, created_at, updated_at;
+
+-- name: ConsumeBaofuWithdrawalAccountGuardAmount :one
+UPDATE baofu_withdrawal_account_guards
+SET
+    reserved_amount_fen = reserved_amount_fen - sqlc.arg(amount_fen),
+    consumed_withdraw_amount_fen = consumed_withdraw_amount_fen + sqlc.arg(amount_fen),
+    updated_at = now()
+WHERE id = sqlc.arg(id)
+  AND reserved_amount_fen >= sqlc.arg(amount_fen)
+RETURNING id, owner_type, owner_id, account_binding_id, provider_available_amount_fen, provider_pending_amount_fen, provider_ledger_amount_fen, provider_frozen_amount_fen, provider_balance_observed_at, reserved_amount_fen, consumed_withdraw_amount_fen, created_at, updated_at;
+
+-- name: ReleaseBaofuWithdrawalAccountGuardAmount :one
+UPDATE baofu_withdrawal_account_guards
+SET
+    reserved_amount_fen = reserved_amount_fen - sqlc.arg(amount_fen),
+    updated_at = now()
+WHERE id = sqlc.arg(id)
+  AND reserved_amount_fen >= sqlc.arg(amount_fen)
+RETURNING id, owner_type, owner_id, account_binding_id, provider_available_amount_fen, provider_pending_amount_fen, provider_ledger_amount_fen, provider_frozen_amount_fen, provider_balance_observed_at, reserved_amount_fen, consumed_withdraw_amount_fen, created_at, updated_at;
+
+-- name: CreateBaofuWithdrawalReservation :one
+INSERT INTO baofu_withdrawal_reservations (
+    withdrawal_order_id,
+    owner_type,
+    owner_id,
+    account_binding_id,
+    amount_fen,
+    status,
+    reserved_at
+) VALUES (
+    sqlc.arg(withdrawal_order_id),
+    sqlc.arg(owner_type),
+    sqlc.arg(owner_id),
+    sqlc.arg(account_binding_id),
+    sqlc.arg(amount_fen),
+    'reserved',
+    sqlc.arg(reserved_at)
+)
+RETURNING id, withdrawal_order_id, owner_type, owner_id, account_binding_id, amount_fen, status, release_reason, reserved_at, consumed_at, released_at, created_at, updated_at;
+
+-- name: GetBaofuWithdrawalReservationByOrderID :one
+SELECT id, withdrawal_order_id, owner_type, owner_id, account_binding_id, amount_fen, status, release_reason, reserved_at, consumed_at, released_at, created_at, updated_at
+FROM baofu_withdrawal_reservations
+WHERE withdrawal_order_id = $1
+LIMIT 1;
+
+-- name: GetBaofuWithdrawalReservationByOrderIDForUpdate :one
+SELECT id, withdrawal_order_id, owner_type, owner_id, account_binding_id, amount_fen, status, release_reason, reserved_at, consumed_at, released_at, created_at, updated_at
+FROM baofu_withdrawal_reservations
+WHERE withdrawal_order_id = $1
+LIMIT 1
+FOR UPDATE;
+
+-- name: ConsumeBaofuWithdrawalReservation :one
+UPDATE baofu_withdrawal_reservations
+SET
+    status = 'consumed',
+    consumed_at = sqlc.arg(consumed_at),
+    updated_at = now()
+WHERE id = sqlc.arg(id)
+  AND status = 'reserved'
+RETURNING id, withdrawal_order_id, owner_type, owner_id, account_binding_id, amount_fen, status, release_reason, reserved_at, consumed_at, released_at, created_at, updated_at;
+
+-- name: ReleaseBaofuWithdrawalReservation :one
+UPDATE baofu_withdrawal_reservations
+SET
+    status = 'released',
+    release_reason = sqlc.narg(release_reason),
+    released_at = sqlc.arg(released_at),
+    updated_at = now()
+WHERE id = sqlc.arg(id)
+  AND status = 'reserved'
+RETURNING id, withdrawal_order_id, owner_type, owner_id, account_binding_id, amount_fen, status, release_reason, reserved_at, consumed_at, released_at, created_at, updated_at;

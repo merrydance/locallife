@@ -342,6 +342,21 @@ func (mr *MockStoreMockRecorder) AllocateDailyPickupSequence(ctx, arg any) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AllocateDailyPickupSequence", reflect.TypeOf((*MockStore)(nil).AllocateDailyPickupSequence), ctx, arg)
 }
 
+// ApplyBaofuWithdrawalTerminalStatusTx mocks base method.
+func (m *MockStore) ApplyBaofuWithdrawalTerminalStatusTx(ctx context.Context, arg db.ApplyBaofuWithdrawalTerminalStatusTxParams) (db.ApplyBaofuWithdrawalTerminalStatusTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ApplyBaofuWithdrawalTerminalStatusTx", ctx, arg)
+	ret0, _ := ret[0].(db.ApplyBaofuWithdrawalTerminalStatusTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ApplyBaofuWithdrawalTerminalStatusTx indicates an expected call of ApplyBaofuWithdrawalTerminalStatusTx.
+func (mr *MockStoreMockRecorder) ApplyBaofuWithdrawalTerminalStatusTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyBaofuWithdrawalTerminalStatusTx", reflect.TypeOf((*MockStore)(nil).ApplyBaofuWithdrawalTerminalStatusTx), ctx, arg)
+}
+
 // ApplyPaidReservationAdjustmentTx mocks base method.
 func (m *MockStore) ApplyPaidReservationAdjustmentTx(ctx context.Context, arg db.ApplyPaidReservationAdjustmentTxParams) (db.ApplyPaidReservationAdjustmentTxResult, error) {
 	m.ctrl.T.Helper()
@@ -1769,6 +1784,36 @@ func (m *MockStore) ConfirmWebLoginSession(ctx context.Context, arg db.ConfirmWe
 func (mr *MockStoreMockRecorder) ConfirmWebLoginSession(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConfirmWebLoginSession", reflect.TypeOf((*MockStore)(nil).ConfirmWebLoginSession), ctx, arg)
+}
+
+// ConsumeBaofuWithdrawalAccountGuardAmount mocks base method.
+func (m *MockStore) ConsumeBaofuWithdrawalAccountGuardAmount(ctx context.Context, arg db.ConsumeBaofuWithdrawalAccountGuardAmountParams) (db.BaofuWithdrawalAccountGuard, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ConsumeBaofuWithdrawalAccountGuardAmount", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuWithdrawalAccountGuard)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ConsumeBaofuWithdrawalAccountGuardAmount indicates an expected call of ConsumeBaofuWithdrawalAccountGuardAmount.
+func (mr *MockStoreMockRecorder) ConsumeBaofuWithdrawalAccountGuardAmount(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConsumeBaofuWithdrawalAccountGuardAmount", reflect.TypeOf((*MockStore)(nil).ConsumeBaofuWithdrawalAccountGuardAmount), ctx, arg)
+}
+
+// ConsumeBaofuWithdrawalReservation mocks base method.
+func (m *MockStore) ConsumeBaofuWithdrawalReservation(ctx context.Context, arg db.ConsumeBaofuWithdrawalReservationParams) (db.BaofuWithdrawalReservation, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ConsumeBaofuWithdrawalReservation", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuWithdrawalReservation)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ConsumeBaofuWithdrawalReservation indicates an expected call of ConsumeBaofuWithdrawalReservation.
+func (mr *MockStoreMockRecorder) ConsumeBaofuWithdrawalReservation(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConsumeBaofuWithdrawalReservation", reflect.TypeOf((*MockStore)(nil).ConsumeBaofuWithdrawalReservation), ctx, arg)
 }
 
 // ConsumeCloudPrinterAuthorizationSession mocks base method.
@@ -3646,6 +3691,21 @@ func (mr *MockStoreMockRecorder) CreateBaofuWithdrawalOrder(ctx, arg any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateBaofuWithdrawalOrder", reflect.TypeOf((*MockStore)(nil).CreateBaofuWithdrawalOrder), ctx, arg)
 }
 
+// CreateBaofuWithdrawalOrderWithReservationAndSubmittedCommandTx mocks base method.
+func (m *MockStore) CreateBaofuWithdrawalOrderWithReservationAndSubmittedCommandTx(ctx context.Context, arg db.CreateBaofuWithdrawalOrderWithReservationAndSubmittedCommandTxParams) (db.CreateBaofuWithdrawalOrderWithReservationAndSubmittedCommandTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateBaofuWithdrawalOrderWithReservationAndSubmittedCommandTx", ctx, arg)
+	ret0, _ := ret[0].(db.CreateBaofuWithdrawalOrderWithReservationAndSubmittedCommandTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateBaofuWithdrawalOrderWithReservationAndSubmittedCommandTx indicates an expected call of CreateBaofuWithdrawalOrderWithReservationAndSubmittedCommandTx.
+func (mr *MockStoreMockRecorder) CreateBaofuWithdrawalOrderWithReservationAndSubmittedCommandTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateBaofuWithdrawalOrderWithReservationAndSubmittedCommandTx", reflect.TypeOf((*MockStore)(nil).CreateBaofuWithdrawalOrderWithReservationAndSubmittedCommandTx), ctx, arg)
+}
+
 // CreateBaofuWithdrawalOrderWithSubmittedCommandTx mocks base method.
 func (m *MockStore) CreateBaofuWithdrawalOrderWithSubmittedCommandTx(ctx context.Context, arg db.CreateBaofuWithdrawalOrderWithSubmittedCommandTxParams) (db.CreateBaofuWithdrawalOrderWithSubmittedCommandTxResult, error) {
 	m.ctrl.T.Helper()
@@ -3659,6 +3719,21 @@ func (m *MockStore) CreateBaofuWithdrawalOrderWithSubmittedCommandTx(ctx context
 func (mr *MockStoreMockRecorder) CreateBaofuWithdrawalOrderWithSubmittedCommandTx(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateBaofuWithdrawalOrderWithSubmittedCommandTx", reflect.TypeOf((*MockStore)(nil).CreateBaofuWithdrawalOrderWithSubmittedCommandTx), ctx, arg)
+}
+
+// CreateBaofuWithdrawalReservation mocks base method.
+func (m *MockStore) CreateBaofuWithdrawalReservation(ctx context.Context, arg db.CreateBaofuWithdrawalReservationParams) (db.BaofuWithdrawalReservation, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateBaofuWithdrawalReservation", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuWithdrawalReservation)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateBaofuWithdrawalReservation indicates an expected call of CreateBaofuWithdrawalReservation.
+func (mr *MockStoreMockRecorder) CreateBaofuWithdrawalReservation(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateBaofuWithdrawalReservation", reflect.TypeOf((*MockStore)(nil).CreateBaofuWithdrawalReservation), ctx, arg)
 }
 
 // CreateBehaviorAction mocks base method.
@@ -7586,6 +7661,36 @@ func (mr *MockStoreMockRecorder) GetBaofuVerifyFeePaymentByAttach(ctx, attach an
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaofuVerifyFeePaymentByAttach", reflect.TypeOf((*MockStore)(nil).GetBaofuVerifyFeePaymentByAttach), ctx, attach)
 }
 
+// GetBaofuWithdrawalAccountGuardByOwner mocks base method.
+func (m *MockStore) GetBaofuWithdrawalAccountGuardByOwner(ctx context.Context, arg db.GetBaofuWithdrawalAccountGuardByOwnerParams) (db.BaofuWithdrawalAccountGuard, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBaofuWithdrawalAccountGuardByOwner", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuWithdrawalAccountGuard)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetBaofuWithdrawalAccountGuardByOwner indicates an expected call of GetBaofuWithdrawalAccountGuardByOwner.
+func (mr *MockStoreMockRecorder) GetBaofuWithdrawalAccountGuardByOwner(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaofuWithdrawalAccountGuardByOwner", reflect.TypeOf((*MockStore)(nil).GetBaofuWithdrawalAccountGuardByOwner), ctx, arg)
+}
+
+// GetBaofuWithdrawalAccountGuardByOwnerForUpdate mocks base method.
+func (m *MockStore) GetBaofuWithdrawalAccountGuardByOwnerForUpdate(ctx context.Context, arg db.GetBaofuWithdrawalAccountGuardByOwnerForUpdateParams) (db.BaofuWithdrawalAccountGuard, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBaofuWithdrawalAccountGuardByOwnerForUpdate", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuWithdrawalAccountGuard)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetBaofuWithdrawalAccountGuardByOwnerForUpdate indicates an expected call of GetBaofuWithdrawalAccountGuardByOwnerForUpdate.
+func (mr *MockStoreMockRecorder) GetBaofuWithdrawalAccountGuardByOwnerForUpdate(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaofuWithdrawalAccountGuardByOwnerForUpdate", reflect.TypeOf((*MockStore)(nil).GetBaofuWithdrawalAccountGuardByOwnerForUpdate), ctx, arg)
+}
+
 // GetBaofuWithdrawalOrder mocks base method.
 func (m *MockStore) GetBaofuWithdrawalOrder(ctx context.Context, id int64) (db.BaofuWithdrawalOrder, error) {
 	m.ctrl.T.Helper()
@@ -7629,6 +7734,51 @@ func (m *MockStore) GetBaofuWithdrawalOrderByOutRequestNo(ctx context.Context, o
 func (mr *MockStoreMockRecorder) GetBaofuWithdrawalOrderByOutRequestNo(ctx, outRequestNo any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaofuWithdrawalOrderByOutRequestNo", reflect.TypeOf((*MockStore)(nil).GetBaofuWithdrawalOrderByOutRequestNo), ctx, outRequestNo)
+}
+
+// GetBaofuWithdrawalOrderForUpdate mocks base method.
+func (m *MockStore) GetBaofuWithdrawalOrderForUpdate(ctx context.Context, id int64) (db.BaofuWithdrawalOrder, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBaofuWithdrawalOrderForUpdate", ctx, id)
+	ret0, _ := ret[0].(db.BaofuWithdrawalOrder)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetBaofuWithdrawalOrderForUpdate indicates an expected call of GetBaofuWithdrawalOrderForUpdate.
+func (mr *MockStoreMockRecorder) GetBaofuWithdrawalOrderForUpdate(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaofuWithdrawalOrderForUpdate", reflect.TypeOf((*MockStore)(nil).GetBaofuWithdrawalOrderForUpdate), ctx, id)
+}
+
+// GetBaofuWithdrawalReservationByOrderID mocks base method.
+func (m *MockStore) GetBaofuWithdrawalReservationByOrderID(ctx context.Context, withdrawalOrderID int64) (db.BaofuWithdrawalReservation, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBaofuWithdrawalReservationByOrderID", ctx, withdrawalOrderID)
+	ret0, _ := ret[0].(db.BaofuWithdrawalReservation)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetBaofuWithdrawalReservationByOrderID indicates an expected call of GetBaofuWithdrawalReservationByOrderID.
+func (mr *MockStoreMockRecorder) GetBaofuWithdrawalReservationByOrderID(ctx, withdrawalOrderID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaofuWithdrawalReservationByOrderID", reflect.TypeOf((*MockStore)(nil).GetBaofuWithdrawalReservationByOrderID), ctx, withdrawalOrderID)
+}
+
+// GetBaofuWithdrawalReservationByOrderIDForUpdate mocks base method.
+func (m *MockStore) GetBaofuWithdrawalReservationByOrderIDForUpdate(ctx context.Context, withdrawalOrderID int64) (db.BaofuWithdrawalReservation, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBaofuWithdrawalReservationByOrderIDForUpdate", ctx, withdrawalOrderID)
+	ret0, _ := ret[0].(db.BaofuWithdrawalReservation)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetBaofuWithdrawalReservationByOrderIDForUpdate indicates an expected call of GetBaofuWithdrawalReservationByOrderIDForUpdate.
+func (mr *MockStoreMockRecorder) GetBaofuWithdrawalReservationByOrderIDForUpdate(ctx, withdrawalOrderID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaofuWithdrawalReservationByOrderIDForUpdate", reflect.TypeOf((*MockStore)(nil).GetBaofuWithdrawalReservationByOrderIDForUpdate), ctx, withdrawalOrderID)
 }
 
 // GetBehaviorAction mocks base method.
@@ -19903,6 +20053,36 @@ func (mr *MockStoreMockRecorder) RejectPendingGroupJoinRequest(ctx, arg any) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RejectPendingGroupJoinRequest", reflect.TypeOf((*MockStore)(nil).RejectPendingGroupJoinRequest), ctx, arg)
 }
 
+// ReleaseBaofuWithdrawalAccountGuardAmount mocks base method.
+func (m *MockStore) ReleaseBaofuWithdrawalAccountGuardAmount(ctx context.Context, arg db.ReleaseBaofuWithdrawalAccountGuardAmountParams) (db.BaofuWithdrawalAccountGuard, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReleaseBaofuWithdrawalAccountGuardAmount", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuWithdrawalAccountGuard)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReleaseBaofuWithdrawalAccountGuardAmount indicates an expected call of ReleaseBaofuWithdrawalAccountGuardAmount.
+func (mr *MockStoreMockRecorder) ReleaseBaofuWithdrawalAccountGuardAmount(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReleaseBaofuWithdrawalAccountGuardAmount", reflect.TypeOf((*MockStore)(nil).ReleaseBaofuWithdrawalAccountGuardAmount), ctx, arg)
+}
+
+// ReleaseBaofuWithdrawalReservation mocks base method.
+func (m *MockStore) ReleaseBaofuWithdrawalReservation(ctx context.Context, arg db.ReleaseBaofuWithdrawalReservationParams) (db.BaofuWithdrawalReservation, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReleaseBaofuWithdrawalReservation", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuWithdrawalReservation)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReleaseBaofuWithdrawalReservation indicates an expected call of ReleaseBaofuWithdrawalReservation.
+func (mr *MockStoreMockRecorder) ReleaseBaofuWithdrawalReservation(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReleaseBaofuWithdrawalReservation", reflect.TypeOf((*MockStore)(nil).ReleaseBaofuWithdrawalReservation), ctx, arg)
+}
+
 // ReleaseMerchantTakeoutSuspensionIfOwned mocks base method.
 func (m *MockStore) ReleaseMerchantTakeoutSuspensionIfOwned(ctx context.Context, arg db.ReleaseMerchantTakeoutSuspensionIfOwnedParams) (int64, error) {
 	m.ctrl.T.Helper()
@@ -20346,6 +20526,21 @@ func (m *MockStore) ReportFoodSafetyIncidentTx(ctx context.Context, arg db.Repor
 func (mr *MockStoreMockRecorder) ReportFoodSafetyIncidentTx(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReportFoodSafetyIncidentTx", reflect.TypeOf((*MockStore)(nil).ReportFoodSafetyIncidentTx), ctx, arg)
+}
+
+// ReserveBaofuWithdrawalAccountGuardAmount mocks base method.
+func (m *MockStore) ReserveBaofuWithdrawalAccountGuardAmount(ctx context.Context, arg db.ReserveBaofuWithdrawalAccountGuardAmountParams) (db.BaofuWithdrawalAccountGuard, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReserveBaofuWithdrawalAccountGuardAmount", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuWithdrawalAccountGuard)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReserveBaofuWithdrawalAccountGuardAmount indicates an expected call of ReserveBaofuWithdrawalAccountGuardAmount.
+func (mr *MockStoreMockRecorder) ReserveBaofuWithdrawalAccountGuardAmount(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReserveBaofuWithdrawalAccountGuardAmount", reflect.TypeOf((*MockStore)(nil).ReserveBaofuWithdrawalAccountGuardAmount), ctx, arg)
 }
 
 // ReserveInventory mocks base method.
@@ -24451,6 +24646,21 @@ func (m *MockStore) UpsertBaofuMerchantReportProcessing(ctx context.Context, arg
 func (mr *MockStoreMockRecorder) UpsertBaofuMerchantReportProcessing(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertBaofuMerchantReportProcessing", reflect.TypeOf((*MockStore)(nil).UpsertBaofuMerchantReportProcessing), ctx, arg)
+}
+
+// UpsertBaofuWithdrawalAccountGuardBalance mocks base method.
+func (m *MockStore) UpsertBaofuWithdrawalAccountGuardBalance(ctx context.Context, arg db.UpsertBaofuWithdrawalAccountGuardBalanceParams) (db.BaofuWithdrawalAccountGuard, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpsertBaofuWithdrawalAccountGuardBalance", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuWithdrawalAccountGuard)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpsertBaofuWithdrawalAccountGuardBalance indicates an expected call of UpsertBaofuWithdrawalAccountGuardBalance.
+func (mr *MockStoreMockRecorder) UpsertBaofuWithdrawalAccountGuardBalance(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertBaofuWithdrawalAccountGuardBalance", reflect.TypeOf((*MockStore)(nil).UpsertBaofuWithdrawalAccountGuardBalance), ctx, arg)
 }
 
 // UpsertCartPackagingSelection mocks base method.

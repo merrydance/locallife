@@ -40,6 +40,9 @@ var ErrReservationTimeConflict = errors.New("reservation time conflict")
 var ErrReservationGuestCountExceedsCapacity = errors.New("reservation guest count exceeds table capacity")
 var ErrReservationMinimumSpendNotMet = errors.New("reservation minimum spend not met")
 var ErrReservationInvalidOfflineCustomerContact = errors.New("reservation offline customer contact is invalid")
+var ErrBaofuWithdrawalAccountBindingOwnerMismatch = errors.New("baofu withdrawal account binding owner mismatch")
+var ErrBaofuWithdrawalInsufficientReservedBalance = errors.New("baofu withdrawal reserved balance is insufficient")
+var ErrBaofuWithdrawalTerminalReservationMismatch = errors.New("baofu withdrawal terminal status and reservation status mismatch")
 
 // ErrPaymentMissingOrderID indicates a payment_order with business_type=order has no order_id.
 // Callers should skip retry and alert for manual intervention.

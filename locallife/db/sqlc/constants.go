@@ -311,6 +311,14 @@ const (
 	BaofuWithdrawalStatusFailed     = "failed"
 	BaofuWithdrawalStatusReturned   = "returned"
 
+	BaofuWithdrawalReservationStatusReserved = "reserved"
+	BaofuWithdrawalReservationStatusConsumed = "consumed"
+	BaofuWithdrawalReservationStatusReleased = "released"
+
+	BaofuWithdrawalReservationReleaseReasonFailed   = "failed"
+	BaofuWithdrawalReservationReleaseReasonReturned = "returned"
+	BaofuWithdrawalReservationReleaseReasonRejected = "rejected"
+
 	BaofuMerchantReportTypeWechat = "WECHAT"
 	BaofuMerchantReportTypeAlipay = "ALIPAY"
 
