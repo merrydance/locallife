@@ -22,6 +22,7 @@ Request:
 - Check it against `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md`; when the task explicitly involves visual-system drift or component visual baseline, use the role-matched design document: consumer surfaces use `.github/standards/weapp/DESIGN_SYSTEM.md`; non-consumer surfaces use `.github/standards/weapp/NON_CONSUMER_DESIGN_SYSTEM.md`
 - Use `.github/standards/weapp/REVIEW_CHECKLIST.md` as the compact PR review checklist so the review covers both baseline conformance and user-facing coherence
 - Check whether the changed surface matches the user's touch habits, common path, first-screen needs, preserved context, weak-network recovery, and typing-reduction expectations
+- For user-reported defects, check the User-Reported Defect Closure Gate in `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md`: original failing scenario, known working reference path, regression evidence, and why the previous behavior or fix missed the root cause
 - State what validation evidence exists, what was not verified, and what residual risk remains
 
 Review must prioritize:
@@ -39,6 +40,8 @@ Review must prioritize:
 - Text-action drift where local add/edit/delete/test/status actions stay as text buttons instead of icon buttons or icon-led small buttons without justification
 - Wrapper bloat where TDesign content is rewrapped in local cards, notice shells, or decorative containers that do not own real state or structure
 - Broken service-to-state-to-view wiring
+- User-reported search, list, filter, pagination, tab, and empty-state fixes that do not trace input or filter state through request params, API composition, adapter/view model, tab/list selection, and empty/error rendering
+- Multi-source async fixes where one failed source can still hide another source's valid result, or where service failure can still be rendered as a fake empty state
 - Missing page states, missing recovery paths, and weak-network regressions
 - Backend-truth drift, fake local truth, and incomplete state propagation
 - Business styles leaking into shared global styles or shared components
@@ -78,6 +81,7 @@ Baseline review must check:
 - Service ownership is coherent: new capabilities were not simply appended to a nearby super-service file once they already formed a distinct task domain
 - Continuous business chains that span multiple API calls, polling, payment, async confirmation, or cross-page recovery have an explicit workflow/controller owner instead of being scattered across page handlers
 - New fields and actions propagate through service layer, state, handlers, and visible UI
+- User-reported bugs include a concrete acceptance case for the original failure and focused regression or validation evidence that covers that case, not just source-string checks or happy-path UI checks
 - Request parameters, response fields, enums, and types stay aligned with the real backend contract instead of drifting from page-local assumptions
 - Backend semantics are treated as the only source of truth; if the code is guessing around missing or ambiguous backend meaning, call that out as a finding or residual risk
 - App Shell structure remains stable during loading and error states
