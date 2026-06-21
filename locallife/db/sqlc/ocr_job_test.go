@@ -14,57 +14,19 @@ import (
 )
 
 func createRandomMediaAsset(t *testing.T, userID int64) MediaAsset {
-	store, ok := testStore.(*SQLStore)
-	require.True(t, ok)
-
-	asset := MediaAsset{}
 	objectKey := fmt.Sprintf("test/ocr/%d-%s.jpg", time.Now().UnixNano(), util.RandomString(6))
 	checksum := util.RandomString(32)
-	bucketTypes := []string{"private", "public", "private_bucket", "public_bucket", "oss_private", "oss_public", "local"}
-	var lastErr error
-
-	for _, bucketType := range bucketTypes {
-		err := store.connPool.QueryRow(context.Background(), `
-			INSERT INTO media_assets (
-				object_key,
-				visibility,
-				media_category,
-				mime_type,
-				file_size,
-				checksum_sha256,
-				upload_status,
-				moderation_status,
-				uploaded_by,
-				source_client,
-				bucket_type
-			) VALUES (
-				$1, $2, $3, $4, $5, $6,
-				'pending', 'pending',
-				$7, $8, $9
-			)
-			RETURNING id, object_key, visibility, media_category, mime_type, file_size, checksum_sha256, upload_status, moderation_status, uploaded_by, source_client, created_at, updated_at
-		`, objectKey, "private", "document", "image/jpeg", int64(1024), checksum, userID, "test", bucketType).Scan(
-			&asset.ID,
-			&asset.ObjectKey,
-			&asset.Visibility,
-			&asset.MediaCategory,
-			&asset.MimeType,
-			&asset.FileSize,
-			&asset.ChecksumSha256,
-			&asset.UploadStatus,
-			&asset.ModerationStatus,
-			&asset.UploadedBy,
-			&asset.SourceClient,
-			&asset.CreatedAt,
-			&asset.UpdatedAt,
-		)
-		if err == nil {
-			return asset
-		}
-		lastErr = err
-	}
-
-	require.NoError(t, lastErr)
+	asset, err := testStore.CreateMediaAsset(context.Background(), CreateMediaAssetParams{
+		ObjectKey:      objectKey,
+		Visibility:     "private",
+		MediaCategory:  "document",
+		MimeType:       "image/jpeg",
+		FileSize:       1024,
+		ChecksumSha256: checksum,
+		UploadedBy:     userID,
+		SourceClient:   "test",
+	})
+	require.NoError(t, err)
 	return asset
 }
 

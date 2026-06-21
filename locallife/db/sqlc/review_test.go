@@ -29,57 +29,25 @@ func createRandomReview(t *testing.T, orderID, userID, merchantID int64) Review 
 }
 
 func createReviewMediaAsset(t *testing.T, userID int64) MediaAsset {
-	store, ok := testStore.(*SQLStore)
-	require.True(t, ok)
-
-	asset := MediaAsset{}
 	objectKey := fmt.Sprintf("user/review/%d/%d.jpg", userID, time.Now().UnixNano())
 	checksum := fmt.Sprintf("%064d", time.Now().UnixNano())
-	bucketTypes := []string{"public", "public_bucket", "oss_public", "local"}
-	var lastErr error
+	asset, err := testStore.CreateMediaAsset(context.Background(), CreateMediaAssetParams{
+		ObjectKey:      objectKey,
+		Visibility:     "public",
+		MediaCategory:  "review",
+		MimeType:       "image/jpeg",
+		FileSize:       1024,
+		ChecksumSha256: checksum,
+		UploadedBy:     userID,
+		SourceClient:   "test",
+	})
+	require.NoError(t, err)
 
-	for _, bucketType := range bucketTypes {
-		err := store.connPool.QueryRow(context.Background(), `
-			INSERT INTO media_assets (
-				object_key,
-				visibility,
-				media_category,
-				mime_type,
-				file_size,
-				checksum_sha256,
-				upload_status,
-				moderation_status,
-				uploaded_by,
-				source_client,
-				bucket_type
-			) VALUES (
-				$1, $2, $3, $4, $5, $6,
-				'confirmed', 'pending',
-				$7, $8, $9
-			)
-			RETURNING id, object_key, visibility, media_category, mime_type, file_size, checksum_sha256, upload_status, moderation_status, uploaded_by, source_client, created_at, updated_at
-		`, objectKey, "public", "review", "image/jpeg", int64(1024), checksum, userID, "test", bucketType).Scan(
-			&asset.ID,
-			&asset.ObjectKey,
-			&asset.Visibility,
-			&asset.MediaCategory,
-			&asset.MimeType,
-			&asset.FileSize,
-			&asset.ChecksumSha256,
-			&asset.UploadStatus,
-			&asset.ModerationStatus,
-			&asset.UploadedBy,
-			&asset.SourceClient,
-			&asset.CreatedAt,
-			&asset.UpdatedAt,
-		)
-		if err == nil {
-			return asset
-		}
-		lastErr = err
-	}
-
-	require.NoError(t, lastErr)
+	asset, err = testStore.SetMediaAssetUploadStatus(context.Background(), SetMediaAssetUploadStatusParams{
+		ID:           asset.ID,
+		UploadStatus: "confirmed",
+	})
+	require.NoError(t, err)
 	return asset
 }
 
