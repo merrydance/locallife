@@ -13,6 +13,8 @@ export interface OperatorCommissionRowView {
   order_count: number
   total_gmv_fen: number
   total_commission_fen: number
+  totalGmvDisplay: string
+  totalCommissionDisplay: string
 }
 
 interface CommissionListResponseLike {
@@ -34,11 +36,16 @@ interface CommissionListResponseLike {
 
 export interface OperatorFinancePageData {
   totalIncomeFen: number
+  totalIncomeDisplay: string
   currentMonthIncomeFen: number
+  currentMonthIncomeDisplay: string
   currentMonthGmvFen: number
+  currentMonthGmvDisplay: string
   currentMonthOrders: number
   currentMonthCommissionFen: number
+  currentMonthCommissionDisplay: string
   operatorShareRatio: number
+  operatorShareRatioDisplay: string
   loadError: string
   commissionRows: OperatorCommissionRowView[]
   commissionError: string
@@ -105,17 +112,31 @@ function adaptCommissionRows(response: unknown): OperatorCommissionRowView[] {
       }, [])
       : []
 
-  return rawItems.slice(0, 10).map((item) => ({
-    date: item.date,
-    order_count: Number(item.order_count || 0),
-    total_gmv_fen: Number(item.total_gmv || 0),
-    total_commission_fen: Number(item.commission || 0)
-  }))
+  return rawItems.slice(0, 10).map((item) => {
+    const totalGmvFen = Number(item.total_gmv || 0)
+    const totalCommissionFen = Number(item.commission || 0)
+    return {
+      date: item.date,
+      order_count: Number(item.order_count || 0),
+      total_gmv_fen: totalGmvFen,
+      total_commission_fen: totalCommissionFen,
+      totalGmvDisplay: formatOperatorFinanceFen(totalGmvFen),
+      totalCommissionDisplay: formatOperatorFinanceFen(totalCommissionFen)
+    }
+  })
 }
 
 export function formatOperatorFinanceFen(fen?: number): string {
   const normalized = Number.isFinite(fen) ? Number(fen) : 0
   return `¥${(normalized / 100).toFixed(2)}`
+}
+
+export function formatOperatorShareRatioDisplay(ratio?: number): string {
+  const normalized = Number(ratio || 0)
+  if (!Number.isFinite(normalized) || normalized <= 0) {
+    return '--'
+  }
+  return `${(normalized * 100).toFixed(0)}%`
 }
 
 function formatOperatorFinanceDate(date: Date): string {
@@ -202,14 +223,24 @@ export async function loadOperatorFinancePageData(): Promise<OperatorFinancePage
     operatorBasicManagementService.getFinanceOverview().catch(() => null),
     operatorBasicManagementService.getCommissionList({ page: 1, limit: 10 }).catch(() => null)
   ])
+  const totalIncomeFen = overview?.total?.operator_income ?? 0
+  const currentMonthIncomeFen = overview?.current_month?.operator_income ?? 0
+  const currentMonthGmvFen = overview?.current_month?.total_gmv ?? 0
+  const currentMonthCommissionFen = overview?.current_month?.total_commission ?? 0
+  const operatorShareRatio = overview?.operator_share_ratio ?? 0
 
   return {
-    totalIncomeFen: overview?.total?.operator_income ?? 0,
-    currentMonthIncomeFen: overview?.current_month?.operator_income ?? 0,
-    currentMonthGmvFen: overview?.current_month?.total_gmv ?? 0,
+    totalIncomeFen,
+    totalIncomeDisplay: formatOperatorFinanceFen(totalIncomeFen),
+    currentMonthIncomeFen,
+    currentMonthIncomeDisplay: formatOperatorFinanceFen(currentMonthIncomeFen),
+    currentMonthGmvFen,
+    currentMonthGmvDisplay: formatOperatorFinanceFen(currentMonthGmvFen),
     currentMonthOrders: overview?.current_month?.total_orders ?? 0,
-    currentMonthCommissionFen: overview?.current_month?.total_commission ?? 0,
-    operatorShareRatio: overview?.operator_share_ratio ?? 0,
+    currentMonthCommissionFen,
+    currentMonthCommissionDisplay: formatOperatorFinanceFen(currentMonthCommissionFen),
+    operatorShareRatio,
+    operatorShareRatioDisplay: formatOperatorShareRatioDisplay(operatorShareRatio),
     loadError: overview ? '' : '收入概览加载失败，请稍后重试',
     commissionRows: adaptCommissionRows(commissionList),
     commissionError: commissionList ? '' : '佣金明细加载失败，请稍后重试'

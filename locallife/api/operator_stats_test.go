@@ -811,6 +811,73 @@ func TestGetOperatorFinanceOverviewAPI(t *testing.T) {
 			},
 		},
 		{
+			name: "DefaultAggregationExcludesSuspendedLegacyPrimaryRegion",
+			path: "/v1/operators/me/finance/overview",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				activeRegionID := operator.RegionID + 1
+				expectActiveOperatorAuth(store, user.ID, operator)
+				store.EXPECT().
+					ListOperatorRegions(gomock.Any(), operator.ID).
+					Return([]db.ListOperatorRegionsRow{{
+						OperatorID: operator.ID,
+						RegionID:   activeRegionID,
+						Status:     db.OperatorRegionStatusActive,
+					}}, nil)
+				store.EXPECT().
+					GetOperatorRegion(gomock.Any(), db.GetOperatorRegionParams{
+						OperatorID: operator.ID,
+						RegionID:   operator.RegionID,
+					}).
+					Return(db.OperatorRegion{
+						OperatorID: operator.ID,
+						RegionID:   operator.RegionID,
+						Status:     db.OperatorRegionStatusSuspended,
+					}, nil)
+				store.EXPECT().
+					GetRegion(gomock.Any(), activeRegionID).
+					Return(db.Region{ID: activeRegionID, Name: "可管区域"}, nil)
+				store.EXPECT().
+					GetRegionStats(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, arg db.GetRegionStatsParams) (db.GetRegionStatsRow, error) {
+						require.Equal(t, activeRegionID, arg.RegionID)
+						return db.GetRegionStatsRow{TotalOrders: 20, TotalGmv: 2000, TotalCommission: 200}, nil
+					})
+				store.EXPECT().
+					GetOperatorProfitSharingStatsByRegion(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, arg db.GetOperatorProfitSharingStatsByRegionParams) (db.GetOperatorProfitSharingStatsByRegionRow, error) {
+						require.Equal(t, activeRegionID, arg.RegionID)
+						return db.GetOperatorProfitSharingStatsByRegionRow{TotalOperatorCommission: 90}, nil
+					})
+				store.EXPECT().
+					GetRegionStats(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, arg db.GetRegionStatsParams) (db.GetRegionStatsRow, error) {
+						require.Equal(t, activeRegionID, arg.RegionID)
+						return db.GetRegionStatsRow{TotalOrders: 200, TotalGmv: 20000, TotalCommission: 2000}, nil
+					})
+				store.EXPECT().
+					GetOperatorProfitSharingStatsByRegion(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, arg db.GetOperatorProfitSharingStatsByRegionParams) (db.GetOperatorProfitSharingStatsByRegionRow, error) {
+						require.Equal(t, activeRegionID, arg.RegionID)
+						return db.GetOperatorProfitSharingStatsByRegionRow{TotalOperatorCommission: 900}, nil
+					})
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var resp operatorFinanceOverviewResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, operator.RegionID+1, resp.RegionID)
+				require.Equal(t, "可管区域", resp.RegionName)
+				require.Equal(t, int32(20), resp.CurrentMonth.TotalOrders)
+				require.Equal(t, int64(90), resp.CurrentMonth.OperatorIncome)
+				require.Equal(t, int64(20000), resp.Total.TotalGMV)
+				require.Equal(t, int64(900), resp.Total.OperatorIncome)
+			},
+		},
+		{
 			name: "MonthStatsFailureReturns500",
 			path: "/v1/operators/me/finance/overview",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {

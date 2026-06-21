@@ -63,6 +63,21 @@ func (server *Server) checkOperatorManagesRegion(ctx *gin.Context, regionID int6
 	}
 
 	if !manages {
+		if operator.RegionID == regionID && regionID > 0 {
+			relation, relationErr := server.store.GetOperatorRegion(ctx, db.GetOperatorRegionParams{
+				OperatorID: operator.ID,
+				RegionID:   regionID,
+			})
+			if relationErr != nil {
+				if isNotFoundError(relationErr) {
+					return &operator, nil
+				}
+				return nil, relationErr
+			}
+			if relation.Status == db.OperatorRegionStatusActive {
+				return &operator, nil
+			}
+		}
 		return nil, errOperatorRegionPermissionDenied
 	}
 
@@ -161,14 +176,29 @@ func (server *Server) listManagedOperatorRegionIDs(ctx *gin.Context) ([]int64, e
 		regionIDs = append(regionIDs, regionID)
 	}
 
-	addRegionID(operator.RegionID)
-
 	regionRelations, err := server.store.ListOperatorRegions(ctx, operator.ID)
 	if err != nil {
 		return nil, err
 	}
 	for _, rel := range regionRelations {
 		addRegionID(rel.RegionID)
+	}
+	if operator.RegionID > 0 {
+		if _, exists := seen[operator.RegionID]; !exists {
+			relation, relationErr := server.store.GetOperatorRegion(ctx, db.GetOperatorRegionParams{
+				OperatorID: operator.ID,
+				RegionID:   operator.RegionID,
+			})
+			if relationErr != nil {
+				if isNotFoundError(relationErr) {
+					addRegionID(operator.RegionID)
+				} else {
+					return nil, relationErr
+				}
+			} else if relation.Status == db.OperatorRegionStatusActive {
+				addRegionID(operator.RegionID)
+			}
+		}
 	}
 
 	if len(regionIDs) == 0 {

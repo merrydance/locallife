@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -141,4 +142,166 @@ func TestGetOperatorPendingDispatchSummaryAPI_DeniesUnmanagedRegion(t *testing.T
 
 	server.router.ServeHTTP(recorder, request)
 	require.Equal(t, http.StatusForbidden, recorder.Code)
+}
+
+func TestGetOperatorPendingDispatchSummaryAPI_AllowsLegacyPrimaryRegionWithoutRelation(t *testing.T) {
+	user, _ := randomUser(t)
+	operator := db.Operator{ID: 84, UserID: user.ID, RegionID: 66, Status: "active"}
+	now := time.Now()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectActiveOperatorAuth(store, user.ID, operator)
+	store.EXPECT().
+		CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
+			OperatorID: operator.ID,
+			RegionID:   operator.RegionID,
+		}).
+		Return(false, nil)
+	store.EXPECT().
+		GetOperatorRegion(gomock.Any(), db.GetOperatorRegionParams{
+			OperatorID: operator.ID,
+			RegionID:   operator.RegionID,
+		}).
+		Return(db.OperatorRegion{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetOperatorPendingDispatchSummary(gomock.Any(), gomock.Any()).
+		Return(db.GetOperatorPendingDispatchSummaryRow{
+			RegionID:                  operator.RegionID,
+			RegionName:                "测试区域",
+			PendingTotal:              0,
+			TimeoutOverThresholdTotal: 0,
+			OldestWaitSeconds:         int64(0),
+			LatestRefreshAt:           now,
+		}, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/operator/regions/66/delivery-pool/summary", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+}
+
+func TestListOperatorPendingDispatchesAPI_AllowsLegacyPrimaryRegionWithoutRelation(t *testing.T) {
+	user, _ := randomUser(t)
+	operator := db.Operator{ID: 87, UserID: user.ID, RegionID: 66, Status: "active"}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectActiveOperatorAuth(store, user.ID, operator)
+	store.EXPECT().
+		CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
+			OperatorID: operator.ID,
+			RegionID:   operator.RegionID,
+		}).
+		Return(false, nil)
+	store.EXPECT().
+		GetOperatorRegion(gomock.Any(), db.GetOperatorRegionParams{
+			OperatorID: operator.ID,
+			RegionID:   operator.RegionID,
+		}).
+		Return(db.OperatorRegion{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		ListOperatorPendingDispatches(gomock.Any(), gomock.Any()).
+		Return([]db.ListOperatorPendingDispatchesRow{}, nil)
+	store.EXPECT().
+		CountOperatorPendingDispatches(gomock.Any(), db.CountOperatorPendingDispatchesParams{
+			RegionID: operator.RegionID,
+			Status:   operatorPendingDispatchStatus,
+		}).
+		Return(int64(0), nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/operator/regions/66/delivery-pool?page=1&limit=20", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+}
+
+func TestGetOperatorPendingDispatchSummaryAPI_DeniesSuspendedRegionRelation(t *testing.T) {
+	user, _ := randomUser(t)
+	operator := db.Operator{ID: 85, UserID: user.ID, RegionID: 66, Status: "active"}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectActiveOperatorAuth(store, user.ID, operator)
+	store.EXPECT().
+		CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
+			OperatorID: operator.ID,
+			RegionID:   operator.RegionID,
+		}).
+		Return(false, nil)
+	store.EXPECT().
+		GetOperatorRegion(gomock.Any(), db.GetOperatorRegionParams{
+			OperatorID: operator.ID,
+			RegionID:   operator.RegionID,
+		}).
+		Return(db.OperatorRegion{
+			OperatorID: operator.ID,
+			RegionID:   operator.RegionID,
+			Status:     db.OperatorRegionStatusSuspended,
+		}, nil)
+	store.EXPECT().
+		GetOperatorPendingDispatchSummary(gomock.Any(), gomock.Any()).
+		Times(0)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/operator/regions/66/delivery-pool/summary", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusForbidden, recorder.Code)
+}
+
+func TestGetOperatorPendingDispatchSummaryAPI_ReturnsInternalErrorWhenLegacyRelationLookupFails(t *testing.T) {
+	user, _ := randomUser(t)
+	operator := db.Operator{ID: 86, UserID: user.ID, RegionID: 66, Status: "active"}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectActiveOperatorAuth(store, user.ID, operator)
+	store.EXPECT().
+		CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
+			OperatorID: operator.ID,
+			RegionID:   operator.RegionID,
+		}).
+		Return(false, nil)
+	store.EXPECT().
+		GetOperatorRegion(gomock.Any(), db.GetOperatorRegionParams{
+			OperatorID: operator.ID,
+			RegionID:   operator.RegionID,
+		}).
+		Return(db.OperatorRegion{}, errors.New("operator region lookup unavailable"))
+	store.EXPECT().
+		GetOperatorPendingDispatchSummary(gomock.Any(), gomock.Any()).
+		Times(0)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/operator/regions/66/delivery-pool/summary", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
 }

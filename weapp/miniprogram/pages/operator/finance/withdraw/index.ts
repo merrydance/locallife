@@ -11,11 +11,16 @@ Page({
     loadingOverview: true,
     loadError: '',
     totalIncomeFen: 0,
+    totalIncomeDisplay: '¥0.00',
     currentMonthIncomeFen: 0,
+    currentMonthIncomeDisplay: '¥0.00',
     currentMonthGmvFen: 0,
+    currentMonthGmvDisplay: '¥0.00',
     currentMonthOrders: 0,
     currentMonthCommissionFen: 0,
+    currentMonthCommissionDisplay: '¥0.00',
     operatorShareRatio: 0,
+    operatorShareRatioDisplay: '--',
     commissionLoading: true,
     commissionError: '',
     commissionRows: [] as OperatorCommissionRowView[]
@@ -55,15 +60,6 @@ Page({
 
   onRetryLoad() {
     this.loadOverview()
-  },
-
-  formatFen(fen: number): string {
-    return (fen / 100).toFixed(2)
-  },
-
-  formatShareRatio(ratio: number): string {
-    if (!Number.isFinite(ratio) || ratio <= 0) return '--'
-    return `${(ratio * 100).toFixed(0)}%`
   },
 
   onOpenSettlementAccount() {

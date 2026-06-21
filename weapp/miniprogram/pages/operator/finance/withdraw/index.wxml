@@ -26,22 +26,22 @@
 
       <view wx:else>
         <view class="balance-label">累计收入（元）</view>
-        <view class="balance-value">¥{{formatFen(totalIncomeFen)}}</view>
+        <view class="balance-value">{{totalIncomeDisplay}}</view>
         <view class="metrics-row">
           <view class="metric-item">
             <text class="metric-label">本月收入</text>
-            <text class="metric-value">¥{{formatFen(currentMonthIncomeFen)}}</text>
+            <text class="metric-value">{{currentMonthIncomeDisplay}}</text>
           </view>
           <view class="metric-divider"></view>
           <view class="metric-item">
             <text class="metric-label">分成比例</text>
-            <text class="metric-value">{{formatShareRatio(operatorShareRatio)}}</text>
+            <text class="metric-value">{{operatorShareRatioDisplay}}</text>
           </view>
         </view>
         <view class="metrics-row metrics-row--secondary">
           <view class="metric-item">
             <text class="metric-label">本月 GMV</text>
-            <text class="metric-value">¥{{formatFen(currentMonthGmvFen)}}</text>
+            <text class="metric-value">{{currentMonthGmvDisplay}}</text>
           </view>
           <view class="metric-divider"></view>
           <view class="metric-item">
@@ -49,7 +49,7 @@
             <text class="metric-value">{{currentMonthOrders}}</text>
           </view>
         </view>
-        <view class="share-ratio">本月平台佣金：¥{{formatFen(currentMonthCommissionFen)}}</view>
+        <view class="share-ratio">本月平台佣金：{{currentMonthCommissionDisplay}}</view>
       </view>
     </view>
 
@@ -81,11 +81,11 @@
         <view wx:for="{{commissionRows}}" wx:key="date" class="commission-item">
           <view class="commission-header">
             <text class="commission-date">{{item.date}}</text>
-            <text class="commission-value">¥{{formatFen(item.total_commission_fen)}}</text>
+            <text class="commission-value">{{item.totalCommissionDisplay}}</text>
           </view>
           <view class="commission-meta">
             <text>订单 {{item.order_count}}</text>
-            <text>GMV ¥{{formatFen(item.total_gmv_fen)}}</text>
+            <text>GMV {{item.totalGmvDisplay}}</text>
           </view>
         </view>
       </view>

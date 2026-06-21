@@ -89,7 +89,7 @@ func (server *Server) getOperatorPendingDispatchSummary(ctx *gin.Context) {
 	}
 
 	if _, err := server.checkOperatorManagesRegion(ctx, uri.RegionID); err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(err))
+		server.respondOperatorRegionSelectionError(ctx, err)
 		return
 	}
 
@@ -148,7 +148,7 @@ func (server *Server) listOperatorPendingDispatches(ctx *gin.Context) {
 	}
 
 	if _, err := server.checkOperatorManagesRegion(ctx, uri.RegionID); err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(err))
+		server.respondOperatorRegionSelectionError(ctx, err)
 		return
 	}
 
