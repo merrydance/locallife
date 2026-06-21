@@ -1495,15 +1495,14 @@ func (server *Server) getPublicMerchantCombos(ctx *gin.Context) {
 		// 解析标签
 		if c.Tags != nil {
 			var tags []string
-			if tagBytes, ok := c.Tags.([]byte); ok {
-				if err := json.Unmarshal(tagBytes, &tags); err != nil {
-					ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("decode public combo %d tags: %w", c.ID, err)))
-					return
-				}
-				combo.Tags = tags
+			if err := unmarshalJSONField(c.Tags, &tags); err != nil {
+				log.Error().
+					Err(err).
+					Int64("merchant_id", req.ID).
+					Int64("combo_id", c.ID).
+					Msg("decode public combo tags failed, degrading to empty tags")
 			} else {
-				ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("decode public combo %d tags: unexpected type %T", c.ID, c.Tags)))
-				return
+				combo.Tags = tags
 			}
 		}
 

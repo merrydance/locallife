@@ -841,7 +841,7 @@ func TestPublicMerchantStorefrontSubresources_RejectUnavailableMerchant(t *testi
 	}
 }
 
-func TestPublicMerchantCombos_ReturnsInternalServerErrorOnInvalidTagsJSON(t *testing.T) {
+func TestPublicMerchantCombos_DegradesInvalidTagsJSON(t *testing.T) {
 	merchant := randomMerchant(util.RandomInt(1, 1000))
 
 	ctrl := gomock.NewController(t)
@@ -866,6 +866,13 @@ func TestPublicMerchantCombos_ReturnsInternalServerErrorOnInvalidTagsJSON(t *tes
 			Dishes:        []byte(`[]`),
 			Tags:          []byte(`not-json`),
 		}}, nil)
+	store.EXPECT().
+		GetComboMemberImagesByCombos(gomock.Any(), db.GetComboMemberImagesByCombosParams{
+			Column1:          []int64{81},
+			ExcludePackaging: false,
+		}).
+		Times(1).
+		Return([]db.GetComboMemberImagesByCombosRow{}, nil)
 
 	server := newTestServer(t, store)
 
@@ -876,10 +883,60 @@ func TestPublicMerchantCombos_ReturnsInternalServerErrorOnInvalidTagsJSON(t *tes
 	recorder := httptest.NewRecorder()
 	server.router.ServeHTTP(recorder, request)
 
-	require.Equal(t, http.StatusInternalServerError, recorder.Code)
-	var resp APIResponse
-	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
-	require.Equal(t, "internal server error", resp.Message)
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var resp publicMerchantCombosResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Len(t, resp.Combos, 1)
+	require.Empty(t, resp.Combos[0].Tags)
+}
+
+func TestPublicMerchantCombos_DecodesInterfaceSliceTags(t *testing.T) {
+	merchant := randomMerchant(util.RandomInt(1, 1000))
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(merchant, nil)
+	store.EXPECT().
+		GetMerchantOnlineCombos(gomock.Any(), db.GetMerchantOnlineCombosParams{
+			MerchantID:       merchant.ID,
+			ExcludePackaging: false,
+		}).
+		Times(1).
+		Return([]db.GetMerchantOnlineCombosRow{{
+			ID:            81,
+			Name:          "测试套餐",
+			ComboPrice:    1999,
+			OriginalPrice: 2599,
+			Dishes:        []byte(`[]`),
+			Tags:          []interface{}{"招牌", "午市"},
+		}}, nil)
+	store.EXPECT().
+		GetComboMemberImagesByCombos(gomock.Any(), db.GetComboMemberImagesByCombosParams{
+			Column1:          []int64{81},
+			ExcludePackaging: false,
+		}).
+		Times(1).
+		Return([]db.GetComboMemberImagesByCombosRow{}, nil)
+
+	server := newTestServer(t, store)
+
+	request, err := http.NewRequest(http.MethodGet, fmt.Sprintf("/v1/public/merchants/%d/combos", merchant.ID), nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, merchant.OwnerUserID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var resp publicMerchantCombosResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Len(t, resp.Combos, 1)
+	require.Equal(t, []string{"招牌", "午市"}, resp.Combos[0].Tags)
 }
 
 func TestPublicMerchantCombos_ExcludesLegacyPackagingWhenFreezeEnabled(t *testing.T) {
