@@ -791,6 +791,7 @@ func TestCreateBaofuProfitSharingOrderTxCreatesOrderAndFeeLedgers(t *testing.T) 
 	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
 	operator := createRandomOperatorForRegion(t, merchant.RegionID)
 	paymentOrder := createPaidBaofuPaymentOrderWithAmount(t, context.Background(), createRandomUser(t).ID, 10000)
+	rider := createRandomRider(t)
 	snapshot := []byte(`{"receivers":[{"role":"merchant","sharing_mer_id":"MER_SHARE","amount":8970}],"payment_fee":30,"payment_fee_rate_bps":30}`)
 
 	result, err := testStore.CreateBaofuProfitSharingOrderTx(context.Background(), CreateBaofuProfitSharingOrderTxParams{
@@ -801,7 +802,7 @@ func TestCreateBaofuProfitSharingOrderTxCreatesOrderAndFeeLedgers(t *testing.T) 
 			OrderSource:           "takeout",
 			TotalAmount:           10000,
 			DeliveryFee:           500,
-			RiderID:               pgtype.Int8{Int64: 202, Valid: true},
+			RiderID:               pgtype.Int8{Int64: rider.ID, Valid: true},
 			RiderAmount:           500,
 			DistributableAmount:   9500,
 			PlatformRate:          200,
@@ -884,7 +885,7 @@ func TestCreateBaofuProfitSharingOrderTxCreatesOrderAndFeeLedgers(t *testing.T) 
 				PaymentOrderID:     paymentOrder.ID,
 				FeeType:            OrderPaymentFeeTypeRiderPaymentServiceFee,
 				PayerType:          OrderPaymentFeePayerTypeRider,
-				PayerID:            pgtype.Int8{Int64: 202, Valid: true},
+				PayerID:            pgtype.Int8{Int64: rider.ID, Valid: true},
 				PayeeType:          OrderPaymentFeePayeeTypePlatform,
 				BaseAmount:         500,
 				RateBps:            60,

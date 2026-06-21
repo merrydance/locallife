@@ -187,6 +187,7 @@ func TestCreateProfitSharingOrderPersistsBaofuFields(t *testing.T) {
 	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
 	operator := createRandomOperatorForRegion(t, merchant.RegionID)
 	paymentOrder := createRandomPaymentOrder(t, createRandomUser(t).ID)
+	rider := createRandomRider(t)
 	snapshot := []byte(`{"receivers":[{"role":"merchant","sharing_mer_id":"MER_SHARE","amount":8970},{"role":"rider","sharing_mer_id":"RIDER_SHARE","amount":500},{"role":"operator","sharing_mer_id":"OP_SHARE","amount":300},{"role":"platform","sharing_mer_id":"PLATFORM_SHARE","amount":200}],"payment_fee":30,"payment_fee_rate_bps":30}`)
 
 	profitSharingOrder, err := testStore.CreateProfitSharingOrder(context.Background(), CreateProfitSharingOrderParams{
@@ -196,7 +197,7 @@ func TestCreateProfitSharingOrderPersistsBaofuFields(t *testing.T) {
 		OrderSource:           "takeout",
 		TotalAmount:           10000,
 		DeliveryFee:           500,
-		RiderID:               pgtype.Int8{Int64: 202, Valid: true},
+		RiderID:               pgtype.Int8{Int64: rider.ID, Valid: true},
 		RiderAmount:           500,
 		DistributableAmount:   9500,
 		PlatformRate:          200,
@@ -233,6 +234,8 @@ func TestUpdateProfitSharingOrderRiderBillByPaymentOrderRequiresPending(t *testi
 	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
 	operator := createRandomOperatorForRegion(t, merchant.RegionID)
 	paymentOrder := createRandomPaymentOrder(t, createRandomUser(t).ID)
+	rider := createRandomRider(t)
+	otherRider := createRandomRider(t)
 
 	order, err := testStore.CreateProfitSharingOrder(ctx, CreateProfitSharingOrderParams{
 		PaymentOrderID:       paymentOrder.ID,
@@ -261,7 +264,7 @@ func TestUpdateProfitSharingOrderRiderBillByPaymentOrderRequiresPending(t *testi
 
 	updated, err := testStore.UpdateProfitSharingOrderRiderBillByPaymentOrder(ctx, UpdateProfitSharingOrderRiderBillByPaymentOrderParams{
 		PaymentOrderID:               paymentOrder.ID,
-		RiderID:                      pgtype.Int8{Int64: 202, Valid: true},
+		RiderID:                      pgtype.Int8{Int64: rider.ID, Valid: true},
 		RiderSharingMerID:            pgtype.Text{String: "RIDER_SHARE", Valid: true},
 		RiderAmount:                  497,
 		DistributableAmount:          9500,
@@ -281,7 +284,7 @@ func TestUpdateProfitSharingOrderRiderBillByPaymentOrderRequiresPending(t *testi
 	require.NoError(t, err)
 	require.Equal(t, order.ID, updated.ID)
 	require.Equal(t, ProfitSharingOrderStatusPending, updated.Status)
-	require.Equal(t, int64(202), updated.RiderID.Int64)
+	require.Equal(t, rider.ID, updated.RiderID.Int64)
 	require.Equal(t, int64(500), updated.RiderGrossAmount)
 	require.Equal(t, int64(3), updated.RiderPaymentFee)
 	require.Equal(t, int64(497), updated.RiderAmount)
@@ -295,7 +298,7 @@ func TestUpdateProfitSharingOrderRiderBillByPaymentOrderRequiresPending(t *testi
 
 	_, err = testStore.UpdateProfitSharingOrderRiderBillByPaymentOrder(ctx, UpdateProfitSharingOrderRiderBillByPaymentOrderParams{
 		PaymentOrderID: paymentOrder.ID,
-		RiderID:        pgtype.Int8{Int64: 303, Valid: true},
+		RiderID:        pgtype.Int8{Int64: otherRider.ID, Valid: true},
 	})
 	require.ErrorIs(t, err, ErrRecordNotFound)
 }
