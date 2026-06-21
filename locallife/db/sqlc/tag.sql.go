@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -113,6 +114,55 @@ func (q *Queries) GetActiveCategoriesByRegion(ctx context.Context, regionID int6
 	return items, nil
 }
 
+const getMerchantSelectableTag = `-- name: GetMerchantSelectableTag :one
+SELECT
+  t.id,
+  t.name,
+  t.type,
+  mst.sort_order,
+  t.status,
+  t.created_at,
+  t.icon
+FROM tags t
+INNER JOIN merchant_selectable_tags mst ON t.id = mst.tag_id
+WHERE mst.merchant_id = $1
+  AND mst.tag_id = $2
+  AND t.type = $3
+  AND t.status = 'active'
+LIMIT 1
+`
+
+type GetMerchantSelectableTagParams struct {
+	MerchantID int64  `json:"merchant_id"`
+	TagID      int64  `json:"tag_id"`
+	Type       string `json:"type"`
+}
+
+type GetMerchantSelectableTagRow struct {
+	ID        int64       `json:"id"`
+	Name      string      `json:"name"`
+	Type      string      `json:"type"`
+	SortOrder int16       `json:"sort_order"`
+	Status    string      `json:"status"`
+	CreatedAt time.Time   `json:"created_at"`
+	Icon      pgtype.Text `json:"icon"`
+}
+
+func (q *Queries) GetMerchantSelectableTag(ctx context.Context, arg GetMerchantSelectableTagParams) (GetMerchantSelectableTagRow, error) {
+	row := q.db.QueryRow(ctx, getMerchantSelectableTag, arg.MerchantID, arg.TagID, arg.Type)
+	var i GetMerchantSelectableTagRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Type,
+		&i.SortOrder,
+		&i.Status,
+		&i.CreatedAt,
+		&i.Icon,
+	)
+	return i, err
+}
+
 const getTag = `-- name: GetTag :one
 SELECT id, name, type, sort_order, status, created_at, icon FROM tags
 WHERE id = $1 LIMIT 1
@@ -133,6 +183,45 @@ func (q *Queries) GetTag(ctx context.Context, id int64) (Tag, error) {
 	return i, err
 }
 
+const linkMerchantSelectableTag = `-- name: LinkMerchantSelectableTag :one
+INSERT INTO merchant_selectable_tags (
+  merchant_id,
+  tag_id,
+  sort_order,
+  created_by_user_id
+) VALUES (
+  $1, $2, $3, $4
+)
+ON CONFLICT (merchant_id, tag_id) DO UPDATE
+SET sort_order = EXCLUDED.sort_order
+RETURNING merchant_id, tag_id, sort_order, created_by_user_id, created_at
+`
+
+type LinkMerchantSelectableTagParams struct {
+	MerchantID      int64       `json:"merchant_id"`
+	TagID           int64       `json:"tag_id"`
+	SortOrder       int16       `json:"sort_order"`
+	CreatedByUserID pgtype.Int8 `json:"created_by_user_id"`
+}
+
+func (q *Queries) LinkMerchantSelectableTag(ctx context.Context, arg LinkMerchantSelectableTagParams) (MerchantSelectableTag, error) {
+	row := q.db.QueryRow(ctx, linkMerchantSelectableTag,
+		arg.MerchantID,
+		arg.TagID,
+		arg.SortOrder,
+		arg.CreatedByUserID,
+	)
+	var i MerchantSelectableTag
+	err := row.Scan(
+		&i.MerchantID,
+		&i.TagID,
+		&i.SortOrder,
+		&i.CreatedByUserID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const listAllTagsByType = `-- name: ListAllTagsByType :many
 SELECT id, name, type, sort_order, status, created_at, icon FROM tags
 WHERE type = $1 AND status = 'active'
@@ -148,6 +237,66 @@ func (q *Queries) ListAllTagsByType(ctx context.Context, type_ string) ([]Tag, e
 	items := []Tag{}
 	for rows.Next() {
 		var i Tag
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Type,
+			&i.SortOrder,
+			&i.Status,
+			&i.CreatedAt,
+			&i.Icon,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMerchantSelectableTags = `-- name: ListMerchantSelectableTags :many
+SELECT
+  t.id,
+  t.name,
+  t.type,
+  mst.sort_order,
+  t.status,
+  t.created_at,
+  t.icon
+FROM tags t
+INNER JOIN merchant_selectable_tags mst ON t.id = mst.tag_id
+WHERE mst.merchant_id = $1
+  AND t.type = $2
+  AND t.status = 'active'
+ORDER BY mst.sort_order ASC, t.name ASC, t.id ASC
+`
+
+type ListMerchantSelectableTagsParams struct {
+	MerchantID int64  `json:"merchant_id"`
+	Type       string `json:"type"`
+}
+
+type ListMerchantSelectableTagsRow struct {
+	ID        int64       `json:"id"`
+	Name      string      `json:"name"`
+	Type      string      `json:"type"`
+	SortOrder int16       `json:"sort_order"`
+	Status    string      `json:"status"`
+	CreatedAt time.Time   `json:"created_at"`
+	Icon      pgtype.Text `json:"icon"`
+}
+
+func (q *Queries) ListMerchantSelectableTags(ctx context.Context, arg ListMerchantSelectableTagsParams) ([]ListMerchantSelectableTagsRow, error) {
+	rows, err := q.db.Query(ctx, listMerchantSelectableTags, arg.MerchantID, arg.Type)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListMerchantSelectableTagsRow{}
+	for rows.Next() {
+		var i ListMerchantSelectableTagsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,

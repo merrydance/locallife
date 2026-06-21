@@ -26,6 +26,7 @@ type Store interface {
 	// Merchant transactions
 	SetBusinessHoursTx(ctx context.Context, arg SetBusinessHoursTxParams) (SetBusinessHoursTxResult, error)
 	SetMerchantTagsTx(ctx context.Context, arg SetMerchantTagsTxParams) (SetMerchantTagsTxResult, error)
+	CreateMerchantSelectableTagTx(ctx context.Context, arg CreateMerchantSelectableTagTxParams) (Tag, error)
 	UpdateMerchantCapabilitiesTx(ctx context.Context, arg UpdateMerchantCapabilitiesTxParams) (UpdateMerchantCapabilitiesTxResult, error)
 	AddMerchantStaffTx(ctx context.Context, arg AddMerchantStaffTxParams) (AddMerchantStaffTxResult, error)
 	AssignMerchantStaffRoleTx(ctx context.Context, arg AssignMerchantStaffRoleTxParams) (AssignMerchantStaffRoleTxResult, error)

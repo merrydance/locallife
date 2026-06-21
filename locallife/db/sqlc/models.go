@@ -1486,6 +1486,16 @@ type MerchantProfile struct {
 	TakeoutSuspendUntil pgtype.Timestamptz `json:"takeout_suspend_until"`
 }
 
+// 商户可选业务标签集合；tags 仍为全局字典，商户通过本表选择可用标签
+type MerchantSelectableTag struct {
+	MerchantID int64 `json:"merchant_id"`
+	TagID      int64 `json:"tag_id"`
+	SortOrder  int16 `json:"sort_order"`
+	// 首次将标签加入商户可选集合的用户
+	CreatedByUserID pgtype.Int8 `json:"created_by_user_id"`
+	CreatedAt       time.Time   `json:"created_at"`
+}
+
 // 商户结算调整流水（追偿真实扣款/回滚）
 type MerchantSettlementAdjustment struct {
 	ID         int64 `json:"id"`

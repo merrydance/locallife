@@ -24,6 +24,52 @@ SET sort_order = tags.sort_order
 WHERE tags.status = 'active'
 RETURNING id, name, type, sort_order, status, created_at, icon;
 
+-- name: LinkMerchantSelectableTag :one
+INSERT INTO merchant_selectable_tags (
+  merchant_id,
+  tag_id,
+  sort_order,
+  created_by_user_id
+) VALUES (
+  $1, $2, $3, $4
+)
+ON CONFLICT (merchant_id, tag_id) DO UPDATE
+SET sort_order = EXCLUDED.sort_order
+RETURNING merchant_id, tag_id, sort_order, created_by_user_id, created_at;
+
+-- name: ListMerchantSelectableTags :many
+SELECT
+  t.id,
+  t.name,
+  t.type,
+  mst.sort_order,
+  t.status,
+  t.created_at,
+  t.icon
+FROM tags t
+INNER JOIN merchant_selectable_tags mst ON t.id = mst.tag_id
+WHERE mst.merchant_id = $1
+  AND t.type = $2
+  AND t.status = 'active'
+ORDER BY mst.sort_order ASC, t.name ASC, t.id ASC;
+
+-- name: GetMerchantSelectableTag :one
+SELECT
+  t.id,
+  t.name,
+  t.type,
+  mst.sort_order,
+  t.status,
+  t.created_at,
+  t.icon
+FROM tags t
+INNER JOIN merchant_selectable_tags mst ON t.id = mst.tag_id
+WHERE mst.merchant_id = $1
+  AND mst.tag_id = $2
+  AND t.type = $3
+  AND t.status = 'active'
+LIMIT 1;
+
 -- name: GetTag :one
 SELECT id, name, type, sort_order, status, created_at, icon FROM tags
 WHERE id = $1 LIMIT 1;

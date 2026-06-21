@@ -936,6 +936,7 @@ type Querier interface {
 	// 注意: repurchase_rate_percent 返回万分比(如 7550 表示 75.50%)，API层需除以100
 	// 注意: avg_orders_per_user 返回百分比形式(如 235 表示 2.35次)，API层需除以100
 	GetMerchantRepurchaseRate(ctx context.Context, arg GetMerchantRepurchaseRateParams) (GetMerchantRepurchaseRateRow, error)
+	GetMerchantSelectableTag(ctx context.Context, arg GetMerchantSelectableTagParams) (GetMerchantSelectableTagRow, error)
 	// 商户服务费明细
 	GetMerchantServiceFeeDetail(ctx context.Context, arg GetMerchantServiceFeeDetailParams) ([]GetMerchantServiceFeeDetailRow, error)
 	GetMerchantSettlementAdjustmentByRelatedAndType(ctx context.Context, arg GetMerchantSettlementAdjustmentByRelatedAndTypeParams) (MerchantSettlementAdjustment, error)
@@ -1261,6 +1262,7 @@ type Querier interface {
 	IsMerchantFavorited(ctx context.Context, arg IsMerchantFavoritedParams) (bool, error)
 	LinkFoodSafetyIncidentsToCase(ctx context.Context, arg LinkFoodSafetyIncidentsToCaseParams) (int64, error)
 	LinkMerchantDishCategory(ctx context.Context, arg LinkMerchantDishCategoryParams) (MerchantDishCategory, error)
+	LinkMerchantSelectableTag(ctx context.Context, arg LinkMerchantSelectableTagParams) (MerchantSelectableTag, error)
 	LinkReservationAdjustmentPaymentOrder(ctx context.Context, arg LinkReservationAdjustmentPaymentOrderParams) (ReservationAdjustment, error)
 	ListAbnormalStatsAlerts(ctx context.Context, arg ListAbnormalStatsAlertsParams) ([]ListAbnormalStatsAlertsRow, error)
 	ListAbnormalStatsDaily(ctx context.Context, arg ListAbnormalStatsDailyParams) ([]AbnormalStatsDaily, error)
@@ -1437,6 +1439,7 @@ type Querier interface {
 	ListMerchantRecoveryDisputesForMerchant(ctx context.Context, arg ListMerchantRecoveryDisputesForMerchantParams) ([]ListMerchantRecoveryDisputesForMerchantRow, error)
 	// 获取商户的包间列表（含主图、月销量）供顾客查看
 	ListMerchantRoomsForCustomer(ctx context.Context, merchantID int64) ([]ListMerchantRoomsForCustomerRow, error)
+	ListMerchantSelectableTags(ctx context.Context, arg ListMerchantSelectableTagsParams) ([]ListMerchantSelectableTagsRow, error)
 	ListMerchantSettlementAdjustments(ctx context.Context, arg ListMerchantSettlementAdjustmentsParams) ([]MerchantSettlementAdjustment, error)
 	ListMerchantSettlementTimeline(ctx context.Context, arg ListMerchantSettlementTimelineParams) ([]ListMerchantSettlementTimelineRow, error)
 	// 商户结算记录（带日期范围和状态筛选）

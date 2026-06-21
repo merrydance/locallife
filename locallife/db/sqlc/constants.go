@@ -20,6 +20,9 @@ const (
 	UserRoleStatusDisabled = "disabled"
 
 	TagStatusActive      = "active"
+	TagTypeDish          = "dish"
+	TagTypeTable         = "table"
+	TagTypeCombo         = "combo"
 	TagTypeCustomization = "customization"
 
 	MerchantStatusApproved          = "approved"

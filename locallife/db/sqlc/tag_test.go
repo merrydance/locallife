@@ -99,6 +99,158 @@ func TestUpsertActiveTagByNameAndTypeDoesNotReactivateInactiveTag(t *testing.T) 
 	require.Equal(t, "inactive", reloaded.Status)
 }
 
+func TestCreateMerchantSelectableTagTxCreatesAndLinksActiveTag(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	creator := createRandomUser(t)
+	name := "商户菜品标签-" + util.RandomString(8)
+
+	tag, err := testStore.CreateMerchantSelectableTagTx(context.Background(), CreateMerchantSelectableTagTxParams{
+		MerchantID:      merchant.ID,
+		Name:            name,
+		Type:            "dish",
+		SortOrder:       7,
+		CreatedByUserID: pgtype.Int8{Int64: creator.ID, Valid: true},
+	})
+	require.NoError(t, err)
+	require.Equal(t, name, tag.Name)
+	require.Equal(t, "dish", tag.Type)
+	require.Equal(t, "active", tag.Status)
+
+	tags, err := testStore.ListMerchantSelectableTags(context.Background(), ListMerchantSelectableTagsParams{
+		MerchantID: merchant.ID,
+		Type:       "dish",
+	})
+	require.NoError(t, err)
+	require.Len(t, tags, 1)
+	require.Equal(t, tag.ID, tags[0].ID)
+	require.Equal(t, int16(7), tags[0].SortOrder)
+}
+
+func TestCreateMerchantSelectableTagTxIsIdempotentForSameMerchant(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	name := "幂等标签-" + util.RandomString(8)
+
+	first, err := testStore.CreateMerchantSelectableTagTx(context.Background(), CreateMerchantSelectableTagTxParams{
+		MerchantID: merchant.ID,
+		Name:       name,
+		Type:       "table",
+		SortOrder:  3,
+	})
+	require.NoError(t, err)
+
+	second, err := testStore.CreateMerchantSelectableTagTx(context.Background(), CreateMerchantSelectableTagTxParams{
+		MerchantID: merchant.ID,
+		Name:       " " + name + " ",
+		Type:       "table",
+		SortOrder:  9,
+	})
+	require.NoError(t, err)
+	require.Equal(t, first.ID, second.ID)
+
+	tags, err := testStore.ListMerchantSelectableTags(context.Background(), ListMerchantSelectableTagsParams{
+		MerchantID: merchant.ID,
+		Type:       "table",
+	})
+	require.NoError(t, err)
+	require.Len(t, tags, 1)
+	require.Equal(t, first.ID, tags[0].ID)
+	require.Equal(t, int16(9), tags[0].SortOrder)
+}
+
+func TestCreateMerchantSelectableTagTxReusesGlobalTagAcrossMerchants(t *testing.T) {
+	firstMerchant := createRandomMerchantForDish(t)
+	secondMerchant := createRandomMerchantForDish(t)
+	name := "跨商户复用-" + util.RandomString(8)
+
+	first, err := testStore.CreateMerchantSelectableTagTx(context.Background(), CreateMerchantSelectableTagTxParams{
+		MerchantID: firstMerchant.ID,
+		Name:       name,
+		Type:       "combo",
+		SortOrder:  1,
+	})
+	require.NoError(t, err)
+
+	second, err := testStore.CreateMerchantSelectableTagTx(context.Background(), CreateMerchantSelectableTagTxParams{
+		MerchantID: secondMerchant.ID,
+		Name:       name,
+		Type:       "combo",
+		SortOrder:  2,
+	})
+	require.NoError(t, err)
+	require.Equal(t, first.ID, second.ID)
+
+	firstTags, err := testStore.ListMerchantSelectableTags(context.Background(), ListMerchantSelectableTagsParams{
+		MerchantID: firstMerchant.ID,
+		Type:       "combo",
+	})
+	require.NoError(t, err)
+	secondTags, err := testStore.ListMerchantSelectableTags(context.Background(), ListMerchantSelectableTagsParams{
+		MerchantID: secondMerchant.ID,
+		Type:       "combo",
+	})
+	require.NoError(t, err)
+	require.Len(t, firstTags, 1)
+	require.Len(t, secondTags, 1)
+	require.Equal(t, first.ID, firstTags[0].ID)
+	require.Equal(t, first.ID, secondTags[0].ID)
+}
+
+func TestCreateMerchantSelectableTagTxDoesNotReactivateInactiveTag(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	name := "停用标签-" + util.RandomString(8)
+
+	inactiveTag, err := testStore.CreateTag(context.Background(), CreateTagParams{
+		Name:      name,
+		Type:      "dish",
+		SortOrder: 1,
+		Status:    "inactive",
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.CreateMerchantSelectableTagTx(context.Background(), CreateMerchantSelectableTagTxParams{
+		MerchantID: merchant.ID,
+		Name:       name,
+		Type:       "dish",
+		SortOrder:  0,
+	})
+	require.ErrorIs(t, err, ErrTagNameReservedInactive)
+
+	reloaded, err := testStore.GetTag(context.Background(), inactiveTag.ID)
+	require.NoError(t, err)
+	require.Equal(t, "inactive", reloaded.Status)
+
+	tags, err := testStore.ListMerchantSelectableTags(context.Background(), ListMerchantSelectableTagsParams{
+		MerchantID: merchant.ID,
+		Type:       "dish",
+	})
+	require.NoError(t, err)
+	require.Empty(t, tags)
+}
+
+func TestCreateMerchantSelectableTagTxRejectsBlankName(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+
+	_, err := testStore.CreateMerchantSelectableTagTx(context.Background(), CreateMerchantSelectableTagTxParams{
+		MerchantID: merchant.ID,
+		Name:       "   ",
+		Type:       "dish",
+		SortOrder:  0,
+	})
+	require.ErrorIs(t, err, ErrInvalidTagName)
+}
+
+func TestCreateMerchantSelectableTagTxRejectsNonSelectableType(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+
+	_, err := testStore.CreateMerchantSelectableTagTx(context.Background(), CreateMerchantSelectableTagTxParams{
+		MerchantID: merchant.ID,
+		Name:       "经营类目-" + util.RandomString(8),
+		Type:       "merchant",
+		SortOrder:  0,
+	})
+	require.ErrorIs(t, err, ErrTagTypeNotSelectable)
+}
+
 func TestGetTag(t *testing.T) {
 	tag1 := createRandomTag(t, "merchant")
 

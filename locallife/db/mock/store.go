@@ -4651,6 +4651,21 @@ func (mr *MockStoreMockRecorder) CreateMerchantReservationTx(ctx, arg any) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateMerchantReservationTx", reflect.TypeOf((*MockStore)(nil).CreateMerchantReservationTx), ctx, arg)
 }
 
+// CreateMerchantSelectableTagTx mocks base method.
+func (m *MockStore) CreateMerchantSelectableTagTx(ctx context.Context, arg db.CreateMerchantSelectableTagTxParams) (db.Tag, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateMerchantSelectableTagTx", ctx, arg)
+	ret0, _ := ret[0].(db.Tag)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateMerchantSelectableTagTx indicates an expected call of CreateMerchantSelectableTagTx.
+func (mr *MockStoreMockRecorder) CreateMerchantSelectableTagTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateMerchantSelectableTagTx", reflect.TypeOf((*MockStore)(nil).CreateMerchantSelectableTagTx), ctx, arg)
+}
+
 // CreateMerchantSettlementAdjustment mocks base method.
 func (m *MockStore) CreateMerchantSettlementAdjustment(ctx context.Context, arg db.CreateMerchantSettlementAdjustmentParams) (db.MerchantSettlementAdjustment, error) {
 	m.ctrl.T.Helper()
@@ -10316,6 +10331,21 @@ func (mr *MockStoreMockRecorder) GetMerchantRepurchaseRate(ctx, arg any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMerchantRepurchaseRate", reflect.TypeOf((*MockStore)(nil).GetMerchantRepurchaseRate), ctx, arg)
 }
 
+// GetMerchantSelectableTag mocks base method.
+func (m *MockStore) GetMerchantSelectableTag(ctx context.Context, arg db.GetMerchantSelectableTagParams) (db.GetMerchantSelectableTagRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMerchantSelectableTag", ctx, arg)
+	ret0, _ := ret[0].(db.GetMerchantSelectableTagRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMerchantSelectableTag indicates an expected call of GetMerchantSelectableTag.
+func (mr *MockStoreMockRecorder) GetMerchantSelectableTag(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMerchantSelectableTag", reflect.TypeOf((*MockStore)(nil).GetMerchantSelectableTag), ctx, arg)
+}
+
 // GetMerchantServiceFeeDetail mocks base method.
 func (m *MockStore) GetMerchantServiceFeeDetail(ctx context.Context, arg db.GetMerchantServiceFeeDetailParams) ([]db.GetMerchantServiceFeeDetailRow, error) {
 	m.ctrl.T.Helper()
@@ -13805,6 +13835,21 @@ func (mr *MockStoreMockRecorder) LinkMerchantDishCategory(ctx, arg any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LinkMerchantDishCategory", reflect.TypeOf((*MockStore)(nil).LinkMerchantDishCategory), ctx, arg)
 }
 
+// LinkMerchantSelectableTag mocks base method.
+func (m *MockStore) LinkMerchantSelectableTag(ctx context.Context, arg db.LinkMerchantSelectableTagParams) (db.MerchantSelectableTag, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "LinkMerchantSelectableTag", ctx, arg)
+	ret0, _ := ret[0].(db.MerchantSelectableTag)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// LinkMerchantSelectableTag indicates an expected call of LinkMerchantSelectableTag.
+func (mr *MockStoreMockRecorder) LinkMerchantSelectableTag(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LinkMerchantSelectableTag", reflect.TypeOf((*MockStore)(nil).LinkMerchantSelectableTag), ctx, arg)
+}
+
 // LinkReservationAdjustmentPaymentOrder mocks base method.
 func (m *MockStore) LinkReservationAdjustmentPaymentOrder(ctx context.Context, arg db.LinkReservationAdjustmentPaymentOrderParams) (db.ReservationAdjustment, error) {
 	m.ctrl.T.Helper()
@@ -15858,6 +15903,21 @@ func (m *MockStore) ListMerchantRoomsForCustomer(ctx context.Context, merchantID
 func (mr *MockStoreMockRecorder) ListMerchantRoomsForCustomer(ctx, merchantID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListMerchantRoomsForCustomer", reflect.TypeOf((*MockStore)(nil).ListMerchantRoomsForCustomer), ctx, merchantID)
+}
+
+// ListMerchantSelectableTags mocks base method.
+func (m *MockStore) ListMerchantSelectableTags(ctx context.Context, arg db.ListMerchantSelectableTagsParams) ([]db.ListMerchantSelectableTagsRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListMerchantSelectableTags", ctx, arg)
+	ret0, _ := ret[0].([]db.ListMerchantSelectableTagsRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListMerchantSelectableTags indicates an expected call of ListMerchantSelectableTags.
+func (mr *MockStoreMockRecorder) ListMerchantSelectableTags(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListMerchantSelectableTags", reflect.TypeOf((*MockStore)(nil).ListMerchantSelectableTags), ctx, arg)
 }
 
 // ListMerchantSettlementAdjustments mocks base method.
