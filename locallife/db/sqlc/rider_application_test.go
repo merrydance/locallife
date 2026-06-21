@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -28,6 +29,22 @@ func createRandomRiderApplicationWithUser(t *testing.T, userID int64) RiderAppli
 	require.NotZero(t, app.CreatedAt)
 
 	return app
+}
+
+func createRiderApplicationMediaAsset(t *testing.T, userID int64, category string) MediaAsset {
+	now := time.Now().UnixNano()
+	asset, err := testStore.CreateMediaAsset(context.Background(), CreateMediaAssetParams{
+		ObjectKey:      fmt.Sprintf("test/rider-application/%d/%s-%d.jpg", userID, category, now),
+		Visibility:     "private",
+		MediaCategory:  category,
+		MimeType:       "image/jpeg",
+		FileSize:       1024,
+		ChecksumSha256: fmt.Sprintf("%064d", now),
+		UploadedBy:     userID,
+		SourceClient:   "test",
+	})
+	require.NoError(t, err)
+	return asset
 }
 
 // ==================== Create Tests ====================
@@ -210,6 +227,10 @@ func TestUpdateRiderApplicationHealthCert(t *testing.T) {
 
 func TestUpdateRiderApplicationHealthCert_ClearsStaleReviewFailure(t *testing.T) {
 	app := createRandomRiderApplication(t)
+	idCardFrontAsset := createRiderApplicationMediaAsset(t, app.UserID, "id_card_front")
+	idCardBackAsset := createRiderApplicationMediaAsset(t, app.UserID, "id_card_back")
+	oldHealthCertAsset := createRiderApplicationMediaAsset(t, app.UserID, "health_cert")
+	newHealthCertAsset := createRiderApplicationMediaAsset(t, app.UserID, "health_cert")
 	_, err := testStore.UpdateRiderApplicationBasicInfo(context.Background(), UpdateRiderApplicationBasicInfoParams{
 		ID:       app.ID,
 		RealName: pgtype.Text{String: "周松涛", Valid: true},
@@ -218,14 +239,14 @@ func TestUpdateRiderApplicationHealthCert_ClearsStaleReviewFailure(t *testing.T)
 	require.NoError(t, err)
 	_, err = testStore.UpdateRiderApplicationIDCard(context.Background(), UpdateRiderApplicationIDCardParams{
 		ID:                      app.ID,
-		IDCardFrontMediaAssetID: pgtype.Int8{Int64: 167, Valid: true},
-		IDCardBackMediaAssetID:  pgtype.Int8{Int64: 168, Valid: true},
+		IDCardFrontMediaAssetID: pgtype.Int8{Int64: idCardFrontAsset.ID, Valid: true},
+		IDCardBackMediaAssetID:  pgtype.Int8{Int64: idCardBackAsset.ID, Valid: true},
 		IDCardOcr:               []byte(`{"name":"周松涛","id_number":"132229197706017792","valid_end":"2035.03.01"}`),
 	})
 	require.NoError(t, err)
 	_, err = testStore.UpdateRiderApplicationHealthCert(context.Background(), UpdateRiderApplicationHealthCertParams{
 		ID:                     app.ID,
-		HealthCertMediaAssetID: pgtype.Int8{Int64: 208, Valid: true},
+		HealthCertMediaAssetID: pgtype.Int8{Int64: oldHealthCertAsset.ID, Valid: true},
 		HealthCertOcr:          []byte(`{"name":"错误姓名","valid_end":"2026.12.06"}`),
 	})
 	require.NoError(t, err)
@@ -239,7 +260,7 @@ func TestUpdateRiderApplicationHealthCert_ClearsStaleReviewFailure(t *testing.T)
 
 	updated, err := testStore.UpdateRiderApplicationHealthCert(context.Background(), UpdateRiderApplicationHealthCertParams{
 		ID:                     app.ID,
-		HealthCertMediaAssetID: pgtype.Int8{Int64: 209, Valid: true},
+		HealthCertMediaAssetID: pgtype.Int8{Int64: newHealthCertAsset.ID, Valid: true},
 		HealthCertOcr:          []byte(`{"name":"周松涛","valid_end":"2026.12.06"}`),
 	})
 	require.NoError(t, err)
@@ -250,6 +271,9 @@ func TestUpdateRiderApplicationHealthCert_ClearsStaleReviewFailure(t *testing.T)
 
 func TestClearRiderApplicationHealthCert_ClearsStaleReviewFailure(t *testing.T) {
 	app := createRandomRiderApplication(t)
+	idCardFrontAsset := createRiderApplicationMediaAsset(t, app.UserID, "id_card_front")
+	idCardBackAsset := createRiderApplicationMediaAsset(t, app.UserID, "id_card_back")
+	healthCertAsset := createRiderApplicationMediaAsset(t, app.UserID, "health_cert")
 	_, err := testStore.UpdateRiderApplicationBasicInfo(context.Background(), UpdateRiderApplicationBasicInfoParams{
 		ID:       app.ID,
 		RealName: pgtype.Text{String: "周松涛", Valid: true},
@@ -258,14 +282,14 @@ func TestClearRiderApplicationHealthCert_ClearsStaleReviewFailure(t *testing.T) 
 	require.NoError(t, err)
 	_, err = testStore.UpdateRiderApplicationIDCard(context.Background(), UpdateRiderApplicationIDCardParams{
 		ID:                      app.ID,
-		IDCardFrontMediaAssetID: pgtype.Int8{Int64: 167, Valid: true},
-		IDCardBackMediaAssetID:  pgtype.Int8{Int64: 168, Valid: true},
+		IDCardFrontMediaAssetID: pgtype.Int8{Int64: idCardFrontAsset.ID, Valid: true},
+		IDCardBackMediaAssetID:  pgtype.Int8{Int64: idCardBackAsset.ID, Valid: true},
 		IDCardOcr:               []byte(`{"name":"周松涛","id_number":"132229197706017792","valid_end":"2035.03.01"}`),
 	})
 	require.NoError(t, err)
 	_, err = testStore.UpdateRiderApplicationHealthCert(context.Background(), UpdateRiderApplicationHealthCertParams{
 		ID:                     app.ID,
-		HealthCertMediaAssetID: pgtype.Int8{Int64: 208, Valid: true},
+		HealthCertMediaAssetID: pgtype.Int8{Int64: healthCertAsset.ID, Valid: true},
 		HealthCertOcr:          []byte(`{"name":"错误姓名","valid_end":"2026.12.06"}`),
 	})
 	require.NoError(t, err)
