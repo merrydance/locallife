@@ -46,7 +46,7 @@
 
 | 类别 | 数量 | 说明 |
 | --- | ---: | --- |
-| 已确认前后端漂移 | 7 | `OPA-001` 至 `OPA-007` 已落证据链 |
+| 已确认前后端漂移 | 10 | `OPA-001` 至 `OPA-010` 已落证据链；`OPA-008` 至 `OPA-010` 来自 2026-06-21 用户回归暴露的二轮漂移 |
 | 已确认小程序缺失后端能力 | 3 | 追偿争议/追偿单、分账规则配置、规则引擎代理均有后端路由但无当前运营商小程序入口 |
 | 已确认小程序实现但后端不支持 | 2 | 商户搜索、骑手搜索是用户可见承诺但后端不绑定查询条件 |
 | 已确认生产数据异常 | 0 | `OPA-001` 已排除生产业务数据异常 |
@@ -169,10 +169,45 @@
 | OPA-005 | 后端权限边界缺口 | 峰时时段列表跨区域读取 | 已修复：`36c91afa` |
 | OPA-006 | 后端状态模型漂移 | 实时统计与骑手生命周期 | 已修复：`35df01de` |
 | OPA-007 | 错误路径漂移 | 代取费配置 PATCH 失败无差别 POST | 已修复：`e50b8503`、`6bf2fef9` |
+| OPA-008 | 小程序 ViewState/布局漂移 | 商户列表成功态空白 | 已修复：`ee292a34` |
+| OPA-009 | 后端区域授权真值漂移 | 调度大厅提示无权限 | 已修复：`6182ade7` |
+| OPA-010 | 小程序运行时展示适配漂移 | 财务概览金额只显示 `¥` | 已修复：`6182ade7` |
 | OP-NOUI-001/002 | 后端已实现但无页面入口 | 追偿争议/追偿单 | 当前确认 |
 | OP-NOUI-003 | 后端已实现但无页面入口 | 分账规则配置 | 当前确认 |
 | OP-NOUI-004 | 后端已实现但无页面入口 | 规则引擎代理 | 当前确认 |
 | OP-CONTRACT-002/005 | 历史候选 | 商户/骑手 summary `region_id` | 当前代码已支持或无页面调用，不计当前缺陷 |
+
+## 二轮漂移复盘与方法修正
+
+2026-06-21 用户回归继续暴露 `OPA-008` 至 `OPA-010`，说明前几轮专项修复虽然逐项关闭了已知 finding，但审计方法仍然偏“接口/页面/症状逐项核对”，没有把运营商侧抽象成跨后端、小程序运行时、页面 ViewState 的业务不变量矩阵。
+
+这不是单个补丁遗漏，而是审计模型不够强：运营商小程序的可用性依赖 `运营商身份 -> 区域授权 -> 能力入口 -> 后端权限 -> 数据聚合 -> 小程序 ViewModel -> WXML 实际渲染` 同时成立。前几轮 review 已覆盖 route、handler、SQL、service 和页面绑定，但没有把“同一能力的所有入口路径”和“小程序真实运行约束”都机器化成 gate。
+
+### 漂移继续出现的机制性原因
+
+1. 审计粒度偏能力清单和页面切片，而不是业务不变量。`OPA-009` 说明 `/v1/operator/regions` 能展示区域，不等于调度接口的区域授权口径一致。
+2. 新旧模型并存但没有统一读取口。`operators.region_id` 和 `operator_regions` 同时存在时，列表、显式区域校验、默认聚合各自实现，容易出现一个路径修复、另一个路径漂移。
+3. 同一用户任务有多条技术路径。区域列表、调度大厅、财务聚合、商户列表分别走不同 handler/service/page 状态机，单页回归不会自然覆盖同域同类路径。
+4. Review 过度相信编译、接口返回和静态页面绑定。`OPA-010` 的后端数据正确，小程序 WXML 却不能可靠调用 Page formatter，属于“契约正确但运行时适配漂移”。
+5. 已知症状修复后，没有立即把同类路径收进自动化矩阵。`OPA-008` 是页面成功态布局/ViewState 问题，和后端无关；如果只按接口真值审计，就会漏掉“数据存在但页面不可见”。
+
+### 运营商能力不变量矩阵
+
+| 不变量 | 必须同时成立的路径 | 已暴露漂移 | 已落地防线 | 后续规则 |
+| --- | --- | --- | --- | --- |
+| 已审核且有有效区域的运营商应看到可运营入口 | `operators`、`operator_regions`、`GET /v1/operator/regions`、dashboard/region picker | `OPA-001` 已审核区域显示待审核 | `check:operator-region-status-contract` | 禁止小程序用缺失字段兜底成审核态；状态必须来自后端关系真值 |
+| 区域权限读取口径应一致 | 显式 `region_id`、默认聚合、legacy primary region、suspended relation | `OPA-009` 调度大厅无权限；历史 `OPA-005` 峰时段越权 | 后端 dispatch/finance focused tests | 修改 operator region auth 时必须同时测显式区域、默认聚合、legacy fallback、suspended deny |
+| 页面成功态必须可见 | WXML 分支、scroll 容器高度、空态、加载态、分页态 | `OPA-008` 商户列表成功态空白 | `check:operator-merchant-list-viewstate` | 列表页修复不能只看接口成功，必须验证 success/empty/load-more 都有可见高度 |
+| 资金/比例展示由 ViewModel 拥有 | 后端金额 fen、service adapter、Page data、WXML 绑定 | `OPA-010` 财务概览只显示 `¥` | `check:operator-finance-overview-display`、`check:finance-bill-pages` | WXML 不调用金额/比例 formatter；关键展示字符串在 service/view model 中生成 |
+| 搜索/筛选/分页必须绑定同一查询条件 | keyword/status/online_status/region/page/count | `OPA-002`、`OPA-003` | 商户/骑手搜索契约脚本和 SQLC/API tests | 列表承诺的筛选项必须有后端绑定、SQL 条件和 stale response guard |
+| 写路径错误语义不能 catch-all fallback | PATCH/POST、404、403、400、500、network unknown | `OPA-007` PATCH 任意失败降级 POST | `check:operator-delivery-fee-fallback` | 只有稳定业务错误可触发 fallback；权限失败和网络未知必须停止并保留草稿 |
+
+### 审计方法调整
+
+- 后续不再以“页面是否调用接口”作为完成标准，而以“业务不变量在所有入口路径成立”作为完成标准。
+- 每个运营商区域相关修复都要同步检查：区域列表展示、显式 `region_id` 权限、默认聚合、legacy primary region、suspended relation、页面空态。
+- 每个小程序页面修复都要同步检查：成功态可见、空态可见、错误态可恢复、旧请求不会覆盖新状态、WXML 不承担关键格式化。
+- 文档 finding 只是第一层防线；能机器化的必须进入 `weapp/scripts/check-*` 或后端 focused test，避免靠人工记忆复盘。小程序侧运营商专项脚本入口统一为 `npm run check:operator-capability-audit`。
 
 ## Findings
 
@@ -599,6 +634,113 @@ SQL 证据：
 - 后端：`go test ./api -run 'TestCreateDeliveryFeeConfigAPI_AllowsInactiveConfig|Test(Create|Update|Get)DeliveryFeeConfigAPI' -count=1`，确认 POST/PATCH/GET 配置契约。
 - 生成物：如修改后端 Swagger 契约，运行 `make swagger && make check-generated`。
 
+### OPA-008: 商户列表接口有数据但小程序成功态不可见
+
+- 状态：已修复：`ee292a34`
+- 风险级别：G1
+- 类型：小程序 ViewState/布局漂移、成功态不可见
+- 影响页面：`weapp/miniprogram/pages/operator/merchants/index`
+- 影响脚本：`weapp/scripts/check-operator-merchant-list-viewstate.test.js`
+
+#### 用户可见现象
+
+运营商进入商户列表时，后端已经能按区域和搜索条件返回商户数据，但页面主体看起来是空的。这个现象容易被误判成“没有商户”或“后端没合并”，实际是成功态列表容器没有稳定可见高度。
+
+#### 前端证据
+
+- `merchants/index.wxml` 的成功态列表分支和空态/加载更多分支依赖 scroll 容器承载。
+- `merchants/index.wxss` 中内容容器和 scroll-view 高度约束不完整时，成功态可渲染但不可见。
+- 该问题和 `GET /v1/operator/merchants` 的后端搜索/分页修复不是同一个问题：接口成功不代表页面成功态可见。
+
+#### 根因
+
+前几轮审计按“service 是否调用后端、接口是否返回、字段是否匹配”收口，但没有把页面成功态、空态和滚动容器高度作为运营商列表页不变量。结果是数据链路已经闭合，ViewState/布局层仍能把可用数据隐藏。
+
+#### 修复方式
+
+- 调整商户列表 WXML 分支，让 `scroll-view` 直接承接成功态列表、空态和加载更多。
+- 调整页面内容容器和 `.merchants-scroll` 高度，避免 flex 子节点塌陷。
+- 新增 `check:operator-merchant-list-viewstate`，锁定成功态列表和空态必须有可见 scroll 高度。
+
+#### 建议验证
+
+- 小程序：`npm run check:operator-merchant-list-viewstate`
+- 小程序：`npm run compile && npm run lint`
+- 人工回归：有商户、无商户、搜索无结果、分页加载更多四种状态均需要可见。
+
+### OPA-009: 调度大厅按新区域关系判定无权限，漏兼容已审核运营商主区域
+
+- 状态：已修复：`6182ade7`
+- 风险级别：G2
+- 类型：后端区域授权真值漂移、legacy/new model 并存漂移
+- 影响页面：`weapp/miniprogram/pages/operator/dispatch-hall/index`
+- 影响接口：`GET /v1/operator/regions/:region_id/delivery-pool/summary`、`GET /v1/operator/regions/:region_id/delivery-pool`
+- 影响后端：`locallife/api/operator_dispatch_monitor.go`、`locallife/api/delivery_fee.go`
+
+#### 用户可见现象
+
+已审核运营商在小程序区域列表或入口中能看到自己的运营区域，但进入调度大厅后提示“无权限”。这说明“区域可见”和“区域可操作”的后端权限读取口径发生漂移。
+
+#### 后端证据
+
+- `/v1/operator/regions` 的展示链路可以暴露运营商主区域。
+- 调度大厅接口使用区域授权校验，只认可 active `operator_regions` 关系时，会漏掉仅存在 legacy `operators.region_id` 的已审核主区域。
+- 默认聚合 helper 如果无差别纳入 legacy 主区域，也可能把 suspended relation 或历史关系带进统计，因此不能简单全局放开。
+
+#### 根因
+
+`operators.region_id` 与 `operator_regions` 新旧模型并存，但没有统一的“当前运营商可操作区域”读取口。区域列表、调度显式 `region_id`、默认财务/统计聚合各自实现，导致某些路径只看新表，某些路径仍能看旧主区域。
+
+#### 修复方式
+
+- 在区域授权 helper 中增加 legacy primary-region fallback，但仅在该 operator 没有 `operator_regions` 关系时生效。
+- suspended relation 仍然拒绝，不能因为 legacy `operators.region_id` 重新获得权限。
+- 修正默认聚合 helper，不把 suspended legacy primary region 纳入 finance/stat 聚合。
+- 增加 dispatch 和 stats focused tests，覆盖 legacy fallback、active relation、suspended relation、显式区域和默认聚合。
+
+#### 建议验证
+
+- 后端：`go test ./api -run 'Test(GetOperatorPendingDispatch|ListOperatorPendingDispatch|GetOperatorFinanceOverview|GetOperatorCommission)' -count=1`
+- 小程序：进入调度大厅，已审核主区域可读；暂停区域或非管理区域显示无权限。
+- 复核：所有 operator region auth 修改必须同时覆盖显式 `region_id` 与默认聚合路径。
+
+### OPA-010: 财务概览后端有金额但小程序只显示 `¥`
+
+- 状态：已修复：`6182ade7`
+- 风险级别：G2
+- 类型：小程序运行时展示适配漂移、资金展示 ViewModel 漂移
+- 影响页面：`weapp/miniprogram/pages/operator/finance/withdraw/index`
+- 影响接口：`GET /v1/operators/me/finance/overview`、`GET /v1/operators/me/commission`
+- 影响脚本：`weapp/scripts/check-operator-finance-overview-display.test.js`
+
+#### 用户可见现象
+
+运营商财务页的概览金额区域只显示货币符号 `¥`，没有显示具体金额。后端并非无数据，问题发生在小程序模板渲染层。
+
+#### 前端证据
+
+- 财务页 WXML 曾在模板中调用 Page formatter，例如金额和比例格式化方法。
+- WeChat WXML 对这种 Page 方法调用不可靠，导致表达式不能按普通 TypeScript runtime 的预期执行。
+- 资金类展示如果依赖 WXML 临时格式化，编译和 TypeScript lint 均可能通过，但真机/开发者工具显示仍然漂移。
+
+#### 根因
+
+前几轮 review 把“后端返回金额字段、页面有绑定表达式”视为足够，但没有把“小程序运行时是否能实际渲染关键金额字符串”作为 gate。金额/比例属于资金域关键展示，格式化所有权应在 service/view model，而不是 WXML。
+
+#### 修复方式
+
+- `operator-finance.ts` 在 view model 中生成 `totalIncomeDisplay`、`currentMonthIncomeDisplay`、`operatorShareRatioDisplay`、佣金行金额展示等字符串。
+- 财务页 WXML 只绑定已格式化 display 字段，不再调用金额/比例 formatter。
+- 页面 TS 移除 template-only formatter 方法，避免形成看似可用但运行时不可靠的接口。
+- 新增 `check:operator-finance-overview-display`，锁定运营商财务概览和佣金行必须绑定 display 字符串。
+
+#### 建议验证
+
+- 小程序：`npm run check:operator-finance-overview-display`
+- 小程序：`npm run check:finance-bill-pages`
+- 小程序：`npm run compile && npm run lint`
+- 人工回归：财务概览、佣金账单、提现入口均显示完整金额和比例，不出现裸 `¥`。
+
 ## 修复任务计划
 
 本节是后续修复执行的任务蓝图，不是一次性大改清单。执行时按“一个子任务一组最小相关文件、一组 focused 验证、一次 review、一次提交”的节奏推进；每个大问题完成后，再做一次设计目标复核，确认没有把漂移转移到其它页面、接口或状态口径上。
@@ -998,6 +1140,7 @@ SQL 证据：
 | Batch 4 | `OPA-004` | 重构区域体检统计契约 | 后端统计 DTO 与页面 ViewModel 一致，切区时序正确 |
 | Batch 5 | `OPA-002`、`OPA-003` | 列表搜索/筛选能力闭环 | keyword/status/分页/count/跨区域测试覆盖 |
 | Batch 6 | `OP-NOUI-*` | 后端-only 能力归属裁决 | 先裁决再实现，不用接口反推页面 |
+| Batch 7 | `OPA-008`、`OPA-009`、`OPA-010` | 用户回归暴露的二轮漂移收口 | 页面成功态可见、调度区域授权一致、财务关键展示由 ViewModel 输出 |
 
 ### 每个大问题完成后的复核模板
 
@@ -1137,6 +1280,51 @@ SQL 证据：
 | 非目标 | 未新增运营商小程序追偿争议、分润配置或规则代理页面；未移除平台规则治理入口；未重新设计规则引擎的区域独占/共享所有权模型；未改变 `/v1/operator/rules` 现有区域规则配置入口；未新增追偿争议处理写操作 |
 | 剩余风险 | `GET /v1/operators/me/rules` 只读代理仍用 rule version JSON 中的 `scope.region_id` / `gray_config.region_id` 判断可见性，适合诊断观察，不适合作为规则编辑所有权模型；如果未来要开放运营商规则命中或规则详情页面，需要先做字段裁剪和移动端 IA review。分润配置列表现在阻断跨区域商户配置，但若未来支持多区域 operator 一次聚合分润配置，需要新增 region 集合查询而不是复用单 region API |
 
+#### OPA-008 完成复核：商户列表成功态可见性
+
+| 字段 | 记录 |
+| --- | --- |
+| 完成范围 | `OPA-008`；业务提交 `ee292a34 fix: restore operator merchant list visibility`；涉及 `weapp/miniprogram/pages/operator/merchants/index.wxml`、`weapp/miniprogram/pages/operator/merchants/index.wxss`、`weapp/scripts/check-operator-merchant-list-viewstate.test.js`、`weapp/package.json` |
+| 设计目标 | 已达成：商户列表在成功态直接渲染有稳定高度的 `scroll-view`；无数据空态、列表、加载更多都在同一可见滚动容器内；接口有数据时不再因为布局塌陷而表现为空白 |
+| 设计修正 | 该问题不是后端商户搜索/分页契约问题，而是小程序 ViewState 与布局可见性问题；因此修复聚焦页面成功态和 scroll 容器，不扩大后端接口或搜索语义 |
+| 时序 | 本项不新增请求时序；既有搜索 stale response guard 继续负责旧请求丢弃；页面渲染层只保证成功态数据到达后有可见承载 |
+| 幂等 | 不新增写路径；重复进入或刷新只重新读取列表并渲染，不产生副作用 |
+| 越权 | 不新增权限入口；商户可见范围仍由 `GET /v1/operator/merchants` 后端区域授权和查询条件控制 |
+| 小程序复核 | 新增 `check:operator-merchant-list-viewstate`，锁定 WXML 成功态结构、空态描述、`.content { min-height: 0; }` 和 `.merchants-scroll { height: 100%; }` |
+| 回归 | `PATH="$HOME/.local/bin:$PATH" npm run check:operator-merchant-list-viewstate`、`npm run compile`、`npm run lint` 在业务修复时已通过；本次文档/gate 收口会通过 `npm run check:operator-capability-audit` 复跑小程序专项脚本 |
+| 非目标 | 未改商户搜索 SQL、状态筛选、详情页能力标签或商户管理权限；这些已分别由 `OPA-002` 和商户能力脚本覆盖 |
+| 剩余风险 | 未记录微信开发者工具或真机截图证据；自动化脚本能锁住结构和高度约束，但不能替代真实设备视觉 smoke |
+
+#### OPA-009 完成复核：调度大厅区域授权口径收敛
+
+| 字段 | 记录 |
+| --- | --- |
+| 完成范围 | `OPA-009`；业务提交 `6182ade7 fix: restore operator dispatch and finance views`；涉及 `locallife/api/delivery_fee.go`、`locallife/api/operator_dispatch_monitor.go`、`locallife/api/operator_dispatch_monitor_test.go`、`locallife/api/operator_stats_test.go` |
+| 设计目标 | 已达成：仅有 legacy `operators.region_id` 且没有 `operator_regions` 行的已审核运营商，可以访问自己主区域的调度大厅；已有 active `operator_regions` 的运营商仍按关系表授权；suspended relation 不会被 legacy 主区域绕过 |
+| 设计修正 | 不把 legacy 主区域无条件加入所有授权集合，而是在无新关系行时作为兼容 fallback；默认聚合 helper 同步避免把 suspended legacy primary region 纳入财务/统计聚合 |
+| 时序 | 本项为读路径授权和聚合口径修复；没有改变调度 alert、delivery pool 或通知状态机；读取前先完成授权判断，不做先读后拒绝 |
+| 幂等 | 不新增写路径；重复读取 summary/list 只返回当前授权范围内的调度池视图 |
+| 越权 | 重点复核 legacy/new model 并存边界：非管理区域继续拒绝，suspended relation 继续拒绝，legacy fallback 只在无 `operator_regions` 关系时生效 |
+| 后端复核 | `operator_dispatch_monitor_test.go` 覆盖 legacy primary-region fallback、active relation、suspended deny；`operator_stats_test.go` 覆盖默认聚合不纳入 suspended legacy primary region |
+| 回归 | 业务修复时 `go test ./api -count=1` 通过；focused dispatch/finance tests 通过；本次文档/gate 收口会复跑 `go test ./api -run 'Test(GetOperatorPendingDispatch|ListOperatorPendingDispatch|GetOperatorFinanceOverview|GetOperatorCommission)' -count=1` |
+| 非目标 | 未重构全局 operator region resolver；未迁移生产历史数据；未改变调度池业务状态、派单策略或通知 worker |
+| 剩余风险 | 生产历史 operator 数据如果同时存在异常 legacy 主区域和多条关系，需要继续用只读 SQL 做样本审计；当前代码测试覆盖了预期兼容和暂停拒绝语义 |
+
+#### OPA-010 完成复核：运营商财务金额展示 ViewModel 收口
+
+| 字段 | 记录 |
+| --- | --- |
+| 完成范围 | `OPA-010`；业务提交 `6182ade7 fix: restore operator dispatch and finance views`；涉及 `weapp/miniprogram/pages/operator/_services/operator-finance.ts`、`weapp/miniprogram/pages/operator/finance/withdraw/index.ts`、`weapp/miniprogram/pages/operator/finance/withdraw/index.wxml`、`weapp/scripts/check-operator-finance-overview-display.test.js`、`weapp/package.json` |
+| 设计目标 | 已达成：财务概览金额、比例和佣金行金额均由 service/view model 生成 display 字符串；WXML 只绑定字符串，不再调用 Page formatter；后端有金额时不会因为模板运行时限制只显示裸 `¥` |
+| 设计修正 | 不把问题归因于后端 finance overview 数据缺失，而是明确为小程序运行时展示适配漂移；资金类展示格式化所有权上移到 view model |
+| 时序 | 本项不改变 finance overview 或 commission 的读取顺序；刷新、返回重入仍以重新拉取后端数据并重建 view model 为准 |
+| 幂等 | 不新增写路径；提现创建、账单读取、账户状态均不在本项改动范围内 |
+| 越权 | 不新增资金接口或参数；财务数据可见范围仍由后端当前 operator 身份和区域聚合控制 |
+| 小程序复核 | 新增 `check:operator-finance-overview-display`，锁定 WXML 不调用 `formatFen/formatShareRatio`，且必须绑定 `totalIncomeDisplay/currentMonthIncomeDisplay/operatorShareRatioDisplay/currentMonthGmvDisplay/currentMonthCommissionDisplay` 等 display 字段 |
+| 回归 | 业务修复时 `npm run check:operator-finance-overview-display`、`npm run check:finance-bill-pages`、`npm run compile`、`npm run lint` 均通过；本次文档/gate 收口会通过 `npm run check:operator-capability-audit` 复跑小程序专项脚本 |
+| 非目标 | 未改后端财务计算公式、提现流程、宝付账户开户或佣金账单分页；未给 WXML 通用表达式安全 gate 增加全仓 formatter 禁令 |
+| 剩余风险 | 自动化脚本能锁住当前财务页 display 字段，但不能替代微信开发者工具或真机 smoke；后续新增资金展示页面必须复用 ViewModel display 字段规则 |
+
 ## 后续审计工作记录
 
 后续继续在本节追加全量盘点结果。每个能力或页面至少记录：
@@ -1150,3 +1338,6 @@ SQL 证据：
 | OPA-002 | 商户管理 | `/v1/operator/merchants` keyword 搜索 | `operator_merchant_rider.go`, `merchant.sql`, `merchant_test.go`, Swagger 生成物 | `operator/merchants/index`, `operator-merchant-management.ts`, `check-operator-merchant-search-contract.test.js` | 已修复：`369b33e3` | 已完成复核 |
 | OPA-003 | 骑手管理 | `/v1/operator/riders` keyword/online_status 搜索筛选 | `operator_merchant_rider.go`, `rider.sql`, `rider_test.go`, Swagger 生成物 | `operator/riders/index`, `operator-rider-management.ts`, `check-operator-rider-search-contract.test.js` | 已修复：`90e87ac7` | 已完成复核 |
 | OP-NOUI | 后端-only 能力 | 追偿争议/追偿单、分润配置、`/v1/operators/me/rules/**` | `recovery_dispute.go`, `claim_recovery.go`, `operator_profit_sharing_config.go`, `rules_operator_proxy.go`, `profit_sharing_config.sql` | 当前运营商小程序无 backend-only 入口；现有规则配置使用 `/v1/operator/rules` | 已修复/裁决：`ae280503` | 已完成复核 |
+| OPA-008 | 商户管理 | 商户列表成功态可见性 | 后端商户列表契约沿用 `OPA-002` | `operator/merchants/index`, `check-operator-merchant-list-viewstate.test.js` | 已修复：`ee292a34` | 已完成复核 |
+| OPA-009 | 调度大厅 | `/v1/operator/regions/:region_id/delivery-pool/summary`、`/delivery-pool` 区域授权 | `operator_dispatch_monitor.go`, `delivery_fee.go`, `operator_dispatch_monitor_test.go`, `operator_stats_test.go` | `operator/dispatch-hall/index` | 已修复：`6182ade7` | 已完成复核 |
+| OPA-010 | 财务概览 | `/v1/operators/me/finance/overview`、`/commission` 金额展示适配 | `operator_stats_test.go` 覆盖默认聚合边界 | `operator/finance/withdraw/index`, `operator-finance.ts`, `check-operator-finance-overview-display.test.js` | 已修复：`6182ade7` | 已完成复核 |
