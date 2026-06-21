@@ -8,10 +8,11 @@
       model:value="{{keyword}}"
       placeholder="搜索菜品、商家"
       focus="{{true}}"
+      action="搜索"
       bind:change="onKeywordChange"
       bind:clear="onClear"
       bind:submit="onSearch"
-      bind:cancel="onCancel"
+      bind:action-click="onSearch"
     />
   </view>
 

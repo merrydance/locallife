@@ -13,6 +13,7 @@ import ConsumerDiscoveryAdapter from '../../../adapters/consumer-discovery'
 import { getPublicImageUrl } from '../../../utils/image'
 import { isSettledFulfilled, isSettledRejected, settleAll } from '../../../utils/promise'
 import { formatPriceNoSymbol } from '../../../utils/util'
+import { chooseTakeoutSearchResultTab } from '../../../utils/takeout-search-result-tab'
 
 const DEBOUNCE_MS = 300
 
@@ -222,6 +223,10 @@ Page({
         resultMerchants: merchants,
         resultDishCount: result.total_dishes,
         resultMerchantCount: result.total_merchants,
+        activeResultTab: chooseTakeoutSearchResultTab({
+          dishCount: dishes.length,
+          merchantCount: merchants.length
+        }),
         searching: false
       })
     } catch (err) {
