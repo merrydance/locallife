@@ -5,6 +5,7 @@
 
 import { request } from '../utils/request'
 import { logger } from '../utils/logger'
+import { settleAll } from '../utils/promise'
 import type { DishSummary } from './dish'
 import {
     getRecommendedMerchantsWithMeta as getRecommendedMerchantsWithMetaFromMerchant,
@@ -366,40 +367,51 @@ export async function unifiedSearch(
     const { dish_limit = 10, merchant_limit = 10, ...locationParams } = params
     const cleanedLoc = cleanParams(locationParams)
 
-    // 并行搜索菜品和商户
-    const [dishResults, merchantResults] = await Promise.all([
-        request({
-            url: '/v1/search/dishes',
-            method: 'GET',
-            data: {
-                keyword,
-                page_id: 1,
-                page_size: dish_limit,
-                ...cleanedLoc
-            }
-        }) as Promise<SearchDishesResponse | DishSummary[]>,
-        request({
-            url: '/v1/search/merchants',
-            method: 'GET',
-            data: {
-                keyword,
-                page_id: 1,
-                page_size: merchant_limit,
-                ...cleanedLoc
-            }
-        }) as Promise<SearchMerchantsResponse | MerchantSummary[]>
-    ])
+    const dishSearchPromise = Promise.resolve().then(() => request({
+        url: '/v1/search/dishes',
+        method: 'GET',
+        data: {
+            keyword,
+            page_id: 1,
+            page_size: dish_limit,
+            ...cleanedLoc
+        }
+    }) as Promise<SearchDishesResponse | DishSummary[]>)
+    const merchantSearchPromise = Promise.resolve().then(() => searchMerchantsWithMetaFromMerchant({
+        keyword,
+        page_id: 1,
+        page_size: merchant_limit,
+        user_latitude: cleanedLoc.user_latitude,
+        user_longitude: cleanedLoc.user_longitude
+    }))
 
-    const dishes = Array.isArray(dishResults) ? dishResults : (dishResults.dishes || [])
-    const merchants = Array.isArray(merchantResults)
-        ? merchantResults
-        : (merchantResults.merchants || [])
-    const dishTotal = Array.isArray(dishResults)
-        ? dishResults.length
-        : (dishResults.total || dishes.length)
-    const merchantTotal = Array.isArray(merchantResults)
-        ? merchantResults.length
-        : (merchantResults.total || merchants.length)
+    // 并行搜索菜品和商户，单路失败不应吞掉另一类可用结果。
+    const [dishResults, merchantResults] = await settleAll([
+        dishSearchPromise,
+        merchantSearchPromise
+    ] as const)
+
+    if (dishResults.status === 'rejected' && merchantResults.status === 'rejected') {
+        throw merchantResults.reason || dishResults.reason
+    }
+
+    const dishPayload = dishResults.status === 'fulfilled' ? dishResults.value : []
+    const merchantPayload = merchantResults.status === 'fulfilled' ? merchantResults.value : null
+    const dishes = Array.isArray(dishPayload) ? dishPayload : (dishPayload.dishes || [])
+    const merchants = merchantPayload?.merchants || []
+    const dishTotal = dishResults.status === 'fulfilled'
+        ? (Array.isArray(dishPayload) ? dishPayload.length : (dishPayload.total || dishes.length))
+        : 0
+    const merchantTotal = merchantPayload?.total || merchants.length
+    const hasAnyResult = dishes.length > 0 || merchants.length > 0 || dishTotal > 0 || merchantTotal > 0
+    if (!hasAnyResult) {
+        if (merchantResults.status === 'rejected') {
+            throw merchantResults.reason
+        }
+        if (dishResults.status === 'rejected') {
+            throw dishResults.reason
+        }
+    }
 
     return {
         dishes,

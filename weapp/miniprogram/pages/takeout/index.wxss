@@ -16,6 +16,16 @@
   z-index: var(--z-index-sticky);
 }
 
+.search-shortcut {
+  position: relative;
+}
+
+.search-hit-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
 .activity-carousel-section {
   padding: 0 var(--spacer-md) var(--spacer-sm);
 }

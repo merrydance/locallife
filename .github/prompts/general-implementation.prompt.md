@@ -34,6 +34,7 @@ Request:
 - Tell me which target areas are involved: <backend, web, weapp, mixed>
 - Classify the risk level (`G0`/`G1`/`G2`/`G3`) and explain why when the task is not obviously routine
 - For bugfixes, refactors, or multi-step requests, provide a short numbered plan where each step names its verification check
+- For user-reported defects, apply the User-Reported Defect Closure Gate in `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md`: restate the original failing scenario as an executable acceptance case, compare any known working reference path, and make the regression validation prove that scenario or state the coverage gap
 - Tell me whether any regeneration or derived-artifact steps are required
 - Run the smallest relevant validation command and report what was executed
 - State which relevant paths were not verified and what residual risk remains

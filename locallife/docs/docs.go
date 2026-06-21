@@ -20690,6 +20690,12 @@ const docTemplate = `{
                     },
                     {
                         "type": "integer",
+                        "description": "区域ID；不传时聚合当前运营商全部可管区域",
+                        "name": "region_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
                         "description": "页码 (默认: 1)",
                         "name": "page",
                         "in": "query"
@@ -21076,6 +21082,12 @@ const docTemplate = `{
                 ],
                 "summary": "获取分账规则配置",
                 "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "区域ID；不传时聚合当前运营商全部可管区域",
+                        "name": "region_id",
+                        "in": "query"
+                    },
                     {
                         "type": "string",
                         "description": "状态",

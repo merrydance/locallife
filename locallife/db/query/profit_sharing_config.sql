@@ -83,6 +83,18 @@ WHERE (NULLIF($1::text, '') IS NULL OR psc.status = $1)
 ORDER BY psc.priority ASC, psc.id DESC
 LIMIT $5 OFFSET $6;
 
+-- name: ListProfitSharingConfigsForRegions :many
+SELECT psc.id, psc.status, psc.order_source, psc.region_id, psc.merchant_id, psc.platform_rate, psc.operator_rate, psc.rider_enabled, psc.priority, psc.effective_at, psc.expires_at, psc.created_by, psc.created_at, psc.updated_at
+FROM profit_sharing_configs psc
+LEFT JOIN merchants m ON m.id = psc.merchant_id
+WHERE (NULLIF(sqlc.arg('status')::text, '') IS NULL OR psc.status = sqlc.arg('status'))
+  AND (NULLIF(sqlc.arg('order_source')::text, '') IS NULL OR psc.order_source = sqlc.arg('order_source'))
+  AND (psc.region_id IS NULL OR psc.region_id = ANY(sqlc.arg('region_ids')::bigint[]))
+  AND (sqlc.arg('merchant_id')::bigint = 0 OR psc.merchant_id = sqlc.arg('merchant_id'))
+  AND (psc.merchant_id IS NULL OR m.region_id = ANY(sqlc.arg('region_ids')::bigint[]))
+ORDER BY psc.priority ASC, psc.id DESC
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
+
 -- name: ListProfitSharingConfigAudits :many
 SELECT id, config_id, action, actor_id, actor_role, detail, created_at
 FROM profit_sharing_config_audits

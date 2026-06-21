@@ -190,21 +190,21 @@ func (server *Server) resolveWeatherRuleValue(ctx *gin.Context, regionID int64, 
 func (server *Server) resolveOperatorRuleRegionID(ctx *gin.Context, operator db.Operator) (int64, error) {
 	var query operatorRulesQuery
 	if err := ctx.ShouldBindQuery(&query); err != nil {
-		return 0, err
+		return 0, errInvalidRegionID
 	}
 
 	if query.RegionID > 0 {
 		if _, err := server.checkOperatorManagesRegion(ctx, query.RegionID); err != nil {
-			return -1, err
+			return 0, err
 		}
 		return query.RegionID, nil
 	}
 
-	if operator.RegionID > 0 {
-		return operator.RegionID, nil
+	regionID, err := server.getOperatorRegionID(ctx)
+	if err != nil {
+		return 0, err
 	}
-
-	return server.getOperatorRegionID(ctx)
+	return regionID, nil
 }
 
 // listOperatorRules 获取运营商规则配置
@@ -229,15 +229,7 @@ func (server *Server) listOperatorRules(ctx *gin.Context) {
 
 	targetRegionID, err := server.resolveOperatorRuleRegionID(ctx, operator)
 	if err != nil {
-		if targetRegionID == -1 {
-			ctx.JSON(http.StatusForbidden, errorResponse(err))
-			return
-		}
-		if errors.Is(err, db.ErrRecordNotFound) {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("operator has no assigned region")))
-			return
-		}
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		server.respondOperatorRegionSelectionError(ctx, err)
 		return
 	}
 
@@ -561,15 +553,7 @@ func (server *Server) updateOperatorRule(ctx *gin.Context) {
 
 	targetRegionID, err := server.resolveOperatorRuleRegionID(ctx, operator)
 	if err != nil {
-		if targetRegionID == -1 {
-			ctx.JSON(http.StatusForbidden, errorResponse(err))
-			return
-		}
-		if errors.Is(err, db.ErrRecordNotFound) {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("operator has no assigned region")))
-			return
-		}
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		server.respondOperatorRegionSelectionError(ctx, err)
 		return
 	}
 

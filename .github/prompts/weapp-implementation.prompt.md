@@ -31,6 +31,7 @@ Request:
 Implementation must push:
 
 - Start from backend-supported capabilities and the user task before coding or styling
+- For user-reported defects, apply the User-Reported Defect Closure Gate in `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md`: restate the exact failing mobile scenario, compare any working reference page or entry, and require regression evidence for that scenario or an explicit coverage gap
 - Treat API flattening as an architecture defect: endpoint count, DTO shape, handler names, service method names, and old WXML structure must not decide page sections, cards, tabs, or component boundaries
 - Treat the real backend contract as the only source of truth for fields, statuses, permissions, pagination, and metric meaning
 - First inventory backend entities, fields, states, actions, permissions, and async outcomes; then group them into task domains before deciding any view structure
@@ -53,6 +54,8 @@ Implementation must push:
 - Check TDesign MCP against the installed Mini Program component set before introducing any user-visible local control or wrapper exception, and state the exact component or supported composition chosen
 - If TDesign or an officially supported TDesign outer composition already solves the task, do not add a user-visible local notice/card/panel/footer shell; keep LocalLife customization at page shell, shared layout, and token-level branding only
 - Wire service calls, page state, handlers, WXML, WXSS, and user-visible feedback end to end
+- For search, list, filter, pagination, tab, and empty-state bugs, trace the full chain from input or filter state through request params, API composition, adapter/view model, tab/list selection, and empty/error rendering before claiming the result is fixed
+- When the Mini Program combines multiple async sources, verify partial failure behavior so one failed source cannot hide valid results from another source or turn service failure into a fake empty state
 - State which role-side design document governed the visual decisions and whether any exception crossed that boundary
 - For non-consumer pages, do not import `styles/customer.wxss` or carry customer-side brand-token styling unless the governing standard explicitly allows that boundary exception
 - Report any user-visible area that still does not use TDesign, any backend-contract ambiguity, and any remaining weak-network, re-entry, duplicate-tap, or payment-state risk
@@ -121,6 +124,7 @@ Acceptance focus:
 - The hand-off names the task risk level, the role-side design document used, and the validation depth chosen for that risk
 - The hand-off states the user's common path, first-screen priority, state to preserve, and recovery behavior before component choices
 - The implementation is closed across service, state, handlers, render branches, feedback, and any affected payment or recovery path
+- User-reported bugs include an acceptance case for the user's original failure, a reference-path comparison when available, and a regression or focused validation that proves the scenario rather than only proving the edited branch
 - The delivery names the task-domain owner and, when relevant, the page-group owner, service owner, and workflow/controller owner
 - The first screen enters the task directly instead of opening with explanatory cards or stacked guidance copy
 - New explanatory copy was avoided by default; any retained sentence is explicitly necessary for risk, state meaning, field constraint, or next-action clarity

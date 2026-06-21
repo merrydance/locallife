@@ -30,6 +30,7 @@ Request:
 - Prioritize bugs, behavioral regressions, contract violations, broken change propagation, and missing validation
 - Flag silent error swallowing, nil-or-empty values treated as implicit success, missing logging boundaries for unexpected failures, or caller-facing errors that are vague, unstable, or leak internal details
 - Check whether the change forms a complete end-to-end path instead of stopping at one layer
+- For user-reported defects, check the User-Reported Defect Closure Gate in `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md`: original failing scenario, any known working reference path, regression evidence, and why the old behavior or previous fix missed the real root cause
 - Check whether the capability owner and single source of truth remain clear, or whether the change introduced duplicate state semantics or multiple writers
 - Check whether replay, duplicate delivery, authorization, signature, injection, or sensitive-data boundaries are missing, bypassed, or only implied by comments
 - Check whether known security patterns were handled by an explicit guard, validation, or fail-closed branch instead of a silent fallback

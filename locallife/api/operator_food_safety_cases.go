@@ -164,25 +164,25 @@ func (server *Server) listOperatorFoodSafetyCases(ctx *gin.Context) {
 		req.Limit = 20
 	}
 
-	regionID, err := server.getOperatorRegionID(ctx)
+	selection, err := server.resolveOperatorRegionSelection(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(err))
+		server.respondOperatorRegionSelectionError(ctx, err)
 		return
 	}
 
 	offset := (req.Page - 1) * req.Limit
 	if req.Status == "" {
-		cases, err := server.store.ListFoodSafetyCasesByRegion(ctx, db.ListFoodSafetyCasesByRegionParams{
-			RegionID: regionID,
-			Limit:    req.Limit,
-			Offset:   offset,
+		cases, err := server.store.ListFoodSafetyCasesByRegions(ctx, db.ListFoodSafetyCasesByRegionsParams{
+			RegionIds: selection.RegionIDs,
+			Limit:     req.Limit,
+			Offset:    offset,
 		})
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
 
-		total, err := server.store.CountFoodSafetyCasesByRegion(ctx, regionID)
+		total, err := server.store.CountFoodSafetyCasesByRegions(ctx, selection.RegionIDs)
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
@@ -197,20 +197,20 @@ func (server *Server) listOperatorFoodSafetyCases(ctx *gin.Context) {
 		return
 	}
 
-	cases, err := server.store.ListFoodSafetyCasesByRegionAndStatus(ctx, db.ListFoodSafetyCasesByRegionAndStatusParams{
-		RegionID: regionID,
-		Status:   req.Status,
-		Limit:    req.Limit,
-		Offset:   offset,
+	cases, err := server.store.ListFoodSafetyCasesByRegionsAndStatus(ctx, db.ListFoodSafetyCasesByRegionsAndStatusParams{
+		RegionIds: selection.RegionIDs,
+		Status:    req.Status,
+		Limit:     req.Limit,
+		Offset:    offset,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	total, err := server.store.CountFoodSafetyCasesByRegionAndStatus(ctx, db.CountFoodSafetyCasesByRegionAndStatusParams{
-		RegionID: regionID,
-		Status:   req.Status,
+	total, err := server.store.CountFoodSafetyCasesByRegionsAndStatus(ctx, db.CountFoodSafetyCasesByRegionsAndStatusParams{
+		RegionIds: selection.RegionIDs,
+		Status:    req.Status,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -245,12 +245,6 @@ func (server *Server) getOperatorFoodSafetyCase(ctx *gin.Context) {
 		return
 	}
 
-	regionID, err := server.getOperatorRegionID(ctx)
-	if err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(err))
-		return
-	}
-
 	caseRecord, err := server.store.GetFoodSafetyCase(ctx, caseID)
 	if err != nil {
 		if isNotFoundError(err) {
@@ -260,8 +254,8 @@ func (server *Server) getOperatorFoodSafetyCase(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	if caseRecord.RegionID != regionID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("forbidden")))
+	if _, err := server.checkOperatorManagesRegion(ctx, caseRecord.RegionID); err != nil {
+		server.respondOperatorRegionSelectionError(ctx, err)
 		return
 	}
 
@@ -306,12 +300,6 @@ func (server *Server) investigateOperatorFoodSafetyCase(ctx *gin.Context) {
 		return
 	}
 
-	regionID, err := server.getOperatorRegionID(ctx)
-	if err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(err))
-		return
-	}
-
 	caseRecord, err := server.store.GetFoodSafetyCase(ctx, caseID)
 	if err != nil {
 		if isNotFoundError(err) {
@@ -321,8 +309,8 @@ func (server *Server) investigateOperatorFoodSafetyCase(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	if caseRecord.RegionID != regionID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("forbidden")))
+	if _, err := server.checkOperatorManagesRegion(ctx, caseRecord.RegionID); err != nil {
+		server.respondOperatorRegionSelectionError(ctx, err)
 		return
 	}
 	if caseRecord.Status == "resolved" {
@@ -379,12 +367,6 @@ func (server *Server) resolveOperatorFoodSafetyCase(ctx *gin.Context) {
 		return
 	}
 
-	regionID, err := server.getOperatorRegionID(ctx)
-	if err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(err))
-		return
-	}
-
 	caseRecord, err := server.store.GetFoodSafetyCase(ctx, caseID)
 	if err != nil {
 		if isNotFoundError(err) {
@@ -394,8 +376,8 @@ func (server *Server) resolveOperatorFoodSafetyCase(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	if caseRecord.RegionID != regionID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("forbidden")))
+	if _, err := server.checkOperatorManagesRegion(ctx, caseRecord.RegionID); err != nil {
+		server.respondOperatorRegionSelectionError(ctx, err)
 		return
 	}
 	if caseRecord.Status == "resolved" {
@@ -425,7 +407,7 @@ func (server *Server) resolveOperatorFoodSafetyCase(ctx *gin.Context) {
 
 	resolved, err := server.store.ResolveFoodSafetyCaseTx(ctx, db.ResolveFoodSafetyCaseTxParams{
 		CaseID:                      caseID,
-		RegionID:                    regionID,
+		RegionID:                    caseRecord.RegionID,
 		InvestigationReport:         effectiveInvestigationReport,
 		MerchantRectificationReport: merchantRectificationReport,
 		Resolution:                  resolution,

@@ -113,7 +113,7 @@
 | 佣金账单 | `GET /v1/operators/me/commission` | `getOperatorCommission` | finance withdraw/bills | 已调用，`OPA-012` |
 | 结算账户 | `GET /v1/operators/me/settlement-account` | `getOperatorBaofuSettlementAccount` | finance settlement-account | 已调用 |
 | 结算账户 | `POST /v1/operators/me/settlement-account` | `createOperatorBaofuSettlementAccount` | finance settlement-account submit | 已调用 |
-| 分账配置 | `GET /v1/operators/me/profit-sharing/configs` | `listOperatorProfitSharingConfigs` | 未发现 | 后端已实现，小程序无入口；多区域默认口径待加固 |
+| 分账配置 | `GET /v1/operators/me/profit-sharing/configs` | `listOperatorProfitSharingConfigs` | 未发现 | 后端已实现，小程序无入口；多区域默认口径已加固 |
 | 通知中心 | `GET /v1/operators/me/notifications` | `listOperatorNotifications` | notifications/index | 已调用 |
 | 通知中心 | `GET /v1/operators/me/notifications/summary` | `getOperatorNotificationSummary` | dashboard/notifications | 已调用 |
 | 通知中心 | `GET /v1/operators/me/notifications/:id` | `getOperatorNotification` | notifications/detail | 已调用 |
@@ -173,13 +173,13 @@
 | OPA-008 | 小程序 ViewState/布局漂移 | 商户列表成功态空白 | 已修复：`ee292a34` |
 | OPA-009 | 后端区域授权真值漂移 | 调度大厅提示无权限 | 已修复：`6182ade7` |
 | OPA-010 | 小程序运行时展示适配漂移 | 财务概览金额只显示 `¥` | 已修复：`6182ade7` |
-| OPA-011 | 后端默认区域/多区域漂移 | 食安案件列表、详情、调查、结案 | 待修复：本轮新增确认 |
-| OPA-012 | 后端默认区域/多区域漂移 | 佣金明细、佣金账单、财务页最近佣金 | 待修复：本轮新增确认 |
+| OPA-011 | 后端默认区域/多区域漂移 | 食安案件列表、详情、调查、结案 | 已修复：`9e8bef7f`、`632921a8`、本次小程序契约 gate 收口 |
+| OPA-012 | 后端默认区域/多区域漂移 | 佣金明细、佣金账单、财务页最近佣金 | 已修复：佣金明细默认聚合全部可管区域 |
 | OP-NOUI-001/002 | 后端已实现但无页面入口 | 追偿争议/追偿单 | 当前确认 |
 | OP-NOUI-003 | 后端已实现但无页面入口 | 分账规则配置 | 当前确认 |
 | OP-NOUI-004 | 后端已实现但无页面入口 | 规则引擎代理 | 当前确认 |
-| OP-RISK-001 | 后端-only 残余风险 | 分账配置默认单区域口径 | 待加固：无当前小程序入口 |
-| OP-RISK-002 | API 直接调用残余风险 | `/v1/operator/rules` 无参 legacy 兜底 | 待加固：小程序页面路径已显式传 `region_id` |
+| OP-RISK-001 | 后端-only 残余风险 | 分账配置默认单区域口径 | 已修复：默认聚合全部可管区域，merchant-scoped 配置不跨区泄漏 |
+| OP-RISK-002 | API 直接调用残余风险 | `/v1/operator/rules` 无参 legacy 兜底 | 已修复：无参复用单区域 active 授权解析，suspended legacy fail closed |
 | OP-CONTRACT-002/005 | 历史候选 | 商户/骑手 summary `region_id` | 当前代码已支持或无页面调用，不计当前缺陷 |
 
 ## 二轮漂移复盘与方法修正
@@ -801,7 +801,7 @@ SQL 证据：
 
 ### OPA-012: 佣金明细仍使用单区域默认口径，和财务概览“全部区域”漂移
 
-- 状态：待修复
+- 状态：已修复（2026-06-21，本次 OPA-012 批次）
 - 风险级别：G2/G3
 - 类型：后端默认区域/多区域漂移、资金统计口径漂移、小程序财务链路不一致
 - 影响页面：`weapp/miniprogram/pages/operator/finance/withdraw/index`、`weapp/miniprogram/pages/operator/finance/bills/index`
@@ -851,6 +851,14 @@ SQL 证据：
 - 小程序：`npm run check:operator-finance-overview-display`、`npm run check:finance-bill-pages`、`npm run compile`。
 - 人工回归：财务概览总额与最近佣金/账单日期范围口径一致，不出现总览有钱但明细加载失败或只显示单区域。
 
+#### 修复记录（2026-06-21）
+
+- 后端 `getOperatorCommission()` 已改用 `resolveOperatorRegionSelection()`：无 `region_id` 默认聚合全部 active/legacy 可管区域，显式 `region_id` 仍走单区域授权校验。
+- 佣金明细先按日期合并授权区域趋势，再计算 `summary/total/total_count` 并分页，避免“按单区域分页后拼接”或 summary/items 来源不一致。
+- suspended legacy primary region 不再进入默认聚合；新增 focused test 锁定多区域默认汇总和 suspended legacy 排除。
+- 小程序财务页和账单页继续不注入默认 `region_id`，由后端承担默认全部区域语义；专项 gate 增加断言，避免后续把 overview 和 commission 拆成不同默认区域口径。
+- Swagger 生成物已同步 `/v1/operators/me/commission` 的可选 `region_id` 查询参数说明。
+
 ### 2026-06-21 按新增方法二轮 review 记录
 
 本轮已按“业务不变量矩阵”重新 review 运营侧后端 helper 与小程序页面调用，而不是只看已经报错的页面。重点核查了：
@@ -862,8 +870,8 @@ SQL 证据：
 结论：
 
 - `OPA-011`、`OPA-012` 是新增方法发现的真实生产路径漂移，均影响当前运营商小程序默认路径，不能视为文档债。
-- `OP-RISK-001` 分账配置仍使用 `getOperatorRegionID()`，但当前小程序没有入口，先作为 backend-only 加固项记录，不与生产可见缺陷混同。
-- `OP-RISK-002` `/v1/operator/rules` 后端无参时会先返回 `operators.region_id`，没有校验 active/suspended 关系；小程序规则页当前强制从区域页进入并传 `region_id`，页面路径未复现，但 API 直接调用口径应后续统一。
+- `OP-RISK-001` 分账配置属于 backend-only 加固项；后续已从 `getOperatorRegionID()` 切换为多区域选择器，默认聚合全部 active 可管区域，merchant-scoped 配置仍按商户所属区域过滤。
+- `OP-RISK-002` `/v1/operator/rules` 后端无参兜底已复用单区域 active 授权解析，不再直接信任 `operators.region_id`；小程序规则页当前仍显式传 `region_id`，页面路径保持原语义。
 - 本轮暂未把商户/骑手详情页展示原始 ID、坐标等体验问题升为前后端漂移；它们属于后续运营端信息架构升级机会，不影响当前后端真值或权限边界。
 
 ## 修复任务计划
@@ -1008,22 +1016,22 @@ SQL 证据：
 
 1. `OP-RISK-001-A` 分账配置默认区域语义裁决
    - 文件：`locallife/api/operator_profit_sharing_config.go`、本文档。
-   - 内容：确认分账配置对多区域 operator 是默认聚合全部区域，还是必须显式选区。若聚合，不能复用单 region 查询；若必须选区，API 要返回清晰 400/403 并在未来 UI 中强制选区。
+   - 内容：已裁决为默认聚合全部 active 可管区域；显式 `region_id` 仍只查单区域并 fail closed。
    - 验证：focused API tests。
 
 2. `OP-RISK-001-B` 分账配置权限和分页加固
    - 文件：`locallife/db/query/profit_sharing_config.sql`、`locallife/api/operator_profit_sharing_config.go`
-   - 内容：按裁决实现 region_ids 查询或显式选区校验；确保 merchant-scoped 配置仍限制在当前 operator 可管区域。
+   - 内容：新增 `ListProfitSharingConfigsForRegions`，默认查询按 `region_ids` 过滤区域默认配置，同时通过商户所属区域限制 merchant-scoped 配置不跨授权区域泄漏。
    - 验证：`make sqlc`、`go test ./api -run TestListOperatorProfitSharingConfigsAPI -count=1`、必要 SQLC 临时库测试。
 
 3. `OP-RISK-002-A` 规则无参兜底加固
    - 文件：`locallife/api/operator_rules.go`
-   - 内容：`resolveOperatorRuleRegionID()` 无参时不直接信 `operator.RegionID`；改为 `getOperatorRegionID()` 或显式校验 active/suspended 关系。由于小程序规则页已传 `region_id`，本项主要锁 API 直接调用。
-   - 验证：新增 suspended relation 无参 API tests；现有 `rules/index` 小程序路径不受影响。
+   - 内容：已将 `resolveOperatorRuleRegionID()` 无参路径改为 `getOperatorRegionID()`，规则配置保持单区域能力，不默认聚合；legacy 主区域必须通过 active 授权关系，suspended fail closed。
+   - 验证：新增 suspended relation 无参、显式授权区域、非法 `region_id` API tests；现有 `rules/index` 小程序路径不受影响。
 
 4. `OP-RISK-002-B` 运营侧 helper 使用矩阵脚本化
-   - 文件：可新增 `weapp/scripts/check-operator-capability-audit` 补充项或后端轻量脚本。
-   - 内容：扫描 operator handler 中 `getOperatorRegionID()` 使用点，要求每个使用点在文档中分类为“必须单区”或“待迁移聚合”。
+   - 文件：`weapp/scripts/check-operator-backend-region-helper-contract.test.js`、`weapp/package.json`、本文档。
+   - 内容：已扫描 operator handler 中 `getOperatorRegionID()` 使用点，要求每个使用点在文档中分类为“必须单区”“兼容兜底”或“待迁移聚合”。
    - 验证：专项脚本通过。
 
 ### OPA-005 修复计划：峰时时段列表跨区域读取权限
@@ -1385,7 +1393,7 @@ SQL 证据：
 | 能力 | 当前后端入口 | 目标角色 | 移动端裁决 | 后端安全裁决 | 风险等级 | 上线条件 |
 | --- | --- | --- | --- | --- | --- | --- |
 | 追偿争议/追偿单 | `GET /v1/operator/recovery-disputes`、`/summary`、`/:id`、`GET /v1/operator/recoveries/:id` | 运营商异常处理/风控观察 | 暂不新增小程序入口；后续如产品需要，按“异常处理队列”另开 IA 和只读列表/详情任务 | 保留 read-only API；列表走 `resolveOperatorRegionSelection`，详情/追偿单按 operator 管理区域校验 | G2/G3 | 明确运营商是否需要移动端处理追偿异常；若新增入口，先只读观察，再单独评估任何处理动作 |
-| 分润配置可见性 | `GET /v1/operators/me/profit-sharing/configs` | 运营商财务确认/配置观察 | 暂不新增小程序入口；可在财务页后续增加只读“分润配置确认” | 保留 read-only API；已修复 merchant-scoped 全局配置跨区域泄漏，商户专属配置必须归属当前 operator region | G3 | 需要产品确认展示字段、解释文案和是否放入财务；不得提供移动端写配置 |
+| 分润配置可见性 | `GET /v1/operators/me/profit-sharing/configs` | 运营商财务确认/配置观察 | 暂不新增小程序入口；可在财务页后续增加只读“分润配置确认” | 保留 read-only API；默认聚合全部 active 可管区域；已修复 merchant-scoped 全局配置跨区域泄漏，商户专属配置必须归属当前 operator region | G3 | 需要产品确认展示字段、解释文案和是否放入财务；不得提供移动端写配置 |
 | 规则引擎代理只读 | `GET /v1/operators/me/rules`、`/:id`、`/hits` | 运营商只读观察/诊断 | 不新增复杂规则引擎页面；现有小程序规则配置继续使用 `/v1/operator/rules` 简化区域规则入口 | 保留只读代理；按 rule version scope/gray_config 或 hit region 过滤 | G3 | 若需要运营商规则命中观察页，先定义只读任务和字段裁剪，不暴露编辑/发布能力 |
 | 规则引擎代理写入 | `POST /v1/operators/me/rules`、`/:id/versions`、`/:id/publish`、`/:id/rollback`、`/:id/disable` | 平台规则治理 | 明确不适合运营商小程序 | 已关闭，统一返回 403；规则创建、版本、发布、回滚、禁用必须走平台治理入口 | G3 | 若未来重新开放，必须先设计区域独占/共享规则所有权、幂等键、审计失败处理、重复提交语义和跨区域回归测试 |
 
@@ -1402,7 +1410,7 @@ SQL 证据：
 | History Batch 7 | `OPA-008`、`OPA-009`、`OPA-010` | 用户回归暴露的二轮漂移收口 | 已完成：页面成功态可见、调度区域授权一致、财务关键展示由 ViewModel 输出 |
 | Next Batch 1 | `OPA-011` | 食安案件多区域默认视图与处置授权 | 多区域列表、详情、调查、结案测试通过；非管理/suspended fail closed |
 | Next Batch 2 | `OPA-012` | 佣金明细默认聚合与财务口径统一 | overview、recent commission、bill items 同一区域集合；summary/page/count 一致 |
-| Next Batch 3 | `OP-RISK-001/002` | backend-only 和 API 直接调用残余风险加固 | 分账配置和规则无参兜底都完成显式语义裁决与 focused tests |
+| Next Batch 3 | `OP-RISK-001/002` | backend-only 和 API 直接调用残余风险加固 | 已完成：分账配置、规则无参兜底和 helper 使用矩阵脚本化均有 focused tests/gate |
 
 ### 每个大问题完成后的复核模板
 
@@ -1420,6 +1428,46 @@ SQL 证据：
 | 剩余风险 | 只写具体风险，不写泛泛“需继续观察” |
 
 ### 已完成复核记录
+
+#### OPA-011 完成复核：食安案件默认多区域视图与处置授权
+
+| 字段 | 记录 |
+| --- | --- |
+| 完成范围 | `OPA-011-B/C/D/E`；业务提交 `9e8bef7f fix: authorize operator food safety cases by case region`、`632921a8 fix: aggregate operator food safety cases by managed regions`，以及本次小程序契约 gate 收口；涉及后端食安 handler/test、`trust_score.sql`、sqlc/mock 生成物、`weapp/scripts/check-operator-food-safety-contract.test.js`、`weapp/package.json`、本文档 |
+| 设计目标 | 已达成：食安列表默认无参展示当前 operator 全部 active 授权区域；显式 `region_id` 仍 fail closed；详情/调查/结案按案件真实 `region_id` 授权；结案事务传入案件真实区域并保留事务内二次校验；小程序食安页面不传默认 `region_id`，错误不吞成空态，调查/结案后回读详情 |
+| 时序 | 列表先解析授权区域集合再查 SQL；SQL 统一做跨区域排序、分页和 total，避免 handler 合并造成乱序分页；详情/写路径先读案件再按案件区域授权；调查/结案后小程序回读详情而不是只靠本地乐观状态 |
+| 幂等 | 列表为只读；调查仍由 `UpdateFoodSafetyCaseInvestigation` 的 `status <> 'resolved'` 条件保护；结案仍由 `ResolveFoodSafetyCaseTx` 行锁和已结案检查防重复；小程序提交按钮保留 submitting loading，后端仍是最终真值 |
+| 越权 | 默认列表不再信任 legacy `operators.region_id`；legacy 主区域 suspended 时只使用 active `operator_regions` 集合；详情/调查/结案授权事实来自 `operator_id + case.region_id`；非管理区域测试覆盖 403，事务内也拒绝案件区域不匹配 |
+| 小程序复核 | `operator-safety.ts` 不本地过滤区域、不吞错成空列表；`safety/report` 区分 loading/error/success-empty/success-list；状态 tab 只传后端支持的 `status` 并重置分页；`safety/detail` 区分 active action 与 resolved read-only；新增 `check:operator-food-safety-contract` 并纳入 `check:operator-capability-audit` |
+| 回归 | 红灯：列表多区域测试在修复前因缺少 `region_ids` SQLC 契约和旧默认区域逻辑失败；详情/写路径测试在修复前返回 403 且未检查案件区域；绿灯：`PATH=/usr/local/go/bin:$PATH go test ./api -run 'Test.*OperatorFoodSafetyCase' -count=1`、`PATH=/usr/local/go/bin:$PATH make sqlc`、`PATH=/usr/local/go/bin:$PATH make check-generated`、`PATH="$HOME/.local/bin:$PATH" npm run check:operator-food-safety-contract`、`PATH="$HOME/.local/bin:$PATH" npm run check:operator-capability-audit` 均通过 |
+| 非目标 | 未新增小程序区域筛选 UI；未改变食安事件触发规则、商户暂停/恢复事务、案件状态枚举；未处理 `OPA-012` 佣金口径和 `OP-RISK-001/002` |
+| 剩余风险 | 未做真机截图或弱网手工演练；当前机器化 gate 覆盖契约、错误态和回读路径，但未验证 TDesign 组件在所有机型上的视觉表现 |
+
+#### OPA-011-B 子任务复核：食安案件列表默认多区域聚合
+
+| 字段 | 记录 |
+| --- | --- |
+| 完成范围 | `OPA-011-B`；涉及 `locallife/api/operator_food_safety_cases.go`、`locallife/api/operator_food_safety_cases_test.go`、`locallife/db/query/trust_score.sql`、`locallife/db/sqlc/querier.go`、`locallife/db/sqlc/trust_score.sql.go`、`locallife/db/mock/store.go` |
+| 设计目标 | 已达成当前子任务目标：食安案件列表从 `getOperatorRegionID()` 切换为 `resolveOperatorRegionSelection()`；默认无参使用全部 active 授权区域；显式 `region_id` 仍由同一 resolver 做 active 授权；列表、status 过滤、total、has_more 统一按 `region_ids` 查询 |
+| 时序 | 读路径先解析后端授权区域集合，再进入 SQL 查询；数据库负责跨区域全局 `created_at DESC, id DESC` 排序和分页，避免 handler 先读多区再内存拼接导致分页/total 不一致 |
+| 幂等 | 本步只改只读列表，不新增写入和重试副作用；重复请求在同一授权集合和同一分页参数下保持稳定排序 |
+| 越权 | 默认列表不再依赖 legacy `operators.region_id`；新增回归覆盖 legacy 主区域 suspended 时只使用 `ListOperatorRegions` 返回的 active 区域集合；显式非授权区域仍由 `resolveOperatorRegionSelection()` fail closed |
+| 回归 | 红灯：列表测试在修复前因缺少 `region_ids` SQLC 契约和旧默认区域逻辑失败；绿灯：`PATH=/usr/local/go/bin:$PATH go test ./api -run 'TestListOperatorFoodSafetyCases_(UsesManagedRegionSelection\|DefaultAggregatesManagedRegions\|DefaultExcludesSuspendedLegacyPrimaryRegion)' -count=1` 通过；扩展绿灯：`PATH=/usr/local/go/bin:$PATH go test ./api -run 'Test.*OperatorFoodSafetyCase' -count=1` 通过；生成检查：`PATH=/usr/local/go/bin:$PATH make sqlc`、`PATH=/usr/local/go/bin:$PATH make check-generated` 通过 |
+| 非目标 | 尚未给小程序食安列表新增区域筛选；未改变食安事件触发、商户暂停/恢复事务、案件状态枚举；未处理 `OPA-012` 佣金和 `OP-RISK-001/002` |
+| 剩余风险 | 当前 `OPA-011` 还需做小程序食安页面契约复核，确认后端默认聚合后页面不会把 403/空态误渲染为“无案件”；该复核不阻塞后端列表不变量，但属于 `OPA-011-D/E` 收口范围 |
+
+#### OPA-011-C 子任务复核：食安案件详情与处置按案件真实区域授权
+
+| 字段 | 记录 |
+| --- | --- |
+| 完成范围 | `OPA-011-C` 第一小步；涉及 `locallife/api/operator_food_safety_cases.go`、`locallife/api/operator_food_safety_cases_test.go` |
+| 设计目标 | 已达成当前子任务目标：详情、调查、结案不再先解析运营商默认区域；统一先读取案件，再以 `caseRecord.RegionID` 调用 `checkOperatorManagesRegion()`；结案事务入参 `RegionID` 改为案件真实区域，事务内仍保留区域二次校验 |
+| 时序 | 读案件后再做授权，避免页面只凭案件 ID 获得操作权；调查/结案仍在授权通过后进入原有状态判断和事务/条件更新，未改变 resolved case、调查报告缺失、并发更新的顺序 |
+| 幂等 | 本步未新增写路径；调查仍由 `UpdateFoodSafetyCaseInvestigation` 的 `status <> 'resolved'` 条件防止已结案覆盖；结案仍由 `ResolveFoodSafetyCaseTx` 在事务内锁定案件并拒绝重复结案 |
+| 越权 | 已新增回归覆盖：运营商默认区域与案件区域不同但同时管理案件区域时允许详情/调查/结案；案件区域不归属当前运营商时 403；授权事实来自后端 `operator_id + case.region_id`，不依赖前端传参或 legacy 默认区 |
+| 回归 | 红灯：`PATH=/usr/local/go/bin:$PATH go test ./api -run 'TestOperatorFoodSafetyCaseDetailAndActions_AuthorizeByCaseRegion\|TestOperatorFoodSafetyCaseDetailAndActions_ForbidCrossRegion' -count=1` 在修复前返回 403 且缺少案件区域授权调用；绿灯：同命令通过；扩展绿灯：`PATH=/usr/local/go/bin:$PATH go test ./api -run 'Test.*OperatorFoodSafetyCase' -count=1` 通过；`git diff --check` 通过 |
+| 非目标 | 尚未完成 `OPA-011-B` 列表默认多区域聚合；尚未改小程序食安列表区域筛选；尚未处理 `OPA-012` 佣金和 `OP-RISK-001/002` |
+| 剩余风险 | 当前小程序食安列表无参默认仍走旧的单区域/default 口径，需下一小任务改为全部 active 授权区域并补多区域列表分页/total 回归 |
 
 #### OPA-001 完成复核：运营商区域状态契约重构
 
@@ -1587,6 +1635,71 @@ SQL 证据：
 | 非目标 | 未改后端财务计算公式、提现流程、宝付账户开户或佣金账单分页；未给 WXML 通用表达式安全 gate 增加全仓 formatter 禁令 |
 | 剩余风险 | 自动化脚本能锁住当前财务页 display 字段，但不能替代微信开发者工具或真机 smoke；后续新增资金展示页面必须复用 ViewModel display 字段规则 |
 
+#### OPA-012 完成复核：佣金明细默认聚合与财务口径统一
+
+| 字段 | 记录 |
+| --- | --- |
+| 完成范围 | `OPA-012-A/B/C/D/E`；本次提交涉及 `locallife/api/operator_stats.go`、`locallife/api/operator_stats_test.go`、Swagger 生成物、`weapp/scripts/check-operator-finance-overview-display.test.js`、本文档 |
+| 设计目标 | 已达成：`GET /v1/operators/me/commission` 与 `/finance/overview` 共用 `resolveOperatorRegionSelection()`；无 `region_id` 默认聚合全部 active/legacy 可管区域；显式 `region_id` 仍单区域授权；summary、total、total_count、items 都来自同一日期范围和同一区域集合 |
+| 设计修正 | 不新增小程序区域筛选 UI。当前财务页和账单页没有区域筛选，因此正确实现是保持两处请求都不传默认 `region_id`，让后端成为默认“全部区域”真值源；小程序 gate 锁定这一点，防止后续又在前端注入单一区域 |
+| 时序 | 佣金明细先解析授权区域集合，再读取趋势；多区域先按日期合并、排序，再分页和计算汇总，避免按区域分页后拼接导致 count/page 漂移。财务页 overview 与最近佣金仍并发加载，单项失败显示各自错误态 |
+| 幂等 | 本项只改读路径，不新增写入、重试或重复提交副作用；重复请求只重新读取相同授权集合的趋势数据 |
+| 越权 | 默认路径不再信任 legacy `operators.region_id` 单区；suspended legacy primary region 被排除；显式 `region_id` 仍调用 `checkOperatorManagesRegion()` fail closed；非授权区域不进入趋势查询 |
+| 小程序复核 | `operator-finance.ts` 的 overview、最近佣金、账单页均不注入默认 `region_id`；commission failure 保持显式 `commissionError`，不会吞成正常空列表；`check:operator-finance-overview-display` 新增默认聚合和错误态断言，并已纳入 `check:operator-capability-audit` |
+| 回归 | 红灯：新增 `DefaultAggregatesManagedRegions`、`DefaultAggregationExcludesSuspendedLegacyPrimaryRegion` 在旧实现上因调用 `getOperatorRegionID()` 和 `CheckOperatorManagesRegion(operator.region_id)` 失败；绿灯：`PATH=/usr/local/go/bin:$PATH go test ./api -run 'Test(GetOperatorFinanceOverviewAPI\|GetOperatorCommissionAPI)' -count=1` 通过；`PATH=/usr/local/go/bin:$PATH make swagger`、`PATH=/usr/local/go/bin:$PATH make check-generated` 通过；`PATH="$HOME/.local/bin:$PATH" npm run check:operator-finance-overview-display`、`PATH="$HOME/.local/bin:$PATH" npm run check:operator-capability-audit` 通过 |
+| 非目标 | 未改变财务计算公式、分账订单 SQL、提现/结算账户流程、账单日期范围口径；未处理 `operator_stats.go` 中商户/骑手排行仍需单区域的旧 helper；未处理 `OP-RISK-001/002` |
+| 剩余风险 | 未做微信开发者工具或真机 smoke；`parseDateRange()` 仍按既有 UTC 日期边界返回，本次未把日期日末语义纳入修复，若业务要求“包含整天”需另开时间口径任务 |
+
+#### OP-RISK-001 完成复核：分账配置默认多区域聚合与商户范围隔离
+
+| 字段 | 记录 |
+| --- | --- |
+| 完成范围 | `OP-RISK-001-A/B`；本次提交涉及 `locallife/api/operator_profit_sharing_config.go`、`locallife/api/operator_profit_sharing_config_test.go`、`locallife/db/query/profit_sharing_config.sql`、sqlc/mock 生成物、Swagger 生成物、`locallife/db/sqlc/profit_sharing_config_test.go`、本文档 |
+| 设计目标 | 已达成：`GET /v1/operators/me/profit-sharing/configs` 从默认单区域 helper 切换为 `resolveOperatorRegionSelection()`；无 `region_id` 默认聚合全部 active/legacy 可管区域；显式 `region_id` 仍只查询单授权区域并 fail closed；merchant-scoped 配置必须归属授权区域内商户 |
+| 设计修正 | 本项不新增小程序入口。分账配置当前仍是 backend-only read-only 能力，后续若进入财务页，应先做只读信息架构和字段解释，不在移动端开放写配置 |
+| 时序 | 读路径先解析后端授权区域集合，再进入 SQL；SQL 使用同一 `region_ids` 同时过滤区域默认配置和商户所属区域，避免 handler 层二次拼接造成分页/排序漂移 |
+| 幂等 | 本项只改只读列表，不新增写路径、重复提交或外部副作用；重复请求在相同筛选和分页参数下保持稳定 `priority ASC, id DESC` 排序 |
+| 越权 | 默认路径不再信任 legacy `operators.region_id` 单区；suspended legacy primary region 被排除；显式 `region_id` 继续经 `checkOperatorManagesRegion()` 校验；SQL 回归覆盖授权区域 A/B 可见、区域 C 和区域 C 商户覆盖不可见 |
+| 回归 | 红灯：新增 API 测试在旧实现上会因调用 `getOperatorRegionID()`/单区查询而失败；绿灯：`PATH=/usr/local/go/bin:$PATH go test ./api -run 'TestListOperatorProfitSharingConfigsAPI' -count=1` 通过；`TEST_DB_SOURCE=postgresql:///<tmp>?sslmode=disable&host=/var/run/postgresql PATH=/usr/local/go/bin:$PATH go test ./db/sqlc -run 'TestListProfitSharingConfigsForRegionsAggregatesManagedRegionsWithoutMerchantLeakage' -count=1` 通过；`PATH=/usr/local/go/bin:$PATH make sqlc`、`PATH=/usr/local/go/bin:$PATH make swagger`、`PATH=/usr/local/go/bin:$PATH make check-generated` 通过 |
+| 非目标 | 未改变平台侧分账配置创建/更新/停用接口；未改变实际订单分账计算、分账订单 SQL、支付/退款/提现流程；未新增运营商小程序页面 |
+| 剩余风险 | 默认 `locallife_test` 本地库当前记录到 migration version 277，但本分支 migration 目录到 276，直接跑 `go test ./db/sqlc` 会被 migrate 初始化阻断；本次已用干净临时库验证 SQLC 行为，后续仍建议清理默认测试库漂移 |
+
+#### OP-RISK-002-A 完成复核：区域规则无参兜底授权加固
+
+| 字段 | 记录 |
+| --- | --- |
+| 完成范围 | `OP-RISK-002-A`；本次提交涉及 `locallife/api/operator_rules.go`、`locallife/api/operator_deposit_rules_test.go`、本文档 |
+| 设计目标 | 已达成：`GET/PATCH /v1/operator/rules` 仍是单区域规则配置能力；显式 `region_id` 继续按该区域授权；无参不再直接返回 `operators.region_id`，而是复用 `getOperatorRegionID()` 的 active/suspended/多区域必选语义 |
+| 设计修正 | 不把规则列表改成多区域聚合。规则页展示和写入都面向单个区域规则配置，多区域 operator 应显式传 `region_id`；当前小程序规则页已经从区域入口携带 `region_id` |
+| 时序 | 读/写规则前先解析授权区域；suspended legacy 主区域不会继续读取 `GetRegionRuleConfigByRegion`、分账配置、运费配置或天气配置；写路径不会进入 `UpsertRegionRuleConfig` 或运费更新 |
+| 幂等 | 读路径无副作用；写路径仍沿用既有更新语义和骑手状态同步逻辑，本项只在写入前增加同一授权解析，不改变重复提交结果 |
+| 越权 | 新增回归覆盖无参 suspended legacy primary region 返回 403；显式授权区域可读；非法 `region_id` 返回 400；既有规则读写测试显式声明当前 operator 必须管理目标区域 |
+| 回归 | 红灯：新增 `TestListOperatorRules_NoRegionParamRejectsSuspendedLegacyPrimaryRegion` 在旧实现上未触发 `CheckOperatorManagesRegion/GetOperatorRegion`，直接进入规则读取；绿灯：`PATH=/usr/local/go/bin:$PATH go test ./api -run 'TestListOperatorRules_(NoRegionParamRejectsSuspendedLegacyPrimaryRegion\|ExplicitRegionUsesAuthorizedRegion\|InvalidRegionParamReturnsBadRequest)' -count=1` 通过；扩展绿灯：`PATH=/usr/local/go/bin:$PATH go test ./api -run 'Test(ListOperatorRules\|UpdateOperatorRule)' -count=1` 通过 |
+| 非目标 | 未重构规则配置字段、天气系数、运费 fallback、骑手押金阈值同步；未新增小程序页面；未处理 helper 使用矩阵脚本化，留给 `OP-RISK-002-B` |
+| 剩余风险 | 当前仍依赖文档和 focused tests 约束 `getOperatorRegionID()` 使用点分类；下一小任务需要把 helper 使用矩阵脚本化，防止后续新增 operator handler 时再次出现默认语义漂移 |
+
+#### OP-RISK-002-B 完成复核：运营侧区域 helper 使用矩阵守卫
+
+| 字段 | 记录 |
+| --- | --- |
+| 完成范围 | `OP-RISK-002-B`；本次提交涉及 `weapp/scripts/check-operator-backend-region-helper-contract.test.js`、`weapp/package.json`、本文档 |
+| 设计目标 | 已达成：`getOperatorRegionID()` 剩余业务调用点必须出现在本文档矩阵中并分类；新增未分类调用点会使 `check:operator-capability-audit` 失败 |
+| 时序 | 本项不改变运行时请求顺序，只把 helper 使用分类机器化到专项 gate；业务修复仍由对应 handler tests 负责 |
+| 幂等 | 本项无写路径和副作用；脚本为只读扫描，重复执行结果稳定 |
+| 越权 | 守卫重点是防止新增 operator handler 在默认视图中误用单区 helper；矩阵要求每个调用点明确“必须单区/兼容兜底/待迁移聚合”语义 |
+| 回归 | 红灯：脚本首次运行因 `operator_realtime.go:51` 等调用点未被矩阵记录而失败；绿灯：补齐矩阵后 `PATH="$HOME/.local/bin:$PATH" node scripts/check-operator-backend-region-helper-contract.test.js`、`PATH="$HOME/.local/bin:$PATH" npm run check:operator-capability-audit` 通过 |
+| 非目标 | 不在本项迁移实时统计、区域列表或排行语义；不改变任何后端 handler 行为 |
+| 剩余风险 | 该脚本基于文本扫描和白名单分类，能防止未登记调用点，但不能自动判断业务语义是否分类正确；涉及新运营侧能力时仍需人工 review 业务默认视图 |
+
+#### 运营侧 `getOperatorRegionID()` 使用矩阵
+
+| 文件 | 函数 | 调用语句 | 分类 | 当前语义 | 后续要求 |
+| --- | --- | --- | --- | --- | --- |
+| operator_rules.go | resolveOperatorRuleRegionID | regionID, err := server.getOperatorRegionID(ctx) | 必须单区 | `/v1/operator/rules` 规则读写只面向单区域配置；无参只能解析一个 active 区域，多区域要求显式 `region_id` | 新增规则入口必须继续显式选区或复用该单区 resolver |
+| operator_realtime.go | getOperatorRealtimeStats | regionID, err = server.getOperatorRegionID(ctx) | 兼容兜底 | 实时统计支持显式 `region_id`；无参 fallback 保持单区域兼容，当前小程序默认路径会从区域选择进入或使用 operator 默认区 | 若要做运营工作台“全部区域实时统计”，需另开聚合 DTO 和页面 ViewModel，不得在此静默聚合 |
+| operator_stats.go | listOperatorRegions | regionID, err := server.getOperatorRegionID(ctx) | 兼容兜底 | `/v1/operator/regions` 展示列表在关系/legacy 读取都为空时，用旧鉴权模型补单一区域 | 只能作为区域列表 legacy fallback；不能复制到统计/财务默认视图 |
+| operator_stats.go | getOperatorRankings | regionID, err := server.getOperatorRegionID(ctx) | 必须单区 | 商户/骑手排行当前是单区域排行能力，页面应有明确区域上下文 | 若产品要求跨区域排行，需新增聚合 SQL/DTO/tests，不能直接复用该 helper |
+
 ## 后续审计工作记录
 
 后续继续在本节追加全量盘点结果。每个能力或页面至少记录：
@@ -1603,7 +1716,7 @@ SQL 证据：
 | OPA-008 | 商户管理 | 商户列表成功态可见性 | 后端商户列表契约沿用 `OPA-002` | `operator/merchants/index`, `check-operator-merchant-list-viewstate.test.js` | 已修复：`ee292a34` | 已完成复核 |
 | OPA-009 | 调度大厅 | `/v1/operator/regions/:region_id/delivery-pool/summary`、`/delivery-pool` 区域授权 | `operator_dispatch_monitor.go`, `delivery_fee.go`, `operator_dispatch_monitor_test.go`, `operator_stats_test.go` | `operator/dispatch-hall/index` | 已修复：`6182ade7` | 已完成复核 |
 | OPA-010 | 财务概览 | `/v1/operators/me/finance/overview`、`/commission` 金额展示适配 | `operator_stats_test.go` 覆盖默认聚合边界 | `operator/finance/withdraw/index`, `operator-finance.ts`, `check-operator-finance-overview-display.test.js` | 已修复：`6182ade7` | 已完成复核 |
-| OPA-011 | 食安案件 | `/v1/operator/food-safety/cases`、`/:id`、`/investigate`、`/resolve` 默认单区域口径 | `operator_food_safety_cases.go`, `operator_food_safety_cases_test.go` | `operator/safety/report`, `operator/safety/detail`, `operator-safety.ts`, `operator-basic-management.ts` | 待修复 | 新增方法二轮 review 确认 |
-| OPA-012 | 财务佣金 | `/v1/operators/me/commission` 与 `/finance/overview` 默认区域口径不一致 | `operator_stats.go`, `operator_stats_test.go` | `operator/finance/withdraw`, `operator/finance/bills`, `operator-finance.ts` | 待修复 | 新增方法二轮 review 确认 |
-| OP-RISK-001 | 分账配置 | `/v1/operators/me/profit-sharing/configs` 默认单区域口径 | `operator_profit_sharing_config.go`, `profit_sharing_config.sql` | 当前运营商小程序无入口 | 待加固 | backend-only 残余风险 |
-| OP-RISK-002 | 区域规则 | `/v1/operator/rules` 无参 legacy 兜底 | `operator_rules.go` | `operator/rules/index` 当前显式传 `region_id` | 待加固 | API 直接调用残余风险 |
+| OPA-011 | 食安案件 | `/v1/operator/food-safety/cases`、`/:id`、`/investigate`、`/resolve` 默认单区域口径 | `operator_food_safety_cases.go`, `operator_food_safety_cases_test.go`, `trust_score.sql`, sqlc/mock 生成物 | `operator/safety/report`, `operator/safety/detail`, `operator-safety.ts`, `operator-basic-management.ts`, `check-operator-food-safety-contract.test.js` | 已修复：`9e8bef7f`、`632921a8`、本次 gate 收口 | 已完成复核 |
+| OPA-012 | 财务佣金 | `/v1/operators/me/commission` 与 `/finance/overview` 默认区域口径不一致 | `operator_stats.go`, `operator_stats_test.go`, Swagger 生成物 | `operator/finance/withdraw`, `operator/finance/bills`, `operator-finance.ts`, `check-operator-finance-overview-display.test.js` | 已修复：本次 OPA-012 提交 | 已完成复核 |
+| OP-RISK-001 | 分账配置 | `/v1/operators/me/profit-sharing/configs` 默认单区域口径 | `operator_profit_sharing_config.go`, `profit_sharing_config.sql`, `profit_sharing_config_test.go` | 当前运营商小程序无入口 | 已修复 | 已完成复核 |
+| OP-RISK-002 | 区域规则 | `/v1/operator/rules` 无参 legacy 兜底 | `operator_rules.go`, `operator_deposit_rules_test.go`, `check-operator-backend-region-helper-contract.test.js` | `operator/rules/index` 当前显式传 `region_id` | 已修复 | 已完成复核 |

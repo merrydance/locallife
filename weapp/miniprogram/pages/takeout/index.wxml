@@ -26,12 +26,15 @@
   show-scrollbar="{{false}}"
 >
   <!-- 搜索框 (App Shell) -->
-  <view class="search-section" bindtap="onSearchTap">
-    <t-search 
-      model:value="{{searchKeyword}}"
-      placeholder="搜索菜品、商家"
-      disabled="{{true}}"
-    />
+  <view class="search-section">
+    <view class="search-shortcut">
+      <t-search
+        model:value="{{searchKeyword}}"
+        placeholder="搜索菜品、商家"
+        disabled="{{true}}"
+      />
+      <view class="search-hit-layer" bindtap="onSearchTap" aria-role="button" aria-label="搜索菜品、商家" />
+    </view>
   </view>
 
   <view class="activity-carousel-section">

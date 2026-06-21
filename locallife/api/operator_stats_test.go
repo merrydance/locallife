@@ -956,7 +956,7 @@ func TestGetOperatorCommissionAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				expectActiveOperatorAuth(store, user.ID, operator)
-				expectOperatorManagesRegion(store, operator, operator.RegionID, true)
+				expectOperatorManagedRegions(store, operator, operator.RegionID)
 
 				store.EXPECT().
 					GetRegionDailyTrend(gomock.Any(), gomock.Any()).
@@ -969,6 +969,142 @@ func TestGetOperatorCommissionAPI(t *testing.T) {
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Len(t, resp.Items, 1)
 				require.Equal(t, int64(750), resp.Summary.TotalCommission)
+			},
+		},
+		{
+			name:  "DefaultAggregatesManagedRegions",
+			query: "?start_date=2025-01-01&end_date=2025-01-31&limit=1",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				regionA := operator.RegionID
+				regionB := operator.RegionID + 1
+				expectActiveOperatorAuth(store, user.ID, operator)
+				expectOperatorManagedRegions(store, operator, regionA, regionB)
+
+				store.EXPECT().
+					GetManagedRegionsDailyTrend(gomock.Any(), db.GetManagedRegionsDailyTrendParams{
+						RegionIds: []int64{regionA, regionB},
+						StartAt:   time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+						EndAt:     time.Date(2025, 1, 31, 0, 0, 0, 0, time.UTC),
+					}).
+					Return([]db.GetManagedRegionsDailyTrendRow{{
+						Date:            pgtype.Date{Time: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC), Valid: true},
+						OrderCount:      30,
+						TotalGmv:        30000,
+						Commission:      900,
+						ActiveUsers:     20,
+						ActiveMerchants: 4,
+					}, {
+						Date:            pgtype.Date{Time: time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC), Valid: true},
+						OrderCount:      20,
+						TotalGmv:        20000,
+						Commission:      600,
+						ActiveUsers:     10,
+						ActiveMerchants: 3,
+					}}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var resp operatorCommissionResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Len(t, resp.Items, 1)
+				require.Equal(t, int64(1500), resp.Summary.TotalCommission)
+				require.Equal(t, int64(50000), resp.Summary.TotalGMV)
+				require.Equal(t, int32(50), resp.Summary.TotalOrders)
+				require.Equal(t, int64(1500), resp.Total)
+				require.Equal(t, int64(2), resp.TotalCount)
+				require.Equal(t, "2025-01-01", resp.Items[0].Date)
+				require.Equal(t, "3.0%", resp.Items[0].CommissionRate)
+			},
+		},
+		{
+			name:  "DefaultAggregationExcludesSuspendedLegacyPrimaryRegion",
+			query: "?start_date=2025-01-01&end_date=2025-01-31",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				activeRegionID := operator.RegionID + 1
+				expectActiveOperatorAuth(store, user.ID, operator)
+				store.EXPECT().
+					ListOperatorRegions(gomock.Any(), operator.ID).
+					Return([]db.ListOperatorRegionsRow{{
+						OperatorID: operator.ID,
+						RegionID:   activeRegionID,
+						Status:     db.OperatorRegionStatusActive,
+					}}, nil)
+				store.EXPECT().
+					GetOperatorRegion(gomock.Any(), db.GetOperatorRegionParams{
+						OperatorID: operator.ID,
+						RegionID:   operator.RegionID,
+					}).
+					Return(db.OperatorRegion{
+						OperatorID: operator.ID,
+						RegionID:   operator.RegionID,
+						Status:     db.OperatorRegionStatusSuspended,
+					}, nil)
+				store.EXPECT().
+					GetRegionDailyTrend(gomock.Any(), db.GetRegionDailyTrendParams{
+						RegionID: activeRegionID,
+						StartAt:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+						EndAt:    time.Date(2025, 1, 31, 0, 0, 0, 0, time.UTC),
+					}).
+					Return([]db.GetRegionDailyTrendRow{{
+						Date:            pgtype.Date{Time: time.Date(2025, 1, 3, 0, 0, 0, 0, time.UTC), Valid: true},
+						OrderCount:      8,
+						TotalGmv:        8000,
+						Commission:      240,
+						ActiveUsers:     6,
+						ActiveMerchants: 2,
+					}}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var resp operatorCommissionResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Len(t, resp.Items, 1)
+				require.Equal(t, int64(240), resp.Summary.TotalCommission)
+				require.Equal(t, int64(8000), resp.Summary.TotalGMV)
+				require.Equal(t, int32(8), resp.Summary.TotalOrders)
+				require.Equal(t, "2025-01-03", resp.Items[0].Date)
+			},
+		},
+		{
+			name:  "ExplicitRegionUsesAuthorizedSingleRegion",
+			query: "?start_date=2025-01-01&end_date=2025-01-31&region_id=25",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				explicitRegionID := int64(25)
+				expectActiveOperatorAuth(store, user.ID, operator)
+				expectOperatorManagesRegion(store, operator, explicitRegionID, true)
+
+				store.EXPECT().
+					GetRegionDailyTrend(gomock.Any(), db.GetRegionDailyTrendParams{
+						RegionID: explicitRegionID,
+						StartAt:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+						EndAt:    time.Date(2025, 1, 31, 0, 0, 0, 0, time.UTC),
+					}).
+					Return([]db.GetRegionDailyTrendRow{{
+						Date:       pgtype.Date{Time: time.Date(2025, 1, 4, 0, 0, 0, 0, time.UTC), Valid: true},
+						OrderCount: 3,
+						TotalGmv:   6000,
+						Commission: 180,
+					}}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var resp operatorCommissionResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Len(t, resp.Items, 1)
+				require.Equal(t, int64(180), resp.Summary.TotalCommission)
+				require.Equal(t, "2025-01-04", resp.Items[0].Date)
 			},
 		},
 	}
