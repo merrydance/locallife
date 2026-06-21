@@ -40,66 +40,65 @@
         </view>
       </view>
 
-      <view wx:else class="animate-fade-in">
-        <scroll-view
-          scroll-y
-          class="merchants-scroll"
-          bindscrolltolower="onLoadMore"
-          lower-threshold="100"
-          enable-back-to-top
-          refresher-enabled="{{true}}"
-          bindrefresherrefresh="onPullDownRefresh"
-          refresher-triggered="{{refreshing}}"
-        >
-          <view wx:if="{{merchants.length === 0}}" class="empty-container">
-            <t-empty icon="shop" description="暂无商户数据" />
-          </view>
+      <scroll-view
+        wx:else
+        scroll-y
+        class="merchants-scroll animate-fade-in"
+        bindscrolltolower="onLoadMore"
+        lower-threshold="100"
+        enable-back-to-top
+        refresher-enabled="{{true}}"
+        bindrefresherrefresh="onPullDownRefresh"
+        refresher-triggered="{{refreshing}}"
+      >
+        <view wx:if="{{merchants.length === 0}}" class="empty-container">
+          <t-empty icon="shop" description="暂无商户数据" />
+        </view>
 
-          <view wx:else class="merchants-container">
-            <view
-              wx:for="{{merchants}}"
-              wx:key="id"
-              class="merchant-card"
-              bindtap="onMerchantTap"
-              data-id="{{item.id}}"
-            >
-              <view class="merchant-header">
-                <view class="merchant-info">
-                  <text class="merchant-name">{{item.name}}</text>
-                  <t-tag
-                    theme="{{item.status_theme}}"
-                    size="small"
-                    variant="dark"
-                  >
-                    {{item.status_label}}
-                  </t-tag>
-                </view>
-                <t-tag theme="{{item.business_state_theme}}" size="small" variant="light">{{item.business_state_label}}</t-tag>
+        <view wx:else class="merchants-container">
+          <view
+            wx:for="{{merchants}}"
+            wx:key="id"
+            class="merchant-card"
+            bindtap="onMerchantTap"
+            data-id="{{item.id}}"
+          >
+            <view class="merchant-header">
+              <view class="merchant-info">
+                <text class="merchant-name">{{item.name}}</text>
+                <t-tag
+                  theme="{{item.status_theme}}"
+                  size="small"
+                  variant="dark"
+                >
+                  {{item.status_label}}
+                </t-tag>
               </view>
-
-              <view class="merchant-details">
-                <view class="detail-row">
-                  <t-icon name="location" size="14px" color="#999" />
-                  <text class="detail-text">{{item.address}}</text>
-                </view>
-                <view class="detail-row">
-                  <t-icon name="call" size="14px" color="#999" />
-                  <text class="detail-text">{{item.phone}}</text>
-                </view>
-                <view class="detail-row">
-                  <t-icon name="time" size="14px" color="#999" />
-                  <text class="detail-text">入驻时间：{{item.created_at}}</text>
-                </view>
-              </view>
+              <t-tag theme="{{item.business_state_theme}}" size="small" variant="light">{{item.business_state_label}}</t-tag>
             </view>
 
-            <view class="load-more">
-              <t-loading wx:if="{{loadingMore}}" theme="dots" size="40rpx" />
-              <text wx:elif="{{!hasMore && merchants.length > 0}}" class="no-more-text">没有更多数据了</text>
+            <view class="merchant-details">
+              <view class="detail-row">
+                <t-icon name="location" size="14px" color="#999" />
+                <text class="detail-text">{{item.address}}</text>
+              </view>
+              <view class="detail-row">
+                <t-icon name="call" size="14px" color="#999" />
+                <text class="detail-text">{{item.phone}}</text>
+              </view>
+              <view class="detail-row">
+                <t-icon name="time" size="14px" color="#999" />
+                <text class="detail-text">入驻时间：{{item.created_at}}</text>
+              </view>
             </view>
           </view>
-        </scroll-view>
-      </view>
+
+          <view class="load-more">
+            <t-loading wx:if="{{loadingMore}}" theme="dots" size="40rpx" />
+            <text wx:elif="{{!hasMore && merchants.length > 0}}" class="no-more-text">没有更多数据了</text>
+          </view>
+        </view>
+      </scroll-view>
     </block>
   </view>
 
