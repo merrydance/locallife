@@ -2257,6 +2257,27 @@ definitions:
     - claim_id
     - reason
     type: object
+  api.createMerchantSelectableTagRequest:
+    properties:
+      name:
+        maxLength: 50
+        minLength: 1
+        type: string
+      sort_order:
+        maximum: 999
+        minimum: 0
+        type: integer
+      type:
+        enum:
+        - dish
+        - table
+        - combo
+        - customization
+        type: string
+    required:
+    - name
+    - type
+    type: object
   api.createOCRJobRequest:
     properties:
       document_type:
@@ -20901,6 +20922,91 @@ paths:
       summary: 获取订单来源分析
       tags:
       - 商户统计
+  /v1/merchant/tags:
+    get:
+      description: 获取当前商户自行维护的菜品、桌台、套餐或定制选项标签
+      parameters:
+      - description: 标签类型
+        enum:
+        - dish
+        - table
+        - combo
+        - customization
+        in: query
+        name: type
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 标签列表
+          schema:
+            $ref: '#/definitions/api.listTagsResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 非商户用户或无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取当前商户可选业务标签
+      tags:
+      - 商户
+    post:
+      consumes:
+      - application/json
+      description: 创建或复用全局唯一标签，并幂等关联到当前商户；不授予平台 /v1/tags 管理权限
+      parameters:
+      - description: 标签信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.createMerchantSelectableTagRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: 创建或关联后的标签
+          schema:
+            $ref: '#/definitions/api.tagDetailResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 非商户用户或无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: 同名停用标签冲突
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 创建当前商户可选业务标签
+      tags:
+      - 商户
   /v1/merchants/{id}/members:
     get:
       description: 商户获取本店所有会员的列表（含余额、消费统计）

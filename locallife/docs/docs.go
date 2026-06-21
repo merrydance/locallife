@@ -14704,6 +14704,137 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/merchant/tags": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取当前商户自行维护的菜品、桌台、套餐或定制选项标签",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户"
+                ],
+                "summary": "获取当前商户可选业务标签",
+                "parameters": [
+                    {
+                        "enum": [
+                            "dish",
+                            "table",
+                            "combo",
+                            "customization"
+                        ],
+                        "type": "string",
+                        "description": "标签类型",
+                        "name": "type",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "标签列表",
+                        "schema": {
+                            "$ref": "#/definitions/api.listTagsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "非商户用户或无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "创建或复用全局唯一标签，并幂等关联到当前商户；不授予平台 /v1/tags 管理权限",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户"
+                ],
+                "summary": "创建当前商户可选业务标签",
+                "parameters": [
+                    {
+                        "description": "标签信息",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.createMerchantSelectableTagRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "创建或关联后的标签",
+                        "schema": {
+                            "$ref": "#/definitions/api.tagDetailResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "非商户用户或无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "同名停用标签冲突",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/merchants/applications/me": {
             "get": {
                 "security": [
@@ -35811,6 +35942,34 @@ const docTemplate = `{
                     "type": "string",
                     "maxLength": 1000,
                     "minLength": 10
+                }
+            }
+        },
+        "api.createMerchantSelectableTagRequest": {
+            "type": "object",
+            "required": [
+                "name",
+                "type"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "maxLength": 50,
+                    "minLength": 1
+                },
+                "sort_order": {
+                    "type": "integer",
+                    "maximum": 999,
+                    "minimum": 0
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "dish",
+                        "table",
+                        "combo",
+                        "customization"
+                    ]
                 }
             }
         },
