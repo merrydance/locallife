@@ -36,6 +36,10 @@ type printServerPrinterRequest struct {
 	MerchantRef string `json:"merchant_ref"`
 }
 
+type printServerRemovePrinterRequest struct {
+	MerchantRef string `json:"merchant_ref"`
+}
+
 type printServerPrintJobRequest struct {
 	PrinterSN   string            `json:"printer_sn"`
 	TaskKey     string            `json:"task_key"`
@@ -152,12 +156,17 @@ func (c *PrintServerClient) RemovePrinter(ctx context.Context, input RemovePrint
 	if sn == "" {
 		return fmt.Errorf("printer sn is required")
 	}
+	if strings.TrimSpace(input.Business) == "" {
+		return fmt.Errorf("merchant business is required")
+	}
 
 	var response struct {
 		PrinterSN string `json:"printer_sn"`
 		Status    string `json:"status"`
 	}
-	return c.callJSON(ctx, http.MethodDelete, "/v1/printers/"+url.PathEscape(sn), nil, &response)
+	return c.callJSON(ctx, http.MethodDelete, "/v1/printers/"+url.PathEscape(sn), printServerRemovePrinterRequest{
+		MerchantRef: printServerMerchantRef(input.Business),
+	}, &response)
 }
 
 func (c *PrintServerClient) Print(ctx context.Context, input PrintInput) (string, error) {

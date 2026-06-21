@@ -225,6 +225,9 @@ func TestPrintServerClientAddAndRemovePrinterUseProviderContract(t *testing.T) {
 			require.NoError(t, json.NewEncoder(w).Encode(map[string]string{"printer_sn": "MDP000001", "status": "registered"}))
 		case "/v1/printers/MDP000001":
 			require.Equal(t, http.MethodDelete, r.Method)
+			var payload map[string]string
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&payload))
+			require.Equal(t, "merchant:1001", payload["merchant_ref"])
 			require.NoError(t, json.NewEncoder(w).Encode(map[string]string{"printer_sn": "MDP000001", "status": "disabled"}))
 		default:
 			t.Fatalf("unexpected path %s", r.URL.Path)
@@ -246,6 +249,6 @@ func TestPrintServerClientAddAndRemovePrinterUseProviderContract(t *testing.T) {
 		Name:     "后厨打印机",
 		Business: "1001",
 	}))
-	require.NoError(t, client.RemovePrinter(context.Background(), RemovePrinterInput{SN: "MDP000001"}))
+	require.NoError(t, client.RemovePrinter(context.Background(), RemovePrinterInput{SN: "MDP000001", Business: "1001"}))
 	require.Equal(t, []string{"POST /v1/printers", "DELETE /v1/printers/MDP000001"}, paths)
 }
