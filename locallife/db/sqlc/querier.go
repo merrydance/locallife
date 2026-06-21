@@ -184,6 +184,8 @@ type Querier interface {
 	CountFavoriteMerchants(ctx context.Context, userID int64) (int64, error)
 	CountFoodSafetyCasesByRegion(ctx context.Context, regionID int64) (int64, error)
 	CountFoodSafetyCasesByRegionAndStatus(ctx context.Context, arg CountFoodSafetyCasesByRegionAndStatusParams) (int64, error)
+	CountFoodSafetyCasesByRegions(ctx context.Context, regionIds []int64) (int64, error)
+	CountFoodSafetyCasesByRegionsAndStatus(ctx context.Context, arg CountFoodSafetyCasesByRegionsAndStatusParams) (int64, error)
 	// 检查某桌台是否有未来的有效预定（用于删除桌台前检查）
 	CountFutureReservationsByTable(ctx context.Context, tableID int64) (int64, error)
 	CountIngredients(ctx context.Context, arg CountIngredientsParams) (int64, error)
@@ -1379,6 +1381,8 @@ type Querier interface {
 	ListFavoriteMerchants(ctx context.Context, arg ListFavoriteMerchantsParams) ([]ListFavoriteMerchantsRow, error)
 	ListFoodSafetyCasesByRegion(ctx context.Context, arg ListFoodSafetyCasesByRegionParams) ([]FoodSafetyCase, error)
 	ListFoodSafetyCasesByRegionAndStatus(ctx context.Context, arg ListFoodSafetyCasesByRegionAndStatusParams) ([]FoodSafetyCase, error)
+	ListFoodSafetyCasesByRegions(ctx context.Context, arg ListFoodSafetyCasesByRegionsParams) ([]FoodSafetyCase, error)
+	ListFoodSafetyCasesByRegionsAndStatus(ctx context.Context, arg ListFoodSafetyCasesByRegionsAndStatusParams) ([]FoodSafetyCase, error)
 	ListFoodSafetyIncidentsByCase(ctx context.Context, caseID pgtype.Int8) ([]ListFoodSafetyIncidentsByCaseRow, error)
 	ListFraudPatterns(ctx context.Context, arg ListFraudPatternsParams) ([]FraudPattern, error)
 	ListGlobalDishCategories(ctx context.Context) ([]ListGlobalDishCategoriesRow, error)

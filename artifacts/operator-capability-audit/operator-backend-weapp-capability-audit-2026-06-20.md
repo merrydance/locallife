@@ -1421,6 +1421,19 @@ SQL 证据：
 
 ### 已完成复核记录
 
+#### OPA-011-B 子任务复核：食安案件列表默认多区域聚合
+
+| 字段 | 记录 |
+| --- | --- |
+| 完成范围 | `OPA-011-B`；涉及 `locallife/api/operator_food_safety_cases.go`、`locallife/api/operator_food_safety_cases_test.go`、`locallife/db/query/trust_score.sql`、`locallife/db/sqlc/querier.go`、`locallife/db/sqlc/trust_score.sql.go`、`locallife/db/mock/store.go` |
+| 设计目标 | 已达成当前子任务目标：食安案件列表从 `getOperatorRegionID()` 切换为 `resolveOperatorRegionSelection()`；默认无参使用全部 active 授权区域；显式 `region_id` 仍由同一 resolver 做 active 授权；列表、status 过滤、total、has_more 统一按 `region_ids` 查询 |
+| 时序 | 读路径先解析后端授权区域集合，再进入 SQL 查询；数据库负责跨区域全局 `created_at DESC, id DESC` 排序和分页，避免 handler 先读多区再内存拼接导致分页/total 不一致 |
+| 幂等 | 本步只改只读列表，不新增写入和重试副作用；重复请求在同一授权集合和同一分页参数下保持稳定排序 |
+| 越权 | 默认列表不再依赖 legacy `operators.region_id`；新增回归覆盖 legacy 主区域 suspended 时只使用 `ListOperatorRegions` 返回的 active 区域集合；显式非授权区域仍由 `resolveOperatorRegionSelection()` fail closed |
+| 回归 | 红灯：列表测试在修复前因缺少 `region_ids` SQLC 契约和旧默认区域逻辑失败；绿灯：`PATH=/usr/local/go/bin:$PATH go test ./api -run 'TestListOperatorFoodSafetyCases_(UsesManagedRegionSelection\|DefaultAggregatesManagedRegions\|DefaultExcludesSuspendedLegacyPrimaryRegion)' -count=1` 通过；扩展绿灯：`PATH=/usr/local/go/bin:$PATH go test ./api -run 'Test.*OperatorFoodSafetyCase' -count=1` 通过；生成检查：`PATH=/usr/local/go/bin:$PATH make sqlc`、`PATH=/usr/local/go/bin:$PATH make check-generated` 通过 |
+| 非目标 | 尚未给小程序食安列表新增区域筛选；未改变食安事件触发、商户暂停/恢复事务、案件状态枚举；未处理 `OPA-012` 佣金和 `OP-RISK-001/002` |
+| 剩余风险 | 当前 `OPA-011` 还需做小程序食安页面契约复核，确认后端默认聚合后页面不会把 403/空态误渲染为“无案件”；该复核不阻塞后端列表不变量，但属于 `OPA-011-D/E` 收口范围 |
+
 #### OPA-011-C 子任务复核：食安案件详情与处置按案件真实区域授权
 
 | 字段 | 记录 |

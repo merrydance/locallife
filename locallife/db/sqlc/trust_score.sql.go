@@ -138,6 +138,36 @@ func (q *Queries) CountFoodSafetyCasesByRegionAndStatus(ctx context.Context, arg
 	return count, err
 }
 
+const countFoodSafetyCasesByRegions = `-- name: CountFoodSafetyCasesByRegions :one
+SELECT COUNT(*) FROM food_safety_cases
+WHERE region_id = ANY($1::bigint[])
+`
+
+func (q *Queries) CountFoodSafetyCasesByRegions(ctx context.Context, regionIds []int64) (int64, error) {
+	row := q.db.QueryRow(ctx, countFoodSafetyCasesByRegions, regionIds)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countFoodSafetyCasesByRegionsAndStatus = `-- name: CountFoodSafetyCasesByRegionsAndStatus :one
+SELECT COUNT(*) FROM food_safety_cases
+WHERE region_id = ANY($1::bigint[])
+  AND status = $2
+`
+
+type CountFoodSafetyCasesByRegionsAndStatusParams struct {
+	RegionIds []int64 `json:"region_ids"`
+	Status    string  `json:"status"`
+}
+
+func (q *Queries) CountFoodSafetyCasesByRegionsAndStatus(ctx context.Context, arg CountFoodSafetyCasesByRegionsAndStatusParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countFoodSafetyCasesByRegionsAndStatus, arg.RegionIds, arg.Status)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countMerchantClaimsByType = `-- name: CountMerchantClaimsByType :one
 
 SELECT COUNT(*) as total
@@ -2621,6 +2651,109 @@ func (q *Queries) ListFoodSafetyCasesByRegionAndStatus(ctx context.Context, arg 
 		arg.Status,
 		arg.Limit,
 		arg.Offset,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []FoodSafetyCase{}
+	for rows.Next() {
+		var i FoodSafetyCase
+		if err := rows.Scan(
+			&i.ID,
+			&i.MerchantID,
+			&i.RegionID,
+			&i.PrimaryProductKey,
+			&i.PrimaryProductLabel,
+			&i.Status,
+			&i.TriggerReason,
+			&i.InvestigationReport,
+			&i.MerchantRectificationReport,
+			&i.Resolution,
+			&i.SuspendedAt,
+			&i.ResolvedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFoodSafetyCasesByRegions = `-- name: ListFoodSafetyCasesByRegions :many
+SELECT id, merchant_id, region_id, primary_product_key, primary_product_label, status, trigger_reason, investigation_report, merchant_rectification_report, resolution, suspended_at, resolved_at, created_at, updated_at FROM food_safety_cases
+WHERE region_id = ANY($1::bigint[])
+ORDER BY created_at DESC, id DESC
+LIMIT $3 OFFSET $2
+`
+
+type ListFoodSafetyCasesByRegionsParams struct {
+	RegionIds []int64 `json:"region_ids"`
+	Offset    int32   `json:"offset"`
+	Limit     int32   `json:"limit"`
+}
+
+func (q *Queries) ListFoodSafetyCasesByRegions(ctx context.Context, arg ListFoodSafetyCasesByRegionsParams) ([]FoodSafetyCase, error) {
+	rows, err := q.db.Query(ctx, listFoodSafetyCasesByRegions, arg.RegionIds, arg.Offset, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []FoodSafetyCase{}
+	for rows.Next() {
+		var i FoodSafetyCase
+		if err := rows.Scan(
+			&i.ID,
+			&i.MerchantID,
+			&i.RegionID,
+			&i.PrimaryProductKey,
+			&i.PrimaryProductLabel,
+			&i.Status,
+			&i.TriggerReason,
+			&i.InvestigationReport,
+			&i.MerchantRectificationReport,
+			&i.Resolution,
+			&i.SuspendedAt,
+			&i.ResolvedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFoodSafetyCasesByRegionsAndStatus = `-- name: ListFoodSafetyCasesByRegionsAndStatus :many
+SELECT id, merchant_id, region_id, primary_product_key, primary_product_label, status, trigger_reason, investigation_report, merchant_rectification_report, resolution, suspended_at, resolved_at, created_at, updated_at FROM food_safety_cases
+WHERE region_id = ANY($1::bigint[])
+  AND status = $2
+ORDER BY created_at DESC, id DESC
+LIMIT $4 OFFSET $3
+`
+
+type ListFoodSafetyCasesByRegionsAndStatusParams struct {
+	RegionIds []int64 `json:"region_ids"`
+	Status    string  `json:"status"`
+	Offset    int32   `json:"offset"`
+	Limit     int32   `json:"limit"`
+}
+
+func (q *Queries) ListFoodSafetyCasesByRegionsAndStatus(ctx context.Context, arg ListFoodSafetyCasesByRegionsAndStatusParams) ([]FoodSafetyCase, error) {
+	rows, err := q.db.Query(ctx, listFoodSafetyCasesByRegionsAndStatus,
+		arg.RegionIds,
+		arg.Status,
+		arg.Offset,
+		arg.Limit,
 	)
 	if err != nil {
 		return nil, err

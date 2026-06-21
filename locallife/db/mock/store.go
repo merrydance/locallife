@@ -2191,6 +2191,36 @@ func (mr *MockStoreMockRecorder) CountFoodSafetyCasesByRegionAndStatus(ctx, arg 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountFoodSafetyCasesByRegionAndStatus", reflect.TypeOf((*MockStore)(nil).CountFoodSafetyCasesByRegionAndStatus), ctx, arg)
 }
 
+// CountFoodSafetyCasesByRegions mocks base method.
+func (m *MockStore) CountFoodSafetyCasesByRegions(ctx context.Context, regionIds []int64) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountFoodSafetyCasesByRegions", ctx, regionIds)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountFoodSafetyCasesByRegions indicates an expected call of CountFoodSafetyCasesByRegions.
+func (mr *MockStoreMockRecorder) CountFoodSafetyCasesByRegions(ctx, regionIds any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountFoodSafetyCasesByRegions", reflect.TypeOf((*MockStore)(nil).CountFoodSafetyCasesByRegions), ctx, regionIds)
+}
+
+// CountFoodSafetyCasesByRegionsAndStatus mocks base method.
+func (m *MockStore) CountFoodSafetyCasesByRegionsAndStatus(ctx context.Context, arg db.CountFoodSafetyCasesByRegionsAndStatusParams) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountFoodSafetyCasesByRegionsAndStatus", ctx, arg)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountFoodSafetyCasesByRegionsAndStatus indicates an expected call of CountFoodSafetyCasesByRegionsAndStatus.
+func (mr *MockStoreMockRecorder) CountFoodSafetyCasesByRegionsAndStatus(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountFoodSafetyCasesByRegionsAndStatus", reflect.TypeOf((*MockStore)(nil).CountFoodSafetyCasesByRegionsAndStatus), ctx, arg)
+}
+
 // CountFutureReservationsByTable mocks base method.
 func (m *MockStore) CountFutureReservationsByTable(ctx context.Context, tableID int64) (int64, error) {
 	m.ctrl.T.Helper()
@@ -15243,6 +15273,36 @@ func (m *MockStore) ListFoodSafetyCasesByRegionAndStatus(ctx context.Context, ar
 func (mr *MockStoreMockRecorder) ListFoodSafetyCasesByRegionAndStatus(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListFoodSafetyCasesByRegionAndStatus", reflect.TypeOf((*MockStore)(nil).ListFoodSafetyCasesByRegionAndStatus), ctx, arg)
+}
+
+// ListFoodSafetyCasesByRegions mocks base method.
+func (m *MockStore) ListFoodSafetyCasesByRegions(ctx context.Context, arg db.ListFoodSafetyCasesByRegionsParams) ([]db.FoodSafetyCase, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListFoodSafetyCasesByRegions", ctx, arg)
+	ret0, _ := ret[0].([]db.FoodSafetyCase)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListFoodSafetyCasesByRegions indicates an expected call of ListFoodSafetyCasesByRegions.
+func (mr *MockStoreMockRecorder) ListFoodSafetyCasesByRegions(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListFoodSafetyCasesByRegions", reflect.TypeOf((*MockStore)(nil).ListFoodSafetyCasesByRegions), ctx, arg)
+}
+
+// ListFoodSafetyCasesByRegionsAndStatus mocks base method.
+func (m *MockStore) ListFoodSafetyCasesByRegionsAndStatus(ctx context.Context, arg db.ListFoodSafetyCasesByRegionsAndStatusParams) ([]db.FoodSafetyCase, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListFoodSafetyCasesByRegionsAndStatus", ctx, arg)
+	ret0, _ := ret[0].([]db.FoodSafetyCase)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListFoodSafetyCasesByRegionsAndStatus indicates an expected call of ListFoodSafetyCasesByRegionsAndStatus.
+func (mr *MockStoreMockRecorder) ListFoodSafetyCasesByRegionsAndStatus(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListFoodSafetyCasesByRegionsAndStatus", reflect.TypeOf((*MockStore)(nil).ListFoodSafetyCasesByRegionsAndStatus), ctx, arg)
 }
 
 // ListFoodSafetyIncidentsByCase mocks base method.

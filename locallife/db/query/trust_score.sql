@@ -399,6 +399,16 @@ LIMIT $2 OFFSET $3;
 SELECT COUNT(*) FROM food_safety_cases
 WHERE region_id = $1;
 
+-- name: ListFoodSafetyCasesByRegions :many
+SELECT id, merchant_id, region_id, primary_product_key, primary_product_label, status, trigger_reason, investigation_report, merchant_rectification_report, resolution, suspended_at, resolved_at, created_at, updated_at FROM food_safety_cases
+WHERE region_id = ANY(sqlc.arg('region_ids')::bigint[])
+ORDER BY created_at DESC, id DESC
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
+
+-- name: CountFoodSafetyCasesByRegions :one
+SELECT COUNT(*) FROM food_safety_cases
+WHERE region_id = ANY(sqlc.arg('region_ids')::bigint[]);
+
 -- name: ListFoodSafetyCasesByRegionAndStatus :many
 SELECT id, merchant_id, region_id, primary_product_key, primary_product_label, status, trigger_reason, investigation_report, merchant_rectification_report, resolution, suspended_at, resolved_at, created_at, updated_at FROM food_safety_cases
 WHERE region_id = $1
@@ -410,6 +420,18 @@ LIMIT $3 OFFSET $4;
 SELECT COUNT(*) FROM food_safety_cases
 WHERE region_id = $1
   AND status = $2;
+
+-- name: ListFoodSafetyCasesByRegionsAndStatus :many
+SELECT id, merchant_id, region_id, primary_product_key, primary_product_label, status, trigger_reason, investigation_report, merchant_rectification_report, resolution, suspended_at, resolved_at, created_at, updated_at FROM food_safety_cases
+WHERE region_id = ANY(sqlc.arg('region_ids')::bigint[])
+  AND status = sqlc.arg('status')
+ORDER BY created_at DESC, id DESC
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
+
+-- name: CountFoodSafetyCasesByRegionsAndStatus :one
+SELECT COUNT(*) FROM food_safety_cases
+WHERE region_id = ANY(sqlc.arg('region_ids')::bigint[])
+  AND status = sqlc.arg('status');
 
 -- name: UpdateFoodSafetyCaseInvestigation :one
 UPDATE food_safety_cases
