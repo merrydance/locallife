@@ -170,6 +170,7 @@ const DASHBOARD_SECTIONS: DashboardSectionDefinition[] = [
       { id: 'business-hours', title: '营业时间', icon: createIcon('calendar-1', 'var(--td-success-color)'), path: '/pages/merchant/settings/business-hours/index' },
       { id: 'staff', title: '员工管理', icon: createIcon('usergroup', 'var(--td-success-color)'), path: '/pages/merchant/staff/index' },
       { id: 'dishes', title: '菜品管理', icon: createIcon('fork', 'var(--td-success-color)'), path: '/pages/merchant/dishes/index' },
+      { id: 'packaging', title: '包装设置', icon: createIcon('setting', 'var(--td-success-color)'), path: '/pages/merchant/packaging/index' },
       { id: 'tables', title: '桌台房间', icon: createIcon('table', 'var(--td-success-color)'), path: '/pages/merchant/tables/index' },
       { id: 'combos', title: '套餐管理', icon: createIcon('combination', 'var(--td-success-color)'), path: '/pages/merchant/combos/index' },
       { id: 'inventory', title: '库存管理', icon: createIcon('system-storage', 'var(--td-success-color)'), path: '/pages/merchant/inventory/index' },
@@ -202,6 +203,7 @@ const DASHBOARD_SECTIONS: DashboardSectionDefinition[] = [
 ]
 
 const DEVICE_MANAGE_ENTRY_IDS = new Set(['display-config', 'printers', 'bind-app'])
+const PACKAGING_MANAGE_ENTRY_IDS = new Set(['packaging'])
 
 function formatMoney(fen: number | null | undefined) {
   if (typeof fen !== 'number' || !Number.isFinite(fen)) return '--'
@@ -262,6 +264,7 @@ export function buildSections(params: {
   pendingOrders: number | null
   canManageDeviceSettings: boolean
   canManageMerchantApplyment: boolean
+  canManagePackagingSettings: boolean
 }): DashboardSectionView[] {
   const badgeOffset: [number, string] = [0, '8rpx']
 
@@ -270,7 +273,8 @@ export function buildSections(params: {
     title: section.title,
     items: section.items.filter((item) => {
       const passesDeviceGate = params.canManageDeviceSettings || !DEVICE_MANAGE_ENTRY_IDS.has(item.id)
-      return passesDeviceGate
+      const passesPackagingGate = params.canManagePackagingSettings || !PACKAGING_MANAGE_ENTRY_IDS.has(item.id)
+      return passesDeviceGate && passesPackagingGate
     }).map((item) => {
       let badgeText = ''
       if (item.badgeKey === 'orders') {

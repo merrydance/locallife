@@ -1,6 +1,7 @@
 import dayjs from '../_main_shared/miniprogram_npm/dayjs/index'
 import { type BaofuSettlementAccountView } from '../_main_shared/api/baofu-account-view'
 import {
+  canManageMerchantPackaging,
   canManageMerchantApplyment,
   canUseMerchantDeviceManagementFallback,
   ensureMerchantConsoleAccess,
@@ -81,6 +82,7 @@ Page({
     pendingOrdersValue: null as number | null,
     canManageDeviceSettings: false,
     canManageMerchantApplyment: false,
+    canManagePackagingSettings: false,
     appBindPopupVisible: false,
     appBindLoading: false,
     appBindError: false,
@@ -95,7 +97,8 @@ Page({
     sections: buildSections({
       pendingOrders: null,
       canManageDeviceSettings: false,
-      canManageMerchantApplyment: false
+      canManageMerchantApplyment: false,
+      canManagePackagingSettings: false
     }) as DashboardSectionView[],
     skeletonRows: SKELETON_ROWS,
     _wsListeners: [] as Array<() => void>
@@ -196,15 +199,18 @@ Page({
 
     const grantedRoles = accessResult.user?.roles || []
     let canManageDeviceSettings = false
+    let canManagePackagingSettings = false
     try {
       const deviceAccess = await getRecentMerchantDeviceAccess()
       canManageDeviceSettings = canUseMerchantDeviceManagementFallback(grantedRoles, deviceAccess)
+      canManagePackagingSettings = canManageMerchantPackaging(grantedRoles, deviceAccess)
     } catch (err) {
       logger.warn('Merchant dashboard device access probe failed', err)
       canManageDeviceSettings = canUseMerchantDeviceManagementFallback(grantedRoles)
+      canManagePackagingSettings = canManageMerchantPackaging(grantedRoles)
     }
 
-    this.setData({ canManageDeviceSettings })
+    this.setData({ canManageDeviceSettings, canManagePackagingSettings })
 
     this.initWebSocketListeners()
     await this.loadDashboard()
@@ -316,7 +322,8 @@ Page({
         sections: buildSections({
           pendingOrders,
           canManageDeviceSettings: this.data.canManageDeviceSettings,
-          canManageMerchantApplyment: this.data.canManageMerchantApplyment
+          canManageMerchantApplyment: this.data.canManageMerchantApplyment,
+          canManagePackagingSettings: this.data.canManagePackagingSettings
         })
       })
     } catch (err) {

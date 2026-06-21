@@ -109,6 +109,49 @@ assert(
   'merchant config page should hide packaging settings for staff roles that backend packaging routes reject'
 )
 
+const dashboardPageTs = read('miniprogram/pages/merchant/dashboard/index.ts')
+assert(
+  dashboardPageTs.includes('canManageMerchantPackaging') &&
+    dashboardPageTs.includes('canManagePackagingSettings'),
+  'merchant dashboard should compute packaging management capability before building visible entries'
+)
+
+const dashboardView = loadModule('pages/merchant/_utils/merchant-dashboard-view.ts', {
+  '../../../utils/user-facing': {
+    getErrorUserMessage: (_err, fallback) => fallback
+  },
+  '../_utils/merchant-finance-entry-view': {
+    MERCHANT_FINANCE_LABEL: '财务中心',
+    MERCHANT_FINANCE_PAGE_PATH: '/pages/merchant/finance/index'
+  }
+})
+
+const packagingDashboardSections = dashboardView.buildSections({
+  pendingOrders: null,
+  canManageDeviceSettings: true,
+  canManageMerchantApplyment: true,
+  canManagePackagingSettings: true
+})
+assert(
+  packagingDashboardSections.some((section) =>
+    section.items.some((item) => item.id === 'packaging' && item.title === '包装设置' && item.path === '/pages/merchant/packaging/index')
+  ),
+  'merchant dashboard should expose a direct packaging settings entry for owner/manager users'
+)
+
+const staffDashboardSections = dashboardView.buildSections({
+  pendingOrders: null,
+  canManageDeviceSettings: false,
+  canManageMerchantApplyment: false,
+  canManagePackagingSettings: false
+})
+assert(
+  !staffDashboardSections.some((section) =>
+    section.items.some((item) => item.id === 'packaging')
+  ),
+  'merchant dashboard should hide the packaging settings entry for staff roles rejected by backend packaging routes'
+)
+
 async function verifyPackagingApiCarriesMerchantContext() {
   const calls = []
   const packagingApiModule = loadModule('pages/merchant/_main_shared/api/packaging.ts', {
