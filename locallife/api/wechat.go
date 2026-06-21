@@ -49,6 +49,11 @@ func (server *Server) wechatLogin(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
+	req.Code = strings.TrimSpace(req.Code)
+	if !isValidWechatLoginCode(req.Code) {
+		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid wechat code")))
+		return
+	}
 
 	// 使用code换取openid
 	wechatResp, err := server.wechatClient.Code2Session(ctx, req.Code)
@@ -186,4 +191,21 @@ func (server *Server) wechatLogin(ctx *gin.Context) {
 		User:                  newUserResponse(user, roles, workbenches),
 	}
 	ctx.JSON(http.StatusOK, rsp)
+}
+
+func isValidWechatLoginCode(code string) bool {
+	if code == "" || len(code) > 256 {
+		return false
+	}
+	for _, r := range code {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r >= '0' && r <= '9':
+		case r == '-' || r == '.' || r == '_' || r == '~':
+		default:
+			return false
+		}
+	}
+	return true
 }

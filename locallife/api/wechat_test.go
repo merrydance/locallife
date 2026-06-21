@@ -150,6 +150,26 @@ func TestWechatLoginAPI(t *testing.T) {
 			},
 		},
 		{
+			name: "MalformedCodeRejectedBeforeProviderCall",
+			body: map[string]interface{}{
+				"code":        "bad code?secret=leak",
+				"device_id":   "test_device_id",
+				"device_type": "ios",
+			},
+			buildStubs: func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient) {
+				wechatClient.EXPECT().
+					Code2Session(gomock.Any(), gomock.Any()).
+					Times(0)
+
+				store.EXPECT().
+					GetUserByWechatOpenID(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
 			name: "WechatInvalidCode",
 			body: map[string]interface{}{
 				"code":        "error_code",
@@ -159,6 +179,27 @@ func TestWechatLoginAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient) {
 				wechatClient.EXPECT().
 					Code2Session(gomock.Any(), gomock.Eq("error_code")).
+					Times(1).
+					Return(nil, &wechat.APIError{Code: 40029, Msg: "invalid code"})
+
+				store.EXPECT().
+					GetUserByWechatOpenID(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name: "UnreservedCodeCharactersAllowed",
+			body: map[string]interface{}{
+				"code":        "valid.Code-123_~",
+				"device_id":   "test_device_id",
+				"device_type": "ios",
+			},
+			buildStubs: func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient) {
+				wechatClient.EXPECT().
+					Code2Session(gomock.Any(), gomock.Eq("valid.Code-123_~")).
 					Times(1).
 					Return(nil, &wechat.APIError{Code: 40029, Msg: "invalid code"})
 

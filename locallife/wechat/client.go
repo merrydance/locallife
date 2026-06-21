@@ -3,9 +3,11 @@ package wechat
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	neturl "net/url"
 	"strings"
 	"sync"
 	"time"
@@ -62,17 +64,24 @@ func NewClient(appID, appSecret string, store db.Store) *Client {
 
 // Code2Session 使用code换取openid和session_key
 func (c *Client) Code2Session(ctx context.Context, code string) (*Code2SessionResponse, error) {
-	url := fmt.Sprintf("%s?appid=%s&secret=%s&js_code=%s&grant_type=authorization_code",
-		code2SessionURL, c.appID, c.appSecret, code)
-
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	endpointURL, err := buildWechatProviderURL(code2SessionURL, map[string]string{
+		"appid":      c.appID,
+		"secret":     c.appSecret,
+		"js_code":    code,
+		"grant_type": "authorization_code",
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, fmt.Errorf("failed to build wechat code2session request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "GET", endpointURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create wechat code2session request: %w", err)
 	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %w", err)
+		return nil, sanitizedWechatProviderRequestError("code2session", err)
 	}
 	defer resp.Body.Close()
 
@@ -132,17 +141,23 @@ func (c *Client) GetAccessToken(ctx context.Context, appType string) (string, er
 
 // fetchAccessToken 从微信服务器获取Access Token
 func (c *Client) fetchAccessToken(ctx context.Context) (*AccessTokenResponse, error) {
-	url := fmt.Sprintf("%s?grant_type=client_credential&appid=%s&secret=%s",
-		getAccessTokenURL, c.appID, c.appSecret)
-
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	endpointURL, err := buildWechatProviderURL(getAccessTokenURL, map[string]string{
+		"grant_type": "client_credential",
+		"appid":      c.appID,
+		"secret":     c.appSecret,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, fmt.Errorf("failed to build wechat access token request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "GET", endpointURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create wechat access token request: %w", err)
 	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %w", err)
+		return nil, sanitizedWechatProviderRequestError("access_token", err)
 	}
 	defer resp.Body.Close()
 
@@ -161,4 +176,25 @@ func (c *Client) fetchAccessToken(ctx context.Context) (*AccessTokenResponse, er
 	}
 
 	return &result, nil
+}
+
+func buildWechatProviderURL(endpoint string, params map[string]string) (string, error) {
+	parsed, err := neturl.Parse(endpoint)
+	if err != nil {
+		return "", err
+	}
+	query := parsed.Query()
+	for key, value := range params {
+		query.Set(key, value)
+	}
+	parsed.RawQuery = query.Encode()
+	return parsed.String(), nil
+}
+
+func sanitizedWechatProviderRequestError(operation string, err error) error {
+	var urlErr *neturl.Error
+	if err != nil && errors.As(err, &urlErr) {
+		return fmt.Errorf("failed to send wechat %s request: %s: %w", operation, urlErr.Op, urlErr.Err)
+	}
+	return fmt.Errorf("failed to send wechat %s request: %w", operation, err)
 }

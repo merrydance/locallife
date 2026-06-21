@@ -81,3 +81,25 @@ func TestCode2SessionRejectsMissingOpenID(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorContains(t, err, "missing openid")
 }
+
+func TestCode2SessionTransportErrorDoesNotLeakSecret(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	const appSecret = "super_secret_value"
+	store := mockdb.NewMockStore(ctrl)
+	client := NewClient("test_app_id", appSecret, store)
+	client.httpClient = &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return nil, context.Canceled
+		}),
+	}
+
+	resp, err := client.Code2Session(context.Background(), "bad code?secret=probe")
+
+	require.Nil(t, resp)
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), appSecret)
+	require.NotContains(t, err.Error(), "secret=")
+	require.NotContains(t, err.Error(), "js_code=")
+}

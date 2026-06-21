@@ -116,7 +116,18 @@ func sanitizeQuery(raw string) string {
 	if err != nil {
 		return "<redacted>"
 	}
-	for _, key := range []string{"token", "access_token", "refresh_token"} {
+	for _, key := range []string{
+		"token",
+		"access_token",
+		"refresh_token",
+		"secret",
+		"code",
+		"js_code",
+		"session_key",
+		"ticket",
+		"signature",
+		"authorization",
+	} {
 		if _, ok := values[key]; ok {
 			values.Set(key, "***")
 		}
