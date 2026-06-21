@@ -11,7 +11,6 @@ import (
 	baofucontracts "github.com/merrydance/locallife/baofu/account/contracts"
 	baofunotification "github.com/merrydance/locallife/baofu/account/notification"
 	db "github.com/merrydance/locallife/db/sqlc"
-	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/worker"
 	"github.com/rs/zerolog/log"
 )
@@ -212,14 +211,11 @@ func (server *Server) applyBaofuAccountOpenCallbackState(ctx context.Context, no
 	if err != nil {
 		return err
 	}
-	server.continueBaofuMerchantReportAfterAccountCallback(ctx, applied.Flow)
+	logBaofuAccountOpenCallbackDeferredMerchantReport(applied.Flow)
 	return nil
 }
 
-func (server *Server) continueBaofuMerchantReportAfterAccountCallback(ctx context.Context, flow db.BaofuAccountOpeningFlow) {
-	if server == nil || server.baofuMerchantReportClient == nil {
-		return
-	}
+func logBaofuAccountOpenCallbackDeferredMerchantReport(flow db.BaofuAccountOpeningFlow) {
 	if strings.TrimSpace(flow.OwnerType) != db.BaofuAccountOwnerTypeMerchant {
 		return
 	}
@@ -228,29 +224,12 @@ func (server *Server) continueBaofuMerchantReportAfterAccountCallback(ctx contex
 	default:
 		return
 	}
-	service := logic.NewBaofuAccountMerchantReportService(server.store, server.baofuMerchantReportClient, server.dataEncryptor, logic.BaofuAccountMerchantReportConfig{
-		CollectMerchantID: server.config.BaofuCollectMerchantID,
-		CollectTerminalID: server.config.BaofuCollectTerminalID,
-		MiniProgramAppID:  server.config.WechatMiniAppID,
-		ChannelID:         server.config.BaofuMerchantReportChannelID,
-		ChannelName:       server.config.BaofuMerchantReportChannelName,
-		Business:          server.config.BaofuMerchantReportBusiness,
-	})
-	updated, err := service.RecoverMerchantReportFlow(ctx, flow)
-	if err != nil {
-		log.Warn().Err(err).
-			Int64("flow_id", flow.ID).
-			Int64("owner_id", flow.OwnerID).
-			Str("state", strings.TrimSpace(flow.State)).
-			Str("open_trans_serial_no", strings.TrimSpace(flow.OpenTransSerialNo.String)).
-			Msg("baofu account callback merchant report continuation failed; recovery will retry")
-		return
-	}
 	log.Info().
-		Int64("flow_id", updated.ID).
-		Int64("owner_id", updated.OwnerID).
-		Str("state", strings.TrimSpace(updated.State)).
-		Msg("baofu account callback merchant report continuation applied")
+		Int64("flow_id", flow.ID).
+		Int64("owner_id", flow.OwnerID).
+		Str("state", strings.TrimSpace(flow.State)).
+		Str("open_trans_serial_no", strings.TrimSpace(flow.OpenTransSerialNo.String)).
+		Msg("baofu account callback deferred merchant report recovery to scheduler")
 }
 
 func baofuAccountResultFromNotification(notification *baofunotification.AccountNotification) baofucontracts.AccountResult {
