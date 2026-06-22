@@ -18,30 +18,54 @@
     <list-skeleton row="4" />
   </view>
 
-  <view wx:elif="{{cases.length > 0}}" class="list">
-    <view class="card" wx:for="{{cases}}" wx:key="id" bindtap="onDetail" data-id="{{item.id}}">
-      <view class="card-header">
-        <text class="title">{{item.primary_product_label}}</text>
-        <t-tag theme="{{item.status_theme}}" variant="dark" size="small">
-          {{item.status_label}}
-        </t-tag>
+  <scroll-view
+    wx:elif="{{cases.length > 0}}"
+    scroll-y
+    class="safety-scroll"
+    scroll-top="{{scrollTop}}"
+    bindscrolltolower="onLoadMore"
+    lower-threshold="100"
+    enable-back-to-top
+    refresher-enabled="{{true}}"
+    bindrefresherrefresh="onPullDownRefresh"
+    refresher-triggered="{{refreshing}}"
+  >
+    <view class="list">
+      <view class="card" wx:for="{{cases}}" wx:key="id" bindtap="onDetail" data-id="{{item.id}}">
+        <view class="card-header">
+          <text class="title">{{item.primary_product_label}}</text>
+          <t-tag theme="{{item.status_theme}}" variant="dark" size="small">
+            {{item.status_label}}
+          </t-tag>
+        </view>
+        <view class="card-body">
+          <text class="body-text">商户ID：{{item.merchant_id}}</text>
+          <text class="body-text">触发原因：{{item.trigger_reason}}</text>
+          <text class="body-text">熔断时间：{{item.suspended_at}}</text>
+        </view>
+        <view class="card-footer">
+          <text>案件ID: {{item.id}}</text>
+          <text>{{item.created_at}}</text>
+        </view>
       </view>
-      <view class="card-body">
-        <text class="body-text">商户ID：{{item.merchant_id}}</text>
-        <text class="body-text">触发原因：{{item.trigger_reason}}</text>
-        <text class="body-text">熔断时间：{{item.suspended_at}}</text>
-      </view>
-      <view class="card-footer">
-        <text>案件ID: {{item.id}}</text>
-        <text>{{item.created_at}}</text>
+
+      <view class="load-more">
+        <t-loading wx:if="{{loadingMore}}" theme="circular" size="32rpx" />
+        <text wx:elif="{{!hasMore}}" class="no-more-text">没有更多案件了</text>
       </view>
     </view>
+  </scroll-view>
 
-    <view class="load-more">
-      <t-button wx:if="{{hasMore}}" size="small" bindtap="onLoadMore" loading="{{loadingMore}}">加载更多</t-button>
-      <text wx:elif="{{!hasMore}}" class="no-more-text">没有更多案件了</text>
-    </view>
-  </view>
-
-  <t-empty wx:else icon="info-circle" description="暂无食安案件" />
+  <scroll-view
+    wx:else
+    scroll-y
+    class="safety-scroll"
+    scroll-top="{{scrollTop}}"
+    enable-back-to-top
+    refresher-enabled="{{true}}"
+    bindrefresherrefresh="onPullDownRefresh"
+    refresher-triggered="{{refreshing}}"
+  >
+    <t-empty icon="info-circle" description="暂无食安案件" />
+  </scroll-view>
 </view>

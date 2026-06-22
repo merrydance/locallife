@@ -53,8 +53,10 @@ Page({
     initialError: false,
     initialErrorMessage: '',
     refreshErrorMessage: '',
+    refreshing: false,
     hasLoadedOnce: false,
     loadingBills: false,
+    loadingMore: false,
     range: DEFAULT_RANGE as OperatorCommissionBillRange,
     quickRanges: buildQuickRanges(DEFAULT_RANGE) as OperatorCommissionQuickRange[],
     rangePickerVisible: false,
@@ -66,7 +68,8 @@ Page({
     page: 1,
     totalPages: 0,
     hasMore: false,
-    totalCount: 0
+    totalCount: 0,
+    scrollTop: 0
   },
 
   async onLoad() {
@@ -80,15 +83,15 @@ Page({
   },
 
   onPullDownRefresh() {
-    void this.loadBills({ silent: true, page: 1 })
-  },
-
-  onReachBottom() {
-    void this.onLoadMore()
+    this.setData({ refreshing: true })
+    void this.loadBills({ silent: true, page: 1 }).finally(() => {
+      this.setData({ refreshing: false })
+      wx.stopPullDownRefresh()
+    })
   },
 
   async onLoadMore() {
-    if (!this.data.hasMore || this.data.loadingBills) {
+    if (!this.data.hasMore || this.data.loadingBills || this.data.loadingMore) {
       return
     }
     await this.loadBills({ silent: true, append: true, page: this.data.page + 1, range: this.data.range })
@@ -96,6 +99,7 @@ Page({
 
   async loadBills(options: { silent?: boolean, append?: boolean, page?: number, range?: OperatorCommissionBillRange } = {}) {
     if (this.data.loadingBills) {
+      this.setData({ refreshing: false })
       wx.stopPullDownRefresh()
       return
     }
@@ -106,6 +110,7 @@ Page({
 
     this.setData({
       loadingBills: true,
+      loadingMore: append,
       ...(silent || hasTrustedData
         ? { refreshErrorMessage: '' }
         : {
@@ -131,10 +136,9 @@ Page({
         initialError: !hasTrustedData,
         initialErrorMessage: hasTrustedData ? '' : message,
         refreshErrorMessage: hasTrustedData ? message : '',
-        loadingBills: false
+        loadingBills: false,
+        loadingMore: false
       })
-    } finally {
-      wx.stopPullDownRefresh()
     }
   },
 
@@ -148,6 +152,7 @@ Page({
       refreshErrorMessage: '',
       hasLoadedOnce: true,
       loadingBills: false,
+      loadingMore: false,
       range,
       quickRanges: buildQuickRanges(range),
       rangePickerValue: getFinanceRangeCalendarValue(range),
@@ -162,6 +167,13 @@ Page({
 
   onRetry() {
     void this.loadBills({ page: 1, range: this.data.range })
+  },
+
+  resetBillScrollTop() {
+    this.setData({ scrollTop: 1 })
+    wx.nextTick(() => {
+      this.setData({ scrollTop: 0 })
+    })
   },
 
   onOpenRangePicker() {
@@ -216,6 +228,7 @@ Page({
 
   applyRange(range: OperatorCommissionBillRange) {
     this.setData({ rangePickerVisible: false })
+    this.resetBillScrollTop()
     void this.loadBills({ page: 1, range })
   }
 })

@@ -1,6 +1,15 @@
 .page-container {
-  min-height: 100vh;
+  height: 100vh;
   background: var(--td-bg-color-page);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.safety-scroll {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
 }
 
 .toolbar {
@@ -71,7 +80,7 @@
 }
 
 .load-more {
-  padding: 0 0 var(--spacer-lg);
+  padding: var(--spacer-sm) 0 var(--spacer-lg);
   display: flex;
   justify-content: center;
 }

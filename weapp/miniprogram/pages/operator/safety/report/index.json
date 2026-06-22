@@ -6,6 +6,7 @@
     "t-tabs": "tdesign-miniprogram/tabs/tabs",
     "t-tab-panel": "tdesign-miniprogram/tab-panel/tab-panel",
     "t-empty": "tdesign-miniprogram/empty/empty",
+    "t-loading": "tdesign-miniprogram/loading/loading",
     "t-tag": "tdesign-miniprogram/tag/tag",
     "t-input": "tdesign-miniprogram/input/input",
     "t-radio": "tdesign-miniprogram/radio/radio",

@@ -9,6 +9,5 @@
     "t-notice-bar": "tdesign-miniprogram/notice-bar/notice-bar",
     "t-tag": "tdesign-miniprogram/tag/tag"
   },
-  "navigationStyle": "custom",
-  "enablePullDownRefresh": true
+  "navigationStyle": "custom"
 }

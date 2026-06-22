@@ -14,13 +14,15 @@ Page({
     cases: [] as OperatorFoodSafetyCaseView[],
     loading: false,
     loadingMore: false,
+    refreshing: false,
     initialLoading: true,
     error: '',
     navBarHeight: 88,
     status: '' as OperatorSafetyStatusFilter,
     page: 1,
     limit: 20,
-    hasMore: false
+    hasMore: false,
+    scrollTop: 0
   },
 
   onLoad() {
@@ -38,16 +40,18 @@ Page({
   },
 
   onPullDownRefresh() {
+    this.setData({ refreshing: true })
     this.loadCases(true).finally(() => {
+      this.setData({ refreshing: false })
       wx.stopPullDownRefresh()
     })
   },
 
   async loadCases(reset = false) {
-    if (this.data.loading || (this.data.loadingMore && !reset)) return
+    if (!reset && (this.data.loading || this.data.loadingMore)) return
     const nextPage = reset ? 1 : this.data.page
     if (reset) {
-      this.setData({ loading: true, error: '' })
+      this.setData({ loading: true, loadingMore: false, error: '' })
     } else {
       this.setData({ loadingMore: true })
     }
@@ -75,11 +79,19 @@ Page({
 
   onTabChange(e: WechatMiniprogram.CustomEvent<TabChangeDetail>) {
     this.setData({ status: e.detail.value })
+    this.resetSafetyScrollTop()
     this.loadCases(true)
   },
 
+  resetSafetyScrollTop() {
+    this.setData({ scrollTop: 1 })
+    wx.nextTick(() => {
+      this.setData({ scrollTop: 0 })
+    })
+  },
+
   onLoadMore() {
-    if (!this.data.hasMore || this.data.loading) return
+    if (!this.data.hasMore || this.data.loading || this.data.loadingMore) return
     this.loadCases(false)
   },
 

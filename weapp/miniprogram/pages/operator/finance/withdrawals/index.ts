@@ -45,13 +45,16 @@ Page({
     refreshErrorMessage: '',
     balanceErrorMessage: '',
     recordsErrorMessage: '',
+    refreshing: false,
     loadingWithdrawals: false,
+    loadingMore: false,
     balanceView: EMPTY_BALANCE_VIEW as BaofuWithdrawalBalanceView,
     loadedSummary: EMPTY_LOADED_SUMMARY_VIEW as BaofuWithdrawalLoadedSummaryView,
     rows: [] as BaofuWithdrawalItemView[],
     page: 1,
     totalPages: 0,
-    hasMore: false
+    hasMore: false,
+    scrollTop: 0
   },
 
   async onLoad() {
@@ -65,15 +68,15 @@ Page({
   },
 
   onPullDownRefresh() {
-    void this.loadWithdrawals({ silent: true, page: 1 })
-  },
-
-  onReachBottom() {
-    void this.onLoadMore()
+    this.setData({ refreshing: true })
+    void this.loadWithdrawals({ silent: true, page: 1 }).finally(() => {
+      this.setData({ refreshing: false })
+      wx.stopPullDownRefresh()
+    })
   },
 
   async onLoadMore() {
-    if (!this.data.hasMore || this.data.loadingWithdrawals) {
+    if (!this.data.hasMore || this.data.loadingWithdrawals || this.data.loadingMore) {
       return
     }
     await this.loadWithdrawals({ silent: true, append: true, page: this.data.page + 1 })
@@ -81,6 +84,7 @@ Page({
 
   async loadWithdrawals(options: { silent?: boolean, append?: boolean, page?: number } = {}) {
     if (this.data.loadingWithdrawals) {
+      this.setData({ refreshing: false })
       wx.stopPullDownRefresh()
       return
     }
@@ -90,6 +94,7 @@ Page({
 
     this.setData({
       loadingWithdrawals: true,
+      loadingMore: append,
       ...(silent || hasTrustedData
         ? { refreshErrorMessage: '' }
         : {
@@ -118,6 +123,7 @@ Page({
         balanceErrorMessage: result.balanceErrorMessage,
         recordsErrorMessage: result.recordsErrorMessage,
         loadingWithdrawals: false,
+        loadingMore: false,
         balanceView,
         loadedSummary: buildBaofuWithdrawalLoadedSummaryView(rows),
         rows,
@@ -133,10 +139,9 @@ Page({
         initialError: !hasTrustedData,
         initialErrorMessage: hasTrustedData ? '' : message,
         refreshErrorMessage: hasTrustedData ? message : '',
-        loadingWithdrawals: false
+        loadingWithdrawals: false,
+        loadingMore: false
       })
-    } finally {
-      wx.stopPullDownRefresh()
     }
   },
 

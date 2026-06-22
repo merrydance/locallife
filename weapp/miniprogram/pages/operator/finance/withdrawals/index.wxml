@@ -10,56 +10,72 @@
     <t-button theme="primary" bind:tap="onRetry">重试</t-button>
   </view>
 
-  <view wx:else class="page-content">
-    <t-cell-group wx:if="{{refreshErrorMessage}}">
-      <t-cell title="提现信息同步失败" note="{{refreshErrorMessage}}">
-        <view slot="right-icon">
-          <t-button size="extra-small" theme="primary" variant="text" loading="{{loadingWithdrawals}}" bind:tap="onRetry">重试</t-button>
-        </view>
-      </t-cell>
-    </t-cell-group>
+  <scroll-view
+    wx:else
+    scroll-y
+    class="withdrawal-scroll"
+    scroll-top="{{scrollTop}}"
+    bindscrolltolower="onLoadMore"
+    lower-threshold="100"
+    enable-back-to-top
+    refresher-enabled="{{true}}"
+    bindrefresherrefresh="onPullDownRefresh"
+    refresher-triggered="{{refreshing}}"
+  >
+    <view class="page-content">
+      <t-cell-group wx:if="{{refreshErrorMessage}}">
+        <t-cell title="提现信息同步失败" note="{{refreshErrorMessage}}">
+          <view slot="right-icon">
+            <t-button size="extra-small" theme="primary" variant="text" loading="{{loadingWithdrawals}}" bind:tap="onRetry">重试</t-button>
+          </view>
+        </t-cell>
+      </t-cell-group>
 
-    <t-cell-group>
-      <t-cell title="可提现余额" note="{{balanceView.availableAmountText}}" />
-      <t-cell title="账户在途提现" note="{{balanceView.pendingAmountText}}" />
-      <t-cell title="账面余额" note="{{balanceView.ledgerAmountText}}" />
-      <t-cell title="冻结金额" note="{{balanceView.frozenAmountText}}" />
-      <t-cell wx:if="{{!balanceView.canSubmit}}" title="暂不能提现" note="{{balanceView.disabledReason}}" />
-      <t-cell title="结算账户" note="{{balanceView.statusDesc || '结算账户已开通'}}" arrow url="/pages/operator/finance/settlement-account/index" />
-    </t-cell-group>
+      <t-cell-group>
+        <t-cell title="可提现余额" note="{{balanceView.availableAmountText}}" />
+        <t-cell title="账户在途提现" note="{{balanceView.pendingAmountText}}" />
+        <t-cell title="账面余额" note="{{balanceView.ledgerAmountText}}" />
+        <t-cell title="冻结金额" note="{{balanceView.frozenAmountText}}" />
+        <t-cell wx:if="{{!balanceView.canSubmit}}" title="暂不能提现" note="{{balanceView.disabledReason}}" />
+        <t-cell title="结算账户" note="{{balanceView.statusDesc || '结算账户已开通'}}" arrow url="/pages/operator/finance/settlement-account/index" />
+      </t-cell-group>
 
-    <t-notice-bar wx:if="{{balanceErrorMessage}}" theme="warning" content="{{balanceErrorMessage}}" />
+      <t-notice-bar wx:if="{{balanceErrorMessage}}" theme="warning" content="{{balanceErrorMessage}}" />
 
-    <t-button theme="primary" block loading="{{loadingWithdrawals}}" disabled="{{!balanceView.canSubmit || loadingWithdrawals}}" bind:tap="onOpenCreate">申请提现</t-button>
+      <t-button theme="primary" block loading="{{loadingWithdrawals}}" disabled="{{!balanceView.canSubmit || loadingWithdrawals}}" bind:tap="onOpenCreate">申请提现</t-button>
 
-    <t-cell-group wx:if="{{rows.length}}">
-      <t-cell title="当前列表小计" note="{{loadedSummary.loadedAmountText}}" />
-      <t-cell title="已加载记录" note="{{loadedSummary.loadedCountText}}" />
-      <t-cell title="列表提现成功" note="{{loadedSummary.succeededAmountText}}" />
-      <t-cell title="列表申请处理中" note="{{loadedSummary.processingAmountText}}" />
-      <t-cell title="列表提现失败" note="{{loadedSummary.failedAmountText}}" />
-      <t-cell title="列表提现退票" note="{{loadedSummary.returnedAmountText}}" />
-    </t-cell-group>
+      <t-cell-group wx:if="{{rows.length}}">
+        <t-cell title="当前列表小计" note="{{loadedSummary.loadedAmountText}}" />
+        <t-cell title="已加载记录" note="{{loadedSummary.loadedCountText}}" />
+        <t-cell title="列表提现成功" note="{{loadedSummary.succeededAmountText}}" />
+        <t-cell title="列表申请处理中" note="{{loadedSummary.processingAmountText}}" />
+        <t-cell title="列表提现失败" note="{{loadedSummary.failedAmountText}}" />
+        <t-cell title="列表提现退票" note="{{loadedSummary.returnedAmountText}}" />
+      </t-cell-group>
 
-    <t-empty wx:if="{{recordsErrorMessage && !rows.length}}" icon="error-circle" description="{{recordsErrorMessage}}" />
-    <t-empty wx:elif="{{!rows.length}}" icon="info-circle" description="暂无提现记录" />
-    <t-cell-group wx:else>
-      <t-cell
-        wx:for="{{rows}}"
-        wx:key="id"
-        title="提现申请"
-        description="{{item.createdAtText}}"
-        note="{{item.amountText}}"
-        data-id="{{item.id}}"
-        arrow
-        bind:click="onOpenDetail"
-      >
-        <view slot="right-icon">
-          <t-tag theme="{{item.statusView.theme}}" size="small">{{item.statusView.text}}</t-tag>
-        </view>
-      </t-cell>
-    </t-cell-group>
+      <t-empty wx:if="{{recordsErrorMessage && !rows.length}}" icon="error-circle" description="{{recordsErrorMessage}}" />
+      <t-empty wx:elif="{{!rows.length}}" icon="info-circle" description="暂无提现记录" />
+      <t-cell-group wx:else>
+        <t-cell
+          wx:for="{{rows}}"
+          wx:key="id"
+          title="提现申请"
+          description="{{item.createdAtText}}"
+          note="{{item.amountText}}"
+          data-id="{{item.id}}"
+          arrow
+          bind:click="onOpenDetail"
+        >
+          <view slot="right-icon">
+            <t-tag theme="{{item.statusView.theme}}" size="small">{{item.statusView.text}}</t-tag>
+          </view>
+        </t-cell>
+      </t-cell-group>
 
-    <t-button wx:if="{{hasMore}}" theme="default" loading="{{loadingWithdrawals}}" bind:tap="onLoadMore">加载更多</t-button>
-  </view>
+      <view class="load-more">
+        <t-loading wx:if="{{loadingMore}}" theme="circular" size="32rpx" />
+        <text wx:elif="{{!hasMore && rows.length > 0}}" class="no-more-text">没有更多提现记录了</text>
+      </view>
+    </view>
+  </scroll-view>
 </view>

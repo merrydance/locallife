@@ -5,16 +5,10 @@
   overflow: hidden;
 }
 
-.bill-scroll {
+.withdrawal-scroll {
   flex: 1;
   min-height: 0;
   height: 100%;
-}
-
-.quick-range-row {
-  display: flex;
-  gap: var(--spacer-sm);
-  flex-wrap: wrap;
 }
 
 .load-more {

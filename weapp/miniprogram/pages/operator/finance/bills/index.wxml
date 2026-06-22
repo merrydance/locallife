@@ -10,52 +10,68 @@
     <t-button theme="primary" bind:tap="onRetry">重试</t-button>
   </view>
 
-  <view wx:else class="page-content">
-    <t-cell-group>
-      <t-cell title="区间佣金" note="{{summary.totalCommissionText}}" />
-      <t-cell title="区域 GMV" note="{{summary.totalGmvText}}" />
-      <t-cell title="区域订单" note="{{summary.totalOrdersText}}" />
-      <t-cell title="账单区间" note="{{summary.rangeLabel}}" arrow bind:tap="onOpenRangePicker" />
-    </t-cell-group>
+  <scroll-view
+    wx:else
+    scroll-y
+    class="bill-scroll"
+    scroll-top="{{scrollTop}}"
+    bindscrolltolower="onLoadMore"
+    lower-threshold="100"
+    enable-back-to-top
+    refresher-enabled="{{true}}"
+    bindrefresherrefresh="onPullDownRefresh"
+    refresher-triggered="{{refreshing}}"
+  >
+    <view class="page-content">
+      <t-cell-group>
+        <t-cell title="区间佣金" note="{{summary.totalCommissionText}}" />
+        <t-cell title="区域 GMV" note="{{summary.totalGmvText}}" />
+        <t-cell title="区域订单" note="{{summary.totalOrdersText}}" />
+        <t-cell title="账单区间" note="{{summary.rangeLabel}}" arrow bind:tap="onOpenRangePicker" />
+      </t-cell-group>
 
-    <view class="quick-range-row">
-      <t-button
-        wx:for="{{quickRanges}}"
-        wx:key="id"
-        size="small"
-        theme="{{item.active ? 'primary' : 'default'}}"
-        variant="{{item.active ? 'base' : 'outline'}}"
-        data-range="{{item.id}}"
-        disabled="{{loadingBills}}"
-        bind:tap="onUseQuickRange"
-      >{{item.label}}</t-button>
+      <view class="quick-range-row">
+        <t-button
+          wx:for="{{quickRanges}}"
+          wx:key="id"
+          size="small"
+          theme="{{item.active ? 'primary' : 'default'}}"
+          variant="{{item.active ? 'base' : 'outline'}}"
+          data-range="{{item.id}}"
+          disabled="{{loadingBills}}"
+          bind:tap="onUseQuickRange"
+        >{{item.label}}</t-button>
+      </view>
+
+      <t-cell-group wx:if="{{refreshErrorMessage}}">
+        <t-cell title="账单同步失败" note="{{refreshErrorMessage}}">
+          <view slot="right-icon">
+            <t-button size="extra-small" theme="primary" variant="text" loading="{{loadingBills}}" bind:tap="onRetry">重试</t-button>
+          </view>
+        </t-cell>
+      </t-cell-group>
+
+      <t-empty wx:if="{{!rows.length}}" icon="info-circle" description="当前区间暂无佣金账单" />
+      <t-cell-group wx:else>
+        <t-cell
+          wx:for="{{rows}}"
+          wx:key="id"
+          title="{{item.date}}"
+          description="GMV {{item.totalGmvText}} · 订单 {{item.orderCountText}}"
+          note="{{item.commissionText}}"
+        >
+          <view slot="right-icon">
+            <t-tag theme="primary" size="small">{{item.commissionRateText}}</t-tag>
+          </view>
+        </t-cell>
+      </t-cell-group>
+
+      <view class="load-more">
+        <t-loading wx:if="{{loadingMore}}" theme="circular" size="32rpx" />
+        <text wx:elif="{{!hasMore && rows.length > 0}}" class="no-more-text">没有更多账单了</text>
+      </view>
     </view>
-
-    <t-cell-group wx:if="{{refreshErrorMessage}}">
-      <t-cell title="账单同步失败" note="{{refreshErrorMessage}}">
-        <view slot="right-icon">
-          <t-button size="extra-small" theme="primary" variant="text" loading="{{loadingBills}}" bind:tap="onRetry">重试</t-button>
-        </view>
-      </t-cell>
-    </t-cell-group>
-
-    <t-empty wx:if="{{!rows.length}}" icon="info-circle" description="当前区间暂无佣金账单" />
-    <t-cell-group wx:else>
-      <t-cell
-        wx:for="{{rows}}"
-        wx:key="id"
-        title="{{item.date}}"
-        description="GMV {{item.totalGmvText}} · 订单 {{item.orderCountText}}"
-        note="{{item.commissionText}}"
-      >
-        <view slot="right-icon">
-          <t-tag theme="primary" size="small">{{item.commissionRateText}}</t-tag>
-        </view>
-      </t-cell>
-    </t-cell-group>
-
-    <t-button wx:if="{{hasMore}}" theme="default" loading="{{loadingBills}}" bind:tap="onLoadMore">加载更多</t-button>
-  </view>
+  </scroll-view>
 
   <t-calendar
     title="选择账单区间"
