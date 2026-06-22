@@ -122,6 +122,7 @@ func (s *RefundRecoveryScheduler) runOnce(ctx context.Context) {
 	s.recoverCancelledReservationRefunds(ctx)
 	s.recoverPendingOrderRefunds(ctx)
 	s.recoverPendingReservationRefunds(ctx)
+	s.recoverPendingRiderDepositRefunds(ctx)
 	s.recoverStuckProcessingRefunds(ctx)
 }
 
@@ -278,6 +279,69 @@ func (s *RefundRecoveryScheduler) recoverPendingReservationRefunds(ctx context.C
 			Int64("payment_order_id", refundOrder.PaymentOrderID).
 			Str("business_type", refundOrder.BusinessType).
 			Msg("pending reservation refund recovery task enqueued")
+	}
+}
+
+func (s *RefundRecoveryScheduler) recoverPendingRiderDepositRefunds(ctx context.Context) {
+	if s.paymentClient == nil {
+		log.Warn().Msg("refund recovery payment client not configured, skip pending rider deposit refund recovery")
+		return
+	}
+
+	pendingRiderDepositRefundOrders, err := s.store.ListPendingRiderDepositRefundOrdersForRecovery(ctx, db.ListPendingRiderDepositRefundOrdersForRecoveryParams{
+		CreatedBefore: time.Now().Add(-1 * time.Minute),
+		Limit:         refundRecoveryBatchLimit,
+	})
+	if err != nil {
+		log.Error().Err(err).Msg("list pending rider deposit refund orders for recovery failed")
+		return
+	}
+
+	for _, refundOrder := range pendingRiderDepositRefundOrders {
+		if refundOrder.PaymentChannel != db.PaymentChannelDirect || refundOrder.BusinessType != db.ExternalPaymentBusinessOwnerRiderDeposit {
+			continue
+		}
+
+		paymentOrder := db.PaymentOrder{
+			ID:             refundOrder.PaymentOrderID,
+			BusinessType:   refundOrder.BusinessType,
+			PaymentChannel: refundOrder.PaymentChannel,
+		}
+		restoredRefundOrder := db.RefundOrder{
+			ID:             refundOrder.ID,
+			PaymentOrderID: refundOrder.PaymentOrderID,
+			RefundAmount:   refundOrder.RefundAmount,
+			OutRefundNo:    refundOrder.OutRefundNo,
+		}
+
+		refundStatus, refundID, err := s.queryRefundStatus(ctx, paymentOrder, restoredRefundOrder)
+		if err != nil {
+			log.Error().Err(err).
+				Int64("refund_order_id", refundOrder.ID).
+				Str("out_refund_no", refundOrder.OutRefundNo).
+				Msg("query pending rider deposit refund status failed")
+			continue
+		}
+
+		application, err := s.recordRiderDepositDirectRefundQueryFact(ctx, paymentOrder, restoredRefundOrder, refundStatus, refundID)
+		if err != nil {
+			log.Error().Err(err).
+				Int64("refund_order_id", refundOrder.ID).
+				Str("out_refund_no", refundOrder.OutRefundNo).
+				Msg("record pending rider deposit refund query fact failed")
+			continue
+		}
+		if application == nil {
+			continue
+		}
+
+		enqueueOrderPaymentFactApplication(ctx, s.distributor, application)
+		log.Info().
+			Int64("refund_order_id", refundOrder.ID).
+			Str("out_refund_no", refundOrder.OutRefundNo).
+			Str("refund_status", refundStatus).
+			Int64("payment_fact_application_id", application.ID).
+			Msg("pending rider deposit refund fact application enqueued")
 	}
 }
 

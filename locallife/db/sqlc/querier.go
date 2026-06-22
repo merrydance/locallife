@@ -1552,6 +1552,7 @@ type Querier interface {
 	ListPendingReservationRefundOrdersForRecovery(ctx context.Context, arg ListPendingReservationRefundOrdersForRecoveryParams) ([]ListPendingReservationRefundOrdersForRecoveryRow, error)
 	// Find pending reservations within N minutes of payment deadline (for reminder notifications)
 	ListPendingReservationsNearDeadline(ctx context.Context, minutesBefore pgtype.Interval) ([]TableReservation, error)
+	ListPendingRiderDepositRefundOrdersForRecovery(ctx context.Context, arg ListPendingRiderDepositRefundOrdersForRecoveryParams) ([]ListPendingRiderDepositRefundOrdersForRecoveryRow, error)
 	ListPendingWithdrawalRecordsByChannel(ctx context.Context, arg ListPendingWithdrawalRecordsByChannelParams) ([]WithdrawalRecord, error)
 	ListPlatformAlertEvents(ctx context.Context, arg ListPlatformAlertEventsParams) ([]PlatformAlertEvent, error)
 	ListPlatformConfigsByKey(ctx context.Context, configKey string) ([]PlatformConfig, error)

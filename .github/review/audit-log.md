@@ -83,3 +83,20 @@ Append one section per formal backend audit or durable review pass.
 - Findings logged: BE-AUDIT-2026-06-16-01, BE-AUDIT-2026-06-16-02
 - Durable docs updated: artifacts/production-risk-audit/state-sequencing-audit-snapshot-2026-06-16.md; .github/review/open-findings.md; .github/review/audit-log.md
 - Remaining scope: The table update transaction path that clears QR on table number change is still a non-finding for the scanned merchant edit flow; the WeChat `env_version` setting remains a separate evidence gap and was not promoted to a finding in this pass.
+
+### 2026-06-22 - P0-F10/P0-F11 recovery gap confirmation
+
+- Scope: Focused only on the already-audited `P0-F10` claim behavior action recovery gap and `P0-F11` rider deposit refund recovery gap, with no business-code changes.
+- Reviewed paths: locallife/worker/task_claim_behavior_action.go; locallife/worker/claim_behavior_action_recovery_scheduler.go; locallife/worker/claim_refund_recovery_scheduler.go; locallife/worker/refund_recovery_scheduler.go; locallife/logic/rider_deposit_refund_service.go; locallife/worker/task_claim_behavior_action_test.go; locallife/worker/claim_behavior_action_recovery_scheduler_test.go; locallife/worker/refund_recovery_scheduler_test.go; locallife/logic/rider_deposit_refund_service_test.go; artifacts/production-risk-audit/state-sequencing-audit-snapshot-2026-06-16.md
+- Findings logged: BE-AUDIT-2026-06-22-01, BE-AUDIT-2026-06-22-02
+- Durable docs updated: artifacts/production-risk-audit/state-sequencing-audit-snapshot-2026-06-16.md; .github/review/open-findings.md; .github/review/audit-log.md
+- Remaining scope: No code or test changes were made in this pass. The next step, if we switch from audit to implementation, is a focused recovery fix plus regression coverage for stale `running` claim behavior actions and rider-deposit `pending`/`unknown` refunds.
+
+### 2026-06-22 - P0-F11 rider deposit refund recovery fix closed
+
+- Scope: Implemented the rider deposit refund recovery gap that was previously confirmed in `BE-AUDIT-2026-06-22-02`, keeping the fix limited to `RefundRecoveryScheduler` and its focused tests.
+- Reviewed paths: locallife/db/query/refund_order.sql; locallife/worker/refund_recovery_scheduler.go; locallife/worker/refund_recovery_scheduler_test.go; locallife/db/sqlc/refund_order.sql.go; locallife/db/sqlc/querier.go; locallife/db/mock/store.go; locallife/logic/payment_fact_application_service.go; locallife/worker/payment_fact_application_scheduler.go; .github/review/open-findings.md; artifacts/production-risk-audit/state-sequencing-audit-snapshot-2026-06-16.md
+- Findings logged: BE-AUDIT-2026-06-22-02 resolved
+- Durable docs updated: .github/review/open-findings.md; .github/review/audit-log.md; artifacts/production-risk-audit/state-sequencing-audit-snapshot-2026-06-16.md; docs/superpowers/plans/2026-06-22-rider-deposit-refund-recovery.md
+- Validation: `PATH=/usr/local/go/bin:$PATH go test ./worker -run 'TestRefundRecoverySchedulerRunOnce' -v` passed after the regression expectations were updated.
+- Remaining scope: The recovery scan is now covered by focused worker tests; broader end-to-end verification of a real provider `unknown`/lost-callback scenario remains unexercised.

@@ -17240,6 +17240,21 @@ func (mr *MockStoreMockRecorder) ListPendingReservationsNearDeadline(ctx, minute
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPendingReservationsNearDeadline", reflect.TypeOf((*MockStore)(nil).ListPendingReservationsNearDeadline), ctx, minutesBefore)
 }
 
+// ListPendingRiderDepositRefundOrdersForRecovery mocks base method.
+func (m *MockStore) ListPendingRiderDepositRefundOrdersForRecovery(ctx context.Context, arg db.ListPendingRiderDepositRefundOrdersForRecoveryParams) ([]db.ListPendingRiderDepositRefundOrdersForRecoveryRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListPendingRiderDepositRefundOrdersForRecovery", ctx, arg)
+	ret0, _ := ret[0].([]db.ListPendingRiderDepositRefundOrdersForRecoveryRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListPendingRiderDepositRefundOrdersForRecovery indicates an expected call of ListPendingRiderDepositRefundOrdersForRecovery.
+func (mr *MockStoreMockRecorder) ListPendingRiderDepositRefundOrdersForRecovery(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPendingRiderDepositRefundOrdersForRecovery", reflect.TypeOf((*MockStore)(nil).ListPendingRiderDepositRefundOrdersForRecovery), ctx, arg)
+}
+
 // ListPendingWithdrawalRecordsByChannel mocks base method.
 func (m *MockStore) ListPendingWithdrawalRecordsByChannel(ctx context.Context, arg db.ListPendingWithdrawalRecordsByChannelParams) ([]db.WithdrawalRecord, error) {
 	m.ctrl.T.Helper()

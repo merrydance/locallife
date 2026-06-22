@@ -169,6 +169,9 @@ func TestRefundRecoverySchedulerRunOncePersistsAlertForUnsupportedDirectRefundFa
 		ListPendingReservationRefundOrdersForRecovery(gomock.Any(), gomock.Any()).
 		Return([]db.ListPendingReservationRefundOrdersForRecoveryRow{}, nil)
 	store.EXPECT().
+		ListPendingRiderDepositRefundOrdersForRecovery(gomock.Any(), gomock.Any()).
+		Return([]db.ListPendingRiderDepositRefundOrdersForRecoveryRow{}, nil)
+	store.EXPECT().
 		ListStuckProcessingRefundOrders(gomock.Any(), gomock.Any()).
 		Return([]db.ListStuckProcessingRefundOrdersRow{{
 			ID:          stuckRefund.ID,
@@ -223,6 +226,7 @@ func TestRefundRecoverySchedulerRunOnceRecordsRiderDepositDirectRefundQueryFact(
 	store.EXPECT().ListPaidUnrefundedReservationPaymentOrders(gomock.Any(), int32(50)).Return([]db.PaymentOrder{}, nil)
 	store.EXPECT().ListPendingOrderRefundOrdersForRecovery(gomock.Any(), gomock.Any()).Return([]db.ListPendingOrderRefundOrdersForRecoveryRow{}, nil)
 	store.EXPECT().ListPendingReservationRefundOrdersForRecovery(gomock.Any(), gomock.Any()).Return([]db.ListPendingReservationRefundOrdersForRecoveryRow{}, nil)
+	store.EXPECT().ListPendingRiderDepositRefundOrdersForRecovery(gomock.Any(), gomock.Any()).Return([]db.ListPendingRiderDepositRefundOrdersForRecoveryRow{}, nil)
 	store.EXPECT().ListStuckProcessingRefundOrders(gomock.Any(), gomock.Any()).Return([]db.ListStuckProcessingRefundOrdersRow{{
 		ID:          stuckRefund.ID,
 		OutRefundNo: stuckRefund.OutRefundNo,
@@ -264,6 +268,71 @@ func TestRefundRecoverySchedulerRunOnceRecordsRiderDepositDirectRefundQueryFact(
 	}
 }
 
+func TestRefundRecoverySchedulerRunOnceRecoversPendingRiderDepositRefunds(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := &riderDepositRefundFactApplicationRecorder{}
+	paymentClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
+
+	store.EXPECT().ListPaidUnrefundedPaymentOrders(gomock.Any(), int32(50)).Return([]db.PaymentOrder{}, nil)
+	store.EXPECT().ListPaidUnrefundedReservationPaymentOrders(gomock.Any(), int32(50)).Return([]db.PaymentOrder{}, nil)
+	store.EXPECT().ListPendingOrderRefundOrdersForRecovery(gomock.Any(), gomock.Any()).Return([]db.ListPendingOrderRefundOrdersForRecoveryRow{}, nil)
+	store.EXPECT().ListPendingReservationRefundOrdersForRecovery(gomock.Any(), gomock.Any()).Return([]db.ListPendingReservationRefundOrdersForRecoveryRow{}, nil)
+	store.EXPECT().ListPendingRiderDepositRefundOrdersForRecovery(gomock.Any(), gomock.Any()).Return([]db.ListPendingRiderDepositRefundOrdersForRecoveryRow{{
+		ID:             61,
+		PaymentOrderID: 91,
+		RefundAmount:   20000,
+		OutRefundNo:    "RFD_PENDING_RIDER_001",
+		BusinessType:   db.ExternalPaymentBusinessOwnerRiderDeposit,
+		PaymentChannel: db.PaymentChannelDirect,
+	}}, nil)
+	store.EXPECT().ListStuckProcessingRefundOrders(gomock.Any(), gomock.Any()).Return([]db.ListStuckProcessingRefundOrdersRow{}, nil)
+	paymentClient.EXPECT().QueryRefund(gomock.Any(), "RFD_PENDING_RIDER_001").Return(&wechat.RefundResponse{RefundID: "WX_REFUND_PENDING_RIDER_001", Status: wechat.RefundStatusSuccess}, nil)
+	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentFactParams{})).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
+		require.Equal(t, db.ExternalPaymentProviderWechat, arg.Provider)
+		require.Equal(t, db.PaymentChannelDirect, arg.Channel)
+		require.Equal(t, db.ExternalPaymentCapabilityDirectRefund, arg.Capability)
+		require.Equal(t, db.ExternalPaymentFactSourceQuery, arg.FactSource)
+		require.Equal(t, db.ExternalPaymentObjectRefund, arg.ExternalObjectType)
+		require.Equal(t, "RFD_PENDING_RIDER_001", arg.ExternalObjectKey)
+		require.True(t, arg.ExternalSecondaryKey.Valid)
+		require.Equal(t, "WX_REFUND_PENDING_RIDER_001", arg.ExternalSecondaryKey.String)
+		require.True(t, arg.BusinessOwner.Valid)
+		require.Equal(t, db.ExternalPaymentBusinessOwnerRiderDeposit, arg.BusinessOwner.String)
+		require.True(t, arg.BusinessObjectType.Valid)
+		require.Equal(t, "refund_order", arg.BusinessObjectType.String)
+		require.True(t, arg.BusinessObjectID.Valid)
+		require.Equal(t, int64(61), arg.BusinessObjectID.Int64)
+		require.Equal(t, "SUCCESS", arg.UpstreamState)
+		require.Equal(t, db.ExternalPaymentTerminalStatusSuccess, arg.TerminalStatus)
+		require.True(t, arg.IsTerminal)
+		require.Equal(t, int64(20000), arg.Amount.Int64)
+		require.Equal(t, "wechat:query:direct:refund:RFD_PENDING_RIDER_001:success", arg.DedupeKey)
+		return db.ExternalPaymentFact{ID: 401, DedupeKey: arg.DedupeKey, IsTerminal: true}, nil
+	})
+	store.EXPECT().CreateExternalPaymentFactApplication(gomock.Any(), db.CreateExternalPaymentFactApplicationParams{
+		FactID:             401,
+		Consumer:           "rider_deposit_domain",
+		BusinessObjectType: "refund_order",
+		BusinessObjectID:   61,
+		Status:             db.ExternalPaymentFactApplicationStatusPending,
+	}).Return(db.ExternalPaymentFactApplication{
+		ID:                 501,
+		FactID:             401,
+		Consumer:           "rider_deposit_domain",
+		BusinessObjectType: "refund_order",
+		BusinessObjectID:   61,
+		Status:             db.ExternalPaymentFactApplicationStatusPending,
+	}, nil)
+
+	scheduler := worker.NewRefundRecoveryScheduler(store, distributor, paymentClient)
+	scheduler.RunOnce()
+
+	require.Equal(t, []int64{501}, distributor.applicationIDs)
+}
+
 func TestRefundRecoverySchedulerRunOnceSkipsRiderDepositRefundResultWhenFactWriteFails(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -290,6 +359,7 @@ func TestRefundRecoverySchedulerRunOnceSkipsRiderDepositRefundResultWhenFactWrit
 	store.EXPECT().ListPaidUnrefundedReservationPaymentOrders(gomock.Any(), int32(50)).Return([]db.PaymentOrder{}, nil)
 	store.EXPECT().ListPendingOrderRefundOrdersForRecovery(gomock.Any(), gomock.Any()).Return([]db.ListPendingOrderRefundOrdersForRecoveryRow{}, nil)
 	store.EXPECT().ListPendingReservationRefundOrdersForRecovery(gomock.Any(), gomock.Any()).Return([]db.ListPendingReservationRefundOrdersForRecoveryRow{}, nil)
+	store.EXPECT().ListPendingRiderDepositRefundOrdersForRecovery(gomock.Any(), gomock.Any()).Return([]db.ListPendingRiderDepositRefundOrdersForRecoveryRow{}, nil)
 	store.EXPECT().ListStuckProcessingRefundOrders(gomock.Any(), gomock.Any()).Return([]db.ListStuckProcessingRefundOrdersRow{{
 		ID:          stuckRefund.ID,
 		OutRefundNo: stuckRefund.OutRefundNo,

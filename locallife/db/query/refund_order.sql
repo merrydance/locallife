@@ -147,6 +147,33 @@ WHERE ro.status = 'pending'
 ORDER BY ro.created_at ASC, ro.id ASC
 LIMIT sqlc.arg('limit')::int;
 
+-- name: ListPendingRiderDepositRefundOrdersForRecovery :many
+SELECT
+    ro.id,
+    ro.payment_order_id,
+    ro.refund_amount,
+    ro.out_refund_no,
+    po.business_type,
+    po.payment_channel
+FROM refund_orders ro
+JOIN payment_orders po ON po.id = ro.payment_order_id
+LEFT JOIN external_payment_commands epc
+    ON epc.provider = 'wechat'
+   AND epc.channel = 'direct'
+   AND epc.capability = 'direct_refund'
+   AND epc.command_type = 'create_refund'
+   AND epc.external_object_type = 'refund'
+   AND epc.external_object_key = ro.out_refund_no
+WHERE ro.status = 'pending'
+  AND po.status = 'paid'
+  AND po.business_type = 'rider_deposit'
+  AND po.payment_channel = 'direct'
+  AND ro.refund_type = 'rider_deposit'
+  AND ro.created_at < sqlc.arg('created_before')
+  AND (epc.id IS NULL OR epc.command_status = 'unknown')
+ORDER BY ro.created_at ASC, ro.id ASC
+LIMIT sqlc.arg('limit')::int;
+
 -- name: UpdateRefundOrderToProcessing :one
 UPDATE refund_orders
 SET

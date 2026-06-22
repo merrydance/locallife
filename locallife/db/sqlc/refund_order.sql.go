@@ -585,6 +585,75 @@ func (q *Queries) ListPendingReservationRefundOrdersForRecovery(ctx context.Cont
 	return items, nil
 }
 
+const listPendingRiderDepositRefundOrdersForRecovery = `-- name: ListPendingRiderDepositRefundOrdersForRecovery :many
+SELECT
+    ro.id,
+    ro.payment_order_id,
+    ro.refund_amount,
+    ro.out_refund_no,
+    po.business_type,
+    po.payment_channel
+FROM refund_orders ro
+JOIN payment_orders po ON po.id = ro.payment_order_id
+LEFT JOIN external_payment_commands epc
+    ON epc.provider = 'wechat'
+   AND epc.channel = 'direct'
+   AND epc.capability = 'direct_refund'
+   AND epc.command_type = 'create_refund'
+   AND epc.external_object_type = 'refund'
+   AND epc.external_object_key = ro.out_refund_no
+WHERE ro.status = 'pending'
+  AND po.status = 'paid'
+  AND po.business_type = 'rider_deposit'
+  AND po.payment_channel = 'direct'
+  AND ro.refund_type = 'rider_deposit'
+  AND ro.created_at < $1
+  AND (epc.id IS NULL OR epc.command_status = 'unknown')
+ORDER BY ro.created_at ASC, ro.id ASC
+LIMIT $2::int
+`
+
+type ListPendingRiderDepositRefundOrdersForRecoveryParams struct {
+	CreatedBefore time.Time `json:"created_before"`
+	Limit         int32     `json:"limit"`
+}
+
+type ListPendingRiderDepositRefundOrdersForRecoveryRow struct {
+	ID             int64  `json:"id"`
+	PaymentOrderID int64  `json:"payment_order_id"`
+	RefundAmount   int64  `json:"refund_amount"`
+	OutRefundNo    string `json:"out_refund_no"`
+	BusinessType   string `json:"business_type"`
+	PaymentChannel string `json:"payment_channel"`
+}
+
+func (q *Queries) ListPendingRiderDepositRefundOrdersForRecovery(ctx context.Context, arg ListPendingRiderDepositRefundOrdersForRecoveryParams) ([]ListPendingRiderDepositRefundOrdersForRecoveryRow, error) {
+	rows, err := q.db.Query(ctx, listPendingRiderDepositRefundOrdersForRecovery, arg.CreatedBefore, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPendingRiderDepositRefundOrdersForRecoveryRow{}
+	for rows.Next() {
+		var i ListPendingRiderDepositRefundOrdersForRecoveryRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PaymentOrderID,
+			&i.RefundAmount,
+			&i.OutRefundNo,
+			&i.BusinessType,
+			&i.PaymentChannel,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRefundOrdersByPaymentOrder = `-- name: ListRefundOrdersByPaymentOrder :many
 SELECT id, payment_order_id, refund_type, refund_amount, refund_reason, out_refund_no, refund_id, platform_refund, operator_refund, merchant_refund, status, refunded_at, created_at FROM refund_orders
 WHERE payment_order_id = $1
