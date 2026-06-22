@@ -9,6 +9,8 @@ interface TabChangeDetail {
   value: OperatorSafetyStatusFilter
 }
 
+let foodSafetyCaseListRequestSeq = 0
+
 Page({
   data: {
     cases: [] as OperatorFoodSafetyCaseView[],
@@ -49,7 +51,9 @@ Page({
 
   async loadCases(reset = false) {
     if (!reset && (this.data.loading || this.data.loadingMore)) return
+    const requestSeq = ++foodSafetyCaseListRequestSeq
     const nextPage = reset ? 1 : this.data.page
+    const status = this.data.status
     if (reset) {
       this.setData({ loading: true, loadingMore: false, error: '' })
     } else {
@@ -60,8 +64,11 @@ Page({
       const result = await loadOperatorFoodSafetyCaseListPageData({
         pageId: nextPage,
         pageSize: this.data.limit,
-        status: this.data.status
+        status
       })
+      if (requestSeq !== foodSafetyCaseListRequestSeq) {
+        return
+      }
       const current = reset ? [] : this.data.cases
       this.setData({
         cases: [...current, ...result.cases],
@@ -72,6 +79,9 @@ Page({
         initialLoading: false
       })
     } catch (error: unknown) {
+      if (requestSeq !== foodSafetyCaseListRequestSeq) {
+        return
+      }
       const message = getErrorUserMessage(error, '加载食安案件失败，请稍后重试')
       this.setData({ loading: false, loadingMore: false, initialLoading: false, error: message })
     }
