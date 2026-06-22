@@ -1,5 +1,6 @@
 import { isLargeScreen } from '@/utils/responsive'
 import {
+  buildOperatorRiderTotalLabel,
   loadOperatorRiderListPageData,
   parseOperatorRiderStatusFilter,
   type OperatorRiderFilterStatus,
@@ -31,7 +32,9 @@ Page({
     page: 1,
     limit: 20,
     total: 0,
+    totalLabel: '骑手总数',
     hasMore: true,
+    scrollTop: 0,
     riders: [] as OperatorRiderListView[],
     regionId: 0,
     statusFilter: '' as OperatorRiderFilterStatus,
@@ -61,10 +64,17 @@ Page({
   },
 
   onPullDownRefresh() {
-    this.setData({ refreshing: true })
+    this.setData({ refreshing: true, page: 1 })
     this.loadRiders(true).finally(() => {
       this.setData({ refreshing: false })
       wx.stopPullDownRefresh()
+    })
+  },
+
+  resetRiderScrollTop() {
+    this.setData({ scrollTop: 1 })
+    wx.nextTick(() => {
+      this.setData({ scrollTop: 0 })
     })
   },
 
@@ -74,7 +84,13 @@ Page({
 
     try {
       if (refresh) {
-        this.setData({ loading: true, error: '', page: 1, ...(silent ? {} : { initialLoading: this.data.initialLoading }) })
+        this.setData({
+          loading: true,
+          loadingMore: false,
+          error: '',
+          page: 1,
+          ...(silent ? {} : { initialLoading: this.data.initialLoading })
+        })
       } else {
         this.setData({ loadingMore: true })
       }
@@ -92,17 +108,21 @@ Page({
       }
 
       const riders = refresh ? result.riders : [...this.data.riders, ...result.riders]
-      const total = refresh ? result.total : Number(result.total || riders.length)
+      const total = Number(result.total || 0)
 
       this.setData({
         riders,
-        page: refresh ? result.nextPage : this.data.page + 1,
+        page: result.nextPage,
         total,
-        hasMore: riders.length < total,
+        totalLabel: buildOperatorRiderTotalLabel(this.data.statusFilter),
+        hasMore: result.hasMore,
         loading: false,
         loadingMore: false,
         initialLoading: false
       })
+      if (refresh && !silent) {
+        this.resetRiderScrollTop()
+      }
     } catch (error: unknown) {
       if (requestSeq !== riderListRequestSeq) {
         return
@@ -131,6 +151,8 @@ Page({
     }
 
     const timer = setTimeout(() => {
+      this.setData({ page: 1 })
+      this.resetRiderScrollTop()
       this.loadRiders(true)
     }, 500)
 
@@ -139,11 +161,13 @@ Page({
 
   onSearchClear() {
     this.setData({ searchKeyword: '', page: 1 })
+    this.resetRiderScrollTop()
     this.loadRiders(true)
   },
 
   onStatusFilterChange(e: WechatMiniprogram.CustomEvent<{ value: OperatorRiderFilterStatus }>) {
     this.setData({ statusFilter: e.detail.value, page: 1 })
+    this.resetRiderScrollTop()
     this.loadRiders(true)
   },
 

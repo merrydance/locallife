@@ -153,6 +153,23 @@ export function parseOperatorMerchantStatusFilter(status?: string): OperatorMerc
   return parseMerchantStatusFilter(status)
 }
 
+export function buildOperatorMerchantTotalLabel(statusFilter: OperatorMerchantFilterStatus) {
+  switch (statusFilter) {
+    case 'approved':
+      return '正常商户'
+    case 'suspended':
+      return '暂停商户'
+    case 'pending':
+      return '待入驻商户'
+    case 'rejected':
+      return '未通过商户'
+    case 'closed':
+      return '已关闭商户'
+    default:
+      return '商户总数'
+  }
+}
+
 export async function loadOperatorMerchantListPageData(params: {
   pageId: number
   pageSize: number
@@ -174,12 +191,17 @@ export async function loadOperatorMerchantListPageData(params: {
   const result = await operatorMerchantManagementService.getMerchantList(query)
   const merchants = (result.merchants || []).map(adaptMerchantItem)
   const total = Number(result.total || merchants.length)
+  const pageId = Number(result.page_id || result.page || params.pageId)
+  const pageSize = Number(result.page_size || result.limit || params.pageSize)
+  const hasMore = typeof result.has_more === 'boolean'
+    ? result.has_more
+    : pageId * pageSize < total
 
   return {
     merchants,
     total,
-    nextPage: params.pageId + 1,
-    hasMore: merchants.length < total
+    nextPage: pageId + 1,
+    hasMore
   }
 }
 

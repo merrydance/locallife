@@ -1,8 +1,9 @@
 .page-container {
-  min-height: 100vh;
+  height: 100vh;
   background-color: var(--td-bg-color-page);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .header-tools {
@@ -34,6 +35,7 @@
 
 .merchants-scroll {
   height: 100%;
+  min-height: 0;
 }
 
 .merchants-container {
@@ -41,6 +43,42 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacer-md);
+}
+
+.merchant-summary {
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-md);
+  padding: var(--spacer-md);
+  margin-bottom: var(--spacer-md);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacer-md);
+}
+
+.merchant-summary__main {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.merchant-summary__title {
+  color: var(--td-text-color-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.merchant-summary__count {
+  color: var(--td-brand-color);
+  font-size: var(--font-size-display);
+  font-weight: 600;
+  line-height: 1;
+}
+
+.merchant-summary__loaded {
+  color: var(--td-text-color-placeholder);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
 }
 
 .merchant-card {

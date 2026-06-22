@@ -39,6 +39,7 @@
       wx:else
       scroll-y
       class="riders-scroll"
+      scroll-top="{{scrollTop}}"
       bindscrolltolower="onLoadMore"
       lower-threshold="100"
       enable-back-to-top
@@ -46,6 +47,14 @@
       bindrefresherrefresh="onPullDownRefresh"
       refresher-triggered="{{refreshing}}"
     >
+      <view class="rider-summary">
+        <view class="rider-summary__main">
+          <text class="rider-summary__title">{{totalLabel}}</text>
+          <text class="rider-summary__count">{{total}}</text>
+        </view>
+        <text class="rider-summary__loaded">已加载 {{riders.length}}/{{total}}</text>
+      </view>
+
       <view wx:if="{{riders.length === 0}}" class="card center">
         <t-empty description="暂无骑手数据" />
       </view>

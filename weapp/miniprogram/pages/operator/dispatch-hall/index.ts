@@ -29,6 +29,8 @@ function createEmptySummary(regionName = '当前区域'): DispatchSummaryState {
   }
 }
 
+let dispatchHallRequestSeq = 0
+
 Page({
   data: {
     navBarHeight: 88,
@@ -131,14 +133,16 @@ Page({
     if (!this.data.selectedRegionId) {
       return
     }
-    if (this.data.loading || (!refresh && this.data.loadingMore)) {
+    if (!refresh && (this.data.loading || this.data.loadingMore)) {
       return
     }
+    const requestSeq = ++dispatchHallRequestSeq
 
     try {
       if (refresh) {
         this.setData({
           loading: true,
+          loadingMore: false,
           error: '',
           page: 1,
           ...(silent ? {} : { initialLoading: this.data.initialLoading })
@@ -153,6 +157,9 @@ Page({
         pageId: currentPage,
         pageSize: this.data.limit
       })
+      if (requestSeq !== dispatchHallRequestSeq) {
+        return
+      }
 
       const dispatches = refresh ? result.items : [...this.data.dispatches, ...result.items]
       this.setData({
@@ -160,13 +167,16 @@ Page({
         dispatches,
         total: result.total,
         hasMore: result.hasMore,
-        page: currentPage + 1,
+        page: result.page + 1,
         loading: false,
         loadingMore: false,
         initialLoading: false,
         emptyRegion: false
       })
     } catch (error: unknown) {
+      if (requestSeq !== dispatchHallRequestSeq) {
+        return
+      }
       this.setData({
         loading: false,
         loadingMore: false,

@@ -19,7 +19,10 @@ export interface ListOperatorMerchantsResponse {
     limit?: number                               // 每页数量
     merchants?: OperatorMerchantItem[]           // 商户列表
     page?: number                                // 页码
+    page_id?: number                             // 页码
+    page_size?: number                           // 每页数量
     total?: number                               // 总数
+    has_more?: boolean                           // 是否还有更多
 }
 
 export interface OperatorMerchantSummaryResponse {

@@ -21,8 +21,11 @@ export type RiderOnlineStatus = 'online' | 'offline'
 export interface ListOperatorRidersResponse {
     limit?: number                               // 每页数量
     page?: number                                // 页码
+    page_id?: number                             // 页码（后端分页元数据）
+    page_size?: number                           // 每页数量（后端分页元数据）
     riders?: OperatorRiderItem[]                 // 骑手列表
     total?: number                               // 总数
+    has_more?: boolean                           // 是否还有更多
 }
 
 export interface OperatorRiderSummaryResponse {

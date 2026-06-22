@@ -1,5 +1,6 @@
 import { isLargeScreen } from '@/utils/responsive'
 import {
+  buildOperatorMerchantTotalLabel,
   loadOperatorMerchantListPageData,
   parseOperatorMerchantStatusFilter,
   type OperatorMerchantFilterStatus,
@@ -34,7 +35,9 @@ Page({
     page: 1,
     limit: 20,
     total: 0,
+    totalLabel: '商户总数',
     hasMore: true,
+    scrollTop: 0,
 
     regionId: 0,
     searchKeyword: '',
@@ -76,6 +79,13 @@ Page({
     })
   },
 
+  resetMerchantScrollTop() {
+    this.setData({ scrollTop: 1 })
+    wx.nextTick(() => {
+      this.setData({ scrollTop: 0 })
+    })
+  },
+
   async loadMerchants(refresh = false, silent = false) {
     if (!refresh && (this.data.loading || this.data.loadingMore)) return
     const requestSeq = ++merchantListRequestSeq
@@ -102,19 +112,22 @@ Page({
         return
       }
       const merchants = refresh ? result.merchants : [...this.data.merchants, ...result.merchants]
-      const total = refresh ? result.total : Number(result.total || merchants.length)
-      const hasMore = merchants.length < total
+      const total = Number(result.total || 0)
 
       this.setData({
         merchants,
         total,
-        hasMore,
-        page: refresh ? result.nextPage : this.data.page + 1,
+        totalLabel: buildOperatorMerchantTotalLabel(this.data.statusFilter),
+        hasMore: result.hasMore,
+        page: result.nextPage,
         loading: false,
         loadingMore: false,
         initialLoading: false,
         error: null
       })
+      if (refresh && !silent) {
+        this.resetMerchantScrollTop()
+      }
     } catch (error) {
       if (requestSeq !== merchantListRequestSeq) {
         return
@@ -150,6 +163,7 @@ Page({
 
     const timer = setTimeout(() => {
       this.setData({ page: 1 })
+      this.resetMerchantScrollTop()
       this.loadMerchants(true)
     }, 500)
 
@@ -158,6 +172,7 @@ Page({
 
   onSearchClear() {
     this.setData({ searchKeyword: '', page: 1 })
+    this.resetMerchantScrollTop()
     this.loadMerchants(true)
   },
 
@@ -166,6 +181,7 @@ Page({
       statusFilter: e.detail.value,
       page: 1
     })
+    this.resetMerchantScrollTop()
     this.loadMerchants(true)
   },
 

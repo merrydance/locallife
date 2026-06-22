@@ -23,6 +23,7 @@
       wx:else
       scroll-y
       class="notifications-scroll"
+      scroll-top="{{scrollTop}}"
       bindscrolltolower="onLoadMore"
       lower-threshold="100"
       enable-back-to-top
@@ -30,7 +31,10 @@
       bindrefresherrefresh="onPullDownRefresh"
       refresher-triggered="{{refreshing}}"
     >
-      <view class="summary-strip">未读提醒 {{unreadCount}}</view>
+      <view class="summary-strip">
+        <text>未读提醒 {{unreadCount}}</text>
+        <text>已加载 {{notifications.length}}/{{total}}</text>
+      </view>
 
       <page-state wx:if="{{notifications.length === 0}}" description="当前没有待接单提醒" />
 

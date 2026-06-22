@@ -94,6 +94,19 @@ export function parseOperatorRiderStatusFilter(status?: string): OperatorRiderFi
   return parseRiderStatusFilter(status)
 }
 
+export function buildOperatorRiderTotalLabel(statusFilter: OperatorRiderFilterStatus) {
+  switch (statusFilter) {
+    case 'approved':
+      return '待激活骑手'
+    case 'active':
+      return '正常骑手'
+    case 'suspended':
+      return '暂停骑手'
+    default:
+      return '骑手总数'
+  }
+}
+
 export async function loadOperatorRiderListPageData(params: {
   pageId: number
   pageSize: number
@@ -113,12 +126,17 @@ export async function loadOperatorRiderListPageData(params: {
   const result = await operatorRiderManagementService.getRiderList(query)
   const riders = (result.riders || []).map((item) => adaptOperatorRider(item as Partial<OperatorRiderItem> & Record<string, unknown>))
   const total = Number(result.total || riders.length)
+  const pageId = Number(result.page_id || result.page || params.pageId)
+  const pageSize = Number(result.page_size || result.limit || params.pageSize)
+  const hasMore = typeof result.has_more === 'boolean'
+    ? result.has_more
+    : pageId * pageSize < total
 
   return {
     riders,
     total,
-    nextPage: params.pageId + 1,
-    hasMore: riders.length < total
+    nextPage: pageId + 1,
+    hasMore
   }
 }
 

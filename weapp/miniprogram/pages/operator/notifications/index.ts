@@ -12,6 +12,8 @@ type NotificationListOptions = {
   category?: string
 }
 
+let notificationListRequestSeq = 0
+
 Page({
   data: {
     navBarHeight: 88,
@@ -25,6 +27,7 @@ Page({
     limit: 20,
     total: 0,
     hasMore: true,
+    scrollTop: 0,
     unreadCount: 0,
     activeCategory: '' as OperatorNotificationFilterCategory,
     notifications: [] as OperatorNotificationView[],
@@ -51,20 +54,29 @@ Page({
   },
 
   onPullDownRefresh() {
-    this.setData({ refreshing: true })
+    this.setData({ refreshing: true, page: 1 })
     this.loadNotifications(true).finally(() => {
       this.setData({ refreshing: false })
       wx.stopPullDownRefresh()
     })
   },
 
+  resetNotificationScrollTop() {
+    this.setData({ scrollTop: 1 })
+    wx.nextTick(() => {
+      this.setData({ scrollTop: 0 })
+    })
+  },
+
   async loadNotifications(refresh: boolean, silent = false) {
-    if (this.data.loading || (this.data.loadingMore && !refresh)) return
+    if (!refresh && (this.data.loading || this.data.loadingMore)) return
+    const requestSeq = ++notificationListRequestSeq
 
     try {
       if (refresh) {
         this.setData({
           loading: true,
+          loadingMore: false,
           error: '',
           page: 1,
           ...(silent ? {} : { initialLoading: this.data.initialLoading })
@@ -83,19 +95,29 @@ Page({
       })
 
       const notifications = refresh ? result.notifications : [...this.data.notifications, ...result.notifications]
-      const total = refresh ? result.total : Number(result.total || notifications.length)
+      const total = Number(result.total || 0)
+
+      if (requestSeq !== notificationListRequestSeq) {
+        return
+      }
 
       this.setData({
         notifications,
         unreadCount: result.unreadCount,
-        page: refresh ? result.nextPage : this.data.page + 1,
+        page: result.nextPage,
         total,
-        hasMore: notifications.length < total,
+        hasMore: result.hasMore,
         loading: false,
         loadingMore: false,
         initialLoading: false
       })
+      if (refresh && !silent) {
+        this.resetNotificationScrollTop()
+      }
     } catch (error: unknown) {
+      if (requestSeq !== notificationListRequestSeq) {
+        return
+      }
       const message = getErrorUserMessage(error, '加载待接单提醒失败，请稍后重试')
       this.setData({ loading: false, loadingMore: false, initialLoading: false, error: message })
     }
@@ -112,7 +134,8 @@ Page({
   },
 
   onCategoryChange(e: WechatMiniprogram.CustomEvent<{ value: OperatorNotificationFilterCategory }>) {
-    this.setData({ activeCategory: e.detail.value })
+    this.setData({ activeCategory: e.detail.value, page: 1 })
+    this.resetNotificationScrollTop()
     this.loadNotifications(true)
   },
 

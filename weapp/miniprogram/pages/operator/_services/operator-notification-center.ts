@@ -119,8 +119,8 @@ export async function loadOperatorNotificationListPageData(params: {
     notifications,
     unreadCount: Number(summary.unread_count || 0),
     total,
-    nextPage: params.pageId + 1,
-    hasMore: notifications.length < total
+    nextPage: result.page + 1,
+    hasMore: result.hasMore
   }
 }
 

@@ -44,6 +44,7 @@
         wx:else
         scroll-y
         class="merchants-scroll animate-fade-in"
+        scroll-top="{{scrollTop}}"
         bindscrolltolower="onLoadMore"
         lower-threshold="100"
         enable-back-to-top
@@ -51,6 +52,14 @@
         bindrefresherrefresh="onPullDownRefresh"
         refresher-triggered="{{refreshing}}"
       >
+        <view class="merchant-summary">
+          <view class="merchant-summary__main">
+            <text class="merchant-summary__title">{{totalLabel}}</text>
+            <text class="merchant-summary__count">{{total}}</text>
+          </view>
+          <text class="merchant-summary__loaded">已加载 {{merchants.length}}/{{total}}</text>
+        </view>
+
         <view wx:if="{{merchants.length === 0}}" class="empty-container">
           <t-empty icon="shop" description="暂无商户数据" />
         </view>
