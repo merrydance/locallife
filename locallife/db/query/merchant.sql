@@ -731,13 +731,6 @@ WHERE business_license_number = $1
   AND status = 'approved'
   AND id != $2;
 
--- name: CheckLegalPersonIDExists :one
--- 检查法人身份证号是否已被其他已通过的申请占用
-SELECT COUNT(*) FROM merchant_applications
-WHERE legal_person_id_number = $1
-  AND status = 'approved'
-  AND id != $2;
-
 -- name: SearchMerchantsByTag :many
 -- 按标签（菜系）过滤商户，支持区域和位置排序
 SELECT m.id, m.owner_user_id, m.name, m.description, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.group_id, m.brand_id, m.logo_media_asset_id, m.auto_open_by_business_hours, COALESCE(mp.total_orders, 0)::int AS total_orders,

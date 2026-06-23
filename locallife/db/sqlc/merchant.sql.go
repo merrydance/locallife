@@ -132,26 +132,6 @@ func (q *Queries) CheckBusinessLicenseExists(ctx context.Context, arg CheckBusin
 	return count, err
 }
 
-const checkLegalPersonIDExists = `-- name: CheckLegalPersonIDExists :one
-SELECT COUNT(*) FROM merchant_applications
-WHERE legal_person_id_number = $1
-  AND status = 'approved'
-  AND id != $2
-`
-
-type CheckLegalPersonIDExistsParams struct {
-	LegalPersonIDNumber string `json:"legal_person_id_number"`
-	ID                  int64  `json:"id"`
-}
-
-// 检查法人身份证号是否已被其他已通过的申请占用
-func (q *Queries) CheckLegalPersonIDExists(ctx context.Context, arg CheckLegalPersonIDExistsParams) (int64, error) {
-	row := q.db.QueryRow(ctx, checkLegalPersonIDExists, arg.LegalPersonIDNumber, arg.ID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const clearExpiredMerchantManualOpenStatusOverrides = `-- name: ClearExpiredMerchantManualOpenStatusOverrides :execrows
 UPDATE merchants
 SET

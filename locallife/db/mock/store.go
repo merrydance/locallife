@@ -896,21 +896,6 @@ func (mr *MockStoreMockRecorder) CheckBusinessLicenseExists(ctx, arg any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckBusinessLicenseExists", reflect.TypeOf((*MockStore)(nil).CheckBusinessLicenseExists), ctx, arg)
 }
 
-// CheckLegalPersonIDExists mocks base method.
-func (m *MockStore) CheckLegalPersonIDExists(ctx context.Context, arg db.CheckLegalPersonIDExistsParams) (int64, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CheckLegalPersonIDExists", ctx, arg)
-	ret0, _ := ret[0].(int64)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// CheckLegalPersonIDExists indicates an expected call of CheckLegalPersonIDExists.
-func (mr *MockStoreMockRecorder) CheckLegalPersonIDExists(ctx, arg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckLegalPersonIDExists", reflect.TypeOf((*MockStore)(nil).CheckLegalPersonIDExists), ctx, arg)
-}
-
 // CheckMerchantAddressExists mocks base method.
 func (m *MockStore) CheckMerchantAddressExists(ctx context.Context, arg db.CheckMerchantAddressExistsParams) (bool, error) {
 	m.ctrl.T.Helper()

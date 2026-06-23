@@ -77,8 +77,6 @@ type Querier interface {
 	CheckAndDecrementInventory(ctx context.Context, arg CheckAndDecrementInventoryParams) (DailyInventory, error)
 	// 检查营业执照号是否已被其他已通过的申请占用
 	CheckBusinessLicenseExists(ctx context.Context, arg CheckBusinessLicenseExistsParams) (int64, error)
-	// 检查法人身份证号是否已被其他已通过的申请占用
-	CheckLegalPersonIDExists(ctx context.Context, arg CheckLegalPersonIDExistsParams) (int64, error)
 	// 检查地址是否已被其他商户占用（排除指定用户自己的商户）
 	CheckMerchantAddressExists(ctx context.Context, arg CheckMerchantAddressExistsParams) (bool, error)
 	CheckNotificationExists(ctx context.Context, id string) (bool, error)

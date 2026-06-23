@@ -1384,21 +1384,6 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 		return apierr(ErrApplicationInvalidState.Code, "该营业执照号码已被其他商户使用，如非重复申请请联系客服处理") // 防止恶意抢注/重复入驻
 	}
 
-	// 5. 检查身份证是否已被使用
-	// 注意：此处严格限制身份证唯一性，暂不支持同一法人开设多家店铺（防止欺诈多账号）
-	// 如需支持连锁店，需放宽此处逻辑或增加连锁店审核流程
-	idCardCount, err := server.store.CheckLegalPersonIDExists(ctx, db.CheckLegalPersonIDExistsParams{
-		LegalPersonIDNumber: app.LegalPersonIDNumber,
-		ID:                  app.ID,
-	})
-	if err != nil {
-		log.Error().Err(err).Int64("application_id", app.ID).Msg("failed to check duplicate id card")
-		return errors.New("系统繁忙，请稍后重试")
-	}
-	if idCardCount > 0 {
-		return apierr(ErrApplicationInvalidState.Code, "该身份证号码已被用于其他商户入驻申请，如有疑问请联系客服处理")
-	}
-
 	return nil
 }
 

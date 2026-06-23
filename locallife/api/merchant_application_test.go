@@ -440,13 +440,6 @@ func TestCheckMerchantApplicationApproval_UsesCorrectedMerchantDocumentOCRFields
 		}).
 		Times(1).
 		Return(int64(0), nil)
-	store.EXPECT().
-		CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
-			LegalPersonIDNumber: app.LegalPersonIDNumber,
-			ID:                  app.ID,
-		}).
-		Times(1).
-		Return(int64(0), nil)
 
 	err := server.checkMerchantApplicationApproval(nil, app)
 
@@ -479,10 +472,28 @@ func TestCheckMerchantApplicationApproval_AllowsNearbyMerchantBeyondHardRejectDi
 		}).
 		Times(1).
 		Return(int64(0), nil)
+
+	err := server.checkMerchantApplicationApproval(nil, app)
+
+	require.NoError(t, err)
+}
+
+func TestCheckMerchantApplicationApproval_AllowsSameLegalPersonAcrossDifferentLicenses(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	server := &Server{store: store}
+	app := randomMerchantAppDraftWithData(1)
+
 	store.EXPECT().
-		CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
-			LegalPersonIDNumber: app.LegalPersonIDNumber,
-			ID:                  app.ID,
+		ListMerchantLocationsInRegion(gomock.Any(), app.RegionID.Int64).
+		Times(1).
+		Return([]db.ListMerchantLocationsInRegionRow{}, nil)
+	store.EXPECT().
+		CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
+			BusinessLicenseNumber: app.BusinessLicenseNumber,
+			ID:                    app.ID,
 		}).
 		Times(1).
 		Return(int64(0), nil)
@@ -2009,14 +2020,6 @@ func TestSubmitMerchantApplication(t *testing.T) {
 					Times(1).
 					Return(int64(0), nil)
 
-				store.EXPECT().
-					CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
-						LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
-						ID:                  submittedApp.ID,
-					}).
-					Times(1).
-					Return(int64(0), nil)
-
 				approvedApp := submittedApp
 				approvedApp.Status = "approved"
 				expectMerchantSubjectProfileApprovalSync(t, store, submittedApp, 1)
@@ -2099,14 +2102,6 @@ func TestSubmitMerchantApplication(t *testing.T) {
 					Times(1).
 					Return(int64(0), nil)
 
-				store.EXPECT().
-					CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
-						LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
-						ID:                  submittedApp.ID,
-					}).
-					Times(1).
-					Return(int64(0), nil)
-
 				approvedApp := submittedApp
 				approvedApp.Status = "approved"
 				expectMerchantSubjectProfileApprovalSync(t, store, submittedApp, 1)
@@ -2162,14 +2157,6 @@ func TestSubmitMerchantApplication(t *testing.T) {
 					CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
 						BusinessLicenseNumber: submittedApp.BusinessLicenseNumber,
 						ID:                    submittedApp.ID,
-					}).
-					Times(1).
-					Return(int64(0), nil)
-
-				store.EXPECT().
-					CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
-						LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
-						ID:                  submittedApp.ID,
 					}).
 					Times(1).
 					Return(int64(0), nil)
@@ -2235,14 +2222,6 @@ func TestSubmitMerchantApplication(t *testing.T) {
 					Times(1).
 					Return(int64(0), nil)
 
-				store.EXPECT().
-					CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
-						LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
-						ID:                  submittedApp.ID,
-					}).
-					Times(1).
-					Return(int64(0), nil)
-
 				approvedApp := submittedApp
 				approvedApp.Status = "approved"
 				expectMerchantSubjectProfileApprovalSync(t, store, submittedApp, 1)
@@ -2304,14 +2283,6 @@ func TestSubmitMerchantApplication(t *testing.T) {
 					CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
 						BusinessLicenseNumber: submittedApp.BusinessLicenseNumber,
 						ID:                    submittedApp.ID,
-					}).
-					Times(1).
-					Return(int64(0), nil)
-
-				store.EXPECT().
-					CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
-						LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
-						ID:                  submittedApp.ID,
 					}).
 					Times(1).
 					Return(int64(0), nil)
@@ -2408,14 +2379,6 @@ func TestSubmitMerchantApplication(t *testing.T) {
 					Times(1).
 					Return(int64(0), nil)
 
-				store.EXPECT().
-					CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
-						LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
-						ID:                  submittedApp.ID,
-					}).
-					Times(1).
-					Return(int64(0), nil)
-
 				approvedApp := submittedApp
 				approvedApp.Status = "approved"
 				expectMerchantSubjectProfileApprovalSync(t, store, submittedApp, 1)
@@ -2486,14 +2449,6 @@ func TestSubmitMerchantApplication(t *testing.T) {
 					CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
 						BusinessLicenseNumber: submittedApp.BusinessLicenseNumber,
 						ID:                    submittedApp.ID,
-					}).
-					Times(1).
-					Return(int64(0), nil)
-
-				store.EXPECT().
-					CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
-						LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
-						ID:                  submittedApp.ID,
 					}).
 					Times(1).
 					Return(int64(0), nil)
@@ -3075,14 +3030,6 @@ func TestSubmitMerchantApplication(t *testing.T) {
 					Times(1).
 					Return(int64(0), nil)
 
-				store.EXPECT().
-					CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
-						LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
-						ID:                  submittedApp.ID,
-					}).
-					Times(1).
-					Return(int64(0), nil)
-
 				approvedApp := submittedApp
 				approvedApp.Status = "approved"
 				expectMerchantSubjectProfileApprovalSync(t, store, submittedApp, 1)
@@ -3132,14 +3079,6 @@ func TestSubmitMerchantApplication(t *testing.T) {
 					CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
 						BusinessLicenseNumber: app.BusinessLicenseNumber,
 						ID:                    app.ID,
-					}).
-					Times(1).
-					Return(int64(0), nil)
-
-				store.EXPECT().
-					CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
-						LegalPersonIDNumber: app.LegalPersonIDNumber,
-						ID:                  app.ID,
 					}).
 					Times(1).
 					Return(int64(0), nil)
@@ -3297,13 +3236,6 @@ func TestSubmitMerchantApplication_QueuesOnboardingReviewWhenAsyncAvailable(t *t
 		Return(int64(0), nil)
 
 	store.EXPECT().
-		CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
-			LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
-			ID:                  submittedApp.ID,
-		}).
-		Return(int64(0), nil)
-
-	store.EXPECT().
 		CreateMerchantOnboardingReviewRun(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, arg db.CreateMerchantOnboardingReviewRunParams) (db.OnboardingReviewRun, error) {
 			require.Equal(t, submittedApp.ID, arg.MerchantApplicationID.Int64)
@@ -3372,13 +3304,6 @@ func TestSubmitMerchantApplication_ReusesExistingQueuedReviewRun(t *testing.T) {
 		CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
 			BusinessLicenseNumber: submittedApp.BusinessLicenseNumber,
 			ID:                    submittedApp.ID,
-		}).
-		Return(int64(0), nil)
-
-	store.EXPECT().
-		CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
-			LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
-			ID:                  submittedApp.ID,
 		}).
 		Return(int64(0), nil)
 
@@ -3453,13 +3378,6 @@ func TestSubmitMerchantApplication_ReusesExistingQueuedReviewRunDuplicateTaskRet
 		}).
 		Return(int64(0), nil)
 
-	store.EXPECT().
-		CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
-			LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
-			ID:                  submittedApp.ID,
-		}).
-		Return(int64(0), nil)
-
 	queuedAt := time.Now().Add(-1 * time.Minute).UTC()
 	existingRun := db.OnboardingReviewRun{
 		ID:                    1404,
@@ -3531,13 +3449,6 @@ func TestSubmitMerchantApplication_ReusesExistingProcessingReviewRunWithoutEnque
 		}).
 		Return(int64(0), nil)
 
-	store.EXPECT().
-		CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
-			LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
-			ID:                  submittedApp.ID,
-		}).
-		Return(int64(0), nil)
-
 	queuedAt := time.Now().Add(-2 * time.Minute).UTC()
 	startedAt := time.Now().Add(-1 * time.Minute).UTC()
 	existingRun := db.OnboardingReviewRun{
@@ -3597,13 +3508,6 @@ func TestSubmitMerchantApplication_ReusesExistingQueuedReviewRunForSyncFallback(
 		CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
 			BusinessLicenseNumber: submittedApp.BusinessLicenseNumber,
 			ID:                    submittedApp.ID,
-		}).
-		Return(int64(0), nil)
-
-	store.EXPECT().
-		CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
-			LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
-			ID:                  submittedApp.ID,
 		}).
 		Return(int64(0), nil)
 
@@ -3728,13 +3632,6 @@ func TestSubmitMerchantApplication_FallsBackToSyncReviewWhenEnqueueFails(t *test
 		CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
 			BusinessLicenseNumber: submittedApp.BusinessLicenseNumber,
 			ID:                    submittedApp.ID,
-		}).
-		Return(int64(0), nil)
-
-	store.EXPECT().
-		CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
-			LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
-			ID:                  submittedApp.ID,
 		}).
 		Return(int64(0), nil)
 
