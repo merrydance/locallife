@@ -15,6 +15,7 @@ import (
 const (
 	claimBehaviorActionRecoveryCron       = "*/5 * * * *"
 	claimBehaviorActionRecoveryBatchLimit = int32(200)
+	claimBehaviorActionRunningStaleAfter  = 30 * time.Minute
 )
 
 type ClaimBehaviorActionRecoveryScheduler struct {
@@ -111,6 +112,34 @@ func (s *ClaimBehaviorActionRecoveryScheduler) runOnce(ctx context.Context) {
 				); err != nil {
 					log.Error().Err(err).Int64("behavior_action_id", action.ID).Msg("re-enqueue claim behavior action failed")
 				}
+			}
+		}
+
+		staleBefore := time.Now().Add(-claimBehaviorActionRunningStaleAfter)
+		actions, err := s.store.ListBehaviorActionsByStatusAndType(ctx, db.ListBehaviorActionsByStatusAndTypeParams{
+			Status:       "running",
+			ActionType:   actionType,
+			TargetEntity: targetEntity,
+			Limit:        claimBehaviorActionRecoveryBatchLimit,
+		})
+		if err != nil {
+			log.Error().Err(err).Str("status", "running").Str("action_type", actionType).Str("target_entity", targetEntity).Msg("list claim behavior actions failed")
+			return
+		}
+		for _, action := range actions {
+			if !action.CreatedAt.Before(staleBefore) {
+				continue
+			}
+			if isClaimBehaviorActionTerminalFailure(action.Detail, action.ActionType) {
+				continue
+			}
+			if err := s.distributor.DistributeTaskClaimBehaviorAction(
+				ctx,
+				&ClaimBehaviorActionPayload{ActionID: action.ID},
+				asynq.Queue(queue),
+				asynq.MaxRetry(retries),
+			); err != nil {
+				log.Error().Err(err).Int64("behavior_action_id", action.ID).Msg("re-enqueue stale running claim behavior action failed")
 			}
 		}
 	}

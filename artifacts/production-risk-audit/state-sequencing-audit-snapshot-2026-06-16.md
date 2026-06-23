@@ -17301,7 +17301,7 @@ ORDER BY row_count DESC, oldest_signal_at ASC;
 | 复现批次 | 触发查询 | 初步等级 | 需要补的证据 | 复现形状 | 测试落点 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- |
 | P4-B02-1 | P4-B05-6 / P2-F06 | S1 | 已有生产聚合命中 + `scan-entry` 解析代码 + `generateTableQRCode` scene 代码 | `table_no` 含 `-` 且 `len("m_<merchantID>-t_<tableNo>") <= 32`，扫码后被 `/t_([^-]+)/` 截断 | `weapp/miniprogram/pages/dine-in/scan-entry/scan-entry.ts` 解析单测 + `locallife/api/scan_test.go` scene 生成回归 | ready for design |
-| P4-B02-2 | P4-B01B-4 / P0-F10 | S2 | 已有生产聚合命中 + `ClaimBehaviorActionRecoveryScheduler` 只回收 `created/failed` + `executeClaimBehaviorAction` 对 `running` 不做回收 | `behavior_actions` 中 `action_type in ('block','recovery','release','notify')`、`status='running'`、`created_at < now() - interval '30 minutes'`，RunOnce 后仍不会被专门重扫 | `worker/claim_behavior_action_recovery_scheduler_test.go` 回收范围回归 + `worker/task_claim_behavior_action.go` stuck-action 状态回归 | card written |
+| P4-B02-2 | P4-B01B-4 / P0-F10 | S2 | 已有生产聚合命中 + `ClaimBehaviorActionRecoveryScheduler` 只回收 `created/failed` + `executeClaimBehaviorAction` 对 `running` 不做回收 | `behavior_actions` 中 `action_type in ('block','recovery','release','notify')`、`status='running'`、`created_at < now() - interval '30 minutes'`，RunOnce 后仍不会被专门重扫 | `worker/claim_behavior_action_recovery_scheduler_test.go` 回收范围回归 + 现有 `worker/task_claim_behavior_action_test.go` running 重入覆盖 | implemented 2026-06-23 |
 | P4-B02-3 | P4-B01B-5 / P0-F11 | S2 | 已有生产聚合命中 + `RefundRecoveryScheduler` 只重扫 `processing` + `SubmitWithdrawal` 在 refund 结果不确定时保留 `pending` 待 query/retry | `refund_orders.status='pending'`、`external_payment_commands.command_status in ('unknown', null)`、`created_at < now() - interval '30 minutes'`，RunOnce 后仍不会被恢复器回扫 | `worker/refund_recovery_scheduler_test.go` pending/unknown 反例 + `logic/rider_deposit_refund_service_test.go` 不确定结果保留 pending 回归 | card written |
 
 - 现有测试边界：
@@ -17328,6 +17328,8 @@ ORDER BY row_count DESC, oldest_signal_at ASC;
 
 - 2026-06-23 残余风险处理补记：`P0-F11-1` 已补 DB-backed 集成验证。`TestRiderDepositRefundPendingUnknownRecoveryIntegration` 构造 rider deposit 支付成功、提现冻结、`refund_orders.status='pending'`、直连退款 command `unknown` 且无回调的持久化状态；执行 `RefundRecoveryScheduler.RunOnce()` 后通过 query fact/application，再由 `PaymentFactService.ApplyExternalPaymentFactApplication` 收敛 `refund_orders`、`riders`、`rider_deposit_credits`、`payment_orders`。本地代码链路残余风险降为已覆盖；真实微信回调投递丢失、provider 查询可用性、生产 scheduler/queue 运行状态仍归入线上观测/只读 SQL 检查范围。
 
+- 2026-06-23 修复闭口补记：`P0-F10` 中 `block/recovery/release/notify` 行为动作 `running` 卡死恢复缺口已完成最小实现。`ClaimBehaviorActionRecoveryScheduler` 现在在原 `created/failed` 扫描之外补扫同 action type / target entity 下 `created_at` 早于 30 分钟的 `running` 动作，并继续跳过 detail 中已标记 terminal failure 的动作；近期 `running` 不会被误派发。`worker/claim_behavior_action_recovery_scheduler_test.go` 已覆盖 stale running 会重新入队、recent running 不入队、terminal failure 不入队；`worker/task_claim_behavior_action_test.go` 既有 running action 重入测试保留为执行器侧覆盖。本次未改 SQL/query、接口、Swagger 或 provider DTO，不需要 `make sqlc` / `make swagger`。
+
 ### P4-B03. 修复批次草案门禁与占位
 
 - 目标：只在生产取证和本地复现给出足够证据后，排列修复批次；本节不作为直接改代码的授权，也不把候选风险自动升级为已确认 bug。
@@ -17347,5 +17349,5 @@ ORDER BY row_count DESC, oldest_signal_at ASC;
 | 修复批次 | 来源查询/复现 | 风险族 | 等级 | 修复类型 | 必要验证 | 当前状态 |
 | --- | --- | --- | --- | --- | --- | --- |
 | P4-B03-1 | P4-B02-1 / P2-F06 | P2-F06 | S1 | parser guard / scene encoding | `weapp/miniprogram/pages/dine-in/scan-entry/scan-entry.ts` 解析单测 + `locallife/api/scan_test.go` scene 回归 | 未入场 |
-| P4-B03-2 | P4-B02-2 / P0-F10 | P0-F10 | S2 | add running-action recovery scan + stale-action reclaim test | `worker/claim_behavior_action_recovery_scheduler_test.go` 追加 running/stale 负例 + `worker/task_claim_behavior_action_test.go` 补恢复入口验证 | card written |
+| P4-B03-2 | P4-B02-2 / P0-F10 | P0-F10 | S2 | add running-action recovery scan + stale-action reclaim test | `worker/claim_behavior_action_recovery_scheduler_test.go` 追加 running/stale 负例；`worker/task_claim_behavior_action_test.go` 现有 running 重入覆盖 | completed 2026-06-23 |
 | P4-B03-3 | P4-B02-3 / P0-F11 | P0-F11 | S2 | add rider-deposit pending/unknown recovery scan + replay test | `worker/refund_recovery_scheduler_test.go` 补 rider deposit pending/unknown 负例 + `logic/rider_deposit_refund_service_test.go` 补不确定命令保持 pending 的回归 | card written |
