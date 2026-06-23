@@ -14,7 +14,8 @@
 - Implemented: a focused `pending`/`unknown` rider-deposit refund recovery scan in `RefundRecoveryScheduler`, reusing the original `out_refund_no` and the existing fact/application path.
 - Regenerated: `sqlc` and generated mocks.
 - Validated: `go test ./worker -run 'TestRefundRecoverySchedulerRunOnce' -v`, `go test ./logic -run TestRiderDepositRefundService_SubmitWithdrawal -v`, `make sqlc`, and `make check-generated`.
-- Residual risk: only focused worker/logic regressions were run; a real provider lost-callback replay remains unexercised outside unit tests.
+- Follow-up validation: on 2026-06-23 added `TestRiderDepositRefundPendingUnknownRecoveryIntegration`, covering a DB-backed `pending` + `unknown` rider-deposit refund with no callback; `RefundRecoveryScheduler.RunOnce()` queries the direct provider, records a query fact/application, and `PaymentFactService` applies the persisted fact to converge refund, rider deposit, credit, and payment-order state.
+- Residual risk: local tests now cover the internal DB/scheduler/fact-application recovery chain. True WeChat provider callback delivery loss, provider query availability, and production scheduler/queue observability remain operational risks that need monitoring or read-only production checks, not more local business-logic changes in this narrow fix.
 
 ---
 

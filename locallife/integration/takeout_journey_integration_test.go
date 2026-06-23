@@ -3016,24 +3016,51 @@ func TestRiderDepositRefundCallbackAccountingIntegration(t *testing.T) {
 	require.True(t, payResult.Processed)
 
 	prepareResult, err := store.PrepareRiderDepositRefundTx(ctx, db.PrepareRiderDepositRefundTxParams{
-		RiderID: rider.ID,
-		Amount:  30000,
-		Remark:  "骑手押金提现",
+		RiderID:                rider.ID,
+		UserID:                 rider.UserID,
+		Amount:                 30000,
+		Remark:                 "骑手押金提现",
+		IdempotencyKey:         "rd_refund_notify_" + util.RandomString(16),
+		IdempotencyRequestHash: "sha256:" + util.RandomString(64),
 	})
 	require.NoError(t, err)
 	require.Len(t, prepareResult.RefundPlans, 1)
 
 	refundOrder := prepareResult.RefundPlans[0].RefundOrder
-	processor := worker.NewTestTaskProcessor(store, nil, nil, nil)
-	payloadBytes, err := json.Marshal(&worker.RefundResultPayload{
-		OutRefundNo:  refundOrder.OutRefundNo,
-		RefundStatus: "SUCCESS",
-		RefundID:     "rider_refund_notify_id_001",
+	refundID := "rider_refund_notify_id_001"
+	sourceEventID := "refund_notify_" + util.RandomString(16)
+	sourceEventType := "REFUND.SUCCESS"
+	businessOwner := db.ExternalPaymentBusinessOwnerRiderDeposit
+	businessObjectType := "refund_order"
+	factResult, err := logic.NewPaymentFactService(store).RecordExternalPaymentFact(ctx, logic.RecordExternalPaymentFactInput{
+		Provider:             db.ExternalPaymentProviderWechat,
+		Channel:              db.PaymentChannelDirect,
+		Capability:           db.ExternalPaymentCapabilityDirectRefund,
+		FactSource:           db.ExternalPaymentFactSourceCallback,
+		SourceEventID:        &sourceEventID,
+		SourceEventType:      &sourceEventType,
+		ExternalObjectType:   db.ExternalPaymentObjectRefund,
+		ExternalObjectKey:    refundOrder.OutRefundNo,
+		ExternalSecondaryKey: &refundID,
+		BusinessOwner:        &businessOwner,
+		BusinessObjectType:   &businessObjectType,
+		BusinessObjectID:     &refundOrder.ID,
+		UpstreamState:        "SUCCESS",
+		TerminalStatus:       db.ExternalPaymentTerminalStatusSuccess,
+		Amount:               &refundOrder.RefundAmount,
+		Currency:             "CNY",
+		RawResource:          []byte(`{"refund_status":"SUCCESS"}`),
+		DedupeKey:            "wechat:callback:direct_refund:" + util.RandomString(16),
+		Application: &logic.ExternalPaymentFactApplicationTarget{
+			Consumer:           "rider_deposit_domain",
+			BusinessObjectType: "refund_order",
+			BusinessObjectID:   refundOrder.ID,
+		},
 	})
 	require.NoError(t, err)
+	require.NotNil(t, factResult.Application)
 
-	task := asynq.NewTask(worker.TaskProcessRefundResult, payloadBytes)
-	err = processor.ProcessTaskRefundResult(ctx, task)
+	_, err = logic.NewPaymentFactService(store).ApplyExternalPaymentFactApplication(ctx, factResult.Application.ID)
 	require.NoError(t, err)
 
 	updatedRefund, err := store.GetRefundOrder(ctx, refundOrder.ID)
@@ -3062,9 +3089,144 @@ func TestRiderDepositRefundCallbackAccountingIntegration(t *testing.T) {
 		Offset:  0,
 	})
 	require.NoError(t, err)
-	require.Len(t, deposits, 3)
-	types := []string{deposits[0].Type, deposits[1].Type, deposits[2].Type}
-	require.ElementsMatch(t, []string{"deposit", "freeze", "withdraw"}, types)
+	require.Len(t, deposits, 2)
+	types := []string{deposits[0].Type, deposits[1].Type}
+	require.ElementsMatch(t, []string{"deposit", "withdraw"}, types)
+
+	freezeLogs, err := store.ListRiderDepositsByType(ctx, db.ListRiderDepositsByTypeParams{
+		RiderID: rider.ID,
+		Type:    "freeze",
+		Limit:   20,
+		Offset:  0,
+	})
+	require.NoError(t, err)
+	require.Len(t, freezeLogs, 1)
+	require.Equal(t, int64(30000), freezeLogs[0].Amount)
+}
+
+// TestRiderDepositRefundPendingUnknownRecoveryIntegration
+// 骑手押金退款 create 结果 unknown 且没有回调时，退款恢复调度器应通过查询通道事实补齐终态。
+func TestRiderDepositRefundPendingUnknownRecoveryIntegration(t *testing.T) {
+	_, store := initIntegrationServer(t)
+	resetIntegrationData(t)
+
+	ctx := context.Background()
+
+	region := createIntegrationRegion(t, store)
+	riderUser := createIntegrationUser(t, store)
+	rider := createIntegrationRider(t, store, riderUser.ID, region.ID)
+
+	_, err := store.UpdateRiderStatus(ctx, db.UpdateRiderStatusParams{ID: rider.ID, Status: "active"})
+	require.NoError(t, err)
+
+	paymentOrder, err := store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
+		UserID:         rider.UserID,
+		PaymentType:    "miniprogram",
+		PaymentChannel: db.PaymentChannelDirect,
+		BusinessType:   db.ExternalPaymentBusinessOwnerRiderDeposit,
+		Amount:         30000,
+		OutTradeNo:     "rd_refund_recovery_" + util.RandomString(10),
+		ExpiresAt:      pgtype.Timestamptz{Time: time.Now().Add(15 * time.Minute), Valid: true},
+	})
+	require.NoError(t, err)
+
+	_, err = store.UpdatePaymentOrderToPaid(ctx, db.UpdatePaymentOrderToPaidParams{
+		ID:            paymentOrder.ID,
+		TransactionID: pgtype.Text{String: "tx_rider_refund_recovery_001", Valid: true},
+	})
+	require.NoError(t, err)
+
+	payResult, err := store.ProcessPaymentSuccessTx(ctx, db.ProcessPaymentSuccessTxParams{
+		PaymentOrderID: paymentOrder.ID,
+	})
+	require.NoError(t, err)
+	require.True(t, payResult.Processed)
+
+	prepareResult, err := store.PrepareRiderDepositRefundTx(ctx, db.PrepareRiderDepositRefundTxParams{
+		RiderID:                rider.ID,
+		UserID:                 rider.UserID,
+		Amount:                 30000,
+		Remark:                 "骑手押金提现",
+		IdempotencyKey:         "rd_refund_recovery_" + util.RandomString(16),
+		IdempotencyRequestHash: "sha256:" + util.RandomString(64),
+	})
+	require.NoError(t, err)
+	require.Len(t, prepareResult.RefundPlans, 1)
+
+	refundOrder := prepareResult.RefundPlans[0].RefundOrder
+	_, err = store.CreateExternalPaymentCommand(ctx, db.CreateExternalPaymentCommandParams{
+		Provider:           db.ExternalPaymentProviderWechat,
+		Channel:            db.PaymentChannelDirect,
+		Capability:         db.ExternalPaymentCapabilityDirectRefund,
+		CommandType:        db.ExternalPaymentCommandTypeCreateRefund,
+		BusinessOwner:      db.ExternalPaymentBusinessOwnerRiderDeposit,
+		BusinessObjectType: pgtype.Text{String: "refund_order", Valid: true},
+		BusinessObjectID:   pgtype.Int8{Int64: refundOrder.ID, Valid: true},
+		ExternalObjectType: db.ExternalPaymentObjectRefund,
+		ExternalObjectKey:  refundOrder.OutRefundNo,
+		CommandStatus:      db.ExternalPaymentCommandStatusUnknown,
+		SubmittedAt:        time.Now().Add(-10 * time.Minute),
+		LastErrorMessage:   pgtype.Text{String: "integration unknown refund create outcome", Valid: true},
+		RequestFingerprint: pgtype.Text{String: "sha256:" + util.RandomString(64), Valid: true},
+		ResponseSnapshot:   []byte(`{"operation":"direct_refund","status":"unknown"}`),
+	})
+	require.NoError(t, err)
+
+	_, err = integrationPool.Exec(ctx, `UPDATE refund_orders SET created_at = $1 WHERE id = $2`, time.Now().Add(-10*time.Minute), refundOrder.ID)
+	require.NoError(t, err)
+
+	beforeRecovery, err := store.GetRefundOrder(ctx, refundOrder.ID)
+	require.NoError(t, err)
+	require.Equal(t, "pending", beforeRecovery.Status)
+
+	queuedApplications := &capturePaymentFactApplicationDistributor{}
+	recovery := worker.NewRefundRecoveryScheduler(store, queuedApplications, &integrationTestPaymentClient{})
+	recovery.RunOnce()
+
+	payloads := queuedApplications.Payloads()
+	require.Len(t, payloads, 1)
+	require.NotZero(t, payloads[0].ApplicationID)
+
+	applicationBeforeApply, err := store.GetExternalPaymentFactApplication(ctx, payloads[0].ApplicationID)
+	require.NoError(t, err)
+	require.Equal(t, db.ExternalPaymentFactApplicationStatusPending, applicationBeforeApply.Status)
+	require.Equal(t, "rider_deposit_domain", applicationBeforeApply.Consumer)
+	require.Equal(t, "refund_order", applicationBeforeApply.BusinessObjectType)
+	require.Equal(t, refundOrder.ID, applicationBeforeApply.BusinessObjectID)
+
+	factBeforeApply, err := store.GetExternalPaymentFact(ctx, applicationBeforeApply.FactID)
+	require.NoError(t, err)
+	require.Equal(t, db.ExternalPaymentFactSourceQuery, factBeforeApply.FactSource)
+	require.Equal(t, db.ExternalPaymentTerminalStatusSuccess, factBeforeApply.TerminalStatus)
+	require.Equal(t, refundOrder.OutRefundNo, factBeforeApply.ExternalObjectKey)
+
+	applyResult, err := logic.NewPaymentFactService(store).ApplyExternalPaymentFactApplication(ctx, payloads[0].ApplicationID)
+	require.NoError(t, err)
+	require.True(t, applyResult.Applied)
+
+	updatedApplication, err := store.GetExternalPaymentFactApplication(ctx, payloads[0].ApplicationID)
+	require.NoError(t, err)
+	require.Equal(t, db.ExternalPaymentFactApplicationStatusApplied, updatedApplication.Status)
+
+	updatedRefund, err := store.GetRefundOrder(ctx, refundOrder.ID)
+	require.NoError(t, err)
+	require.Equal(t, "success", updatedRefund.Status)
+	require.Equal(t, refundOrder.OutRefundNo, updatedRefund.RefundID.String)
+
+	updatedRider, err := store.GetRider(ctx, rider.ID)
+	require.NoError(t, err)
+	require.Equal(t, int64(0), updatedRider.DepositAmount)
+	require.Equal(t, int64(0), updatedRider.FrozenDeposit)
+
+	credit, err := store.GetRiderDepositCreditByPaymentOrderID(ctx, paymentOrder.ID)
+	require.NoError(t, err)
+	require.Equal(t, "fully_refunded", credit.Status)
+	require.Equal(t, int64(0), credit.RefundableAmount)
+	require.Equal(t, int64(30000), credit.RefundedAmount)
+
+	updatedPaymentOrder, err := store.GetPaymentOrder(ctx, paymentOrder.ID)
+	require.NoError(t, err)
+	require.Equal(t, "refunded", updatedPaymentOrder.Status)
 }
 
 // TestClaimJourneyD1Integration

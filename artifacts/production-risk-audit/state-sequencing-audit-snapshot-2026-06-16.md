@@ -17326,6 +17326,8 @@ ORDER BY row_count DESC, oldest_signal_at ASC;
 
 - 2026-06-22 修复闭口补记：`P0-F11-1` 已完成实现。`RefundRecoveryScheduler` 现在新增 rider deposit `pending/unknown` recovery scan，复用原 `out_refund_no` 重新查询并重新记录 fact/application；`worker/refund_recovery_scheduler_test.go` 已补覆盖 pending rider deposit refund 的回归测试，原有 direct refund / baofu stuck 用例也补齐了新的空扫描期望，避免新 query 破坏旧路径。
 
+- 2026-06-23 残余风险处理补记：`P0-F11-1` 已补 DB-backed 集成验证。`TestRiderDepositRefundPendingUnknownRecoveryIntegration` 构造 rider deposit 支付成功、提现冻结、`refund_orders.status='pending'`、直连退款 command `unknown` 且无回调的持久化状态；执行 `RefundRecoveryScheduler.RunOnce()` 后通过 query fact/application，再由 `PaymentFactService.ApplyExternalPaymentFactApplication` 收敛 `refund_orders`、`riders`、`rider_deposit_credits`、`payment_orders`。本地代码链路残余风险降为已覆盖；真实微信回调投递丢失、provider 查询可用性、生产 scheduler/queue 运行状态仍归入线上观测/只读 SQL 检查范围。
+
 ### P4-B03. 修复批次草案门禁与占位
 
 - 目标：只在生产取证和本地复现给出足够证据后，排列修复批次；本节不作为直接改代码的授权，也不把候选风险自动升级为已确认 bug。

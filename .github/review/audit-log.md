@@ -100,3 +100,10 @@ Append one section per formal backend audit or durable review pass.
 - Durable docs updated: .github/review/open-findings.md; .github/review/audit-log.md; artifacts/production-risk-audit/state-sequencing-audit-snapshot-2026-06-16.md; docs/superpowers/plans/2026-06-22-rider-deposit-refund-recovery.md
 - Validation: `PATH=/usr/local/go/bin:$PATH go test ./worker -run 'TestRefundRecoverySchedulerRunOnce' -v` passed after the regression expectations were updated.
 - Remaining scope: The recovery scan is now covered by focused worker tests; broader end-to-end verification of a real provider `unknown`/lost-callback scenario remains unexercised.
+
+### 2026-06-23 - P0-F11 rider deposit refund recovery residual validation
+
+- Scope: Reduced the residual risk left after the P0-F11 fix by adding DB-backed integration coverage for a rider-deposit refund that remains `pending` after an `unknown` direct-refund create outcome and receives no callback.
+- Reviewed paths: locallife/integration/takeout_journey_integration_test.go; locallife/worker/refund_recovery_scheduler.go; locallife/logic/payment_fact_application_service.go; locallife/db/sqlc/tx_rider_refund.go; docs/superpowers/plans/2026-06-22-rider-deposit-refund-recovery.md
+- Validation: `PATH=/usr/local/go/bin:$PATH go test -v -cover -count=1 -p 1 ./integration -run TestRiderDepositRefundPendingUnknownRecoveryIntegration` passed. The test verifies persisted convergence through `RefundRecoveryScheduler.RunOnce()` -> query fact/application -> `PaymentFactService.ApplyExternalPaymentFactApplication`.
+- Remaining scope: Local integration now covers the internal recovery chain. True WeChat callback delivery loss, provider query availability, and production scheduler/queue observability still need operational monitoring or read-only production checks.
