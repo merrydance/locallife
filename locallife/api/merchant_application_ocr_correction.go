@@ -175,9 +175,9 @@ func (server *Server) patchMerchantBusinessLicenseOCRFields(ctx *gin.Context, ap
 		return
 	}
 
-	licenseNumber := strings.TrimSpace(next.CreditCode)
+	licenseNumber := normalizeMerchantBusinessLicenseNumber(next.CreditCode)
 	if licenseNumber == "" {
-		licenseNumber = strings.TrimSpace(next.RegNum)
+		licenseNumber = normalizeMerchantBusinessLicenseNumber(next.RegNum)
 	}
 	merchantNameBackfill := strings.TrimSpace(next.EnterpriseName)
 	if strings.TrimSpace(app.MerchantName) != "" {

@@ -604,6 +604,23 @@ export interface PatchMerchantFoodPermitOCRFieldsRequest {
   confirmed?: boolean
 }
 
+export type MerchantLicenseAvailabilityState =
+  | 'available'
+  | 'current_user_approved'
+  | 'occupied_by_other_account'
+
+export type MerchantLicenseAvailabilityAction =
+  | 'continue'
+  | 'enter_merchant_center'
+  | 'request_invite'
+
+export interface MerchantLicenseAvailabilityResponse {
+  available: boolean
+  state: MerchantLicenseAvailabilityState | string
+  action: MerchantLicenseAvailabilityAction | string
+  message: string
+}
+
 // ==================== API Methods ====================
 
 /**
@@ -617,6 +634,16 @@ export function getMerchantApplication() {
   return request<MerchantApplicationDraftResponse>({
     url: '/v1/merchant/application',
     method: 'GET'
+  })
+}
+
+export function checkMerchantLicenseAvailability(businessLicenseNumber: string) {
+  return request<MerchantLicenseAvailabilityResponse>({
+    url: '/v1/merchant/application/license-availability',
+    method: 'GET',
+    data: {
+      business_license_number: businessLicenseNumber
+    }
   })
 }
 

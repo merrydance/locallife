@@ -1090,6 +1090,28 @@ func TestGetMerchantApplicationByLicenseNumber(t *testing.T) {
 	require.Equal(t, app1.BusinessLicenseNumber, app2.BusinessLicenseNumber)
 }
 
+func TestGetApprovedMerchantApplicationByLicenseNumber(t *testing.T) {
+	app1 := createRandomMerchantApplication(t)
+
+	_, err := testStore.GetApprovedMerchantApplicationByLicenseNumber(context.Background(), app1.BusinessLicenseNumber)
+	require.Error(t, err)
+
+	reviewer := createRandomUser(t)
+	approvedApp, err := testStore.UpdateMerchantApplicationStatus(context.Background(), UpdateMerchantApplicationStatusParams{
+		ID:           app1.ID,
+		Status:       "approved",
+		RejectReason: pgtype.Text{},
+		ReviewedBy:   pgtype.Int8{Int64: reviewer.ID, Valid: true},
+		ReviewedAt:   pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	})
+	require.NoError(t, err)
+
+	app2, err := testStore.GetApprovedMerchantApplicationByLicenseNumber(context.Background(), app1.BusinessLicenseNumber)
+	require.NoError(t, err)
+	require.Equal(t, approvedApp.ID, app2.ID)
+	require.Equal(t, "approved", app2.Status)
+}
+
 func TestListAllMerchantApplications(t *testing.T) {
 	// 创建多个申请
 	for i := 0; i < 3; i++ {

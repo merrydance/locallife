@@ -672,6 +672,7 @@ type Querier interface {
 	GetActiveWantedMerchantByID(ctx context.Context, arg GetActiveWantedMerchantByIDParams) (WantedMerchant, error)
 	GetActiveWantedMerchantByIDForUpdate(ctx context.Context, arg GetActiveWantedMerchantByIDForUpdateParams) (WantedMerchant, error)
 	GetApplicableDiscountRules(ctx context.Context, arg GetApplicableDiscountRulesParams) ([]DiscountRule, error)
+	GetApprovedMerchantApplicationByLicenseNumber(ctx context.Context, businessLicenseNumber string) (MerchantApplication, error)
 	GetBaofuAccountBinding(ctx context.Context, id int64) (BaofuAccountBinding, error)
 	GetBaofuAccountBindingByContractNo(ctx context.Context, contractNo pgtype.Text) (BaofuAccountBinding, error)
 	GetBaofuAccountBindingByOwner(ctx context.Context, arg GetBaofuAccountBindingByOwnerParams) (BaofuAccountBinding, error)

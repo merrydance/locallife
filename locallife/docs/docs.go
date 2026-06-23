@@ -9526,6 +9526,61 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/merchant/application/license-availability": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "只读检查已通过入驻申请中的营业执照占用状态，用于在小程序端前置分流；不创建草稿、不授予商户权限。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户申请"
+                ],
+                "summary": "检查营业执照是否可用于商户入驻",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "营业执照号码/统一社会信用代码",
+                        "name": "business_license_number",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "检查结果",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantLicenseAvailabilityResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未登录",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/merchant/application/reset": {
             "post": {
                 "security": [
@@ -39961,6 +40016,23 @@ const docTemplate = `{
                 },
                 "order_count": {
                     "type": "integer"
+                }
+            }
+        },
+        "api.merchantLicenseAvailabilityResponse": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string"
+                },
+                "available": {
+                    "type": "boolean"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
                 }
             }
         },

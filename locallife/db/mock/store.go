@@ -7421,6 +7421,21 @@ func (mr *MockStoreMockRecorder) GetApplicableDiscountRules(ctx, arg any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetApplicableDiscountRules", reflect.TypeOf((*MockStore)(nil).GetApplicableDiscountRules), ctx, arg)
 }
 
+// GetApprovedMerchantApplicationByLicenseNumber mocks base method.
+func (m *MockStore) GetApprovedMerchantApplicationByLicenseNumber(ctx context.Context, businessLicenseNumber string) (db.MerchantApplication, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetApprovedMerchantApplicationByLicenseNumber", ctx, businessLicenseNumber)
+	ret0, _ := ret[0].(db.MerchantApplication)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetApprovedMerchantApplicationByLicenseNumber indicates an expected call of GetApprovedMerchantApplicationByLicenseNumber.
+func (mr *MockStoreMockRecorder) GetApprovedMerchantApplicationByLicenseNumber(ctx, businessLicenseNumber any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetApprovedMerchantApplicationByLicenseNumber", reflect.TypeOf((*MockStore)(nil).GetApprovedMerchantApplicationByLicenseNumber), ctx, businessLicenseNumber)
+}
+
 // GetBaofuAccountBinding mocks base method.
 func (m *MockStore) GetBaofuAccountBinding(ctx context.Context, id int64) (db.BaofuAccountBinding, error) {
 	m.ctrl.T.Helper()

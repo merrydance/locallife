@@ -4,6 +4,7 @@ import { DraftStorage } from './draft-storage'
 import {
   buildMerchantApplicationOCRStatusView,
   buildMerchantApplicationStatusView,
+  checkMerchantLicenseAvailability,
   getMerchantApplication,
   updateMerchantBasicInfo,
   patchMerchantApplicationOCRFields,
@@ -18,6 +19,7 @@ import {
   deleteMerchantApplicationDocument,
   deleteMediaAsset,
   waitForPublicMediaDisplayUrl,
+  type MerchantLicenseAvailabilityResponse,
   type MerchantApplicationOCRSubmissionResult,
   type MerchantApplicationDraftResponse
 } from '../../../_main_shared/api/onboarding'
@@ -197,6 +199,24 @@ function hasDocumentOCRConfirmationValues(values: unknown): boolean {
 
 function normalizedDocumentCode(value: unknown): string {
   return toSafeString(value).replace(/\s/g, '').toUpperCase()
+}
+
+function businessLicenseNumberFromOCR(ocr?: OCRResult | null): string {
+  return normalizedDocumentCode(ocr?.credit_code || ocr?.reg_num)
+}
+
+function businessLicenseNumberFromDraft(draft: MerchantDraftExt, formData?: Record<string, unknown>): string {
+  return normalizedDocumentCode(
+    formData?.creditCode
+    || draft.business_license_number
+    || draft.business_license_ocr?.credit_code
+    || draft.business_license_ocr?.reg_num
+  )
+}
+
+function isDuplicateBusinessLicenseGuidance(message: string): boolean {
+  return message.includes('营业执照')
+    && (message.includes('已完成入驻') || message.includes('已入驻') || message.includes('已被其他商户使用'))
 }
 
 function normalizedDocumentValue(field: string, value: unknown): string {
@@ -472,6 +492,52 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
     this.setData({ [`uploadFeedback.${field}`]: feedback })
   },
 
+  handleBusinessLicenseAvailability(availability: MerchantLicenseAvailabilityResponse): boolean {
+    if (availability.available || availability.action === 'continue') {
+      return false
+    }
+
+    const message = availability.message || '该营业执照已完成入驻。请联系门店老板在商户中心邀请你加入，或联系平台客服处理。'
+
+    if (availability.action === 'enter_merchant_center') {
+      wx.showModal({
+        title: '已完成入驻',
+        content: message,
+        showCancel: false,
+        confirmText: '进入商户中心',
+        success: () => {
+          wx.reLaunch({ url: MERCHANT_DASHBOARD_URL })
+        }
+      })
+      return true
+    }
+
+    this.setUploadFeedback('license', buildMerchantUploadErrorFeedback(message))
+    this.setData({ currentStep: 1 })
+    wx.showModal({
+      title: '该证照已入驻',
+      content: message,
+      showCancel: false,
+      confirmText: '我知道了'
+    })
+    return true
+  },
+
+  async checkBusinessLicenseAvailability(licenseNumber: string): Promise<boolean> {
+    const normalizedLicenseNumber = normalizedDocumentCode(licenseNumber)
+    if (!normalizedLicenseNumber) {
+      return false
+    }
+
+    try {
+      const availability = await checkMerchantLicenseAvailability(normalizedLicenseNumber)
+      return this.handleBusinessLicenseAvailability(availability)
+    } catch (error) {
+      logger.warn('[MerchantRegister] 营业执照占用状态检查失败，保留提交兜底', error, 'checkBusinessLicenseAvailability')
+      return false
+    }
+  },
+
   setUploadedImage(field: UploadField, path: string, assetId?: number) {
     const patch = buildMerchantUploadedImagePatch(field, path, assetId) as Record<string, unknown>
     if (field === 'license') {
@@ -595,6 +661,10 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
         valid_period: formOCRFieldValue(formData, touchedFields, 'licenseValidity', businessLicenseOCR.valid_period),
         confirmed: true
       }) as MerchantDraftExt
+    }
+
+    if (await this.checkBusinessLicenseAvailability(businessLicenseNumberFromDraft(currentDraft, formData))) {
+      return null
     }
 
     const foodPermitOCR = (currentDraft.food_permit_ocr || latestDraft.food_permit_ocr || {}) as OCRResult
@@ -994,6 +1064,7 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
         if (ocr) {
           this.setData(buildMerchantBusinessLicenseOcrRecognizedPatch(ocr, this.data.formData.address))
           this.saveDraft()
+          void this.checkBusinessLicenseAvailability(businessLicenseNumberFromOCR(ocr))
         }
       })
     } catch (error: unknown) {
@@ -1197,6 +1268,9 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
       this.setData({ [`formData.${field}`]: value }, () => {
         this.saveDraft()
         this.syncToBackend()
+        if (field === 'creditCode') {
+          void this.checkBusinessLicenseAvailability(normalizedDocumentCode(value))
+        }
       })
     }
   },
@@ -1554,6 +1628,18 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
         userMessage: errMsg,
         debugMessage
       }, 'merchant-register-submit')
+      if (isDuplicateBusinessLicenseGuidance(errMsg)) {
+        this.setData({ isSubmitting: false, currentStep: 1 })
+        this.setUploadFeedback('license', buildMerchantUploadErrorFeedback(errMsg))
+        wx.showModal({
+          title: '该证照已入驻',
+          content: errMsg,
+          showCancel: false,
+          confirmText: '我知道了'
+        })
+        return
+      }
+
       this.setData({ isSubmitting: false, currentStep: 4 })
       wx.showModal({
         title: isMerchantCorrectionError(errMsg) ? '请修改资料后重试' : '提交失败',

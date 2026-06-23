@@ -5012,6 +5012,17 @@ definitions:
       order_count:
         type: integer
     type: object
+  api.merchantLicenseAvailabilityResponse:
+    properties:
+      action:
+        type: string
+      available:
+        type: boolean
+      message:
+        type: string
+      state:
+        type: string
+    type: object
   api.merchantListItem:
     properties:
       address:
@@ -17498,6 +17509,41 @@ paths:
       security:
       - BearerAuth: []
       summary: 更新门头照和环境照
+      tags:
+      - 商户申请
+  /v1/merchant/application/license-availability:
+    get:
+      consumes:
+      - application/json
+      description: 只读检查已通过入驻申请中的营业执照占用状态，用于在小程序端前置分流；不创建草稿、不授予商户权限。
+      parameters:
+      - description: 营业执照号码/统一社会信用代码
+        in: query
+        name: business_license_number
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 检查结果
+          schema:
+            $ref: '#/definitions/api.merchantLicenseAvailabilityResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未登录
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 检查营业执照是否可用于商户入驻
       tags:
       - 商户申请
   /v1/merchant/application/reset:

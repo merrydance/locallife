@@ -30,6 +30,17 @@ const (
 	merchantOnboardingReviewTaskUniqueTTL                = 30 * time.Second
 )
 
+const (
+	merchantLicenseAvailabilityStateAvailable                = "available"
+	merchantLicenseAvailabilityStateCurrentUserApproved      = "current_user_approved"
+	merchantLicenseAvailabilityStateOccupiedByOtherAccount   = "occupied_by_other_account"
+	merchantLicenseAvailabilityActionContinue                = "continue"
+	merchantLicenseAvailabilityActionEnterMerchantCenter     = "enter_merchant_center"
+	merchantLicenseAvailabilityActionRequestInvite           = "request_invite"
+	merchantLicenseAvailabilityCurrentUserApprovedMessage    = "当前账号已完成商户入驻，可直接进入商户中心。"
+	merchantLicenseAvailabilityOccupiedByOtherAccountMessage = "该营业执照已完成入驻。请联系门店老板在商户中心邀请你加入，或联系平台客服处理。"
+)
+
 // ==================== 商户申请数据结构 ====================
 
 // BusinessLicenseOCRData 营业执照OCR识别数据
@@ -128,6 +139,21 @@ type merchantApplicationDraftResponse struct {
 	RejectReason                *string                           `json:"reject_reason,omitempty"`
 	CreatedAt                   time.Time                         `json:"created_at"`
 	UpdatedAt                   time.Time                         `json:"updated_at"`
+}
+
+type merchantLicenseAvailabilityRequest struct {
+	BusinessLicenseNumber string `form:"business_license_number" binding:"required,min=8,max=32"`
+}
+
+type merchantLicenseAvailabilityResponse struct {
+	Available bool   `json:"available"`
+	State     string `json:"state"`
+	Action    string `json:"action"`
+	Message   string `json:"message"`
+}
+
+func normalizeMerchantBusinessLicenseNumber(value string) string {
+	return strings.ToUpper(strings.Join(strings.Fields(value), ""))
 }
 
 func (server *Server) defaultOCRProviderName(documentType ocr.DocumentType) ocr.ProviderName {
@@ -354,6 +380,62 @@ func (server *Server) getMyMerchantApplication(ctx *gin.Context) {
 	server.writeMerchantApplicationDraftResponse(ctx, http.StatusOK, app)
 }
 
+// checkMerchantApplicationLicenseAvailability godoc
+// @Summary 检查营业执照是否可用于商户入驻
+// @Description 只读检查已通过入驻申请中的营业执照占用状态，用于在小程序端前置分流；不创建草稿、不授予商户权限。
+// @Tags 商户申请
+// @Accept json
+// @Produce json
+// @Param business_license_number query string true "营业执照号码/统一社会信用代码"
+// @Success 200 {object} merchantLicenseAvailabilityResponse "检查结果"
+// @Failure 400 {object} ErrorResponse "参数错误"
+// @Failure 401 {object} ErrorResponse "未登录"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/merchant/application/license-availability [get]
+// @Security BearerAuth
+func (server *Server) checkMerchantApplicationLicenseAvailability(ctx *gin.Context) {
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	var req merchantLicenseAvailabilityRequest
+	if err := ctx.ShouldBindQuery(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	licenseNumber := normalizeMerchantBusinessLicenseNumber(req.BusinessLicenseNumber)
+	app, err := server.store.GetApprovedMerchantApplicationByLicenseNumber(ctx, licenseNumber)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusOK, merchantLicenseAvailabilityResponse{
+				Available: true,
+				State:     merchantLicenseAvailabilityStateAvailable,
+				Action:    merchantLicenseAvailabilityActionContinue,
+				Message:   "",
+			})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	if app.UserID == authPayload.UserID {
+		ctx.JSON(http.StatusOK, merchantLicenseAvailabilityResponse{
+			Available: false,
+			State:     merchantLicenseAvailabilityStateCurrentUserApproved,
+			Action:    merchantLicenseAvailabilityActionEnterMerchantCenter,
+			Message:   merchantLicenseAvailabilityCurrentUserApprovedMessage,
+		})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, merchantLicenseAvailabilityResponse{
+		Available: false,
+		State:     merchantLicenseAvailabilityStateOccupiedByOtherAccount,
+		Action:    merchantLicenseAvailabilityActionRequestInvite,
+		Message:   merchantLicenseAvailabilityOccupiedByOtherAccountMessage,
+	})
+}
+
 // ==================== 获取或创建草稿 ====================
 
 // getOrCreateMerchantApplicationDraft godoc
@@ -483,7 +565,7 @@ func (server *Server) updateMerchantApplicationBasicInfo(ctx *gin.Context) {
 		arg.BusinessAddress = pgtype.Text{String: req.BusinessAddress, Valid: true}
 	}
 	if req.BusinessLicenseNumber != "" {
-		arg.BusinessLicenseNumber = pgtype.Text{String: req.BusinessLicenseNumber, Valid: true}
+		arg.BusinessLicenseNumber = pgtype.Text{String: normalizeMerchantBusinessLicenseNumber(req.BusinessLicenseNumber), Valid: true}
 	}
 	if req.BusinessScope != "" {
 		arg.BusinessScope = pgtype.Text{String: req.BusinessScope, Valid: true}
@@ -1381,7 +1463,7 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 		return errors.New("系统繁忙，请稍后重试")
 	}
 	if licenseCount > 0 {
-		return apierr(ErrApplicationInvalidState.Code, "该营业执照号码已被其他商户使用，如非重复申请请联系客服处理") // 防止恶意抢注/重复入驻
+		return apierr(ErrApplicationInvalidState.Code, merchantLicenseAvailabilityOccupiedByOtherAccountMessage) // 防止恶意抢注/重复入驻
 	}
 
 	return nil

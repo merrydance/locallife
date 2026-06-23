@@ -90,8 +90,24 @@ export function hasMerchantConsoleAccess(roles: string[]) {
   return normalizedRoles.some((role) => MERCHANT_CONSOLE_ROLES.includes(role))
 }
 
+export function getMerchantWorkbenchFromProfile(workbenches?: UserWorkbenchResponse[]) {
+  return (workbenches || []).find((workbench) => workbench.id === 'merchant') || null
+}
+
+export function isMerchantWorkbenchGranted(workbench?: UserWorkbenchResponse | null) {
+  return workbench?.status === 'granted'
+}
+
+export function isMerchantWorkbenchPendingAssignment(workbench?: UserWorkbenchResponse | null) {
+  return workbench?.status === 'pending_assignment'
+}
+
+export function getMerchantWorkbenchPendingMessage(workbench?: UserWorkbenchResponse | null) {
+  return workbench?.message || '已加入商户，等待老板分配岗位后即可进入商户中心。'
+}
+
 function hasGrantedMerchantWorkbench(workbenches?: UserWorkbenchResponse[]) {
-	return (workbenches || []).some((workbench) => workbench.id === 'merchant' && workbench.status === 'granted')
+  return isMerchantWorkbenchGranted(getMerchantWorkbenchFromProfile(workbenches))
 }
 
 export function canManageMerchantApplyment(roles: string[]) {

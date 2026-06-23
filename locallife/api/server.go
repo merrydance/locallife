@@ -737,7 +737,12 @@ func (server *Server) setupRouter() {
 	authGroup.GET("/merchants/applications/me", server.getMyMerchantApplication) // 兼容小程序提交后状态轮询，只读
 	merchantAppGroup := authGroup.Group("/merchant/application")
 	{
-		merchantAppGroup.GET("", server.getOrCreateMerchantApplicationDraft)      // 创建/获取草稿
+		merchantAppGroup.GET("", server.getOrCreateMerchantApplicationDraft) // 创建/获取草稿
+		if rateLimiter != nil {
+			merchantAppGroup.GET("/license-availability", rateLimiter.SensitiveAPIMiddleware(20), server.checkMerchantApplicationLicenseAvailability)
+		} else {
+			merchantAppGroup.GET("/license-availability", server.checkMerchantApplicationLicenseAvailability)
+		}
 		merchantAppGroup.PUT("/basic", server.updateMerchantApplicationBasicInfo) // 更新基础信息
 		merchantAppGroup.PUT("/images", server.updateMerchantApplicationImages)   // 更新门头照/环境照
 		merchantAppGroup.DELETE("/documents/:document_type", server.deleteMerchantApplicationDocument)

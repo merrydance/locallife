@@ -742,6 +742,117 @@ func TestGetMyMerchantApplicationReturnsEmptyStateWithoutCreatingDraft(t *testin
 	require.JSONEq(t, `{}`, string(unwrapAPIResponseData(t, recorder.Body.Bytes())))
 }
 
+func TestCheckMerchantApplicationLicenseAvailability(t *testing.T) {
+	user, _ := randomUser(t)
+	licenseNumber := "91110000MA12345678"
+	query := "/v1/merchant/application/license-availability?business_license_number=%2091110000ma12345678%20"
+
+	testCases := []struct {
+		name          string
+		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
+		buildStubs    func(store *mockdb.MockStore)
+		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+	}{
+		{
+			name: "Available",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetApprovedMerchantApplicationByLicenseNumber(gomock.Any(), licenseNumber).
+					Times(1).
+					Return(db.MerchantApplication{}, db.ErrRecordNotFound)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp merchantLicenseAvailabilityResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.True(t, resp.Available)
+				require.Equal(t, merchantLicenseAvailabilityStateAvailable, resp.State)
+				require.Equal(t, merchantLicenseAvailabilityActionContinue, resp.Action)
+			},
+		},
+		{
+			name: "CurrentUserApproved",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomMerchantAppDraftWithData(user.ID)
+				app.Status = "approved"
+				app.BusinessLicenseNumber = licenseNumber
+				store.EXPECT().
+					GetApprovedMerchantApplicationByLicenseNumber(gomock.Any(), licenseNumber).
+					Times(1).
+					Return(app, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp merchantLicenseAvailabilityResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.False(t, resp.Available)
+				require.Equal(t, merchantLicenseAvailabilityStateCurrentUserApproved, resp.State)
+				require.Equal(t, merchantLicenseAvailabilityActionEnterMerchantCenter, resp.Action)
+				require.Contains(t, resp.Message, "商户中心")
+			},
+		},
+		{
+			name: "OccupiedByOtherAccount",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomMerchantAppDraftWithData(user.ID + 100)
+				app.Status = "approved"
+				app.BusinessLicenseNumber = licenseNumber
+				store.EXPECT().
+					GetApprovedMerchantApplicationByLicenseNumber(gomock.Any(), licenseNumber).
+					Times(1).
+					Return(app, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp merchantLicenseAvailabilityResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.False(t, resp.Available)
+				require.Equal(t, merchantLicenseAvailabilityStateOccupiedByOtherAccount, resp.State)
+				require.Equal(t, merchantLicenseAvailabilityActionRequestInvite, resp.Action)
+				require.Contains(t, resp.Message, "邀请")
+			},
+		},
+		{
+			name:       "NoAuth",
+			setupAuth:  func(t *testing.T, request *http.Request, tokenMaker token.Maker) {},
+			buildStubs: func(store *mockdb.MockStore) {},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusUnauthorized, recorder.Code)
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			tc.buildStubs(store)
+
+			server := newTestServer(t, store)
+			recorder := httptest.NewRecorder()
+
+			request, err := http.NewRequest(http.MethodGet, query, nil)
+			require.NoError(t, err)
+
+			tc.setupAuth(t, request, server.tokenMaker)
+			server.router.ServeHTTP(recorder, request)
+			tc.checkResponse(t, recorder)
+		})
+	}
+}
+
 // ==================== 更新基础信息测试 ====================
 
 func TestUpdateMerchantApplicationBasicInfo(t *testing.T) {

@@ -1,7 +1,15 @@
 import Navigation from '../../utils/navigation'
 import { logger } from '../../utils/logger'
 import { getStableBarHeights } from '../../utils/responsive'
-import { invalidateConsoleAccessUserInfoCache, resolveConsoleWorkbenchesFromProfile } from '../../utils/console-access'
+import {
+  getMerchantWorkbenchFromProfile,
+  getMerchantWorkbenchPendingMessage,
+  hasMerchantConsoleAccess,
+  invalidateConsoleAccessUserInfoCache,
+  isMerchantWorkbenchGranted,
+  isMerchantWorkbenchPendingAssignment,
+  resolveConsoleWorkbenchesFromProfile
+} from '../../utils/console-access'
 import {
   bindMerchantInviteCode,
   confirmWebLoginSessionCode,
@@ -306,6 +314,28 @@ Page({
 
   onRegisterTap(e: WechatMiniprogram.TouchEvent) {
     const { id } = e.currentTarget.dataset
+    if (id === 'merchant') {
+      const merchantWorkbench = getMerchantWorkbenchFromProfile(app.globalData.userWorkbenches)
+      const cachedRoles = app.globalData.userRoles
+      const roles = cachedRoles && cachedRoles.length > 0
+        ? cachedRoles
+        : normalizeRoles(app.globalData.userRole)
+
+      if (isMerchantWorkbenchGranted(merchantWorkbench) || (!merchantWorkbench && hasMerchantConsoleAccess(roles))) {
+        wx.navigateTo({ url: '/pages/merchant/dashboard/index' })
+        return
+      }
+
+      if (isMerchantWorkbenchPendingAssignment(merchantWorkbench)) {
+        wx.showModal({
+          title: '等待分配岗位',
+          content: getMerchantWorkbenchPendingMessage(merchantWorkbench),
+          showCancel: false,
+          confirmText: '我知道了'
+        })
+        return
+      }
+    }
     // 已有运营商点击「运营商入驻」应跳转「申请更多区域」而非重新走注册流程
     if (id === 'operator' && app.globalData.userRole === 'operator') {
       wx.navigateTo({ url: '/pages/operator/region-expansion/index' })

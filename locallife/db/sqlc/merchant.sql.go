@@ -625,6 +625,51 @@ func (q *Queries) DeleteMerchantBusinessHours(ctx context.Context, merchantID in
 	return err
 }
 
+const getApprovedMerchantApplicationByLicenseNumber = `-- name: GetApprovedMerchantApplicationByLicenseNumber :one
+SELECT id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id, review_summary FROM merchant_applications
+WHERE business_license_number = $1
+  AND status = 'approved'
+ORDER BY reviewed_at DESC NULLS LAST, id DESC
+LIMIT 1
+`
+
+func (q *Queries) GetApprovedMerchantApplicationByLicenseNumber(ctx context.Context, businessLicenseNumber string) (MerchantApplication, error) {
+	row := q.db.QueryRow(ctx, getApprovedMerchantApplicationByLicenseNumber, businessLicenseNumber)
+	var i MerchantApplication
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.MerchantName,
+		&i.BusinessLicenseNumber,
+		&i.LegalPersonName,
+		&i.LegalPersonIDNumber,
+		&i.ContactPhone,
+		&i.BusinessAddress,
+		&i.BusinessScope,
+		&i.Status,
+		&i.RejectReason,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Longitude,
+		&i.Latitude,
+		&i.RegionID,
+		&i.FoodPermitOcr,
+		&i.BusinessLicenseOcr,
+		&i.IDCardFrontOcr,
+		&i.IDCardBackOcr,
+		&i.StorefrontImages,
+		&i.EnvironmentImages,
+		&i.BusinessLicenseMediaAssetID,
+		&i.FoodPermitMediaAssetID,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
+		&i.ReviewSummary,
+	)
+	return i, err
+}
+
 const getBusinessHour = `-- name: GetBusinessHour :one
 SELECT id, merchant_id, day_of_week, open_time, close_time, is_closed, special_date, created_at, updated_at FROM merchant_business_hours
 WHERE id = $1 LIMIT 1
