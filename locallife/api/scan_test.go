@@ -18,6 +18,7 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
+	"github.com/merrydance/locallife/wechat"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -824,6 +825,48 @@ func TestGenerateTableQRCodeAPI(t *testing.T) {
 				var response generateTableQRCodeResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Contains(t, response.QrCodeUrl, currentTableQRCodeFilenameSuffix)
+			},
+		},
+		{
+			name:    "HyphenTableNoUsesTableIDScene",
+			tableID: table.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient) {
+				hyphenTable := table
+				hyphenTable.TableNo = "A-01"
+
+				store.EXPECT().
+					GetTable(gomock.Any(), gomock.Eq(hyphenTable.ID)).
+					Times(1).
+					Return(hyphenTable, nil)
+
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				wechatClient.EXPECT().
+					GetWXACodeUnlimited(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, req *wechat.WXACodeRequest) ([]byte, error) {
+						require.Equal(t, fmt.Sprintf("tid_%d", hyphenTable.ID), req.Scene)
+						return qrCodeData, nil
+					}).
+					Times(1)
+
+				store.EXPECT().
+					CreateMediaAsset(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.MediaAsset{ID: util.RandomInt(1, 1000), ModerationStatus: "approved"}, nil)
+
+				store.EXPECT().
+					UpdateTable(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(hyphenTable, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var response generateTableQRCodeResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Equal(t, "A-01", response.TableNo)
 			},
 		},
 		{

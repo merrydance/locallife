@@ -54,6 +54,7 @@
     "check:merchant-membership-settings-scenes": "node scripts/check-merchant-membership-settings-scenes.test.js",
     "check:dine-in-checkout-balance-assessment": "node scripts/check-dine-in-checkout-balance-assessment.test.js",
     "check:dine-in-checkout-result-reentry-contract": "node scripts/check-dine-in-checkout-result-reentry-contract.test.js",
+    "check:dine-in-scan-entry-scene": "node scripts/check-dine-in-scan-entry-scene.test.js",
     "check:dine-in-device-e2e-evidence": "node scripts/check-dine-in-device-e2e-evidence.test.js",
     "check:dine-in-recovery-alert-evidence": "node scripts/check-dine-in-recovery-alert-evidence.test.js",
     "check:takeaway-balance-checkout": "node scripts/check-takeaway-balance-checkout.test.js",

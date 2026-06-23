@@ -22,6 +22,14 @@ const (
 	currentTableQRCodeFilenameSuffix = "_qrcode_v2.png"
 )
 
+func buildTableQRCodeScene(merchantID int64, tableID int64, tableNo string) string {
+	scene := "m_" + strconv.FormatInt(merchantID, 10) + "-t_" + tableNo
+	if len(scene) > 32 || strings.Contains(tableNo, "-") {
+		return "tid_" + strconv.FormatInt(tableID, 10)
+	}
+	return scene
+}
+
 // =============================================================================
 // Scan Table API - 扫码点餐
 // =============================================================================
@@ -532,13 +540,7 @@ func (server *Server) generateTableQRCode(ctx *gin.Context) {
 	}
 
 	// 调用微信API生成小程序码
-	// scene参数只允许：数字、英文字母、下划线、减号，最大32字符
-	// 格式: m_商户ID-t_桌号
-	scene := "m_" + strconv.FormatInt(merchant.ID, 10) + "-t_" + table.TableNo
-	if len(scene) > 32 {
-		// 如果超长，使用桌台ID
-		scene = "tid_" + strconv.FormatInt(tableID, 10)
-	}
+	scene := buildTableQRCodeScene(merchant.ID, tableID, table.TableNo)
 
 	checkPath := false
 	wxaReq := &wechat.WXACodeRequest{

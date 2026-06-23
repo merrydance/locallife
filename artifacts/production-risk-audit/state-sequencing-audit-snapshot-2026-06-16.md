@@ -13153,6 +13153,13 @@ LIMIT 200;
   - `51` 维持 `C0-confirmed`：对象存储、`media_assets`、`tables.qr_code_url` 是分段提交；若最后 `UpdateTable` 失败，系统会留下已上传/已登记的 QR asset，但桌台指针为空或旧值。相同 PNG 重试还可能因同一 object key 触发唯一冲突，当前没有“发现既有 QR asset 后回写 table pointer”的自愈分支。
   - `422` 维持 `C0-confirmed code path`：新增主图先清后插，插入失败/超时/进程退出会留下无主图；并发两个新增主图请求可能各自清空后插入 `is_primary=true`，DB 又没有 partial unique，最终多主图时读侧 `LIMIT 1` 展示不确定。
 - 当前判断更新：`50/51/422` 是真实存在的问题；`52/53/NP-339/NP-352` 已收窄为非问题或边界投影，不再作为当前 P2-F06 的真实缺陷扩张。P2-F06 修复优先级低于资金/履约主状态，但确定性强，适合穿插处理。
+
+##### P2-F06-1 修复闭口补记（2026-06-23）
+
+- 已完成范围：本次只关闭 `P2-F06-1` / `P4-B03-1` 的桌台二维码 scene 协议错位，不处理 `P2-F06-2/3/4` 的 QR 指针半状态和桌台主图投影问题。
+- 服务端生成：`generateTableQRCode` 现在通过统一 helper 生成 scene；当 `table_no` 含 `-` 或 scene 超过微信 32 字符限制时，改用稳定的 `tid_<tableID>`，避免继续生产会被小程序截断的 `m_<merchantID>-t_<tableNo>`。
+- 小程序解析：`scan-entry` 的 scene 解析拆到 `entry-params.ts`，先识别 `tid_<tableID>`，再用锚定正则完整保留 `m_<merchantID>-t_<tableNo>` 中的桌号字段，因此既能消费新生成的 `tid_` 场景，也能正确处理历史短 scene 中包含 `-` 的桌号；旧 `table_` / `t` 数字桌台 ID 格式继续兼容。
+- 验证闭口：`locallife/api/scan_test.go` 覆盖含 `-` 桌号会生成 `tid_<tableID>`；`weapp/scripts/check-dine-in-scan-entry-scene.test.js` 覆盖含 `-` 桌号、URL encoded scene、`tid_`、旧 `t` 格式和非法 scene。已执行 `go test ./api -run TestGenerateTableQRCodeAPI -count=1`、`npm run check:dine-in-scan-entry-scene`、`npm run compile`、`npm run lint`。
 - 生产 SQL 模板：
 
 ```sql
@@ -17300,7 +17307,7 @@ ORDER BY row_count DESC, oldest_signal_at ASC;
 
 | 复现批次 | 触发查询 | 初步等级 | 需要补的证据 | 复现形状 | 测试落点 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- |
-| P4-B02-1 | P4-B05-6 / P2-F06 | S1 | 已有生产聚合命中 + `scan-entry` 解析代码 + `generateTableQRCode` scene 代码 | `table_no` 含 `-` 且 `len("m_<merchantID>-t_<tableNo>") <= 32`，扫码后被 `/t_([^-]+)/` 截断 | `weapp/miniprogram/pages/dine-in/scan-entry/scan-entry.ts` 解析单测 + `locallife/api/scan_test.go` scene 生成回归 | ready for design |
+| P4-B02-1 | P4-B05-6 / P2-F06 | S1 | 已有生产聚合命中 + `scan-entry` 解析代码 + `generateTableQRCode` scene 代码 | `table_no` 含 `-` 且 `len("m_<merchantID>-t_<tableNo>") <= 32`，扫码后被 `/t_([^-]+)/` 截断 | `weapp/miniprogram/pages/dine-in/scan-entry/entry-params.ts` parser 回归 + `locallife/api/scan_test.go` scene 生成回归 | implemented 2026-06-23 |
 | P4-B02-2 | P4-B01B-4 / P0-F10 | S2 | 已有生产聚合命中 + `ClaimBehaviorActionRecoveryScheduler` 只回收 `created/failed` + `executeClaimBehaviorAction` 对 `running` 不做回收 | `behavior_actions` 中 `action_type in ('block','recovery','release','notify')`、`status='running'`、`created_at < now() - interval '30 minutes'`，RunOnce 后仍不会被专门重扫 | `worker/claim_behavior_action_recovery_scheduler_test.go` 回收范围回归 + 现有 `worker/task_claim_behavior_action_test.go` running 重入覆盖 | implemented 2026-06-23 |
 | P4-B02-3 | P4-B01B-5 / P0-F11 | S2 | 已有生产聚合命中 + `RefundRecoveryScheduler` 只重扫 `processing` + `SubmitWithdrawal` 在 refund 结果不确定时保留 `pending` 待 query/retry | `refund_orders.status='pending'`、`external_payment_commands.command_status in ('unknown', null)`、`created_at < now() - interval '30 minutes'`，RunOnce 后仍不会被恢复器回扫 | `worker/refund_recovery_scheduler_test.go` pending/unknown 反例 + `logic/rider_deposit_refund_service_test.go` 不确定结果保留 pending 回归 | card written |
 
@@ -17330,6 +17337,8 @@ ORDER BY row_count DESC, oldest_signal_at ASC;
 
 - 2026-06-23 修复闭口补记：`P0-F10` 中 `block/recovery/release/notify` 行为动作 `running` 卡死恢复缺口已完成最小实现。`ClaimBehaviorActionRecoveryScheduler` 现在在原 `created/failed` 扫描之外补扫同 action type / target entity 下 `created_at` 早于 30 分钟的 `running` 动作，并继续跳过 detail 中已标记 terminal failure 的动作；近期 `running` 不会被误派发。`worker/claim_behavior_action_recovery_scheduler_test.go` 已覆盖 stale running 会重新入队、recent running 不入队、terminal failure 不入队；`worker/task_claim_behavior_action_test.go` 既有 running action 重入测试保留为执行器侧覆盖。本次未改 SQL/query、接口、Swagger 或 provider DTO，不需要 `make sqlc` / `make swagger`。
 
+- 2026-06-23 修复闭口补记：`P2-F06-1` 的桌台二维码 scene 截断缺口已完成最小实现。后端在 `table_no` 含 `-` 或 scene 超长时统一回退 `tid_<tableID>`；小程序扫码入口改为共享 `entry-params.ts` parser，完整保留历史 `m_<merchantID>-t_<tableNo>` scene 中的含 `-` 桌号，并兼容 `tid_` 与旧 `t` / `table_` 数字桌台 ID。`api/scan_test.go` 已覆盖含 `-` 桌号的生成回归，`check:dine-in-scan-entry-scene` 覆盖 parser 分支；本次未改 SQL/query、Swagger、支付/履约主状态或视觉 UI。
+
 ### P4-B03. 修复批次草案门禁与占位
 
 - 目标：只在生产取证和本地复现给出足够证据后，排列修复批次；本节不作为直接改代码的授权，也不把候选风险自动升级为已确认 bug。
@@ -17348,6 +17357,6 @@ ORDER BY row_count DESC, oldest_signal_at ASC;
 
 | 修复批次 | 来源查询/复现 | 风险族 | 等级 | 修复类型 | 必要验证 | 当前状态 |
 | --- | --- | --- | --- | --- | --- | --- |
-| P4-B03-1 | P4-B02-1 / P2-F06 | P2-F06 | S1 | parser guard / scene encoding | `weapp/miniprogram/pages/dine-in/scan-entry/scan-entry.ts` 解析单测 + `locallife/api/scan_test.go` scene 回归 | 未入场 |
+| P4-B03-1 | P4-B02-1 / P2-F06 | P2-F06 | S1 | parser guard / scene encoding | `weapp/miniprogram/pages/dine-in/scan-entry/entry-params.ts` parser 回归 + `locallife/api/scan_test.go` scene 回归 | completed 2026-06-23 |
 | P4-B03-2 | P4-B02-2 / P0-F10 | P0-F10 | S2 | add running-action recovery scan + stale-action reclaim test | `worker/claim_behavior_action_recovery_scheduler_test.go` 追加 running/stale 负例；`worker/task_claim_behavior_action_test.go` 现有 running 重入覆盖 | completed 2026-06-23 |
 | P4-B03-3 | P4-B02-3 / P0-F11 | P0-F11 | S2 | add rider-deposit pending/unknown recovery scan + replay test | `worker/refund_recovery_scheduler_test.go` 补 rider deposit pending/unknown 负例 + `logic/rider_deposit_refund_service_test.go` 补不确定命令保持 pending 的回归 | card written |

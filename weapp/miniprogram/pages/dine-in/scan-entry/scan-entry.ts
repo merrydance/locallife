@@ -14,61 +14,7 @@ import {
   saveDineInSessionFromOpenResponse
 } from '../_main_shared/services/dine-in-session'
 import { getErrorUserMessage } from '../../../utils/user-facing'
-
-type EntryParams = {
-  merchant_id?: number
-  table_no?: string
-  table_id?: number
-}
-
-function parseScene(scene: string): EntryParams | null {
-  const decoded = decodeURIComponent(scene)
-  const merchantMatch = decoded.match(/m_(\d+)/)
-  const tableNoMatch = decoded.match(/t_([^-]+)/)
-  const tableIdMatch = decoded.match(/tid_(\d+)/)
-
-  if (merchantMatch && tableNoMatch) {
-    return {
-      merchant_id: parseInt(merchantMatch[1], 10),
-      table_no: tableNoMatch[1]
-    }
-  }
-
-  if (tableIdMatch) {
-    return { table_id: parseInt(tableIdMatch[1], 10) }
-  }
-
-  const legacyTableId = decoded.replace(/^(table_|t)/, '')
-  if (legacyTableId && !Number.isNaN(parseInt(legacyTableId, 10))) {
-    return { table_id: parseInt(legacyTableId, 10) }
-  }
-
-  return null
-}
-
-function parseQrUrl(url: string): EntryParams | null {
-  const urlObj = new URL(url)
-  const tableId = urlObj.searchParams.get('table_id')
-  if (tableId && !Number.isNaN(parseInt(tableId, 10))) {
-    return { table_id: parseInt(tableId, 10) }
-  }
-
-  const merchantId = urlObj.searchParams.get('merchant_id')
-  const tableNo = urlObj.searchParams.get('table_no')
-  if (merchantId && tableNo && !Number.isNaN(parseInt(merchantId, 10))) {
-    return {
-      merchant_id: parseInt(merchantId, 10),
-      table_no: tableNo
-    }
-  }
-
-  const pathTableId = urlObj.pathname.match(/\/table\/(\d+)/)?.[1]
-  if (pathTableId && !Number.isNaN(parseInt(pathTableId, 10))) {
-    return { table_id: parseInt(pathTableId, 10) }
-  }
-
-  return null
-}
+import { parseQrUrl, parseScene, type EntryParams } from './entry-params'
 
 Page({
   data: {
