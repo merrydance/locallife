@@ -110,6 +110,7 @@ type Store interface {
 	UpdateTableTx(ctx context.Context, arg UpdateTableTxParams) (UpdateTableTxResult, error)
 	UpdateTableStatusTx(ctx context.Context, arg UpdateTableStatusTxParams) (Table, error)
 	DeleteTableTx(ctx context.Context, arg DeleteTableParams) (DeleteTableResult, error)
+	AddTableImageTx(ctx context.Context, arg AddTableImageTxParams) (TableImage, error)
 	SetTableImagePrimaryTx(ctx context.Context, arg SetTableImagePrimaryTxParams) (TableImage, error)
 	// Dining session transactions
 	OpenDiningSessionTx(ctx context.Context, arg OpenDiningSessionTxParams) (OpenDiningSessionTxResult, error)

@@ -54,6 +54,11 @@ type SetTableImagePrimaryTxParams struct {
 	ImageID int64
 }
 
+// AddTableImageTxParams adds a table image and optionally makes it the only primary image.
+type AddTableImageTxParams struct {
+	Image AddTableImageParams
+}
+
 // UpdateTableStatusTxParams updates table status through the table transaction boundary.
 type UpdateTableStatusTxParams struct {
 	ID                          int64
@@ -286,11 +291,47 @@ func (store *SQLStore) DeleteTableTx(ctx context.Context, arg DeleteTableParams)
 	return result, err
 }
 
+// AddTableImageTx adds an image and clears other primary images atomically when the new image is primary.
+func (store *SQLStore) AddTableImageTx(ctx context.Context, arg AddTableImageTxParams) (TableImage, error) {
+	var result TableImage
+
+	err := store.execTx(ctx, func(q *Queries) error {
+		var err error
+		if arg.Image.IsPrimary {
+			if _, err = q.GetTableForUpdate(ctx, arg.Image.TableID); err != nil {
+				return err
+			}
+		}
+
+		result, err = q.AddTableImage(ctx, arg.Image)
+		if err != nil {
+			return err
+		}
+
+		if result.IsPrimary {
+			if err := q.ClearOtherPrimaryTableImages(ctx, ClearOtherPrimaryTableImagesParams{
+				TableID: result.TableID,
+				ID:      result.ID,
+			}); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+
+	return result, err
+}
+
 // SetTableImagePrimaryTx verifies the image belongs to the table, then switches the table primary image atomically.
 func (store *SQLStore) SetTableImagePrimaryTx(ctx context.Context, arg SetTableImagePrimaryTxParams) (TableImage, error) {
 	var result TableImage
 
 	err := store.execTx(ctx, func(q *Queries) error {
+		if _, err := q.GetTableForUpdate(ctx, arg.TableID); err != nil {
+			return err
+		}
+
 		image, err := q.SetTableImagePrimary(ctx, SetTableImagePrimaryParams{
 			TableID: arg.TableID,
 			ID:      arg.ImageID,

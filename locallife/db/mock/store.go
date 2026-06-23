@@ -267,6 +267,21 @@ func (mr *MockStoreMockRecorder) AddTableImage(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTableImage", reflect.TypeOf((*MockStore)(nil).AddTableImage), ctx, arg)
 }
 
+// AddTableImageTx mocks base method.
+func (m *MockStore) AddTableImageTx(ctx context.Context, arg db.AddTableImageTxParams) (db.TableImage, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddTableImageTx", ctx, arg)
+	ret0, _ := ret[0].(db.TableImage)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AddTableImageTx indicates an expected call of AddTableImageTx.
+func (mr *MockStoreMockRecorder) AddTableImageTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTableImageTx", reflect.TypeOf((*MockStore)(nil).AddTableImageTx), ctx, arg)
+}
+
 // AddTableTag mocks base method.
 func (m *MockStore) AddTableTag(ctx context.Context, arg db.AddTableTagParams) (db.TableTag, error) {
 	m.ctrl.T.Helper()

@@ -13160,6 +13160,13 @@ LIMIT 200;
 - 服务端生成：`generateTableQRCode` 现在通过统一 helper 生成 scene；当 `table_no` 含 `-` 或 scene 超过微信 32 字符限制时，改用稳定的 `tid_<tableID>`，避免继续生产会被小程序截断的 `m_<merchantID>-t_<tableNo>`。
 - 小程序解析：`scan-entry` 的 scene 解析拆到 `entry-params.ts`，先识别 `tid_<tableID>`，再用锚定正则完整保留 `m_<merchantID>-t_<tableNo>` 中的桌号字段，因此既能消费新生成的 `tid_` 场景，也能正确处理历史短 scene 中包含 `-` 的桌号；旧 `table_` / `t` 数字桌台 ID 格式继续兼容。
 - 验证闭口：`locallife/api/scan_test.go` 覆盖含 `-` 桌号会生成 `tid_<tableID>`；`weapp/scripts/check-dine-in-scan-entry-scene.test.js` 覆盖含 `-` 桌号、URL encoded scene、`tid_`、旧 `t` 格式和非法 scene。已执行 `go test ./api -run TestGenerateTableQRCodeAPI -count=1`、`npm run check:dine-in-scan-entry-scene`、`npm run compile`、`npm run lint`。
+
+##### P2-F06-3/4 修复闭口补记（2026-06-23）
+
+- 已完成范围：本次关闭当前写路径中“新增桌台图片并同时设为主图”的分段写缺口，防止插入失败留下无主图，以及同桌主图写入并发下互相穿透产生多主图；不处理 `P2-F06-2` 的 QR asset/table 指针半状态，也不在本轮做历史 `table_images` 脏数据清理。
+- 持久化边界：新增 `AddTableImageTx`，主图新增时先锁定对应 `tables` 行，再插入 `table_images`，随后在同一事务内清除同桌其它主图；任一步失败都会回滚，不再先清旧主图。已有图片设主图的 `SetTableImagePrimaryTx` 也补同一桌台行锁，使两个主图写入口共享串行化边界。
+- API 边界：`addTableImage` 仍先做商户/桌台归属、media asset 类别、上传确认、审核状态、可见性与上传者归属校验；只有 `is_primary=true` 的新增请求切到事务入口，非主图新增继续走原 `AddTableImage` 轻量路径。
+- 验证闭口：`api/table_test.go` 覆盖主图新增必须调用 `AddTableImageTx` 且失败时不得调用旧的先清主图入口；`db/sqlc/table_test.go` 覆盖同桌旧主图被清除、其它桌主图不受影响。已执行 `go test ./api -run TestAddTableImageAPI -count=1`、`go test ./db/sqlc -run 'Test(AddTableImageTxPrimaryClearsExistingPrimaryWithinTable|SetTableImagePrimaryTx)' -count=1`、`go test ./api -count=1`、`make check-generated`、`git diff --check`。`go test ./db/sqlc -count=1` 仍在既有 `TestListProfitSharingConfigsForRegionExcludesMerchantOverridesOutsideRegion` 上失败，单跑同样失败，和本轮桌台图片写路径无交集；`TestDeactivateStaleMerchantAppDevices` 在包级污染下失败、单跑通过。`make lint-filesize` 仍因仓库既有 63 个超限 Go 文件失败，本轮未新增超限文件。
 - 生产 SQL 模板：
 
 ```sql
@@ -17309,7 +17316,8 @@ ORDER BY row_count DESC, oldest_signal_at ASC;
 | --- | --- | --- | --- | --- | --- | --- |
 | P4-B02-1 | P4-B05-6 / P2-F06 | S1 | 已有生产聚合命中 + `scan-entry` 解析代码 + `generateTableQRCode` scene 代码 | `table_no` 含 `-` 且 `len("m_<merchantID>-t_<tableNo>") <= 32`，扫码后被 `/t_([^-]+)/` 截断 | `weapp/miniprogram/pages/dine-in/scan-entry/entry-params.ts` parser 回归 + `locallife/api/scan_test.go` scene 生成回归 | implemented 2026-06-23 |
 | P4-B02-2 | P4-B01B-4 / P0-F10 | S2 | 已有生产聚合命中 + `ClaimBehaviorActionRecoveryScheduler` 只回收 `created/failed` + `executeClaimBehaviorAction` 对 `running` 不做回收 | `behavior_actions` 中 `action_type in ('block','recovery','release','notify')`、`status='running'`、`created_at < now() - interval '30 minutes'`，RunOnce 后仍不会被专门重扫 | `worker/claim_behavior_action_recovery_scheduler_test.go` 回收范围回归 + 现有 `worker/task_claim_behavior_action_test.go` running 重入覆盖 | implemented 2026-06-23 |
-| P4-B02-3 | P4-B01B-5 / P0-F11 | S2 | 已有生产聚合命中 + `RefundRecoveryScheduler` 只重扫 `processing` + `SubmitWithdrawal` 在 refund 结果不确定时保留 `pending` 待 query/retry | `refund_orders.status='pending'`、`external_payment_commands.command_status in ('unknown', null)`、`created_at < now() - interval '30 minutes'`，RunOnce 后仍不会被恢复器回扫 | `worker/refund_recovery_scheduler_test.go` pending/unknown 反例 + `logic/rider_deposit_refund_service_test.go` 不确定结果保留 pending 回归 | card written |
+| P4-B02-3 | P4-B01B-5 / P0-F11 | S2 | 已有生产聚合命中 + `RefundRecoveryScheduler` 只重扫 `processing` + `SubmitWithdrawal` 在 refund 结果不确定时保留 `pending` 待 query/retry | `refund_orders.status='pending'`、`external_payment_commands.command_status in ('unknown', null)`、`created_at < now() - interval '30 minutes'`，RunOnce 后仍不会被恢复器回扫 | `worker/refund_recovery_scheduler_test.go` pending/unknown 反例 + `logic/rider_deposit_refund_service_test.go` 不确定结果保留 pending 回归 | implemented 2026-06-23 |
+| P4-B02-4 | P4-B05-6 / P2-F06 | S1 | 已有生产聚合命中 + `addTableImage` 先清旧主图再插新图 + `SetTableImagePrimaryTx` 既有事务模式 | `is_primary=true` 新增图片时，旧主图清除和新图插入分段；插入失败会无主图，并发主图写入可能多主图 | `api/table_test.go` 主图新增路由回归 + `db/sqlc/table_test.go` `AddTableImageTx` 事务回归 | implemented 2026-06-23 |
 
 - 现有测试边界：
   - `P4-B02-1` 现有 `api/scan_test.go` 只覆盖 `generateTableQRCode` 的服务端生成与回写，不覆盖小程序 `scan-entry` 对 scene 的解析分支；`weapp/miniprogram/pages/dine-in/scan-entry/scan-entry.ts` 也没有独立的解析单测，因此这条的最小复现仍需要新补一条 parser 回归，而不是依赖现有二维码生成测试。
@@ -17339,6 +17347,8 @@ ORDER BY row_count DESC, oldest_signal_at ASC;
 
 - 2026-06-23 修复闭口补记：`P2-F06-1` 的桌台二维码 scene 截断缺口已完成最小实现。后端在 `table_no` 含 `-` 或 scene 超长时统一回退 `tid_<tableID>`；小程序扫码入口改为共享 `entry-params.ts` parser，完整保留历史 `m_<merchantID>-t_<tableNo>` scene 中的含 `-` 桌号，并兼容 `tid_` 与旧 `t` / `table_` 数字桌台 ID。`api/scan_test.go` 已覆盖含 `-` 桌号的生成回归，`check:dine-in-scan-entry-scene` 覆盖 parser 分支；本次未改 SQL/query、Swagger、支付/履约主状态或视觉 UI。
 
+- 2026-06-23 修复闭口补记：`P2-F06-3/4` 的桌台主图投影写路径已完成最小实现。新增图片同时设主图时，API 现在调用 `AddTableImageTx`，在同一事务内锁桌台、插新图、清同桌其它主图；已有图片设主图的事务也补同一桌台锁。媒体资产校验、商户/桌台归属、非主图新增路径保持原行为。本轮不改 migration，不处理历史无主图/多主图脏数据；历史治理继续按只读 SQL 盘点后另排。
+
 ### P4-B03. 修复批次草案门禁与占位
 
 - 目标：只在生产取证和本地复现给出足够证据后，排列修复批次；本节不作为直接改代码的授权，也不把候选风险自动升级为已确认 bug。
@@ -17359,4 +17369,5 @@ ORDER BY row_count DESC, oldest_signal_at ASC;
 | --- | --- | --- | --- | --- | --- | --- |
 | P4-B03-1 | P4-B02-1 / P2-F06 | P2-F06 | S1 | parser guard / scene encoding | `weapp/miniprogram/pages/dine-in/scan-entry/entry-params.ts` parser 回归 + `locallife/api/scan_test.go` scene 回归 | completed 2026-06-23 |
 | P4-B03-2 | P4-B02-2 / P0-F10 | P0-F10 | S2 | add running-action recovery scan + stale-action reclaim test | `worker/claim_behavior_action_recovery_scheduler_test.go` 追加 running/stale 负例；`worker/task_claim_behavior_action_test.go` 现有 running 重入覆盖 | completed 2026-06-23 |
-| P4-B03-3 | P4-B02-3 / P0-F11 | P0-F11 | S2 | add rider-deposit pending/unknown recovery scan + replay test | `worker/refund_recovery_scheduler_test.go` 补 rider deposit pending/unknown 负例 + `logic/rider_deposit_refund_service_test.go` 补不确定命令保持 pending 的回归 | card written |
+| P4-B03-3 | P4-B02-3 / P0-F11 | P0-F11 | S2 | add rider-deposit pending/unknown recovery scan + replay test | `worker/refund_recovery_scheduler_test.go` 补 rider deposit pending/unknown 反例/正例 + DB-backed rider deposit pending/unknown 集成验证 | completed 2026-06-23 |
+| P4-B03-4 | P4-B02-4 / P2-F06 | P2-F06 | S1 | transactional table-image primary projection | `api/table_test.go` 主图新增路由回归 + `db/sqlc/table_test.go` `AddTableImageTx` 事务回归 | completed 2026-06-23 |

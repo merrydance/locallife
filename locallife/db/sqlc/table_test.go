@@ -1100,6 +1100,57 @@ func TestSetTableImagePrimaryTxRejectsDifferentTableWithoutClearingCurrentPrimar
 	require.True(t, primaryImage.IsPrimary)
 }
 
+func TestAddTableImageTxPrimaryClearsExistingPrimaryWithinTable(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	table := createRandomRoom(t, merchant.ID)
+	otherTable := createRandomRoom(t, merchant.ID)
+
+	currentPrimary, err := testStore.AddTableImage(context.Background(), AddTableImageParams{
+		TableID:      table.ID,
+		MediaAssetID: pgtype.Int8{},
+		SortOrder:    1,
+		IsPrimary:    true,
+	})
+	require.NoError(t, err)
+
+	otherPrimary, err := testStore.AddTableImage(context.Background(), AddTableImageParams{
+		TableID:      otherTable.ID,
+		MediaAssetID: pgtype.Int8{},
+		SortOrder:    1,
+		IsPrimary:    true,
+	})
+	require.NoError(t, err)
+
+	newPrimary, err := testStore.AddTableImageTx(context.Background(), AddTableImageTxParams{
+		Image: AddTableImageParams{
+			TableID:      table.ID,
+			MediaAssetID: pgtype.Int8{},
+			SortOrder:    2,
+			IsPrimary:    true,
+		},
+	})
+	require.NoError(t, err)
+	require.True(t, newPrimary.IsPrimary)
+
+	tableImages, err := testStore.ListTableImages(context.Background(), table.ID)
+	require.NoError(t, err)
+	for _, img := range tableImages {
+		if img.ID == newPrimary.ID {
+			require.True(t, img.IsPrimary)
+			continue
+		}
+		require.False(t, img.IsPrimary)
+	}
+
+	otherImages, err := testStore.ListTableImages(context.Background(), otherTable.ID)
+	require.NoError(t, err)
+	require.Len(t, otherImages, 1)
+	require.Equal(t, otherPrimary.ID, otherImages[0].ID)
+	require.True(t, otherImages[0].IsPrimary)
+	require.NotEqual(t, currentPrimary.ID, newPrimary.ID)
+}
+
 func TestDeleteTableImage(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)

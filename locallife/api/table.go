@@ -1232,25 +1232,28 @@ func (server *Server) addTableImage(ctx *gin.Context) {
 		return
 	}
 
-	// 如果设置为主图，先清除其他主图标记
-	if req.IsPrimary {
-		err = server.store.SetPrimaryTableImage(ctx, uriReq.ID)
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-	}
-
-	// 添加图片
-	image, err := server.store.AddTableImage(ctx, db.AddTableImageParams{
+	imageParams := db.AddTableImageParams{
 		TableID:      uriReq.ID,
 		MediaAssetID: pgtype.Int8{Int64: req.MediaAssetID, Valid: true},
 		SortOrder:    req.SortOrder,
 		IsPrimary:    req.IsPrimary,
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
+	}
+
+	var image db.TableImage
+	if req.IsPrimary {
+		image, err = server.store.AddTableImageTx(ctx, db.AddTableImageTxParams{
+			Image: imageParams,
+		})
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+	} else {
+		image, err = server.store.AddTableImage(ctx, imageParams)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
 	}
 
 	ctx.JSON(http.StatusCreated, tableImageResponse{
