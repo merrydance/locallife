@@ -1328,6 +1328,144 @@ func (q *Queries) MarkPaymentDomainOutboxPublished(ctx context.Context, id int64
 	return i, err
 }
 
+const reclaimStaleExternalPaymentFactApplicationsByTarget = `-- name: ReclaimStaleExternalPaymentFactApplicationsByTarget :many
+WITH stale_applications AS (
+    SELECT epfa.id
+    FROM external_payment_fact_applications epfa
+    WHERE epfa.consumer = $3
+        AND epfa.business_object_type = $4
+        AND epfa.status = 'processing'
+        AND epfa.updated_at < $5
+    ORDER BY epfa.updated_at ASC, epfa.id ASC
+    LIMIT $6
+    FOR UPDATE SKIP LOCKED
+)
+UPDATE external_payment_fact_applications epfa
+SET status = 'failed',
+    last_error = $1,
+    next_retry_at = $2,
+    updated_at = now()
+FROM stale_applications
+WHERE epfa.id = stale_applications.id
+RETURNING epfa.id, epfa.fact_id, epfa.consumer, epfa.business_object_type, epfa.business_object_id, epfa.status, epfa.attempt_count, epfa.last_error, epfa.next_retry_at, epfa.applied_at, epfa.created_at, epfa.updated_at
+`
+
+type ReclaimStaleExternalPaymentFactApplicationsByTargetParams struct {
+	LastError          pgtype.Text        `json:"last_error"`
+	NextRetryAt        pgtype.Timestamptz `json:"next_retry_at"`
+	Consumer           string             `json:"consumer"`
+	BusinessObjectType string             `json:"business_object_type"`
+	StaleBefore        time.Time          `json:"stale_before"`
+	LimitCount         int32              `json:"limit_count"`
+}
+
+func (q *Queries) ReclaimStaleExternalPaymentFactApplicationsByTarget(ctx context.Context, arg ReclaimStaleExternalPaymentFactApplicationsByTargetParams) ([]ExternalPaymentFactApplication, error) {
+	rows, err := q.db.Query(ctx, reclaimStaleExternalPaymentFactApplicationsByTarget,
+		arg.LastError,
+		arg.NextRetryAt,
+		arg.Consumer,
+		arg.BusinessObjectType,
+		arg.StaleBefore,
+		arg.LimitCount,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExternalPaymentFactApplication{}
+	for rows.Next() {
+		var i ExternalPaymentFactApplication
+		if err := rows.Scan(
+			&i.ID,
+			&i.FactID,
+			&i.Consumer,
+			&i.BusinessObjectType,
+			&i.BusinessObjectID,
+			&i.Status,
+			&i.AttemptCount,
+			&i.LastError,
+			&i.NextRetryAt,
+			&i.AppliedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const reclaimStalePaymentDomainOutboxByEventType = `-- name: ReclaimStalePaymentDomainOutboxByEventType :many
+WITH stale_outbox AS (
+    SELECT pdo.id
+    FROM payment_domain_outbox pdo
+    WHERE pdo.event_type = $3
+        AND pdo.status = 'processing'
+        AND pdo.updated_at < $4
+    ORDER BY pdo.updated_at ASC, pdo.id ASC
+    LIMIT $5
+    FOR UPDATE SKIP LOCKED
+)
+UPDATE payment_domain_outbox pdo
+SET status = 'failed',
+    last_error = $1,
+    next_retry_at = $2,
+    updated_at = now()
+FROM stale_outbox
+WHERE pdo.id = stale_outbox.id
+RETURNING pdo.id, pdo.event_type, pdo.aggregate_type, pdo.aggregate_id, pdo.payload, pdo.status, pdo.attempt_count, pdo.next_retry_at, pdo.last_error, pdo.created_at, pdo.updated_at
+`
+
+type ReclaimStalePaymentDomainOutboxByEventTypeParams struct {
+	LastError   pgtype.Text        `json:"last_error"`
+	NextRetryAt pgtype.Timestamptz `json:"next_retry_at"`
+	EventType   string             `json:"event_type"`
+	StaleBefore time.Time          `json:"stale_before"`
+	LimitCount  int32              `json:"limit_count"`
+}
+
+func (q *Queries) ReclaimStalePaymentDomainOutboxByEventType(ctx context.Context, arg ReclaimStalePaymentDomainOutboxByEventTypeParams) ([]PaymentDomainOutbox, error) {
+	rows, err := q.db.Query(ctx, reclaimStalePaymentDomainOutboxByEventType,
+		arg.LastError,
+		arg.NextRetryAt,
+		arg.EventType,
+		arg.StaleBefore,
+		arg.LimitCount,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PaymentDomainOutbox{}
+	for rows.Next() {
+		var i PaymentDomainOutbox
+		if err := rows.Scan(
+			&i.ID,
+			&i.EventType,
+			&i.AggregateType,
+			&i.AggregateID,
+			&i.Payload,
+			&i.Status,
+			&i.AttemptCount,
+			&i.NextRetryAt,
+			&i.LastError,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateExternalPaymentCommandOutcome = `-- name: UpdateExternalPaymentCommandOutcome :one
 UPDATE external_payment_commands
 SET command_status = CASE

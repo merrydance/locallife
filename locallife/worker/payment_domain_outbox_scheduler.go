@@ -15,6 +15,8 @@ import (
 const (
 	paymentDomainOutboxCron       = "*/1 * * * *"
 	paymentDomainOutboxBatchLimit = int32(200)
+	paymentDomainOutboxStaleAfter = 15 * time.Minute
+	paymentDomainOutboxStaleError = "stale processing payment domain outbox reclaimed by scheduler"
 	paymentDomainOutboxTaskUnique = 30 * time.Second
 )
 
@@ -134,6 +136,8 @@ func (s *PaymentDomainOutboxScheduler) runOnce(ctx context.Context) {
 }
 
 func (s *PaymentDomainOutboxScheduler) enqueuePendingEventType(ctx context.Context, eventType string, now time.Time) {
+	s.reclaimStaleEventType(ctx, eventType, now)
+
 	entries, err := s.store.ListPendingPaymentDomainOutboxByEventType(ctx, db.ListPendingPaymentDomainOutboxByEventTypeParams{
 		EventType:  eventType,
 		NowAt:      pgtype.Timestamptz{Time: now, Valid: true},
@@ -160,4 +164,25 @@ func (s *PaymentDomainOutboxScheduler) enqueuePendingEventType(ctx context.Conte
 				Msg("enqueue payment domain outbox task failed")
 		}
 	}
+}
+
+func (s *PaymentDomainOutboxScheduler) reclaimStaleEventType(ctx context.Context, eventType string, now time.Time) {
+	reclaimed, err := s.store.ReclaimStalePaymentDomainOutboxByEventType(ctx, db.ReclaimStalePaymentDomainOutboxByEventTypeParams{
+		EventType:   eventType,
+		StaleBefore: now.Add(-paymentDomainOutboxStaleAfter),
+		LastError:   pgtype.Text{String: paymentDomainOutboxStaleError, Valid: true},
+		NextRetryAt: pgtype.Timestamptz{Time: now, Valid: true},
+		LimitCount:  paymentDomainOutboxBatchLimit,
+	})
+	if err != nil {
+		log.Error().Err(err).Str("event_type", eventType).Msg("reclaim stale payment domain outbox entries failed")
+		return
+	}
+	if len(reclaimed) == 0 {
+		return
+	}
+	log.Warn().
+		Int("reclaimed_count", len(reclaimed)).
+		Str("event_type", eventType).
+		Msg("reclaimed stale payment domain outbox entries for retry")
 }

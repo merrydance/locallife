@@ -19888,6 +19888,36 @@ func (mr *MockStoreMockRecorder) RechargeTx(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RechargeTx", reflect.TypeOf((*MockStore)(nil).RechargeTx), ctx, arg)
 }
 
+// ReclaimStaleExternalPaymentFactApplicationsByTarget mocks base method.
+func (m *MockStore) ReclaimStaleExternalPaymentFactApplicationsByTarget(ctx context.Context, arg db.ReclaimStaleExternalPaymentFactApplicationsByTargetParams) ([]db.ExternalPaymentFactApplication, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReclaimStaleExternalPaymentFactApplicationsByTarget", ctx, arg)
+	ret0, _ := ret[0].([]db.ExternalPaymentFactApplication)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReclaimStaleExternalPaymentFactApplicationsByTarget indicates an expected call of ReclaimStaleExternalPaymentFactApplicationsByTarget.
+func (mr *MockStoreMockRecorder) ReclaimStaleExternalPaymentFactApplicationsByTarget(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReclaimStaleExternalPaymentFactApplicationsByTarget", reflect.TypeOf((*MockStore)(nil).ReclaimStaleExternalPaymentFactApplicationsByTarget), ctx, arg)
+}
+
+// ReclaimStalePaymentDomainOutboxByEventType mocks base method.
+func (m *MockStore) ReclaimStalePaymentDomainOutboxByEventType(ctx context.Context, arg db.ReclaimStalePaymentDomainOutboxByEventTypeParams) ([]db.PaymentDomainOutbox, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReclaimStalePaymentDomainOutboxByEventType", ctx, arg)
+	ret0, _ := ret[0].([]db.PaymentDomainOutbox)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReclaimStalePaymentDomainOutboxByEventType indicates an expected call of ReclaimStalePaymentDomainOutboxByEventType.
+func (mr *MockStoreMockRecorder) ReclaimStalePaymentDomainOutboxByEventType(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReclaimStalePaymentDomainOutboxByEventType", reflect.TypeOf((*MockStore)(nil).ReclaimStalePaymentDomainOutboxByEventType), ctx, arg)
+}
+
 // RecordBrowseHistory mocks base method.
 func (m *MockStore) RecordBrowseHistory(ctx context.Context, arg db.RecordBrowseHistoryParams) (db.BrowseHistory, error) {
 	m.ctrl.T.Helper()

@@ -1734,6 +1734,8 @@ type Querier interface {
 	MarkUserVoucherAsUnused(ctx context.Context, arg MarkUserVoucherAsUnusedParams) (UserVoucher, error)
 	MarkUserVoucherAsUsed(ctx context.Context, arg MarkUserVoucherAsUsedParams) (UserVoucher, error)
 	ReactivateDisabledMerchantStaff(ctx context.Context, arg ReactivateDisabledMerchantStaffParams) (MerchantStaff, error)
+	ReclaimStaleExternalPaymentFactApplicationsByTarget(ctx context.Context, arg ReclaimStaleExternalPaymentFactApplicationsByTargetParams) ([]ExternalPaymentFactApplication, error)
+	ReclaimStalePaymentDomainOutboxByEventType(ctx context.Context, arg ReclaimStalePaymentDomainOutboxByEventTypeParams) ([]PaymentDomainOutbox, error)
 	// 浏览历史查询
 	RecordBrowseHistory(ctx context.Context, arg RecordBrowseHistoryParams) (BrowseHistory, error)
 	RecordMerchantAppDevicePermanentPushFailure(ctx context.Context, arg RecordMerchantAppDevicePermanentPushFailureParams) (int64, error)

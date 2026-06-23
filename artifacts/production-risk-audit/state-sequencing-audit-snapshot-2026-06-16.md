@@ -7054,6 +7054,13 @@ ORDER BY pdo.created_at DESC;
   - 若 P0-F03-7 显示 outbox 已 published 但 application/fact 未 terminalized/applied：按具体 consumer 回放幂等性决定是否人工补 mark，不能盲目重跑 domain side-effect。
   - 本族修复要先补观测和人工 runbook，再改核心状态机；资金链底座误修的 blast radius 高。
 
+##### P0-F03-1/5 修复闭口补记（2026-06-23）
+
+- 已完成范围：本次只关闭公共资金底座中 `external_payment_fact_applications` 与 `payment_domain_outbox` 的 stale `processing` 无自动回收缺口；不改 provider DTO/字段语义，不改具体支付、退款、分账、提现 consumer 的业务终态处理，也不处理 failed application 直接任务绕过 `next_retry_at`、fact-without-application 或历史 outbox payload drift。
+- 恢复边界：`PaymentFactApplicationScheduler` 每轮按既有 consumer/business_object_type 白名单，先把 `updated_at` 早于 15 分钟的 `processing` application 标回 `failed`，写入可观测 `last_error` 和当前 `next_retry_at`，再复用既有 retryable 列表重新入队；近期 `processing` 和非目标 consumer 不会被回收。
+- Outbox 边界：`PaymentDomainOutboxScheduler` 每轮按既有 event_type 白名单，先把 `updated_at` 早于 15 分钟的 `processing` outbox 标回 `failed` 并立即进入既有 pending/failed 派发扫描；近期 `processing` 和非目标 event_type 不会被回收。
+- 验证闭口：`db/sqlc/external_payment_fact_test.go` 覆盖两条 SQL 只回收 stale processing、保留 recent processing 和非目标行，并确认回收后进入 retryable 列表；`worker/payment_fact_application_scheduler_test.go` 与 `worker/task_payment_domain_outbox_test.go` 覆盖 scheduler 先 reclaim 再 enqueue 的调用顺序。已执行 `go test ./worker -run TestPaymentFactApplicationSchedulerRunOnceReclaimsStaleProcessingApplications -count=1`、`go test ./worker -run TestPaymentDomainOutboxSchedulerRunOnceReclaimsStaleProcessingEntries -count=1`、`go test ./worker -count=1`、`go test ./db/sqlc -run TestReclaimStaleExternalPaymentFactApplicationsByTarget -count=1`、`go test ./db/sqlc -run TestReclaimStalePaymentDomainOutboxByEventType -count=1`、`go test ./db/sqlc -run 'Test(ReclaimStaleExternalPaymentFactApplicationsByTarget|ReclaimStalePaymentDomainOutboxByEventType|ExternalPaymentFactApplication_StateTransitions|PaymentDomainOutbox_ClaimAndMarkLifecycle)' -count=1`、`make check-generated`。`go test ./db/sqlc -count=1` 仍因既有 `TestListProfitSharingConfigsForRegionExcludesMerchantOverridesOutsideRegion` 失败未通过，单独重跑该用例同样失败；本轮 touched path 的 sqlc 用例均通过。
+
 #### P0-F04. paid-after-cancel / reservation late success 的资金补偿断链
 
 - 原始编号：`28/29/194/255/361/368/369/NP-199/NP-209/NP-213`，与 timeout 家族 `P0-F02` 交叉。
@@ -17326,6 +17333,7 @@ ORDER BY row_count DESC, oldest_signal_at ASC;
 | P4-B02-3 | P4-B01B-5 / P0-F11 | S2 | 已有生产聚合命中 + `RefundRecoveryScheduler` 只重扫 `processing` + `SubmitWithdrawal` 在 refund 结果不确定时保留 `pending` 待 query/retry | `refund_orders.status='pending'`、`external_payment_commands.command_status in ('unknown', null)`、`created_at < now() - interval '30 minutes'`，RunOnce 后仍不会被恢复器回扫 | `worker/refund_recovery_scheduler_test.go` pending/unknown 反例 + `logic/rider_deposit_refund_service_test.go` 不确定结果保留 pending 回归 | implemented 2026-06-23 |
 | P4-B02-4 | P4-B05-6 / P2-F06 | S1 | 已有生产聚合命中 + `addTableImage` 先清旧主图再插新图 + `SetTableImagePrimaryTx` 既有事务模式 | `is_primary=true` 新增图片时，旧主图清除和新图插入分段；插入失败会无主图，并发主图写入可能多主图 | `api/table_test.go` 主图新增路由回归 + `db/sqlc/table_test.go` `AddTableImageTx` 事务回归 | implemented 2026-06-23 |
 | P4-B02-5 | P4-B05-6 / P2-F06 | S1 | 已有生产聚合命中 + `storeTableQRCode` 先写 object/media asset 后回写 table 指针 | `CreateMediaAsset` 已成功但 `UpdateTable(qr_code_url)` 失败；第二次相同 QR 内容重试撞 `media_assets.object_key` 唯一键，无法继续修复桌台指针 | `api/scan_test.go` store-level object-key 复用回归 + handler 重试回写回归 | implemented 2026-06-23 |
+| P4-B02-6 | P4-B01A-1 / P0-F03 | S2 | 已有生产聚合命中 + `PaymentFactApplicationScheduler` / `PaymentDomainOutboxScheduler` 只扫 `pending/failed`，不回收 `processing` | `external_payment_fact_applications.status='processing'` 或 `payment_domain_outbox.status='processing'` 且 `updated_at < now() - interval '15 minutes'`；worker 崩溃后 scheduler 不会重新入队 | `db/sqlc/external_payment_fact_test.go` stale reclaim SQL 回归 + `worker/*scheduler*_test.go` reclaim 后重新入队回归 | implemented 2026-06-23 |
 
 - 现有测试边界：
   - `P4-B02-1` 现有 `api/scan_test.go` 只覆盖 `generateTableQRCode` 的服务端生成与回写，不覆盖小程序 `scan-entry` 对 scene 的解析分支；`weapp/miniprogram/pages/dine-in/scan-entry/scan-entry.ts` 也没有独立的解析单测，因此这条的最小复现仍需要新补一条 parser 回归，而不是依赖现有二维码生成测试。
@@ -17382,3 +17390,4 @@ ORDER BY row_count DESC, oldest_signal_at ASC;
 | P4-B03-3 | P4-B02-3 / P0-F11 | P0-F11 | S2 | add rider-deposit pending/unknown recovery scan + replay test | `worker/refund_recovery_scheduler_test.go` 补 rider deposit pending/unknown 反例/正例 + DB-backed rider deposit pending/unknown 集成验证 | completed 2026-06-23 |
 | P4-B03-4 | P4-B02-4 / P2-F06 | P2-F06 | S1 | transactional table-image primary projection | `api/table_test.go` 主图新增路由回归 + `db/sqlc/table_test.go` `AddTableImageTx` 事务回归 | completed 2026-06-23 |
 | P4-B03-5 | P4-B02-5 / P2-F06 | P2-F06 | S1 | QR media asset idempotent reuse + table pointer retry | `api/scan_test.go` object-key 复用回归 + handler 重试回写回归 | completed 2026-06-23 |
+| P4-B03-6 | P4-B02-6 / P0-F03 | P0-F03 | S2 | reclaim stale payment fact application/outbox processing rows | `db/sqlc/external_payment_fact_test.go` stale reclaim SQL 回归 + `worker/payment_fact_application_scheduler_test.go` / `worker/task_payment_domain_outbox_test.go` scheduler 回归 | completed 2026-06-23 |

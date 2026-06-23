@@ -15,9 +15,11 @@ import (
 const (
 	paymentFactApplicationCron              = "*/1 * * * *"
 	paymentFactApplicationBatchLimit        = int32(200)
+	paymentFactApplicationProcessingStale   = 15 * time.Minute
 	paymentFactApplicationTaskUnique        = 30 * time.Second
 	claimRecoveryPaymentFactConsumer        = "claim_recovery_domain"
 	baofuVerifyFeePaymentFactConsumerDomain = "baofu_account_verify_fee_domain"
+	paymentFactApplicationStaleError        = "stale processing payment fact application reclaimed by scheduler"
 )
 
 var paymentFactApplicationSchedulerTargets = []struct {
@@ -105,8 +107,11 @@ func (s *PaymentFactApplicationScheduler) runOnce(ctx context.Context) {
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 
-	nowAt := pgtype.Timestamptz{Time: time.Now(), Valid: true}
+	now := time.Now()
+	nowAt := pgtype.Timestamptz{Time: now, Valid: true}
 	for _, target := range paymentFactApplicationSchedulerTargets {
+		s.reclaimStaleTarget(ctx, target.consumer, target.businessObjectType, now)
+
 		applications, err := s.store.ListRetryableExternalPaymentFactApplicationsByTarget(ctx, db.ListRetryableExternalPaymentFactApplicationsByTargetParams{
 			Consumer:           target.consumer,
 			BusinessObjectType: target.businessObjectType,
@@ -139,4 +144,30 @@ func (s *PaymentFactApplicationScheduler) runOnce(ctx context.Context) {
 			}
 		}
 	}
+}
+
+func (s *PaymentFactApplicationScheduler) reclaimStaleTarget(ctx context.Context, consumer, businessObjectType string, now time.Time) {
+	reclaimed, err := s.store.ReclaimStaleExternalPaymentFactApplicationsByTarget(ctx, db.ReclaimStaleExternalPaymentFactApplicationsByTargetParams{
+		Consumer:           consumer,
+		BusinessObjectType: businessObjectType,
+		StaleBefore:        now.Add(-paymentFactApplicationProcessingStale),
+		LastError:          pgtype.Text{String: paymentFactApplicationStaleError, Valid: true},
+		NextRetryAt:        pgtype.Timestamptz{Time: now, Valid: true},
+		LimitCount:         paymentFactApplicationBatchLimit,
+	})
+	if err != nil {
+		log.Error().Err(err).
+			Str("consumer", consumer).
+			Str("business_object_type", businessObjectType).
+			Msg("reclaim stale payment fact applications failed")
+		return
+	}
+	if len(reclaimed) == 0 {
+		return
+	}
+	log.Warn().
+		Int("reclaimed_count", len(reclaimed)).
+		Str("consumer", consumer).
+		Str("business_object_type", businessObjectType).
+		Msg("reclaimed stale payment fact applications for retry")
 }

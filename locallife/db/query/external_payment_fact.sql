@@ -316,6 +316,27 @@ WHERE id = sqlc.arg(id)
     AND status = 'processing'
 RETURNING id, fact_id, consumer, business_object_type, business_object_id, status, attempt_count, last_error, next_retry_at, applied_at, created_at, updated_at;
 
+-- name: ReclaimStaleExternalPaymentFactApplicationsByTarget :many
+WITH stale_applications AS (
+    SELECT epfa.id
+    FROM external_payment_fact_applications epfa
+    WHERE epfa.consumer = sqlc.arg(consumer)
+        AND epfa.business_object_type = sqlc.arg(business_object_type)
+        AND epfa.status = 'processing'
+        AND epfa.updated_at < sqlc.arg(stale_before)
+    ORDER BY epfa.updated_at ASC, epfa.id ASC
+    LIMIT sqlc.arg(limit_count)
+    FOR UPDATE SKIP LOCKED
+)
+UPDATE external_payment_fact_applications epfa
+SET status = 'failed',
+    last_error = sqlc.arg(last_error),
+    next_retry_at = sqlc.arg(next_retry_at),
+    updated_at = now()
+FROM stale_applications
+WHERE epfa.id = stale_applications.id
+RETURNING epfa.id, epfa.fact_id, epfa.consumer, epfa.business_object_type, epfa.business_object_id, epfa.status, epfa.attempt_count, epfa.last_error, epfa.next_retry_at, epfa.applied_at, epfa.created_at, epfa.updated_at;
+
 -- name: ListRetryableExternalPaymentFactApplications :many
 SELECT id, fact_id, consumer, business_object_type, business_object_id, status, attempt_count, last_error, next_retry_at, applied_at, created_at, updated_at
 FROM external_payment_fact_applications
@@ -424,3 +445,23 @@ SET status = 'failed',
 WHERE id = sqlc.arg(id)
     AND status = 'processing'
 RETURNING id, event_type, aggregate_type, aggregate_id, payload, status, attempt_count, next_retry_at, last_error, created_at, updated_at;
+
+-- name: ReclaimStalePaymentDomainOutboxByEventType :many
+WITH stale_outbox AS (
+    SELECT pdo.id
+    FROM payment_domain_outbox pdo
+    WHERE pdo.event_type = sqlc.arg(event_type)
+        AND pdo.status = 'processing'
+        AND pdo.updated_at < sqlc.arg(stale_before)
+    ORDER BY pdo.updated_at ASC, pdo.id ASC
+    LIMIT sqlc.arg(limit_count)
+    FOR UPDATE SKIP LOCKED
+)
+UPDATE payment_domain_outbox pdo
+SET status = 'failed',
+    last_error = sqlc.arg(last_error),
+    next_retry_at = sqlc.arg(next_retry_at),
+    updated_at = now()
+FROM stale_outbox
+WHERE pdo.id = stale_outbox.id
+RETURNING pdo.id, pdo.event_type, pdo.aggregate_type, pdo.aggregate_id, pdo.payload, pdo.status, pdo.attempt_count, pdo.next_retry_at, pdo.last_error, pdo.created_at, pdo.updated_at;

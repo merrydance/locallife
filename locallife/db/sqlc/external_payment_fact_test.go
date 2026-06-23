@@ -469,6 +469,83 @@ func TestExternalPaymentFactApplication_StateTransitions(t *testing.T) {
 	require.True(t, applied.AppliedAt.Valid)
 }
 
+func TestReclaimStaleExternalPaymentFactApplicationsByTarget(t *testing.T) {
+	ctx := context.Background()
+	now := time.Now().UTC()
+	staleUpdatedAt := now.Add(-20 * time.Minute)
+
+	staleFact := createRandomExternalPaymentFact(t, ExternalPaymentTerminalStatusSuccess, true)
+	staleApplication, err := testStore.CreateExternalPaymentFactApplication(ctx, CreateExternalPaymentFactApplicationParams{
+		FactID:             staleFact.ID,
+		Consumer:           "rider_deposit_domain",
+		BusinessObjectType: "refund_order",
+		BusinessObjectID:   staleFact.BusinessObjectID.Int64,
+		Status:             ExternalPaymentFactApplicationStatusPending,
+	})
+	require.NoError(t, err)
+	staleApplication, err = testStore.ClaimExternalPaymentFactApplication(ctx, staleApplication.ID)
+	require.NoError(t, err)
+	setExternalPaymentFactApplicationUpdatedAt(t, staleApplication.ID, staleUpdatedAt)
+
+	recentFact := createRandomExternalPaymentFact(t, ExternalPaymentTerminalStatusSuccess, true)
+	recentApplication, err := testStore.CreateExternalPaymentFactApplication(ctx, CreateExternalPaymentFactApplicationParams{
+		FactID:             recentFact.ID,
+		Consumer:           "rider_deposit_domain",
+		BusinessObjectType: "refund_order",
+		BusinessObjectID:   recentFact.BusinessObjectID.Int64,
+		Status:             ExternalPaymentFactApplicationStatusPending,
+	})
+	require.NoError(t, err)
+	recentApplication, err = testStore.ClaimExternalPaymentFactApplication(ctx, recentApplication.ID)
+	require.NoError(t, err)
+
+	otherTargetFact := createRandomExternalPaymentFact(t, ExternalPaymentTerminalStatusSuccess, true)
+	otherTargetApplication, err := testStore.CreateExternalPaymentFactApplication(ctx, CreateExternalPaymentFactApplicationParams{
+		FactID:             otherTargetFact.ID,
+		Consumer:           "order_domain",
+		BusinessObjectType: "payment_order",
+		BusinessObjectID:   otherTargetFact.BusinessObjectID.Int64,
+		Status:             ExternalPaymentFactApplicationStatusPending,
+	})
+	require.NoError(t, err)
+	otherTargetApplication, err = testStore.ClaimExternalPaymentFactApplication(ctx, otherTargetApplication.ID)
+	require.NoError(t, err)
+	setExternalPaymentFactApplicationUpdatedAt(t, otherTargetApplication.ID, staleUpdatedAt)
+
+	reclaimed, err := testStore.ReclaimStaleExternalPaymentFactApplicationsByTarget(ctx, ReclaimStaleExternalPaymentFactApplicationsByTargetParams{
+		Consumer:           "rider_deposit_domain",
+		BusinessObjectType: "refund_order",
+		StaleBefore:        now.Add(-15 * time.Minute),
+		LastError:          pgtype.Text{String: "stale processing payment fact application reclaimed by scheduler", Valid: true},
+		NextRetryAt:        pgtype.Timestamptz{Time: now, Valid: true},
+		LimitCount:         10,
+	})
+	require.NoError(t, err)
+	require.Equal(t, []int64{staleApplication.ID}, externalPaymentFactApplicationIDs(reclaimed))
+	require.Equal(t, ExternalPaymentFactApplicationStatusFailed, reclaimed[0].Status)
+	require.Equal(t, int32(1), reclaimed[0].AttemptCount)
+	require.Equal(t, "stale processing payment fact application reclaimed by scheduler", reclaimed[0].LastError.String)
+	require.True(t, reclaimed[0].NextRetryAt.Valid)
+
+	recentAfter, err := testStore.GetExternalPaymentFactApplication(ctx, recentApplication.ID)
+	require.NoError(t, err)
+	require.Equal(t, ExternalPaymentFactApplicationStatusProcessing, recentAfter.Status)
+
+	otherTargetAfter, err := testStore.GetExternalPaymentFactApplication(ctx, otherTargetApplication.ID)
+	require.NoError(t, err)
+	require.Equal(t, ExternalPaymentFactApplicationStatusProcessing, otherTargetAfter.Status)
+
+	retryable, err := testStore.ListRetryableExternalPaymentFactApplicationsByTarget(ctx, ListRetryableExternalPaymentFactApplicationsByTargetParams{
+		Consumer:           "rider_deposit_domain",
+		BusinessObjectType: "refund_order",
+		NowAt:              pgtype.Timestamptz{Time: now.Add(time.Second), Valid: true},
+		LimitCount:         10,
+	})
+	require.NoError(t, err)
+	require.Contains(t, externalPaymentFactApplicationIDs(retryable), staleApplication.ID)
+	require.NotContains(t, externalPaymentFactApplicationIDs(retryable), recentApplication.ID)
+}
+
 func TestPaymentDomainOutbox_PendingList(t *testing.T) {
 	now := time.Now().UTC()
 	eventType := "rider_deposit_activated_" + util.RandomString(12)
@@ -621,6 +698,107 @@ func TestPaymentDomainOutbox_ClaimAndMarkLifecycle(t *testing.T) {
 		NextRetryAt: pgtype.Timestamptz{Time: now.Add(3 * time.Minute), Valid: true},
 	})
 	require.ErrorIs(t, err, ErrRecordNotFound)
+}
+
+func TestReclaimStalePaymentDomainOutboxByEventType(t *testing.T) {
+	ctx := context.Background()
+	now := time.Now().UTC()
+	eventType := "payment_domain_outbox_reclaim_" + util.RandomString(12)
+	otherEventType := "payment_domain_outbox_reclaim_other_" + util.RandomString(12)
+
+	staleEntry, err := testStore.CreatePaymentDomainOutbox(ctx, CreatePaymentDomainOutboxParams{
+		EventType:     eventType,
+		AggregateType: "profit_sharing_order",
+		AggregateID:   time.Now().UnixNano(),
+		Payload:       []byte(`{"profit_sharing_order_id":1}`),
+		Status:        PaymentDomainOutboxStatusPending,
+	})
+	require.NoError(t, err)
+	staleEntry, err = testStore.ClaimPaymentDomainOutbox(ctx, ClaimPaymentDomainOutboxParams{
+		ID:    staleEntry.ID,
+		NowAt: pgtype.Timestamptz{Time: now, Valid: true},
+	})
+	require.NoError(t, err)
+	setPaymentDomainOutboxUpdatedAt(t, staleEntry.ID, now.Add(-20*time.Minute))
+
+	recentEntry, err := testStore.CreatePaymentDomainOutbox(ctx, CreatePaymentDomainOutboxParams{
+		EventType:     eventType,
+		AggregateType: "profit_sharing_order",
+		AggregateID:   time.Now().UnixNano(),
+		Payload:       []byte(`{"profit_sharing_order_id":2}`),
+		Status:        PaymentDomainOutboxStatusPending,
+	})
+	require.NoError(t, err)
+	recentEntry, err = testStore.ClaimPaymentDomainOutbox(ctx, ClaimPaymentDomainOutboxParams{
+		ID:    recentEntry.ID,
+		NowAt: pgtype.Timestamptz{Time: now, Valid: true},
+	})
+	require.NoError(t, err)
+
+	otherEventEntry, err := testStore.CreatePaymentDomainOutbox(ctx, CreatePaymentDomainOutboxParams{
+		EventType:     otherEventType,
+		AggregateType: "profit_sharing_order",
+		AggregateID:   time.Now().UnixNano(),
+		Payload:       []byte(`{"profit_sharing_order_id":3}`),
+		Status:        PaymentDomainOutboxStatusPending,
+	})
+	require.NoError(t, err)
+	otherEventEntry, err = testStore.ClaimPaymentDomainOutbox(ctx, ClaimPaymentDomainOutboxParams{
+		ID:    otherEventEntry.ID,
+		NowAt: pgtype.Timestamptz{Time: now, Valid: true},
+	})
+	require.NoError(t, err)
+	setPaymentDomainOutboxUpdatedAt(t, otherEventEntry.ID, now.Add(-20*time.Minute))
+
+	reclaimed, err := testStore.ReclaimStalePaymentDomainOutboxByEventType(ctx, ReclaimStalePaymentDomainOutboxByEventTypeParams{
+		EventType:   eventType,
+		StaleBefore: now.Add(-15 * time.Minute),
+		LastError:   pgtype.Text{String: "stale processing payment domain outbox reclaimed by scheduler", Valid: true},
+		NextRetryAt: pgtype.Timestamptz{Time: now, Valid: true},
+		LimitCount:  10,
+	})
+	require.NoError(t, err)
+	require.Equal(t, []int64{staleEntry.ID}, paymentDomainOutboxIDs(reclaimed))
+	require.Equal(t, PaymentDomainOutboxStatusFailed, reclaimed[0].Status)
+	require.Equal(t, int32(1), reclaimed[0].AttemptCount)
+	require.Equal(t, "stale processing payment domain outbox reclaimed by scheduler", reclaimed[0].LastError.String)
+	require.True(t, reclaimed[0].NextRetryAt.Valid)
+
+	require.Equal(t, PaymentDomainOutboxStatusProcessing, getPaymentDomainOutboxStatus(t, recentEntry.ID))
+
+	require.Equal(t, PaymentDomainOutboxStatusProcessing, getPaymentDomainOutboxStatus(t, otherEventEntry.ID))
+
+	pendingEntries, err := testStore.ListPendingPaymentDomainOutboxByEventType(ctx, ListPendingPaymentDomainOutboxByEventTypeParams{
+		EventType:  eventType,
+		NowAt:      pgtype.Timestamptz{Time: now.Add(time.Second), Valid: true},
+		LimitCount: 10,
+	})
+	require.NoError(t, err)
+	require.Contains(t, paymentDomainOutboxIDs(pendingEntries), staleEntry.ID)
+	require.NotContains(t, paymentDomainOutboxIDs(pendingEntries), recentEntry.ID)
+}
+
+func setExternalPaymentFactApplicationUpdatedAt(t *testing.T, id int64, updatedAt time.Time) {
+	store, ok := testStore.(*SQLStore)
+	require.True(t, ok)
+	_, err := store.connPool.Exec(context.Background(), "UPDATE external_payment_fact_applications SET updated_at = $1 WHERE id = $2", updatedAt, id)
+	require.NoError(t, err)
+}
+
+func setPaymentDomainOutboxUpdatedAt(t *testing.T, id int64, updatedAt time.Time) {
+	store, ok := testStore.(*SQLStore)
+	require.True(t, ok)
+	_, err := store.connPool.Exec(context.Background(), "UPDATE payment_domain_outbox SET updated_at = $1 WHERE id = $2", updatedAt, id)
+	require.NoError(t, err)
+}
+
+func getPaymentDomainOutboxStatus(t *testing.T, id int64) string {
+	store, ok := testStore.(*SQLStore)
+	require.True(t, ok)
+	var status string
+	err := store.connPool.QueryRow(context.Background(), "SELECT status FROM payment_domain_outbox WHERE id = $1", id).Scan(&status)
+	require.NoError(t, err)
+	return status
 }
 
 func externalPaymentFactApplicationIDs(applications []ExternalPaymentFactApplication) []int64 {

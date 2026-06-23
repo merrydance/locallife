@@ -743,11 +743,29 @@ func TestPaymentDomainOutboxSchedulerRunOnceEnqueuesDefaultEventTypes(t *testing
 	distributor := &paymentDomainOutboxSchedulerTestDistributor{}
 
 	gomock.InOrder(
+		store.EXPECT().ReclaimStalePaymentDomainOutboxByEventType(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.ReclaimStalePaymentDomainOutboxByEventTypeParams) ([]db.PaymentDomainOutbox, error) {
+			require.Equal(t, worker.PaymentDomainOutboxEventDispatcherProbe, arg.EventType)
+			require.Equal(t, int32(200), arg.LimitCount)
+			require.False(t, arg.StaleBefore.IsZero())
+			require.True(t, arg.NextRetryAt.Valid)
+			require.True(t, arg.LastError.Valid)
+			require.Contains(t, arg.LastError.String, "stale processing")
+			return nil, nil
+		}),
 		store.EXPECT().ListPendingPaymentDomainOutboxByEventType(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.ListPendingPaymentDomainOutboxByEventTypeParams) ([]db.PaymentDomainOutbox, error) {
 			require.Equal(t, worker.PaymentDomainOutboxEventDispatcherProbe, arg.EventType)
 			require.Equal(t, int32(200), arg.LimitCount)
 			require.True(t, arg.NowAt.Valid)
 			return []db.PaymentDomainOutbox{{ID: 904, EventType: worker.PaymentDomainOutboxEventDispatcherProbe}}, nil
+		}),
+		store.EXPECT().ReclaimStalePaymentDomainOutboxByEventType(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.ReclaimStalePaymentDomainOutboxByEventTypeParams) ([]db.PaymentDomainOutbox, error) {
+			require.Equal(t, db.PaymentDomainOutboxEventOrderPaymentSucceeded, arg.EventType)
+			require.Equal(t, int32(200), arg.LimitCount)
+			require.False(t, arg.StaleBefore.IsZero())
+			require.True(t, arg.NextRetryAt.Valid)
+			require.True(t, arg.LastError.Valid)
+			require.Contains(t, arg.LastError.String, "stale processing")
+			return nil, nil
 		}),
 		store.EXPECT().ListPendingPaymentDomainOutboxByEventType(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.ListPendingPaymentDomainOutboxByEventTypeParams) ([]db.PaymentDomainOutbox, error) {
 			require.Equal(t, db.PaymentDomainOutboxEventOrderPaymentSucceeded, arg.EventType)
@@ -755,11 +773,29 @@ func TestPaymentDomainOutboxSchedulerRunOnceEnqueuesDefaultEventTypes(t *testing
 			require.True(t, arg.NowAt.Valid)
 			return []db.PaymentDomainOutbox{{ID: 910, EventType: db.PaymentDomainOutboxEventOrderPaymentSucceeded}}, nil
 		}),
+		store.EXPECT().ReclaimStalePaymentDomainOutboxByEventType(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.ReclaimStalePaymentDomainOutboxByEventTypeParams) ([]db.PaymentDomainOutbox, error) {
+			require.Equal(t, db.PaymentDomainOutboxEventReservationPaymentSucceeded, arg.EventType)
+			require.Equal(t, int32(200), arg.LimitCount)
+			require.False(t, arg.StaleBefore.IsZero())
+			require.True(t, arg.NextRetryAt.Valid)
+			require.True(t, arg.LastError.Valid)
+			require.Contains(t, arg.LastError.String, "stale processing")
+			return nil, nil
+		}),
 		store.EXPECT().ListPendingPaymentDomainOutboxByEventType(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.ListPendingPaymentDomainOutboxByEventTypeParams) ([]db.PaymentDomainOutbox, error) {
 			require.Equal(t, db.PaymentDomainOutboxEventReservationPaymentSucceeded, arg.EventType)
 			require.Equal(t, int32(200), arg.LimitCount)
 			require.True(t, arg.NowAt.Valid)
 			return []db.PaymentDomainOutbox{{ID: 912, EventType: db.PaymentDomainOutboxEventReservationPaymentSucceeded}}, nil
+		}),
+		store.EXPECT().ReclaimStalePaymentDomainOutboxByEventType(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.ReclaimStalePaymentDomainOutboxByEventTypeParams) ([]db.PaymentDomainOutbox, error) {
+			require.Equal(t, db.PaymentDomainOutboxEventProfitSharingResultReady, arg.EventType)
+			require.Equal(t, int32(200), arg.LimitCount)
+			require.False(t, arg.StaleBefore.IsZero())
+			require.True(t, arg.NextRetryAt.Valid)
+			require.True(t, arg.LastError.Valid)
+			require.Contains(t, arg.LastError.String, "stale processing")
+			return nil, nil
 		}),
 		store.EXPECT().ListPendingPaymentDomainOutboxByEventType(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.ListPendingPaymentDomainOutboxByEventTypeParams) ([]db.PaymentDomainOutbox, error) {
 			require.Equal(t, db.PaymentDomainOutboxEventProfitSharingResultReady, arg.EventType)
@@ -767,11 +803,29 @@ func TestPaymentDomainOutboxSchedulerRunOnceEnqueuesDefaultEventTypes(t *testing
 			require.True(t, arg.NowAt.Valid)
 			return []db.PaymentDomainOutbox{{ID: 905, EventType: db.PaymentDomainOutboxEventProfitSharingResultReady}}, nil
 		}),
+		store.EXPECT().ReclaimStalePaymentDomainOutboxByEventType(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.ReclaimStalePaymentDomainOutboxByEventTypeParams) ([]db.PaymentDomainOutbox, error) {
+			require.Equal(t, db.PaymentDomainOutboxEventOrderRefundSucceeded, arg.EventType)
+			require.Equal(t, int32(200), arg.LimitCount)
+			require.False(t, arg.StaleBefore.IsZero())
+			require.True(t, arg.NextRetryAt.Valid)
+			require.True(t, arg.LastError.Valid)
+			require.Contains(t, arg.LastError.String, "stale processing")
+			return nil, nil
+		}),
 		store.EXPECT().ListPendingPaymentDomainOutboxByEventType(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.ListPendingPaymentDomainOutboxByEventTypeParams) ([]db.PaymentDomainOutbox, error) {
 			require.Equal(t, db.PaymentDomainOutboxEventOrderRefundSucceeded, arg.EventType)
 			require.Equal(t, int32(200), arg.LimitCount)
 			require.True(t, arg.NowAt.Valid)
 			return []db.PaymentDomainOutbox{{ID: 907, EventType: db.PaymentDomainOutboxEventOrderRefundSucceeded}}, nil
+		}),
+		store.EXPECT().ReclaimStalePaymentDomainOutboxByEventType(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.ReclaimStalePaymentDomainOutboxByEventTypeParams) ([]db.PaymentDomainOutbox, error) {
+			require.Equal(t, db.PaymentDomainOutboxEventOrderRefundAbnormal, arg.EventType)
+			require.Equal(t, int32(200), arg.LimitCount)
+			require.False(t, arg.StaleBefore.IsZero())
+			require.True(t, arg.NextRetryAt.Valid)
+			require.True(t, arg.LastError.Valid)
+			require.Contains(t, arg.LastError.String, "stale processing")
+			return nil, nil
 		}),
 		store.EXPECT().ListPendingPaymentDomainOutboxByEventType(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.ListPendingPaymentDomainOutboxByEventTypeParams) ([]db.PaymentDomainOutbox, error) {
 			require.Equal(t, db.PaymentDomainOutboxEventOrderRefundAbnormal, arg.EventType)
@@ -779,11 +833,29 @@ func TestPaymentDomainOutboxSchedulerRunOnceEnqueuesDefaultEventTypes(t *testing
 			require.True(t, arg.NowAt.Valid)
 			return []db.PaymentDomainOutbox{{ID: 908, EventType: db.PaymentDomainOutboxEventOrderRefundAbnormal}}, nil
 		}),
+		store.EXPECT().ReclaimStalePaymentDomainOutboxByEventType(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.ReclaimStalePaymentDomainOutboxByEventTypeParams) ([]db.PaymentDomainOutbox, error) {
+			require.Equal(t, db.PaymentDomainOutboxEventReservationRefundAbnormal, arg.EventType)
+			require.Equal(t, int32(200), arg.LimitCount)
+			require.False(t, arg.StaleBefore.IsZero())
+			require.True(t, arg.NextRetryAt.Valid)
+			require.True(t, arg.LastError.Valid)
+			require.Contains(t, arg.LastError.String, "stale processing")
+			return nil, nil
+		}),
 		store.EXPECT().ListPendingPaymentDomainOutboxByEventType(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.ListPendingPaymentDomainOutboxByEventTypeParams) ([]db.PaymentDomainOutbox, error) {
 			require.Equal(t, db.PaymentDomainOutboxEventReservationRefundAbnormal, arg.EventType)
 			require.Equal(t, int32(200), arg.LimitCount)
 			require.True(t, arg.NowAt.Valid)
 			return []db.PaymentDomainOutbox{{ID: 909, EventType: db.PaymentDomainOutboxEventReservationRefundAbnormal}}, nil
+		}),
+		store.EXPECT().ReclaimStalePaymentDomainOutboxByEventType(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.ReclaimStalePaymentDomainOutboxByEventTypeParams) ([]db.PaymentDomainOutbox, error) {
+			require.Equal(t, db.PaymentDomainOutboxEventRiderDepositRefundAbnormal, arg.EventType)
+			require.Equal(t, int32(200), arg.LimitCount)
+			require.False(t, arg.StaleBefore.IsZero())
+			require.True(t, arg.NextRetryAt.Valid)
+			require.True(t, arg.LastError.Valid)
+			require.Contains(t, arg.LastError.String, "stale processing")
+			return nil, nil
 		}),
 		store.EXPECT().ListPendingPaymentDomainOutboxByEventType(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.ListPendingPaymentDomainOutboxByEventTypeParams) ([]db.PaymentDomainOutbox, error) {
 			require.Equal(t, db.PaymentDomainOutboxEventRiderDepositRefundAbnormal, arg.EventType)
@@ -816,11 +888,29 @@ func TestPaymentDomainOutboxSchedulerRunOnceEnqueuesConfiguredEventTypes(t *test
 	distributor := &paymentDomainOutboxSchedulerTestDistributor{}
 
 	gomock.InOrder(
+		store.EXPECT().ReclaimStalePaymentDomainOutboxByEventType(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.ReclaimStalePaymentDomainOutboxByEventTypeParams) ([]db.PaymentDomainOutbox, error) {
+			require.Equal(t, worker.PaymentDomainOutboxEventDispatcherProbe, arg.EventType)
+			require.Equal(t, int32(200), arg.LimitCount)
+			require.False(t, arg.StaleBefore.IsZero())
+			require.True(t, arg.NextRetryAt.Valid)
+			require.True(t, arg.LastError.Valid)
+			require.Contains(t, arg.LastError.String, "stale processing")
+			return nil, nil
+		}),
 		store.EXPECT().ListPendingPaymentDomainOutboxByEventType(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.ListPendingPaymentDomainOutboxByEventTypeParams) ([]db.PaymentDomainOutbox, error) {
 			require.Equal(t, worker.PaymentDomainOutboxEventDispatcherProbe, arg.EventType)
 			require.Equal(t, int32(200), arg.LimitCount)
 			require.True(t, arg.NowAt.Valid)
 			return []db.PaymentDomainOutbox{{ID: 904, EventType: worker.PaymentDomainOutboxEventDispatcherProbe}}, nil
+		}),
+		store.EXPECT().ReclaimStalePaymentDomainOutboxByEventType(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.ReclaimStalePaymentDomainOutboxByEventTypeParams) ([]db.PaymentDomainOutbox, error) {
+			require.Equal(t, db.PaymentDomainOutboxEventProfitSharingResultReady, arg.EventType)
+			require.Equal(t, int32(200), arg.LimitCount)
+			require.False(t, arg.StaleBefore.IsZero())
+			require.True(t, arg.NextRetryAt.Valid)
+			require.True(t, arg.LastError.Valid)
+			require.Contains(t, arg.LastError.String, "stale processing")
+			return nil, nil
 		}),
 		store.EXPECT().ListPendingPaymentDomainOutboxByEventType(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.ListPendingPaymentDomainOutboxByEventTypeParams) ([]db.PaymentDomainOutbox, error) {
 			require.Equal(t, db.PaymentDomainOutboxEventProfitSharingResultReady, arg.EventType)
@@ -840,6 +930,51 @@ func TestPaymentDomainOutboxSchedulerRunOnceEnqueuesConfiguredEventTypes(t *test
 	require.Len(t, distributor.optionCounts, 2)
 	require.GreaterOrEqual(t, distributor.optionCounts[0], 3)
 	require.GreaterOrEqual(t, distributor.optionCounts[1], 3)
+}
+
+func TestPaymentDomainOutboxSchedulerRunOnceReclaimsStaleProcessingEntries(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := &paymentDomainOutboxSchedulerTestDistributor{}
+
+	gomock.InOrder(
+		store.EXPECT().ReclaimStalePaymentDomainOutboxByEventType(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.ReclaimStalePaymentDomainOutboxByEventTypeParams) ([]db.PaymentDomainOutbox, error) {
+			require.Equal(t, db.PaymentDomainOutboxEventProfitSharingResultReady, arg.EventType)
+			require.Equal(t, int32(200), arg.LimitCount)
+			require.False(t, arg.StaleBefore.IsZero())
+			require.True(t, arg.NextRetryAt.Valid)
+			require.True(t, arg.LastError.Valid)
+			require.Contains(t, arg.LastError.String, "stale processing")
+			return []db.PaymentDomainOutbox{{
+				ID:            931,
+				EventType:     db.PaymentDomainOutboxEventProfitSharingResultReady,
+				AggregateType: db.PaymentDomainOutboxAggregateProfitSharingOrder,
+				AggregateID:   801,
+				Status:        db.PaymentDomainOutboxStatusFailed,
+			}}, nil
+		}),
+		store.EXPECT().ListPendingPaymentDomainOutboxByEventType(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.ListPendingPaymentDomainOutboxByEventTypeParams) ([]db.PaymentDomainOutbox, error) {
+			require.Equal(t, db.PaymentDomainOutboxEventProfitSharingResultReady, arg.EventType)
+			require.Equal(t, int32(200), arg.LimitCount)
+			require.True(t, arg.NowAt.Valid)
+			return []db.PaymentDomainOutbox{{
+				ID:            931,
+				EventType:     db.PaymentDomainOutboxEventProfitSharingResultReady,
+				AggregateType: db.PaymentDomainOutboxAggregateProfitSharingOrder,
+				AggregateID:   801,
+				Status:        db.PaymentDomainOutboxStatusFailed,
+			}}, nil
+		}),
+	)
+
+	scheduler := worker.NewPaymentDomainOutboxSchedulerWithEventTypes(store, distributor, []string{
+		db.PaymentDomainOutboxEventProfitSharingResultReady,
+	})
+	scheduler.RunOnce()
+
+	require.Equal(t, []int64{931}, distributor.outboxIDs)
 }
 
 func TestPaymentDomainOutboxSchedulerRunOnceSkipsWithoutDistributor(t *testing.T) {

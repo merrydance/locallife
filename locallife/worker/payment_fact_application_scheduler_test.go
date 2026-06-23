@@ -38,6 +38,16 @@ func TestPaymentFactApplicationSchedulerRunOnceEnqueuesConfiguredTargets(t *test
 	calls := make([]any, 0, len(expectedTargets))
 	for _, expected := range expectedTargets {
 		expected := expected
+		calls = append(calls, store.EXPECT().ReclaimStaleExternalPaymentFactApplicationsByTarget(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.ReclaimStaleExternalPaymentFactApplicationsByTargetParams) ([]db.ExternalPaymentFactApplication, error) {
+			require.Equal(t, expected.consumer, arg.Consumer)
+			require.Equal(t, expected.businessObjectType, arg.BusinessObjectType)
+			require.Equal(t, int32(200), arg.LimitCount)
+			require.False(t, arg.StaleBefore.IsZero())
+			require.True(t, arg.NextRetryAt.Valid)
+			require.True(t, arg.LastError.Valid)
+			require.Contains(t, arg.LastError.String, "stale processing")
+			return nil, nil
+		}))
 		calls = append(calls, store.EXPECT().ListRetryableExternalPaymentFactApplicationsByTarget(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.ListRetryableExternalPaymentFactApplicationsByTargetParams) ([]db.ExternalPaymentFactApplication, error) {
 			require.Equal(t, expected.consumer, arg.Consumer)
 			require.Equal(t, expected.businessObjectType, arg.BusinessObjectType)
@@ -63,6 +73,79 @@ func TestPaymentFactApplicationSchedulerRunOnceEnqueuesConfiguredTargets(t *test
 	for _, optionCount := range distributor.optionCounts {
 		require.GreaterOrEqual(t, optionCount, 3)
 	}
+}
+
+func TestPaymentFactApplicationSchedulerRunOnceReclaimsStaleProcessingApplications(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := &paymentFactApplicationSchedulerTestDistributor{}
+
+	expectedTargets := []struct {
+		consumer           string
+		businessObjectType string
+		applicationID      int64
+	}{
+		{consumer: "profit_sharing_domain", businessObjectType: "profit_sharing_order", applicationID: 901},
+		{consumer: "profit_sharing_domain", businessObjectType: "profit_sharing_return"},
+		{consumer: "claim_recovery_domain", businessObjectType: "payment_order"},
+		{consumer: "rider_deposit_domain", businessObjectType: "payment_order"},
+		{consumer: "baofu_account_verify_fee_domain", businessObjectType: "payment_order"},
+		{consumer: "order_domain", businessObjectType: "payment_order"},
+		{consumer: "reservation_domain", businessObjectType: "payment_order"},
+		{consumer: "order_domain", businessObjectType: "refund_order"},
+		{consumer: "reservation_domain", businessObjectType: "refund_order"},
+		{consumer: "rider_deposit_domain", businessObjectType: "refund_order"},
+	}
+
+	calls := make([]any, 0, len(expectedTargets)*2)
+	for _, expected := range expectedTargets {
+		expected := expected
+		calls = append(calls, store.EXPECT().ReclaimStaleExternalPaymentFactApplicationsByTarget(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.ReclaimStaleExternalPaymentFactApplicationsByTargetParams) ([]db.ExternalPaymentFactApplication, error) {
+			require.Equal(t, expected.consumer, arg.Consumer)
+			require.Equal(t, expected.businessObjectType, arg.BusinessObjectType)
+			require.Equal(t, int32(200), arg.LimitCount)
+			require.False(t, arg.StaleBefore.IsZero())
+			require.True(t, arg.NextRetryAt.Valid)
+			require.True(t, arg.LastError.Valid)
+			require.Contains(t, arg.LastError.String, "stale processing")
+			if expected.applicationID == 0 {
+				return nil, nil
+			}
+			return []db.ExternalPaymentFactApplication{{
+				ID:                 expected.applicationID,
+				FactID:             expected.applicationID + 100,
+				Consumer:           expected.consumer,
+				BusinessObjectType: expected.businessObjectType,
+				BusinessObjectID:   expected.applicationID + 2000,
+				Status:             db.ExternalPaymentFactApplicationStatusFailed,
+			}}, nil
+		}))
+		calls = append(calls, store.EXPECT().ListRetryableExternalPaymentFactApplicationsByTarget(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.ListRetryableExternalPaymentFactApplicationsByTargetParams) ([]db.ExternalPaymentFactApplication, error) {
+			require.Equal(t, expected.consumer, arg.Consumer)
+			require.Equal(t, expected.businessObjectType, arg.BusinessObjectType)
+			require.Equal(t, int32(200), arg.LimitCount)
+			require.True(t, arg.NowAt.Valid)
+			if expected.applicationID == 0 {
+				return nil, nil
+			}
+			return []db.ExternalPaymentFactApplication{{
+				ID:                 expected.applicationID,
+				FactID:             expected.applicationID + 100,
+				Consumer:           expected.consumer,
+				BusinessObjectType: expected.businessObjectType,
+				BusinessObjectID:   expected.applicationID + 2000,
+				Status:             db.ExternalPaymentFactApplicationStatusFailed,
+			}}, nil
+		}))
+	}
+	gomock.InOrder(calls...)
+
+	scheduler := worker.NewPaymentFactApplicationScheduler(store, distributor)
+	scheduler.RunOnce()
+
+	require.Equal(t, []int64{901}, distributor.applicationIDs)
 }
 
 func TestPaymentFactApplicationSchedulerRunOnceSkipsWithoutDistributor(t *testing.T) {
