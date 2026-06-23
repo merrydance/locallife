@@ -13161,6 +13161,13 @@ LIMIT 200;
 - 小程序解析：`scan-entry` 的 scene 解析拆到 `entry-params.ts`，先识别 `tid_<tableID>`，再用锚定正则完整保留 `m_<merchantID>-t_<tableNo>` 中的桌号字段，因此既能消费新生成的 `tid_` 场景，也能正确处理历史短 scene 中包含 `-` 的桌号；旧 `table_` / `t` 数字桌台 ID 格式继续兼容。
 - 验证闭口：`locallife/api/scan_test.go` 覆盖含 `-` 桌号会生成 `tid_<tableID>`；`weapp/scripts/check-dine-in-scan-entry-scene.test.js` 覆盖含 `-` 桌号、URL encoded scene、`tid_`、旧 `t` 格式和非法 scene。已执行 `go test ./api -run TestGenerateTableQRCodeAPI -count=1`、`npm run check:dine-in-scan-entry-scene`、`npm run compile`、`npm run lint`。
 
+##### P2-F06-2 修复闭口补记（2026-06-23）
+
+- 已完成范围：本次关闭当前 QR 生成写路径中“对象存储与 `media_assets` 已成功，但 `tables.qr_code_url` 回写失败后重试撞同一 `object_key`”的自愈缺口；不做历史 `qr_code_url` 为空桌台的批量回填，历史治理继续按只读 SQL 盘点后另排。
+- 幂等边界：`storeTableQRCode` 在 `CreateMediaAsset` 遇到 `media_assets.object_key` 唯一键冲突时，会按同一 `objectKey` 读取既有 asset，并继续返回同一个 public URL；既有 asset 若不是 `approved`，仍沿用原审核状态修正分支设为 `approved`。
+- 回写恢复：`generateTableQRCode` 的后续 `UpdateTable(qr_code_url)` 不变，因此首次请求若在最后回写失败，第二次生成相同 QR 内容时会复用已存在的 media asset，并继续尝试修复桌台指针，而不是在保存二维码阶段提前 500。
+- 验证闭口：`TestStoreTableQRCodeReusesExistingMediaAsset` 覆盖 `CreateMediaAsset` 唯一键冲突后按 object key 复用既有 asset；`TestGenerateTableQRCodeAPI/RetryReusesExistingQRCodeAsset` 覆盖 handler 重试能复用既有 QR asset 并继续回写 `tables.qr_code_url`。已执行 `go test ./api -run TestStoreTableQRCodeReusesExistingMediaAsset -count=1`、`go test ./api -run TestGenerateTableQRCodeAPI/RetryReusesExistingQRCodeAsset -count=1`、`go test ./api -run TestGenerateTableQRCodeAPI -count=1`、`go test ./api -count=1`、`git diff --check`。`make lint-filesize` 仍因仓库既有 63 个超限 Go 文件失败；本轮未新增超限文件，`api/scan.go` 属于历史超限文件。
+
 ##### P2-F06-3/4 修复闭口补记（2026-06-23）
 
 - 已完成范围：本次关闭当前写路径中“新增桌台图片并同时设为主图”的分段写缺口，防止插入失败留下无主图，以及同桌主图写入并发下互相穿透产生多主图；不处理 `P2-F06-2` 的 QR asset/table 指针半状态，也不在本轮做历史 `table_images` 脏数据清理。
@@ -17318,6 +17325,7 @@ ORDER BY row_count DESC, oldest_signal_at ASC;
 | P4-B02-2 | P4-B01B-4 / P0-F10 | S2 | 已有生产聚合命中 + `ClaimBehaviorActionRecoveryScheduler` 只回收 `created/failed` + `executeClaimBehaviorAction` 对 `running` 不做回收 | `behavior_actions` 中 `action_type in ('block','recovery','release','notify')`、`status='running'`、`created_at < now() - interval '30 minutes'`，RunOnce 后仍不会被专门重扫 | `worker/claim_behavior_action_recovery_scheduler_test.go` 回收范围回归 + 现有 `worker/task_claim_behavior_action_test.go` running 重入覆盖 | implemented 2026-06-23 |
 | P4-B02-3 | P4-B01B-5 / P0-F11 | S2 | 已有生产聚合命中 + `RefundRecoveryScheduler` 只重扫 `processing` + `SubmitWithdrawal` 在 refund 结果不确定时保留 `pending` 待 query/retry | `refund_orders.status='pending'`、`external_payment_commands.command_status in ('unknown', null)`、`created_at < now() - interval '30 minutes'`，RunOnce 后仍不会被恢复器回扫 | `worker/refund_recovery_scheduler_test.go` pending/unknown 反例 + `logic/rider_deposit_refund_service_test.go` 不确定结果保留 pending 回归 | implemented 2026-06-23 |
 | P4-B02-4 | P4-B05-6 / P2-F06 | S1 | 已有生产聚合命中 + `addTableImage` 先清旧主图再插新图 + `SetTableImagePrimaryTx` 既有事务模式 | `is_primary=true` 新增图片时，旧主图清除和新图插入分段；插入失败会无主图，并发主图写入可能多主图 | `api/table_test.go` 主图新增路由回归 + `db/sqlc/table_test.go` `AddTableImageTx` 事务回归 | implemented 2026-06-23 |
+| P4-B02-5 | P4-B05-6 / P2-F06 | S1 | 已有生产聚合命中 + `storeTableQRCode` 先写 object/media asset 后回写 table 指针 | `CreateMediaAsset` 已成功但 `UpdateTable(qr_code_url)` 失败；第二次相同 QR 内容重试撞 `media_assets.object_key` 唯一键，无法继续修复桌台指针 | `api/scan_test.go` store-level object-key 复用回归 + handler 重试回写回归 | implemented 2026-06-23 |
 
 - 现有测试边界：
   - `P4-B02-1` 现有 `api/scan_test.go` 只覆盖 `generateTableQRCode` 的服务端生成与回写，不覆盖小程序 `scan-entry` 对 scene 的解析分支；`weapp/miniprogram/pages/dine-in/scan-entry/scan-entry.ts` 也没有独立的解析单测，因此这条的最小复现仍需要新补一条 parser 回归，而不是依赖现有二维码生成测试。
@@ -17349,6 +17357,8 @@ ORDER BY row_count DESC, oldest_signal_at ASC;
 
 - 2026-06-23 修复闭口补记：`P2-F06-3/4` 的桌台主图投影写路径已完成最小实现。新增图片同时设主图时，API 现在调用 `AddTableImageTx`，在同一事务内锁桌台、插新图、清同桌其它主图；已有图片设主图的事务也补同一桌台锁。媒体资产校验、商户/桌台归属、非主图新增路径保持原行为。本轮不改 migration，不处理历史无主图/多主图脏数据；历史治理继续按只读 SQL 盘点后另排。
 
+- 2026-06-23 修复闭口补记：`P2-F06-2` 的 QR asset/table pointer 半状态重试缺口已完成最小实现。`storeTableQRCode` 现在在 `media_assets.object_key` 唯一键冲突时复用既有 asset，并让 `generateTableQRCode` 继续执行 `UpdateTable(qr_code_url)`；因此首次回写失败后，第二次相同内容重试可以自愈桌台指针。本轮不改 SQL/query、Swagger 或媒体 schema，不做历史空指针批量回填。
+
 ### P4-B03. 修复批次草案门禁与占位
 
 - 目标：只在生产取证和本地复现给出足够证据后，排列修复批次；本节不作为直接改代码的授权，也不把候选风险自动升级为已确认 bug。
@@ -17371,3 +17381,4 @@ ORDER BY row_count DESC, oldest_signal_at ASC;
 | P4-B03-2 | P4-B02-2 / P0-F10 | P0-F10 | S2 | add running-action recovery scan + stale-action reclaim test | `worker/claim_behavior_action_recovery_scheduler_test.go` 追加 running/stale 负例；`worker/task_claim_behavior_action_test.go` 现有 running 重入覆盖 | completed 2026-06-23 |
 | P4-B03-3 | P4-B02-3 / P0-F11 | P0-F11 | S2 | add rider-deposit pending/unknown recovery scan + replay test | `worker/refund_recovery_scheduler_test.go` 补 rider deposit pending/unknown 反例/正例 + DB-backed rider deposit pending/unknown 集成验证 | completed 2026-06-23 |
 | P4-B03-4 | P4-B02-4 / P2-F06 | P2-F06 | S1 | transactional table-image primary projection | `api/table_test.go` 主图新增路由回归 + `db/sqlc/table_test.go` `AddTableImageTx` 事务回归 | completed 2026-06-23 |
+| P4-B03-5 | P4-B02-5 / P2-F06 | P2-F06 | S1 | QR media asset idempotent reuse + table pointer retry | `api/scan_test.go` object-key 复用回归 + handler 重试回写回归 | completed 2026-06-23 |

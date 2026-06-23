@@ -469,7 +469,13 @@ func (server *Server) storeTableQRCode(ctx context.Context, uploaderID int64, me
 		SourceClient:   "server",
 	})
 	if err != nil {
-		return "", err
+		if db.ErrorCode(err) != db.UniqueViolation {
+			return "", err
+		}
+		asset, err = server.store.GetMediaAssetByObjectKey(ctx, objectKey)
+		if err != nil {
+			return "", fmt.Errorf("lookup existing table QR media asset: %w", err)
+		}
 	}
 
 	if asset.ModerationStatus != "approved" {

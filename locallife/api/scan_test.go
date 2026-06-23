@@ -736,6 +736,47 @@ func buildTestQRCodePNG(t *testing.T) []byte {
 	return buf.Bytes()
 }
 
+func TestStoreTableQRCodeReusesExistingMediaAsset(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	table := randomTable(merchant.ID)
+	qrCodeData := buildTestQRCodePNG(t)
+
+	var storedObjectKey string
+	store.EXPECT().
+		CreateMediaAsset(gomock.Any(), gomock.AssignableToTypeOf(db.CreateMediaAssetParams{})).
+		DoAndReturn(func(_ context.Context, arg db.CreateMediaAssetParams) (db.MediaAsset, error) {
+			require.NotEmpty(t, arg.ObjectKey)
+			require.Equal(t, "server", arg.SourceClient)
+			storedObjectKey = arg.ObjectKey
+			return db.MediaAsset{}, db.ErrUniqueViolation
+		}).
+		Times(1)
+
+	store.EXPECT().
+		GetMediaAssetByObjectKey(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, objectKey string) (db.MediaAsset, error) {
+			require.Equal(t, storedObjectKey, objectKey)
+			return db.MediaAsset{
+				ID:               util.RandomInt(1, 1000),
+				ObjectKey:        objectKey,
+				ModerationStatus: "approved",
+			}, nil
+		}).
+		Times(1)
+
+	server, _ := newTestServerForMedia(t, store)
+
+	qrCodeURL, err := server.storeTableQRCode(context.Background(), user.ID, merchant.ID, table.ID, qrCodeData)
+
+	require.NoError(t, err)
+	require.Contains(t, qrCodeURL, storedObjectKey)
+}
+
 func TestGenerateTableQRCodeAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
@@ -906,6 +947,66 @@ func TestGenerateTableQRCodeAPI(t *testing.T) {
 				var response generateTableQRCodeResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Contains(t, response.QrCodeUrl, currentTableQRCodeFilenameSuffix)
+			},
+		},
+		{
+			name:    "RetryReusesExistingQRCodeAsset",
+			tableID: table.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient) {
+				store.EXPECT().
+					GetTable(gomock.Any(), gomock.Eq(table.ID)).
+					Times(1).
+					Return(table, nil)
+
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				wechatClient.EXPECT().
+					GetWXACodeUnlimited(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(qrCodeData, nil)
+
+				var storedObjectKey string
+				store.EXPECT().
+					CreateMediaAsset(gomock.Any(), gomock.AssignableToTypeOf(db.CreateMediaAssetParams{})).
+					DoAndReturn(func(_ context.Context, arg db.CreateMediaAssetParams) (db.MediaAsset, error) {
+						storedObjectKey = arg.ObjectKey
+						return db.MediaAsset{}, db.ErrUniqueViolation
+					}).
+					Times(1)
+
+				store.EXPECT().
+					GetMediaAssetByObjectKey(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, objectKey string) (db.MediaAsset, error) {
+						require.Equal(t, storedObjectKey, objectKey)
+						return db.MediaAsset{
+							ID:               util.RandomInt(1, 1000),
+							ObjectKey:        objectKey,
+							ModerationStatus: "approved",
+						}, nil
+					}).
+					Times(1)
+
+				store.EXPECT().
+					UpdateTable(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, arg db.UpdateTableParams) (db.Table, error) {
+						require.Equal(t, table.ID, arg.ID)
+						require.True(t, arg.QrCodeUrl.Valid)
+						require.Contains(t, arg.QrCodeUrl.String, storedObjectKey)
+						updatedTable := table
+						updatedTable.QrCodeUrl = arg.QrCodeUrl
+						return updatedTable, nil
+					}).
+					Times(1)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var response generateTableQRCodeResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Contains(t, response.QrCodeUrl, currentTableQRCodeFilenameSuffix)
+				require.Equal(t, table.TableNo, response.TableNo)
 			},
 		},
 		{
